@@ -1,0 +1,1 @@
+ALTER TABLE contabilidades ADD COLUMN logo_url TEXT, ADD COLUMN login_email TEXT, ADD COLUMN login_senha TEXT; ALTER TABLE clientes ADD COLUMN logo_url TEXT, ADD COLUMN login_email TEXT, ADD COLUMN login_senha TEXT; INSERT INTO storage.buckets (id, name, public) VALUES ('logos', 'logos', true) ON CONFLICT DO NOTHING;
