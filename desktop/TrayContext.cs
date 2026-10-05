@@ -43,7 +43,7 @@ namespace HubParatechDesktop
         {
             trayIcon = new NotifyIcon()
             {
-                Icon = SystemIcons.Information,
+                Icon = new Icon("icon.ico"),
                 ContextMenuStrip = new ContextMenuStrip(),
                 Visible = true,
                 Text = "Hub Paratech - Monitorando"
