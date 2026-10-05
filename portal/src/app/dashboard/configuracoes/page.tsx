@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, Download } from 'lucide-react'
 
 export default function ConfiguracoesPage() {
   const supabase = createClient()
@@ -28,7 +28,7 @@ export default function ConfiguracoesPage() {
   async function loadClientes() {
     const { data } = await supabase
       .from('clientes')
-      .select('id, razao_social, configuracoes_hub(ultima_sincronizacao)')
+      .select('id, razao_social, configuracoes_hub(ultima_sincronizacao, offline_secret)')
       .order('razao_social')
     
     if (data) {
@@ -107,10 +107,16 @@ export default function ConfiguracoesPage() {
           <h1 className="text-3xl font-bold text-slate-900">Configurações do Hub</h1>
           <p className="text-slate-500 mt-1">Defina as regras de bloqueio e monitoramento por cliente.</p>
         </div>
-        <button onClick={() => loadClientes()} className="bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-2">
-          <RefreshCw size={20} />
-          Atualizar Tabela
-        </button>
+        <div className="flex items-center gap-3">
+          <a href="/HubParatech.zip" download className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition flex items-center gap-2">
+            <Download size={20} />
+            Baixar Hub (.zip)
+          </a>
+          <button onClick={() => loadClientes()} className="bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-2">
+            <RefreshCw size={20} />
+            Atualizar Tabela
+          </button>
+        </div>
       </header>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
