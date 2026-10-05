@@ -49,18 +49,43 @@ export default function NovoClientePage() {
       finalLogoUrl = supabase.storage.from('logos').getPublicUrl(fileName).data.publicUrl
     }
 
+    // Remove email/senha do payload do cliente
+    const { login_email, login_senha, ...clienteData } = formData
+    
     const payload = {
-      ...formData,
-      contabilidade_id: formData.contabilidade_id || null,
+      ...clienteData,
+      contabilidade_id: clienteData.contabilidade_id || null,
       logo_url: finalLogoUrl
     }
 
-    const { error } = await supabase.from('clientes').insert([payload])
+    // 1. Criar o Cliente no banco
+    const { data: clienteResult, error } = await supabase.from('clientes').insert([payload]).select().single()
     
     if (error) {
-      toast.error('Erro ao salvar: ' + error.message)
+      toast.error('Erro ao salvar cliente: ' + error.message)
       setLoading(false)
       return
+    }
+
+    // 2. Criar a Conta de Usuário (se preencheu e-mail e senha)
+    if (login_email && login_senha) {
+      const res = await fetch('/api/admin/create-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: login_email,
+          password: login_senha,
+          role: 'cliente',
+          entity_id: clienteResult.id
+        })
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        toast.error('Cliente criado, mas falha ao criar Acesso: ' + errorData.error)
+        setLoading(false)
+        return
+      }
     }
 
     toast.success('Cliente salvo com sucesso!')

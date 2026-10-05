@@ -72,9 +72,11 @@ export default function EditarClientePage() {
       finalLogoUrl = supabase.storage.from('logos').getPublicUrl(fileName).data.publicUrl
     }
 
+    const { login_email, login_senha, ...clienteData } = formData
+
     const payload = {
-      ...formData,
-      contabilidade_id: formData.contabilidade_id || null,
+      ...clienteData,
+      contabilidade_id: clienteData.contabilidade_id || null,
       logo_url: finalLogoUrl
     }
 
@@ -84,6 +86,25 @@ export default function EditarClientePage() {
       toast.error('Erro ao salvar: ' + error.message)
       setSaving(false)
       return
+    }
+
+    // Atualizar o acesso do usuário
+    if (login_email) {
+      const res = await fetch('/api/admin/update-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: login_email,
+          password: login_senha || undefined, // Se vazio, nao atualiza
+          role: 'cliente',
+          entity_id: params.id
+        })
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        toast.error('Erro ao configurar Acesso: ' + errorData.error)
+      }
     }
 
     toast.success('Cliente atualizado com sucesso!')
