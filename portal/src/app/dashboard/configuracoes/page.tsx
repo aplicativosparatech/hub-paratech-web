@@ -220,7 +220,7 @@ export default function ConfiguracoesPage() {
               </thead>
               <tbody>
                 {hubs.map((hub) => {
-                  const config = hub.configuracoes_hub?.[0];
+                  const config = Array.isArray(hub.configuracoes_hub) ? hub.configuracoes_hub[0] : hub.configuracoes_hub;
                   const lastSync = config?.ultima_sincronizacao;
                   const offlineSecret = config?.offline_secret || 'Não gerada';
                   let isOnline = false;

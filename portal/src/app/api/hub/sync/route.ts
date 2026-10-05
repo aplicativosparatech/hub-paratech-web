@@ -70,7 +70,10 @@ export async function POST(request: Request) {
     }
 
     // Registra que o Hub acabou de bater no servidor (Online!)
-    await supabase.from('configuracoes_hub').update({ ultima_sincronizacao: new Date().toISOString() }).eq('cliente_id', cliente.id)
+    const { error: syncError } = await supabase.from('configuracoes_hub').update({ ultima_sincronizacao: new Date().toISOString() }).eq('cliente_id', cliente.id)
+    if (syncError) {
+      console.error('Erro ao atualizar sincronizacao:', syncError)
+    }
 
     return NextResponse.json(responseData)
   } catch (error: any) {
