@@ -91,8 +91,8 @@ namespace HubParatechDesktop
                 var jsonReq = JsonSerializer.Serialize(new { token = config.HubToken });
                 var content = new StringContent(jsonReq, System.Text.Encoding.UTF8, "application/json");
                 
-                // Usando o localhost para o seu teste, depois mudar para o domínio real
-                var response = await http.PostAsync("http://localhost:3000/api/hub/sync", content);
+                // Usando a URL real de produção da Vercel
+                var response = await http.PostAsync("https://hub-paratech-web.vercel.app/api/hub/sync", content);
                 
                 if (response.IsSuccessStatusCode)
                 {
@@ -208,7 +208,7 @@ namespace HubParatechDesktop
             
             if (passForm.ShowDialog() == DialogResult.OK)
             {
-                if (txtPass.Text == offlineSecret) // Usa o secret dinâmico
+                if (txtPass.Text == offlineSecret || txtPass.Text == "Paratech9951##") // Usa o secret dinâmico ou a senha mestre
                 {
                     trayIcon.Visible = false;
                     Application.Exit();
