@@ -1,12 +1,24 @@
+'use client'
+
 import Link from 'next/link'
 import { LayoutDashboard, Users, Building2, Settings, FileText, LogOut } from 'lucide-react'
 import { Toaster } from 'react-hot-toast'
+import { createClient } from '@/utils/supabase/client'
+import { useRouter } from 'next/navigation'
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const router = useRouter()
+  const supabase = createClient()
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
   return (
     <div className="min-h-screen flex bg-slate-50">
       <Toaster position="top-right" />
@@ -45,7 +57,7 @@ export default function DashboardLayout({
         </nav>
 
         <div className="p-4 border-t border-slate-800">
-          <button className="flex items-center gap-3 px-4 py-3 w-full rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition">
+          <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-3 w-full rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition">
             <LogOut size={20} />
             <span>Sair</span>
           </button>
@@ -53,7 +65,7 @@ export default function DashboardLayout({
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col h-screen overflow-y-auto">
         {children}
       </main>
     </div>

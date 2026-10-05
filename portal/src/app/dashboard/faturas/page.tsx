@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
-import { FileText, Plus, X, Pencil, Trash2 } from 'lucide-react'
+import { FileText, Plus, X, Pencil, Trash2, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function FaturasPage() {
@@ -151,10 +151,16 @@ export default function FaturasPage() {
           <h1 className="text-3xl font-bold text-slate-900">Faturas e Pagamentos</h1>
           <p className="text-slate-500 mt-1">Histórico de cobranças e controle de pagamentos.</p>
         </div>
-        <button onClick={() => setModalOpen(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition flex items-center gap-2">
-          <Plus size={20} />
-          Gerar Fatura
-        </button>
+        <div className="flex gap-3">
+          <button onClick={() => { setLoading(true); fetchFaturas() }} className="bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-2">
+            <RefreshCw size={20} />
+            Atualizar
+          </button>
+          <button onClick={() => setModalOpen(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition flex items-center gap-2">
+            <Plus size={20} />
+            Gerar Fatura
+          </button>
+        </div>
       </header>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">

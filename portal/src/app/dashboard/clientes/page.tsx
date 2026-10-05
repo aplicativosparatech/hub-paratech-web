@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Trash2, X, Copy } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Copy, RefreshCw } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 
@@ -50,10 +50,16 @@ export default function ClientesPage() {
           <p className="text-slate-500 mt-1">Gerencie os clientes e os tokens de acesso ao Hub.</p>
         </div>
         
-        <Link href="/dashboard/clientes/novo" className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition flex items-center gap-2">
-          <Plus size={20} />
-          Novo Cliente
-        </Link>
+        <div className="flex gap-3">
+          <button onClick={() => { setLoading(true); fetchClientes() }} className="bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-2">
+            <RefreshCw size={20} />
+            Atualizar
+          </button>
+          <Link href="/dashboard/clientes/novo" className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition flex items-center gap-2">
+            <Plus size={20} />
+            Novo Cliente
+          </Link>
+        </div>
       </header>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
