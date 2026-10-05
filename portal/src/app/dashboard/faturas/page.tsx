@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
-import { FileText, Plus, X } from 'lucide-react'
+import { FileText, Plus, X, Pencil, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function FaturasPage() {
@@ -13,11 +13,12 @@ export default function FaturasPage() {
   const [gerando, setGerando] = useState(false)
   const supabase = createClient()
 
-  // Form de nova fatura
+  // Form de nova fatura/edição
   const [selectedCliente, setSelectedCliente] = useState('')
   const [competencia, setCompetencia] = useState('')
   const [dataVencimento, setDataVencimento] = useState('')
   const [valor, setValor] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   async function fetchFaturas() {
     const { data } = await supabase
@@ -38,10 +39,10 @@ export default function FaturasPage() {
     fetchClientes()
   }, [])
 
-  // Quando seleciona um cliente, preenche automaticamente com base nas configurações
+  // Quando seleciona um cliente (apenas na criação), preenche automaticamente
   const handleClienteChange = async (clienteId: string) => {
     setSelectedCliente(clienteId)
-    if (!clienteId) return
+    if (!clienteId || editingId) return
 
     const { data: config } = await supabase
       .from('configuracoes_hub')
@@ -65,31 +66,68 @@ export default function FaturasPage() {
     }
   }
 
+  const handleEditFatura = (f: any) => {
+    setEditingId(f.id)
+    setSelectedCliente(f.cliente_id)
+    setCompetencia(f.competencia)
+    setDataVencimento(f.data_vencimento)
+    setValor(f.valor)
+    setModalOpen(true)
+  }
+
+  const handleDeleteFatura = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta fatura?')) return
+    const { error } = await supabase.from('faturas').delete().eq('id', id)
+    if (error) {
+      toast.error('Erro ao excluir fatura: ' + error.message)
+    } else {
+      toast.success('Fatura excluída com sucesso!')
+      fetchFaturas()
+    }
+  }
+
   const handleGerarFatura = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedCliente) { toast.error('Selecione um cliente.'); return }
     setGerando(true)
 
-    const { error } = await supabase.from('faturas').insert([{
-      cliente_id: selectedCliente,
-      competencia,
-      data_vencimento: dataVencimento,
-      valor: parseFloat(valor),
-      status: 'pendente'
-    }])
+    let error;
+    if (editingId) {
+      const { error: updateError } = await supabase.from('faturas').update({
+        cliente_id: selectedCliente,
+        competencia,
+        data_vencimento: dataVencimento,
+        valor: parseFloat(valor),
+      }).eq('id', editingId)
+      error = updateError
+    } else {
+      const { error: insertError } = await supabase.from('faturas').insert([{
+        cliente_id: selectedCliente,
+        competencia,
+        data_vencimento: dataVencimento,
+        valor: parseFloat(valor),
+        status: 'pendente'
+      }])
+      error = insertError
+    }
 
     if (error) {
-      toast.error('Erro ao gerar fatura: ' + error.message)
+      toast.error('Erro ao salvar fatura: ' + error.message)
     } else {
-      toast.success('Fatura gerada com sucesso!')
-      setModalOpen(false)
-      setSelectedCliente('')
-      setCompetencia('')
-      setDataVencimento('')
-      setValor('')
+      toast.success(editingId ? 'Fatura atualizada com sucesso!' : 'Fatura gerada com sucesso!')
+      closeModal()
       fetchFaturas()
     }
     setGerando(false)
+  }
+
+  const closeModal = () => {
+    setModalOpen(false)
+    setEditingId(null)
+    setSelectedCliente('')
+    setCompetencia('')
+    setDataVencimento('')
+    setValor('')
   }
 
   const getStatusStyle = (status: string) => {
@@ -162,6 +200,15 @@ export default function FaturasPage() {
                     </span>
                   </td>
                   <td className="p-4 text-right flex items-center justify-end gap-2">
+                    {/* Botões de Ação Comuns a Todos os Status */}
+                    <button onClick={() => handleEditFatura(f)} className="p-1 text-slate-400 hover:text-blue-600 transition" title="Editar Fatura">
+                      <Pencil size={18} />
+                    </button>
+                    <button onClick={() => handleDeleteFatura(f.id)} className="p-1 text-slate-400 hover:text-red-600 transition" title="Excluir Fatura">
+                      <Trash2 size={18} />
+                    </button>
+
+                    {/* Botões Específicos para Pendente */}
                     {f.status === 'pendente' && (
                       <>
                         <button 
@@ -212,8 +259,8 @@ export default function FaturasPage() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6">
             <div className="flex justify-between items-start mb-6">
-              <h3 className="text-xl font-bold text-slate-900">Gerar Nova Fatura</h3>
-              <button onClick={() => setModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <h3 className="text-xl font-bold text-slate-900">{editingId ? 'Editar Fatura' : 'Gerar Nova Fatura'}</h3>
+              <button onClick={closeModal} className="text-slate-400 hover:text-slate-600">
                 <X size={20} />
               </button>
             </div>
@@ -249,11 +296,11 @@ export default function FaturasPage() {
               </div>
 
               <div className="flex gap-3 justify-end pt-4">
-                <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition font-medium">
+                <button type="button" onClick={closeModal} className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition font-medium">
                   Cancelar
                 </button>
                 <button type="submit" disabled={gerando} className="px-6 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition font-medium disabled:opacity-50">
-                  {gerando ? 'Gerando...' : 'Gerar Fatura'}
+                  {gerando ? 'Salvando...' : (editingId ? 'Atualizar Fatura' : 'Gerar Fatura')}
                 </button>
               </div>
             </form>
