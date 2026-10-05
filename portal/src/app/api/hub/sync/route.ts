@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     const hoje = new Date().toISOString().split('T')[0]
     const { data: faturaVencida } = await supabase
       .from('faturas')
-      .select('id, valor, qr_code_payload, status')
+      .select('id, valor, qr_code_payload, status, desbloqueio_confianca_em')
       .eq('cliente_id', cliente.id)
       .eq('status', 'pendente')
       .lt('data_vencimento', hoje)
@@ -44,8 +44,21 @@ export async function POST(request: Request) {
        if (pixData.qr_code_payload) finalPix = pixData.qr_code_payload
     }
 
+    let isBloqueado = !cliente.is_ativo || !!faturaVencida;
+    
+    // Lógica de liberação em confiança (24h)
+    if (faturaVencida && faturaVencida.desbloqueio_confianca_em) {
+        const dataDesbloqueio = new Date(faturaVencida.desbloqueio_confianca_em).getTime()
+        const agora = new Date().getTime()
+        const horasPassadas = (agora - dataDesbloqueio) / (1000 * 60 * 60)
+        
+        if (horasPassadas <= 24) {
+            isBloqueado = false; // Está no período de confiança!
+        }
+    }
+
     const responseData = {
-      bloqueado: !cliente.is_ativo || !!faturaVencida,
+      bloqueado: isBloqueado,
       motivo: !cliente.is_ativo ? 'administrativo' : (faturaVencida ? 'inadimplencia' : null),
       executavel: cliente.nome_sistema_utilizado,
       executaveis: config?.exes_monitorados || [],

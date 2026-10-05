@@ -161,20 +161,43 @@ export default function FaturasPage() {
                       {f.status}
                     </span>
                   </td>
-                  <td className="p-4 text-right">
+                  <td className="p-4 text-right flex items-center justify-end gap-2">
                     {f.status === 'pendente' && (
-                      <button 
-                        onClick={async () => {
-                          const { error } = await supabase.from('faturas').update({ status: 'pago', data_pagamento: new Date().toISOString() }).eq('id', f.id)
-                          if (!error) {
-                            toast.success('Pagamento simulado com sucesso!')
-                            fetchFaturas()
-                          }
-                        }}
-                        className="text-xs bg-emerald-100 text-emerald-700 px-3 py-1 rounded hover:bg-emerald-200 transition font-medium"
-                      >
-                        Simular Pagamento
-                      </button>
+                      <>
+                        <button 
+                          onClick={async () => {
+                            const novaQtd = (f.confianca_qtd || 0) + 1
+                            const { error } = await supabase.from('faturas').update({ 
+                              desbloqueio_confianca_em: new Date().toISOString(),
+                              confianca_qtd: novaQtd
+                            }).eq('id', f.id)
+                            if (!error) {
+                              toast.success(`Liberado por 24h! (Usado ${novaQtd} vezes)`)
+                              fetchFaturas()
+                            } else {
+                              toast.error('Erro ao liberar: ' + error.message)
+                            }
+                          }}
+                          className="text-xs bg-orange-100 text-orange-700 px-3 py-1 rounded hover:bg-orange-200 transition font-medium"
+                          title="Libera o bloqueio no cliente por 24 horas"
+                        >
+                          Liberar em Confiança ({(f.confianca_qtd || 0)}x)
+                        </button>
+                        <button 
+                          onClick={async () => {
+                            const { error } = await supabase.from('faturas').update({ status: 'pago', data_pagamento: new Date().toISOString() }).eq('id', f.id)
+                            if (!error) {
+                              toast.success('Pagamento simulado com sucesso!')
+                              fetchFaturas()
+                            } else {
+                              toast.error('Erro ao simular: ' + error.message)
+                            }
+                          }}
+                          className="text-xs bg-emerald-100 text-emerald-700 px-3 py-1 rounded hover:bg-emerald-200 transition font-medium"
+                        >
+                          Simular Pagamento
+                        </button>
+                      </>
                     )}
                   </td>
                 </tr>

@@ -212,6 +212,7 @@ export default function ConfiguracoesPage() {
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-sm text-slate-500">
                   <th className="p-4 font-medium">Cliente</th>
+                  <th className="p-4 font-medium">Contra-Senha (Offline)</th>
                   <th className="p-4 font-medium">Última Sincronização</th>
                   <th className="p-4 font-medium">Status do Hub</th>
                   <th className="p-4 font-medium text-right">Ação</th>
@@ -221,6 +222,7 @@ export default function ConfiguracoesPage() {
                 {hubs.map((hub) => {
                   const config = hub.configuracoes_hub?.[0];
                   const lastSync = config?.ultima_sincronizacao;
+                  const offlineSecret = config?.offline_secret || 'Não gerada';
                   let isOnline = false;
                   
                   if (lastSync) {
@@ -232,6 +234,7 @@ export default function ConfiguracoesPage() {
                   return (
                     <tr key={hub.id} className="border-b border-slate-100 hover:bg-slate-50">
                       <td className="p-4 text-sm font-medium text-slate-800">{hub.razao_social}</td>
+                      <td className="p-4 text-sm text-slate-600 font-mono bg-slate-100 rounded px-2 py-1 select-all">{offlineSecret}</td>
                       <td className="p-4 text-sm text-slate-600">
                         {lastSync ? new Date(lastSync).toLocaleString('pt-BR') : 'Nunca'}
                       </td>

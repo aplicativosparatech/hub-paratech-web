@@ -37,9 +37,10 @@ export default function LoginPage() {
   return (
     <main className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-slate-900">Login</h1>
-          <p className="text-slate-500 mt-2">Acesse o Portal Hub Paratech</p>
+        <div className="text-center mb-8 flex flex-col items-center">
+          <img src="/logo.png" alt="Paratech Logo" className="h-20 mb-4 object-contain" />
+          <h1 className="text-3xl font-bold text-slate-900">Hub Paratech</h1>
+          <p className="text-slate-500 mt-2">Acesso Restrito</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6">

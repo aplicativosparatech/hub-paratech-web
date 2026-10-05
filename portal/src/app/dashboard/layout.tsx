@@ -12,8 +12,9 @@ export default function DashboardLayout({
       <Toaster position="top-right" />
       {/* Sidebar */}
       <aside className="w-64 bg-slate-900 text-white flex flex-col">
-        <div className="p-6">
-          <h2 className="text-2xl font-bold text-white tracking-tight">Hub<span className="text-blue-500">Paratech</span></h2>
+        <div className="p-6 flex items-center gap-3">
+          <img src="/logo-icon.png" alt="Icon" className="w-8 h-8 object-contain" />
+          <h2 className="text-xl font-bold text-white tracking-tight">Hub<span className="text-blue-500">Paratech</span></h2>
         </div>
         
         <nav className="flex-1 px-4 space-y-2 mt-4">
