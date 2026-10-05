@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     const hoje = new Date().toISOString().split('T')[0]
     const { data: faturaVencida } = await supabase
       .from('faturas')
-      .select('id, valor, qr_code_payload, status, desbloqueio_confianca_em')
+      .select('id, valor, qr_code_payload, status, desbloqueio_confianca_em, data_vencimento')
       .eq('cliente_id', cliente.id)
       .eq('status', 'pendente')
       .lt('data_vencimento', hoje)
@@ -65,7 +65,9 @@ export async function POST(request: Request) {
       offline_secret: config?.offline_secret || '123456',
       fatura: faturaVencida ? {
         valor: faturaVencida.valor,
-        pix_payload: finalPix || 'ERRO_PIX'
+        pix_payload: finalPix || 'ERRO_PIX',
+        data_vencimento: faturaVencida.data_vencimento,
+        cliente_nome: cliente.nome_sistema_utilizado || 'Cliente Paratech'
       } : null
     }
 

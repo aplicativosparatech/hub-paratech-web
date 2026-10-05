@@ -21,6 +21,8 @@ namespace HubParatechDesktop
     {
         public decimal valor { get; set; }
         public string? pix_payload { get; set; }
+        public string? data_vencimento { get; set; }
+        public string? cliente_nome { get; set; }
     }
 
     public class TrayContext : ApplicationContext
@@ -37,6 +39,8 @@ namespace HubParatechDesktop
         private string offlineSecret = "123456";
         private string pixPayload = "";
         private decimal faturaValor = 0;
+        private string faturaVencimento = "";
+        private string clienteNome = "";
         private DateTime lastSync = DateTime.MinValue;
 
         public TrayContext()
@@ -134,6 +138,8 @@ namespace HubParatechDesktop
                         {
                             pixPayload = data.fatura.pix_payload ?? "";
                             faturaValor = data.fatura.valor;
+                            faturaVencimento = data.fatura.data_vencimento ?? "";
+                            clienteNome = data.fatura.cliente_nome ?? "Cliente Paratech";
                         }
                         lastSync = DateTime.Now;
                         
@@ -180,7 +186,7 @@ namespace HubParatechDesktop
             {
                 if (activeBlocker == null || activeBlocker.IsDisposed)
                 {
-                    activeBlocker = new BlockerForm(pixPayload, faturaValor, offlineSecret);
+                    activeBlocker = new BlockerForm(pixPayload, faturaValor, offlineSecret, faturaVencimento, clienteNome);
                     
                     // Adiciona evento para saber quando a tela é fechada pelo Desbloqueio Offline
                     activeBlocker.FormClosed += (s, ev) => {
