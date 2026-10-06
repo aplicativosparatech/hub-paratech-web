@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { LayoutDashboard, Users, Building2, Settings, FileText, LogOut, BarChart3, Receipt } from 'lucide-react'
+import { LayoutDashboard, Users, Building2, Settings, FileText, LogOut, BarChart3, Receipt, FileDown } from 'lucide-react'
 import { Toaster } from 'react-hot-toast'
 import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -66,6 +66,10 @@ export default function DashboardLayout({
               <Link href="/dashboard/faturas" className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition">
                 <FileText size={20} />
                 <span>Faturas</span>
+              </Link>
+              <Link href="/dashboard/notas-fiscais" className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition">
+                <FileDown size={20} />
+                <span>Notas Fiscais</span>
               </Link>
               <Link href="/dashboard/relatorios" className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition">
                 <BarChart3 size={20} />
