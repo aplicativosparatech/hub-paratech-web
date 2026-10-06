@@ -35,10 +35,12 @@ export default function DashboardLayout({
 
       if (error || !roleData) {
         console.error('Erro ao buscar user_roles:', error)
-        toast.error('Erro de permissão. Sua conta não tem um papel atribuído.')
-        // Sem role = sem acesso
-        await supabase.auth.signOut()
-        router.push('/login')
+        toast.error(`Erro de permissão: ${error?.message || 'Papel não encontrado'}`)
+        
+        setTimeout(async () => {
+          await supabase.auth.signOut()
+          router.push('/login')
+        }, 4000)
         return
       }
 
@@ -63,7 +65,6 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen flex bg-slate-50">
-      <Toaster position="top-right" />
       {/* Sidebar */}
       <aside className="w-64 bg-slate-900 text-white flex flex-col">
         <div className="p-6 flex items-center gap-3">
