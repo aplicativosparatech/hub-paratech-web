@@ -7,6 +7,8 @@ import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
+type Role = 'admin' | 'cliente' | 'contabilidade'
+
 export default function DashboardLayout({
   children,
 }: {
@@ -14,19 +16,32 @@ export default function DashboardLayout({
 }) {
   const router = useRouter()
   const supabase = createClient()
-  const [role, setRole] = useState<'admin' | 'cliente' | 'contabilidade' | null>(null)
+  const [role, setRole] = useState<Role | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function loadRole() {
       const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: roleData } = await supabase.from('user_roles').select('role').eq('user_id', user.id).single()
-        if (roleData) {
-          setRole(roleData.role)
-        } else {
-          setRole('admin') // Fallback if no role found for some reason, though normally we kick them out.
-        }
+      if (!user) {
+        router.push('/login')
+        return
       }
+
+      const { data: roleData, error } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .single()
+
+      if (error || !roleData) {
+        // Sem role = sem acesso
+        await supabase.auth.signOut()
+        router.push('/login')
+        return
+      }
+
+      setRole(roleData.role as Role)
+      setLoading(false)
     }
     loadRole()
   }, [])
@@ -34,6 +49,14 @@ export default function DashboardLayout({
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.push('/login')
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-slate-500 text-lg animate-pulse">Carregando...</div>
+      </div>
+    )
   }
 
   return (
@@ -46,14 +69,16 @@ export default function DashboardLayout({
           <h2 className="text-xl font-bold text-white tracking-tight">Hub<span className="text-blue-500">Paratech</span></h2>
         </div>
         
-        <nav className="flex-1 px-4 space-y-2 mt-4">
+        <nav className="flex-1 px-4 space-y-1 mt-4">
+
+          {/* Dashboard - visível para todos */}
           <Link href="/dashboard" className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition">
             <LayoutDashboard size={20} />
             <span>Dashboard</span>
           </Link>
 
-          {/* MENUS DO ADMIN */}
-          {(!role || role === 'admin') && (
+          {/* ===== MENUS DO ADMIN ===== */}
+          {role === 'admin' && (
             <>
               <Link href="/dashboard/contabilidades" className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition">
                 <Building2 size={20} />
@@ -75,10 +100,6 @@ export default function DashboardLayout({
                 <BarChart3 size={20} />
                 <span>Relatórios</span>
               </Link>
-              <Link href="/dashboard/gateways" className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition">
-                <Building2 size={20} />
-                <span>Gateways</span>
-              </Link>
               <Link href="/dashboard/configuracoes" className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition">
                 <Settings size={20} />
                 <span>Configurações Hub</span>
@@ -86,30 +107,55 @@ export default function DashboardLayout({
             </>
           )}
 
-          {/* MENUS DO CLIENTE */}
+          {/* ===== MENUS DO CLIENTE ===== */}
           {role === 'cliente' && (
             <>
+              <Link href="/dashboard/meu-perfil" className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition">
+                <Users size={20} />
+                <span>Meu Perfil</span>
+              </Link>
               <Link href="/dashboard/minhas-faturas" className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition">
                 <Receipt size={20} />
                 <span>Minhas Faturas</span>
               </Link>
-            </>
-          )}
-
-          {/* MENUS DA CONTABILIDADE */}
-          {role === 'contabilidade' && (
-            <>
               <Link href="/dashboard/notas-fiscais" className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition">
                 <FileDown size={20} />
-                <span>Notas Fiscais (XMLs)</span>
+                <span>Minhas Notas Fiscais</span>
+              </Link>
+              <Link href="/dashboard/relatorios" className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition">
+                <BarChart3 size={20} />
+                <span>Relatórios</span>
               </Link>
             </>
           )}
+
+          {/* ===== MENUS DA CONTABILIDADE ===== */}
+          {role === 'contabilidade' && (
+            <>
+              <Link href="/dashboard/meu-perfil" className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition">
+                <Building2 size={20} />
+                <span>Meu Perfil</span>
+              </Link>
+              <Link href="/dashboard/meus-clientes" className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition">
+                <Users size={20} />
+                <span>Meus Clientes</span>
+              </Link>
+              <Link href="/dashboard/notas-fiscais" className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition">
+                <FileDown size={20} />
+                <span>Notas Fiscais</span>
+              </Link>
+              <Link href="/dashboard/relatorios" className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition">
+                <BarChart3 size={20} />
+                <span>Relatórios</span>
+              </Link>
+            </>
+          )}
+
         </nav>
 
         <div className="p-4 border-t border-slate-800">
-          <div className="px-4 pb-3 mb-3 border-b border-slate-800 text-xs text-slate-500 text-center font-mono">
-            {role ? `Acesso: ${role.toUpperCase()}` : 'Carregando...'}
+          <div className="px-4 pb-3 mb-3 border-b border-slate-800 text-xs text-slate-500 text-center font-mono uppercase">
+            {role}
           </div>
           <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-3 w-full rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition">
             <LogOut size={20} />
