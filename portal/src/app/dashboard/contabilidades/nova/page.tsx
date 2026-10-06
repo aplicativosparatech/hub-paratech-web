@@ -38,13 +38,38 @@ export default function NovaContabilidadePage() {
       finalLogoUrl = supabase.storage.from('logos').getPublicUrl(fileName).data.publicUrl
     }
 
-    const payload = { ...formData, logo_url: finalLogoUrl }
-    const { error } = await supabase.from('contabilidades').insert([payload])
+    // Remover os campos virtuais de login antes de inserir no DB
+    const { login_email, login_senha, ...contabilidadeData } = formData
+    const payload = { ...contabilidadeData, logo_url: finalLogoUrl }
+    
+    // 1. Criar contabilidade
+    const { data: contResult, error } = await supabase.from('contabilidades').insert([payload]).select().single()
     
     if (error) {
-      toast.error('Erro ao salvar: ' + error.message)
+      toast.error('Erro ao salvar contabilidade: ' + error.message)
       setLoading(false)
       return
+    }
+
+    // 2. Criar usuário de acesso
+    if (login_email && login_senha) {
+      const res = await fetch('/api/admin/create-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: login_email,
+          password: login_senha,
+          role: 'contabilidade',
+          entity_id: contResult.id
+        })
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        toast.error('Criada, mas erro no Acesso: ' + errorData.error)
+        setLoading(false)
+        return
+      }
     }
 
     toast.success('Contabilidade salva com sucesso!')

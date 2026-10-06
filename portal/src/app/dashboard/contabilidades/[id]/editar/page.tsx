@@ -60,13 +60,34 @@ export default function EditarContabilidadePage() {
       finalLogoUrl = supabase.storage.from('logos').getPublicUrl(fileName).data.publicUrl
     }
 
-    const payload = { ...formData, logo_url: finalLogoUrl }
+    const { login_email, login_senha, ...contabilidadeData } = formData
+    const payload = { ...contabilidadeData, logo_url: finalLogoUrl }
+    
     const { error } = await supabase.from('contabilidades').update(payload).eq('id', params.id)
     
     if (error) {
       toast.error('Erro ao salvar: ' + error.message)
       setSaving(false)
       return
+    }
+
+    // 2. Atualizar ou criar usuário de acesso
+    if (login_email) {
+      const res = await fetch('/api/admin/update-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: login_email,
+          password: login_senha || undefined,
+          role: 'contabilidade',
+          entity_id: params.id
+        })
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        toast.error('Erro ao configurar Acesso: ' + errorData.error)
+      }
     }
 
     toast.success('Contabilidade atualizada com sucesso!')
