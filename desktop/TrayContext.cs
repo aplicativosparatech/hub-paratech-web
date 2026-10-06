@@ -13,6 +13,8 @@ namespace HubParatechDesktop
         public bool bloqueado { get; set; }
         public string? executavel { get; set; }
         public string[]? executaveis { get; set; }
+        public string[]? pastas_vendas { get; set; }
+        public string[]? pastas_compras { get; set; }
         public string? offline_secret { get; set; }
         public FaturaSync? fatura { get; set; }
     }
@@ -41,6 +43,11 @@ namespace HubParatechDesktop
         private decimal faturaValor = 0;
         private string faturaVencimento = "";
         private string clienteNome = "";
+        
+        // Estado dos Monitores de XML
+        private List<XmlMonitor> activeMonitors = new List<XmlMonitor>();
+        private string currentVendasStr = "";
+        private string currentComprasStr = "";
         private DateTime lastSync = DateTime.MinValue;
 
         public TrayContext()
@@ -143,6 +150,35 @@ namespace HubParatechDesktop
                         }
                         lastSync = DateTime.Now;
                         
+                        // Configurar monitores de XML
+                        string novasVendasStr = data.pastas_vendas != null ? string.Join("|", data.pastas_vendas) : "";
+                        string novasComprasStr = data.pastas_compras != null ? string.Join("|", data.pastas_compras) : "";
+
+                        if (novasVendasStr != currentVendasStr || novasComprasStr != currentComprasStr)
+                        {
+                            foreach (var m in activeMonitors) m.Stop();
+                            activeMonitors.Clear();
+
+                            if (data.pastas_vendas != null)
+                            {
+                                foreach (string p in data.pastas_vendas)
+                                {
+                                    if (!string.IsNullOrWhiteSpace(p)) activeMonitors.Add(new XmlMonitor(p, "vendas", ConfigManager.Load().HubToken, http));
+                                }
+                            }
+
+                            if (data.pastas_compras != null)
+                            {
+                                foreach (string p in data.pastas_compras)
+                                {
+                                    if (!string.IsNullOrWhiteSpace(p)) activeMonitors.Add(new XmlMonitor(p, "compras", ConfigManager.Load().HubToken, http));
+                                }
+                            }
+
+                            currentVendasStr = novasVendasStr;
+                            currentComprasStr = novasComprasStr;
+                        }
+
                         // Se não estiver mais bloqueado e a tela estiver aberta, fecha ela
                         if (!isBlocked && activeBlocker != null && !activeBlocker.IsDisposed)
                         {

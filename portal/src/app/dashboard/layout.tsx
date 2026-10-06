@@ -99,9 +99,9 @@ export default function DashboardLayout({
           {/* MENUS DA CONTABILIDADE */}
           {role === 'contabilidade' && (
             <>
-              <Link href="/dashboard/xmls" className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition">
-                <FileText size={20} />
-                <span>Meus Clientes (XMLs)</span>
+              <Link href="/dashboard/notas-fiscais" className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition">
+                <FileDown size={20} />
+                <span>Notas Fiscais (XMLs)</span>
               </Link>
             </>
           )}
