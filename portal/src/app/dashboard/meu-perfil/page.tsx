@@ -29,11 +29,13 @@ export default function MeuPerfilPage() {
 
       if (roleData.role === 'cliente' && roleData.cliente_id) {
         setEntityId(roleData.cliente_id)
-        const { data } = await supabase.from('clientes').select('nome_fantasia, cnpj, telefone, email, endereco').eq('id', roleData.cliente_id).single()
+        const { data, error } = await supabase.from('clientes').select('nome_fantasia, razao_social, cnpj, login_email').eq('id', roleData.cliente_id).single()
+        if (error) console.error('Erro ao buscar cliente:', error)
         if (data) setFormData(data)
       } else if (roleData.role === 'contabilidade' && roleData.contabilidade_id) {
         setEntityId(roleData.contabilidade_id)
-        const { data } = await supabase.from('contabilidades').select('razao_social, cnpj, email_contato').eq('id', roleData.contabilidade_id).single()
+        const { data, error } = await supabase.from('contabilidades').select('razao_social, cnpj, email_contato, login_email').eq('id', roleData.contabilidade_id).single()
+        if (error) console.error('Erro ao buscar contab:', error)
         if (data) setFormData(data)
       }
       setLoading(false)
@@ -55,16 +57,16 @@ export default function MeuPerfilPage() {
 
   const fields = role === 'cliente'
     ? [
+        { key: 'razao_social', label: 'Razão Social' },
         { key: 'nome_fantasia', label: 'Nome Fantasia' },
         { key: 'cnpj', label: 'CNPJ' },
-        { key: 'telefone', label: 'Telefone' },
-        { key: 'email', label: 'E-mail' },
-        { key: 'endereco', label: 'Endereço' },
+        { key: 'login_email', label: 'E-mail de Login' },
       ]
     : [
         { key: 'razao_social', label: 'Razão Social' },
         { key: 'cnpj', label: 'CNPJ' },
         { key: 'email_contato', label: 'E-mail de Contato' },
+        { key: 'login_email', label: 'E-mail de Login' },
       ]
 
   return (

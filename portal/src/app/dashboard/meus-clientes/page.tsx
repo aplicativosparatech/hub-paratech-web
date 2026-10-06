@@ -25,7 +25,7 @@ export default function MeusClientesPage() {
 
       const { data } = await supabase
         .from('clientes')
-        .select('id, nome_fantasia, cnpj, telefone, email')
+        .select('id, razao_social, nome_fantasia, cnpj, login_email')
         .eq('contabilidade_id', roleData.contabilidade_id)
         .order('nome_fantasia')
 
@@ -48,10 +48,10 @@ export default function MeusClientesPage() {
         <table className="w-full text-left text-sm text-slate-600">
           <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
             <tr>
-              <th className="p-4">Empresa</th>
+              <th className="p-4">Empresa (Nome Fantasia)</th>
+              <th className="p-4">Razão Social</th>
               <th className="p-4">CNPJ</th>
-              <th className="p-4">Telefone</th>
-              <th className="p-4">E-mail</th>
+              <th className="p-4">Login (E-mail)</th>
               <th className="p-4 text-right">Ações</th>
             </tr>
           </thead>
@@ -61,9 +61,9 @@ export default function MeusClientesPage() {
             ) : clientes.map(c => (
               <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
                 <td className="p-4 font-medium text-slate-900">{c.nome_fantasia}</td>
+                <td className="p-4">{c.razao_social || '—'}</td>
                 <td className="p-4">{c.cnpj || '—'}</td>
-                <td className="p-4">{c.telefone || '—'}</td>
-                <td className="p-4">{c.email || '—'}</td>
+                <td className="p-4">{c.login_email || '—'}</td>
                 <td className="p-4 text-right">
                   <Link
                     href={`/dashboard/notas-fiscais?cliente_id=${c.id}`}
