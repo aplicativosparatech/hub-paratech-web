@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     if (!cliente) return NextResponse.json({ error: 'Cliente não encontrado' }, { status: 404 })
 
     // 2. Busca configuração (offline_secret, exes_monitorados)
-    const { data: config } = await supabase.from('configuracoes_hub').select('offline_secret, exes_monitorados').eq('cliente_id', cliente.id).maybeSingle()
+    const { data: config } = await supabase.from('configuracoes_hub').select('offline_secret, exes_monitorados, pastas_vendas, pastas_compras').eq('cliente_id', cliente.id).maybeSingle()
 
     // 3. Verifica faturas vencidas
     const hoje = new Date().toISOString().split('T')[0]
@@ -62,6 +62,8 @@ export async function POST(request: Request) {
       motivo: !cliente.is_ativo ? 'administrativo' : (faturaVencida ? 'inadimplencia' : null),
       executavel: cliente.nome_sistema_utilizado,
       executaveis: config?.exes_monitorados || [],
+      pastas_vendas: config?.pastas_vendas || [],
+      pastas_compras: config?.pastas_compras || [],
       offline_secret: config?.offline_secret || '123456',
       fatura: faturaVencida ? {
         valor: faturaVencida.valor,
