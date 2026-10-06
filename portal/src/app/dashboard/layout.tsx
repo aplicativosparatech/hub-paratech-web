@@ -34,6 +34,8 @@ export default function DashboardLayout({
         .single()
 
       if (error || !roleData) {
+        console.error('Erro ao buscar user_roles:', error)
+        toast.error('Erro de permissão. Sua conta não tem um papel atribuído.')
         // Sem role = sem acesso
         await supabase.auth.signOut()
         router.push('/login')
