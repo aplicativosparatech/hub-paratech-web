@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { sendWhatsAppMessage } from '@/utils/whatsapp'
 
 export async function GET(request: Request) {
   // Segurança Básica: Em produção, checar cabeçalhos de autenticação do Vercel Cron.
@@ -43,7 +44,7 @@ export async function GET(request: Request) {
 
     // 3. Processa cada fatura de acordo com a Régua de Cobrança
     for (const fatura of faturas || []) {
-      const cliente = fatura.clientes
+      const cliente: any = Array.isArray(fatura.clientes) ? fatura.clientes[0] : fatura.clientes
       if (!cliente || !cliente.whatsapp) continue // Se o cliente não tem whatsapp cadastrado, ignora.
 
       const vencimento = new Date(fatura.data_vencimento)
@@ -91,15 +92,27 @@ export async function GET(request: Request) {
 
       // Se gerou alguma mensagem para as condições acima, envia para a API!
       if (mensagem) {
-        // [FUTURO]: Aqui injetaremos a chamada real Axios/Fetch para a Uazapi ou Evolution API.
-        // await enviarWhatsapp(wppApis, cliente.whatsapp, mensagem)
-        
-        disparosRealizados.push({
-          cliente: cliente.nome_fantasia,
-          whatsapp: cliente.whatsapp,
-          regra: diferencaDias,
-          mensagem
-        })
+        try {
+          await sendWhatsAppMessage({
+            to: cliente.whatsapp,
+            message: mensagem
+          })
+
+          disparosRealizados.push({
+            cliente: cliente.nome_fantasia || cliente.razao_social,
+            whatsapp: cliente.whatsapp,
+            regra: diferencaDias,
+            status: 'enviado'
+          })
+        } catch (err: any) {
+          disparosRealizados.push({
+            cliente: cliente.nome_fantasia || cliente.razao_social,
+            whatsapp: cliente.whatsapp,
+            regra: diferencaDias,
+            status: 'falha',
+            erro: err.message
+          })
+        }
       }
     }
 

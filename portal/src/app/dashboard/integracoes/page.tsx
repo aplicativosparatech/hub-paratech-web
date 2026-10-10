@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { PlugZap, CreditCard, MessageCircle, Save } from 'lucide-react'
+import { PlugZap, CreditCard, MessageCircle, Save, Send } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { createClient } from '@/utils/supabase/client'
 
@@ -18,6 +18,37 @@ export default function IntegracoesPage() {
   const [activeTab, setActiveTab] = useState<'gateways' | 'whatsapp'>('gateways')
   const [isLoading, setIsLoading] = useState(true)
   const [integracoes, setIntegracoes] = useState<Integracao[]>([])
+  const [testPhone, setTestPhone] = useState('')
+  const [isTestingWpp, setIsTestingWpp] = useState(false)
+
+  const handleTestWhatsApp = async () => {
+    if (!testPhone) {
+      toast.error('Digite um número para teste (com DDD)')
+      return
+    }
+
+    setIsTestingWpp(true)
+    const tId = toast.loading('Enviando mensagem de teste via WhatsApp...')
+
+    try {
+      const res = await fetch('/api/whatsapp/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: testPhone })
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Falha no disparo')
+      }
+
+      toast.success('Mensagem enviada com sucesso para o seu WhatsApp!', { id: tId })
+    } catch (err: any) {
+      toast.error(`Erro: ${err.message}`, { id: tId })
+    } finally {
+      setIsTestingWpp(false)
+    }
+  }
 
   // Fetch das configurações do banco
   useEffect(() => {
@@ -215,6 +246,34 @@ export default function IntegracoesPage() {
           </>
         )}
       </div>
+
+      {/* Card de Teste em Tempo Real de WhatsApp */}
+      {activeTab === 'whatsapp' && (
+        <div className="mt-8 bg-emerald-50 border border-emerald-200 rounded-2xl p-6">
+          <h3 className="text-lg font-bold text-emerald-900 mb-1 flex items-center gap-2">
+            <Send size={18} className="text-emerald-600" /> Testar Envio em Tempo Real
+          </h3>
+          <p className="text-sm text-emerald-700 mb-4">
+            Envie uma mensagem de teste para o seu próprio WhatsApp para verificar se a API configurada está respondendo.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 max-w-xl">
+            <input 
+              type="text" 
+              placeholder="DDD + Seu Número (Ex: 5511999999999)" 
+              value={testPhone} 
+              onChange={e => setTestPhone(e.target.value)}
+              className="flex-1 bg-white border border-emerald-300 px-4 py-2.5 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+            />
+            <button 
+              onClick={handleTestWhatsApp}
+              disabled={isTestingWpp}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-6 py-2.5 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+            >
+              <Send size={16} /> {isTestingWpp ? 'Disparando...' : 'Enviar Teste'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="mt-8 flex justify-end">
         <button onClick={handleSave} className="flex items-center gap-2 bg-slate-900 text-white px-8 py-3 rounded-xl font-semibold shadow-lg hover:bg-slate-800 hover:shadow-xl transition-all hover:-translate-y-0.5">
