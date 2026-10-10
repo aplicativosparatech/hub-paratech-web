@@ -19,6 +19,7 @@ export default function NovoClientePage() {
     cnpj: '',
     nome_sistema_utilizado: '',
     contabilidade_id: '',
+    whatsapp: '',
     login_email: '',
     login_senha: '',
     logo_url: ''

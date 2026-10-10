@@ -60,11 +60,13 @@ export default function MeuPerfilPage() {
         { key: 'razao_social', label: 'Razão Social' },
         { key: 'nome_fantasia', label: 'Nome Fantasia' },
         { key: 'cnpj', label: 'CNPJ' },
+        { key: 'whatsapp', label: 'WhatsApp' },
         { key: 'login_email', label: 'E-mail de Login' },
       ]
     : [
         { key: 'razao_social', label: 'Razão Social' },
         { key: 'cnpj', label: 'CNPJ' },
+        { key: 'whatsapp', label: 'WhatsApp' },
         { key: 'email_contato', label: 'E-mail de Contato' },
         { key: 'login_email', label: 'E-mail de Login' },
       ]
