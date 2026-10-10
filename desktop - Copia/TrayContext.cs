@@ -76,9 +76,9 @@ namespace HubParatechDesktop
             trayIcon.ShowBalloonTip(3000, "Hub Paratech", "Iniciado e monitorando os sistemas.", ToolTipIcon.Info);
             EnableAutoStart();
 
-            // Timer para sincronizar com a nuvem a cada 1 hora (3600000 ms)
+            // Timer para sincronizar com a nuvem (ex: a cada 60 segundos)
             syncTimer = new System.Windows.Forms.Timer();
-            syncTimer.Interval = 3600000;
+            syncTimer.Interval = 60000;
             syncTimer.Tick += async (s, e) => await SyncWithServer();
             syncTimer.Start();
 
