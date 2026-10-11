@@ -44,7 +44,18 @@ export async function POST(request: Request) {
        if (pixData.qr_code_payload) finalPix = pixData.qr_code_payload
     }
 
-    let isBloqueado = !cliente.is_ativo || !!faturaVencida;
+    let isBloqueado = !cliente.is_ativo;
+
+    // Lógica da Régua de Cobrança: 5 dias de carência/tolerância após o vencimento antes de travar a máquina
+    if (faturaVencida) {
+      const dataVenc = new Date(faturaVencida.data_vencimento)
+      const dataHoje = new Date(hoje)
+      const diasAtraso = Math.floor((dataHoje.getTime() - dataVenc.getTime()) / (1000 * 60 * 60 * 24))
+      
+      if (diasAtraso >= 5) {
+        isBloqueado = true; // Passou dos 5 dias de tolerância: trava o sistema!
+      }
+    }
     
     // Lógica de liberação em confiança (24h)
     if (faturaVencida && faturaVencida.desbloqueio_confianca_em) {
