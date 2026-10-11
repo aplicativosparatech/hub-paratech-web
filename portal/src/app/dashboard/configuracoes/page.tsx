@@ -101,8 +101,8 @@ export default function ConfiguracoesPage() {
   }
 
   return (
-    <div className="p-8 max-w-4xl">
-      <header className="mb-8 flex justify-between items-center">
+    <div className="w-full space-y-6 animate-in fade-in duration-300">
+      <header className="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Configurações do Hub</h1>
           <p className="text-slate-500 mt-1">Defina as regras de bloqueio e monitoramento por cliente.</p>

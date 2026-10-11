@@ -43,8 +43,8 @@ export default function GatewaysPage() {
   if (loading) return <div className="p-8">Carregando...</div>
 
   return (
-    <div className="p-8 max-w-4xl">
-      <header className="mb-8">
+    <div className="w-full space-y-6 animate-in fade-in duration-300">
+      <header className="mb-4">
         <h1 className="text-3xl font-bold text-slate-900">Gateways de Pagamento</h1>
         <p className="text-slate-500 mt-1">Configure as integrações para geração de Pix Automático.</p>
       </header>

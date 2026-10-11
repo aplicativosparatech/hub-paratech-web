@@ -43,19 +43,22 @@ export async function GET(request: Request) {
 
     const disparosRealizados = []
 
+    // Modo de contagem configurável na tela de WhatsApp: 'bloqueio_real' (considera próximo dia útil) ou 'bloqueio_nominal' (5 dias corridos da data do vencimento)
+    const modoContagem = wppApis?.credenciais?.modo_contagem_bloqueio || 'bloqueio_real'
+
     // 3. Processa cada fatura de acordo com a Régua de Cobrança
     for (const fatura of faturas || []) {
       const cliente: any = Array.isArray(fatura.clientes) ? fatura.clientes[0] : fatura.clientes
       if (!cliente || !cliente.whatsapp) continue // Se o cliente não tem whatsapp cadastrado, ignora.
 
-      // Cálculo de datas considerando Fins de Semana e Feriados Nacionais (Legislação BR)
-      const { effectiveDueDate, effectiveBlockDate } = calculateEffectiveDates(fatura.data_vencimento)
+      // Cálculo de datas: data do vencimento NUNCA muda!
+      const { rawDueDate, targetCountdownDate } = calculateEffectiveDates(fatura.data_vencimento, modoContagem)
 
-      const diferencaDias = Math.floor((effectiveDueDate.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
-      const diasParaBloqueio = Math.floor((effectiveBlockDate.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
+      const diferencaDias = Math.floor((rawDueDate.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
+      const diasParaBloqueio = Math.floor((targetCountdownDate.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
 
-      const dataVencimentoFormatada = effectiveDueDate.toLocaleDateString('pt-BR')
-      const dataBloqueioFormatada = effectiveBlockDate.toLocaleDateString('pt-BR')
+      const dataVencimentoFormatada = rawDueDate.toLocaleDateString('pt-BR')
+      const dataBloqueioFormatada = targetCountdownDate.toLocaleDateString('pt-BR')
       const valorFormatado = Number(fatura.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
       let mensagem = null

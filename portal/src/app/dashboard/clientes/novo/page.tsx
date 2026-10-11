@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, UserPlus, Save } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 
@@ -50,7 +50,6 @@ export default function NovoClientePage() {
       finalLogoUrl = supabase.storage.from('logos').getPublicUrl(fileName).data.publicUrl
     }
 
-    // Remove email/senha do payload do cliente
     const { login_email, login_senha, ...clienteData } = formData
     
     const payload = {
@@ -89,111 +88,109 @@ export default function NovoClientePage() {
       }
     }
 
-    toast.success('Cliente salvo com sucesso!')
+    toast.success('Cliente cadastrado com sucesso!')
     router.push('/dashboard/clientes')
   }
 
   return (
-    <div className="p-8 max-w-2xl">
-      <Link href="/dashboard/clientes" className="inline-flex items-center gap-2 text-slate-500 hover:text-slate-900 mb-6 transition">
-        <ArrowLeft size={16} /> Voltar
-      </Link>
+    <div className="w-full space-y-6 animate-in fade-in duration-300">
+      <div className="flex items-center justify-between">
+        <Link href="/dashboard/clientes" className="inline-flex items-center gap-2 text-slate-500 hover:text-slate-900 transition font-medium">
+          <ArrowLeft size={18} /> Voltar para lista de clientes
+        </Link>
+      </div>
       
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900">Novo Cliente</h1>
+      <header className="mb-2">
+        <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
+          <UserPlus className="text-blue-600" size={30} />
+          Novo Cliente
+        </h1>
+        <p className="text-slate-500 text-sm mt-1">Cadastre uma nova empresa cliente para gerar o Token do Hub e vincular à contabilidade.</p>
       </header>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Razão Social</label>
-            <input 
-              required type="text" 
-              className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={formData.razao_social} onChange={e => setFormData({...formData, razao_social: e.target.value})}
-            />
-          </div>
+      {/* Formulário Expandido em Grid */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 w-full">
+        <form onSubmit={handleSubmit} className="space-y-6">
           
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Nome Fantasia</label>
-            <input 
-              type="text" 
-              className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={formData.nome_fantasia} onChange={e => setFormData({...formData, nome_fantasia: e.target.value})}
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">CNPJ</label>
-            <input 
-              required type="text" 
-              className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={formData.cnpj} onChange={e => setFormData({...formData, cnpj: e.target.value})}
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Nome do Sistema Monitorado (Ex: PDV Vendas)</label>
-            <input 
-              required type="text" 
-              className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={formData.nome_sistema_utilizado} onChange={e => setFormData({...formData, nome_sistema_utilizado: e.target.value})}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Vincular a uma Contabilidade</label>
-            <select
-              className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={formData.contabilidade_id} onChange={e => setFormData({...formData, contabilidade_id: e.target.value})}
-            >
-              <option value="">Nenhuma</option>
-              {contabilidades.map(c => (
-                <option key={c.id} value={c.id}>{c.razao_social}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="border-t border-slate-200 pt-4 mt-4">
-            <h3 className="text-lg font-semibold text-slate-800 mb-4">Dados de Acesso e Marca</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <h3 className="text-base font-bold text-slate-900 mb-4 pb-2 border-b border-slate-100">
+              Dados da Empresa
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">E-mail de Login</label>
-                <input 
-                  type="email" 
-                  className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={formData.login_email} onChange={e => setFormData({...formData, login_email: e.target.value})}
-                />
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Razão Social</label>
+                <input required type="text" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  placeholder="Nome oficial da empresa"
+                  value={formData.razao_social} onChange={e => setFormData({...formData, razao_social: e.target.value})} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Senha de Login</label>
-                <input 
-                  type="password" 
-                  className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={formData.login_senha} onChange={e => setFormData({...formData, login_senha: e.target.value})}
-                />
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Nome Fantasia</label>
+                <input type="text" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  placeholder="Nome comercial"
+                  value={formData.nome_fantasia} onChange={e => setFormData({...formData, nome_fantasia: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">CNPJ</label>
+                <input required type="text" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  placeholder="00.000.000/0000-00"
+                  value={formData.cnpj} onChange={e => setFormData({...formData, cnpj: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">WhatsApp (Cobranças / Notificações)</label>
+                <input type="text" placeholder="5511999999999" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  value={formData.whatsapp} onChange={e => setFormData({...formData, whatsapp: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Nome do Sistema Monitorado (ERP/PDV)</label>
+                <input required type="text" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  placeholder="Ex: GdoorSlim, SysPDV"
+                  value={formData.nome_sistema_utilizado} onChange={e => setFormData({...formData, nome_sistema_utilizado: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Vincular a uma Contabilidade</label>
+                <select className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  value={formData.contabilidade_id} onChange={e => setFormData({...formData, contabilidade_id: e.target.value})}>
+                  <option value="">Nenhuma</option>
+                  {contabilidades.map(c => (
+                    <option key={c.id} value={c.id}>{c.razao_social}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Logomarca da Empresa</label>
+                <input type="file" accept="image/*" className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 text-sm"
+                  onChange={e => { if (e.target.files && e.target.files.length > 0) setLogoFile(e.target.files[0]) }} />
               </div>
             </div>
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Logomarca (opcional)</label>
-              <input 
-                type="file" accept="image/*"
-                className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                onChange={e => {
-                  if (e.target.files && e.target.files.length > 0) {
-                    setLogoFile(e.target.files[0])
-                  }
-                }}
-              />
+          </div>
+
+          <div className="pt-4 border-t border-slate-100">
+            <h3 className="text-base font-bold text-slate-900 mb-4 pb-2 border-b border-slate-100">
+              Acesso ao Portal (Login)
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">E-mail de Login</label>
+                <input type="email" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  placeholder="cliente@empresa.com"
+                  value={formData.login_email} onChange={e => setFormData({...formData, login_email: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Senha de Login</label>
+                <input type="password" placeholder="••••••••" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  value={formData.login_senha} onChange={e => setFormData({...formData, login_senha: e.target.value})} />
+              </div>
             </div>
           </div>
 
-          <div className="pt-4">
+          <div className="pt-6 border-t border-slate-100 flex justify-end">
             <button 
-              type="submit" disabled={loading}
-              className="w-full bg-blue-600 text-white font-medium py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+              type="submit" 
+              disabled={loading}
+              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
             >
-              {loading ? 'Salvando...' : 'Salvar Cliente'}
+              <Save size={18} />
+              {loading ? 'Cadastrando cliente...' : 'Cadastrar Cliente'}
             </button>
           </div>
         </form>
