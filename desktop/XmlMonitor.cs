@@ -17,6 +17,12 @@ namespace HubParatechDesktop
         private HttpClient http;
         private bool isRunning = true;
 
+        private static readonly string[] NomeMeses = new string[]
+        {
+            "JANEIRO", "FEVEREIRO", "MARCO", "ABRIL", "MAIO", "JUNHO",
+            "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"
+        };
+
         public XmlMonitor(string path, string tipoPasta, string token, HttpClient httpClient)
         {
             this.rootPath = path;
@@ -77,9 +83,7 @@ namespace HubParatechDesktop
                 string fileName = Path.GetFileName(filePath);
                 string fileNameWithoutExt = Path.GetFileNameWithoutExtension(filePath);
 
-                // REGRA SOLICITADA:
-                // Sistemas como Gdoor gravam 2 arquivos (um provisório curto e um com a chave de 44 dígitos).
-                // Ignora arquivos com nome curto (<= 35 caracteres) para pegar apenas o XML oficial com chave.
+                // REGRA: Ignora arquivos curtos (<= 35 caracteres) como rascunhos do Gdoor
                 if (fileNameWithoutExt.Length <= 35)
                 {
                     return;
@@ -95,7 +99,7 @@ namespace HubParatechDesktop
                     return;
                 }
 
-                // Tenta ler o arquivo com segurança (lidando com arquivo em gravação pelo ERP)
+                // Tenta ler o arquivo com segurança (lidando com gravação pelo ERP)
                 byte[]? fileBytes = await ReadFileWithRetryAsync(filePath, maxRetries: 4, delayMs: 1500);
                 if (fileBytes == null || fileBytes.Length == 0) return;
 
@@ -112,17 +116,80 @@ namespace HubParatechDesktop
 
                     if (response.IsSuccessStatusCode)
                     {
-                        // REGRA: O ARQUIVO ORIGINAL NUNCA É MOVIDO OU APAGADO!
-                        // Ele permanece intacto na pasta do cliente para o ERP continuar funcionando normalmente.
-                        // Marcamos no cache em disco que o arquivo já foi enviado com sucesso.
+                        // 1. Marca no cache local que foi enviado (evita duplicidades no futuro)
                         XmlUploadCache.MarkAsUploaded(fileIdentifier);
-                        Debug.WriteLine($"XML enviado com sucesso: {fileName}");
+
+                        // 2. Cria cópia de conferência em Contabilidade_Paratech/{MM-MES-AAAA} SEM mexer no original
+                        SaveBackupCopy(filePath, fileBytes);
+
+                        Debug.WriteLine($"XML enviado e conferido com sucesso: {fileName}");
                     }
                 }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Erro ao processar XML {filePath}: {ex.Message}");
+            }
+        }
+
+        private void SaveBackupCopy(string sourceFilePath, byte[] fileBytes)
+        {
+            try
+            {
+                // Determina Ano e Mês (priorizando a data de emissão do XML)
+                int ano = DateTime.Now.Year;
+                int mes = DateTime.Now.Month;
+
+                try
+                {
+                    string xmlPreview = System.Text.Encoding.UTF8.GetString(fileBytes, 0, Math.Min(fileBytes.Length, 4096));
+                    var match = Regex.Match(xmlPreview, @"<(?:dhEmi|dEmi)[^>]*>(\d{4})-(\d{2})-(\d{2})");
+                    if (match.Success)
+                    {
+                        ano = int.Parse(match.Groups[1].Value);
+                        mes = int.Parse(match.Groups[2].Value);
+                    }
+                    else
+                    {
+                        var fi = new FileInfo(sourceFilePath);
+                        ano = fi.LastWriteTime.Year;
+                        mes = fi.LastWriteTime.Month;
+                    }
+                }
+                catch
+                {
+                    var fi = new FileInfo(sourceFilePath);
+                    ano = fi.LastWriteTime.Year;
+                    mes = fi.LastWriteTime.Month;
+                }
+
+                if (mes < 1 || mes > 12) mes = DateTime.Now.Month;
+                string nomeMes = NomeMeses[mes - 1];
+                string folderMesAno = $"{mes:D2}-{nomeMes}-{ano}";
+
+                // Base do drive onde o arquivo monitorado reside (ex: C:\ ou D:\)
+                string driveRoot = Path.GetPathRoot(sourceFilePath) ?? "C:\\";
+                string targetDir = Path.Combine(driveRoot, "Contabilidade_Paratech", folderMesAno);
+
+                try
+                {
+                    if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
+                    string destFile = Path.Combine(targetDir, Path.GetFileName(sourceFilePath));
+                    File.Copy(sourceFilePath, destFile, true);
+                }
+                catch
+                {
+                    // Fallback para a pasta do perfil caso a raiz do drive exija elevação
+                    string fallbackRoot = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                    string fallbackDir = Path.Combine(fallbackRoot, "Contabilidade_Paratech", folderMesAno);
+                    if (!Directory.Exists(fallbackDir)) Directory.CreateDirectory(fallbackDir);
+                    string destFile = Path.Combine(fallbackDir, Path.GetFileName(sourceFilePath));
+                    File.Copy(sourceFilePath, destFile, true);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Erro ao criar cópia de conferência na Contabilidade_Paratech: {ex.Message}");
             }
         }
 
