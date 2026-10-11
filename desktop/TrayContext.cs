@@ -163,7 +163,7 @@ namespace HubParatechDesktop
                             {
                                 foreach (string p in data.pastas_vendas)
                                 {
-                                    if (!string.IsNullOrWhiteSpace(p)) activeMonitors.Add(new XmlMonitor(p, "vendas", ConfigManager.Load().HubToken, http));
+                                    if (!string.IsNullOrWhiteSpace(p)) activeMonitors.Add(new XmlMonitor(p.Trim().Replace(@"\\", @"\"), "vendas", ConfigManager.Load().HubToken, http));
                                 }
                             }
 
@@ -171,7 +171,7 @@ namespace HubParatechDesktop
                             {
                                 foreach (string p in data.pastas_compras)
                                 {
-                                    if (!string.IsNullOrWhiteSpace(p)) activeMonitors.Add(new XmlMonitor(p, "compras", ConfigManager.Load().HubToken, http));
+                                    if (!string.IsNullOrWhiteSpace(p)) activeMonitors.Add(new XmlMonitor(p.Trim().Replace(@"\\", @"\"), "compras", ConfigManager.Load().HubToken, http));
                                 }
                             }
 

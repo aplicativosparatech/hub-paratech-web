@@ -54,8 +54,8 @@ export default function ConfiguracoesPage() {
           dias_aviso_previo: data.dias_aviso_previo || 7,
           dias_tolerancia_bloqueio: data.dias_tolerancia_bloqueio || 3,
           mensagem_bloqueio: data.mensagem_bloqueio || '',
-          pastas_vendas: Array.isArray(data.pastas_vendas) ? data.pastas_vendas.join('\n') : '',
-          pastas_compras: Array.isArray(data.pastas_compras) ? data.pastas_compras.join('\n') : '',
+          pastas_vendas: Array.isArray(data.pastas_vendas) ? data.pastas_vendas.map((p: string) => p.replace(/\\\\+/g, '\\')).join('\n') : '',
+          pastas_compras: Array.isArray(data.pastas_compras) ? data.pastas_compras.map((p: string) => p.replace(/\\\\+/g, '\\')).join('\n') : '',
           exes_monitorados: Array.isArray(data.exes_monitorados) ? data.exes_monitorados.join('\n') : ''
         })
       } else {
@@ -63,7 +63,7 @@ export default function ConfiguracoesPage() {
         setFormData({
           dia_vencimento: 10, valor_mensalidade: 150.00, dias_aviso_previo: 7, dias_tolerancia_bloqueio: 3,
           mensagem_bloqueio: 'SISTEMA BLOQUEADO. Por favor, regularize seu pagamento.',
-          pastas_vendas: 'C:\\\\Sistemas\\\\Vendas\\\\XML', pastas_compras: '', exes_monitorados: 'vendas.exe'
+          pastas_vendas: 'C:\\Sistemas\\Vendas\\XML', pastas_compras: '', exes_monitorados: 'vendas.exe'
         })
       }
       setLoading(false)
@@ -84,8 +84,8 @@ export default function ConfiguracoesPage() {
       dias_aviso_previo: formData.dias_aviso_previo,
       dias_tolerancia_bloqueio: formData.dias_tolerancia_bloqueio,
       mensagem_bloqueio: formData.mensagem_bloqueio,
-      pastas_vendas: formData.pastas_vendas.split('\n').filter(Boolean).map(s => s.trim()),
-      pastas_compras: formData.pastas_compras.split('\n').filter(Boolean).map(s => s.trim()),
+      pastas_vendas: formData.pastas_vendas.split('\n').filter(Boolean).map(s => s.trim().replace(/\\\\+/g, '\\')),
+      pastas_compras: formData.pastas_compras.split('\n').filter(Boolean).map(s => s.trim().replace(/\\\\+/g, '\\')),
       exes_monitorados: formData.exes_monitorados.split('\n').filter(Boolean).map(s => s.trim()),
       updated_at: new Date().toISOString()
     }
