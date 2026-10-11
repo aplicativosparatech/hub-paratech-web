@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { calculateEffectiveDates } from '@/utils/businessDays'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -46,14 +47,15 @@ export async function POST(request: Request) {
 
     let isBloqueado = !cliente.is_ativo;
 
-    // Lógica da Régua de Cobrança: 5 dias de carência/tolerância após o vencimento antes de travar a máquina
+    // Regra de Negócio: Se o vencimento ou a data de bloqueio cair em feriado/fim de semana, prorroga para o próximo dia útil
     if (faturaVencida) {
-      const dataVenc = new Date(faturaVencida.data_vencimento)
-      const dataHoje = new Date(hoje)
-      const diasAtraso = Math.floor((dataHoje.getTime() - dataVenc.getTime()) / (1000 * 60 * 60 * 24))
-      
-      if (diasAtraso >= 5) {
-        isBloqueado = true; // Passou dos 5 dias de tolerância: trava o sistema!
+      const { effectiveBlockDate } = calculateEffectiveDates(faturaVencida.data_vencimento)
+      const dataHoje = new Date()
+      dataHoje.setHours(0, 0, 0, 0)
+
+      // Só bloqueia se HOJE já atingiu ou passou a data de bloqueio efetiva (respeitando fins de semana e feriados)
+      if (dataHoje.getTime() >= effectiveBlockDate.getTime()) {
+        isBloqueado = true;
       }
     }
     

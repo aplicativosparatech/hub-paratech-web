@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { sendWhatsAppMessage } from '@/utils/whatsapp'
+import { calculateEffectiveDates } from '@/utils/businessDays'
 
 export async function GET(request: Request) {
   // Segurança Básica: Em produção, checar cabeçalhos de autenticação do Vercel Cron.
@@ -47,17 +48,15 @@ export async function GET(request: Request) {
       const cliente: any = Array.isArray(fatura.clientes) ? fatura.clientes[0] : fatura.clientes
       if (!cliente || !cliente.whatsapp) continue // Se o cliente não tem whatsapp cadastrado, ignora.
 
-      const vencimento = new Date(fatura.data_vencimento)
-      vencimento.setHours(0, 0, 0, 0) // Zera as horas
+      // Cálculo de datas considerando Fins de Semana e Feriados Nacionais (Legislação BR)
+      const { effectiveDueDate, effectiveBlockDate } = calculateEffectiveDates(fatura.data_vencimento)
 
-      const diferencaDias = Math.floor((vencimento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
-      const dataVencimentoFormatada = vencimento.toLocaleDateString('pt-BR')
+      const diferencaDias = Math.floor((effectiveDueDate.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
+      const diasParaBloqueio = Math.floor((effectiveBlockDate.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
+
+      const dataVencimentoFormatada = effectiveDueDate.toLocaleDateString('pt-BR')
+      const dataBloqueioFormatada = effectiveBlockDate.toLocaleDateString('pt-BR')
       const valorFormatado = Number(fatura.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-      
-      // Data de bloqueio (ex: 5 dias após o vencimento)
-      const dataBloqueio = new Date(vencimento)
-      dataBloqueio.setDate(dataBloqueio.getDate() + 5)
-      const dataBloqueioFormatada = dataBloqueio.toLocaleDateString('pt-BR')
 
       let mensagem = null
 
@@ -66,27 +65,23 @@ export async function GET(request: Request) {
         mensagem = `Olá! A fatura ${fatura.id.split('-')[0]} — Sistema Comercial, referente a este mês, da empresa ${cliente.nome_fantasia || cliente.razao_social}, já está disponível.\nValor: ${valorFormatado}\nVencimento: ${dataVencimentoFormatada}\n\nToque no link abaixo para pagar via Pix.\n💳 [LINK AQUI]`
       }
       
-      // REGRA 2: No dia do Vencimento
+      // REGRA 2: No dia do Vencimento Efetivo
       else if (diferencaDias === 0) {
-        const diasFaltantesBloqueio = 5
-        mensagem = `Olá! Sua fatura do Sistema Comercial vence hoje, ${dataVencimentoFormatada}. Valor: ${valorFormatado}.\n\nPara evitar o bloqueio previsto para ${dataBloqueioFormatada}, regularize o pagamento. Faltam ${diasFaltantesBloqueio} dias.\n💳 [LINK AQUI]`
+        mensagem = `Olá! Sua fatura do Sistema Comercial vence hoje, ${dataVencimentoFormatada}. Valor: ${valorFormatado}.\n\nPara evitar o bloqueio previsto para ${dataBloqueioFormatada}, regularize o pagamento. Faltam ${diasParaBloqueio} dias.\n💳 [LINK AQUI]`
       }
       
-      // REGRA 3: Atrasado (1 a 5 dias após vencimento)
-      else if (diferencaDias < 0 && diferencaDias >= -5) {
-        const diasAtraso = Math.abs(diferencaDias)
-        const faltamParaBloqueio = 5 - diasAtraso
-        
-        if (faltamParaBloqueio === 0) {
-           // Dia do Bloqueio
-           mensagem = `Olá. Ainda não identificamos o pagamento da fatura ${fatura.id.split('-')[0]} da empresa ${cliente.nome_fantasia}. Vencimento original: ${dataVencimentoFormatada}.\n\n⚠️ O prazo para regularizar o pagamento antes do bloqueio TERMINA HOJE.\nValor: ${valorFormatado}\n\nSe já pagou, entre em contato conosco.\n💳 [LINK AQUI]`
+      // REGRA 3: Atrasado, mas antes do bloqueio efetivo
+      else if (diferencaDias < 0 && diasParaBloqueio >= 0) {
+        if (diasParaBloqueio === 0) {
+           // Dia do Bloqueio Efetivo (Próximo dia útil se caiu no fim de semana/feriado)
+           mensagem = `Olá. Ainda não identificamos o pagamento da fatura ${fatura.id.split('-')[0]} da empresa ${cliente.nome_fantasia || cliente.razao_social}. Vencimento: ${dataVencimentoFormatada}.\n\n⚠️ O prazo para regularizar o pagamento antes do bloqueio TERMINA HOJE.\nValor: ${valorFormatado}\n\nSe já pagou, entre em contato conosco.\n💳 [LINK AQUI]`
         } else {
-           mensagem = `Olá. Ainda não identificamos o pagamento da fatura ${fatura.id.split('-')[0]} da empresa ${cliente.nome_fantasia}. Vencimento original: ${dataVencimentoFormatada}.\n\nPara evitar o bloqueio previsto para ${dataBloqueioFormatada}, regularize o pagamento. Faltam ${faltamParaBloqueio} dias.\nValor: ${valorFormatado}\n\nSe já pagou, entre em contato conosco.\n💳 [LINK AQUI]`
+           mensagem = `Olá. Ainda não identificamos o pagamento da fatura ${fatura.id.split('-')[0]} da empresa ${cliente.nome_fantasia || cliente.razao_social}. Vencimento: ${dataVencimentoFormatada}.\n\nPara evitar o bloqueio previsto para ${dataBloqueioFormatada}, regularize o pagamento. Faltam ${diasParaBloqueio} dias.\nValor: ${valorFormatado}\n\nSe já pagou, entre em contato conosco.\n💳 [LINK AQUI]`
         }
       }
       
-      // REGRA 4: Já bloqueado (> 5 dias de atraso)
-      else if (diferencaDias < -5) {
+      // REGRA 4: Já passou da data de bloqueio efetiva
+      else if (diasParaBloqueio < 0) {
         mensagem = `⚠️ AVISO DE BLOQUEIO ⚠️\nO prazo previsto para bloqueio terminou em ${dataBloqueioFormatada}. Seu sistema pode estar inativo.\n\nRegularize o pagamento de ${valorFormatado} ou entre em contato conosco imediatamente.\n💳 [LINK AQUI]`
       }
 
