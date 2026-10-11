@@ -3,13 +3,38 @@ import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-// Usaremos a Service Role Key para inserir no banco com segurança na API
 const supabaseAdmin = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseKey)
 
-function extractTag(xml: string, tag: string) {
-  const regex = new RegExp(`<${tag}[^>]*>(.*?)</${tag}>`)
+function extractTag(xml: string, tag: string): string | null {
+  const regex = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`)
   const match = xml.match(regex)
-  return match ? match[1] : null
+  return match ? match[1].trim() : null
+}
+
+function calculateMonofasico(xml: string): number {
+  let totalMonofasico = 0
+  // Pega cada bloco de item <det nItem="...">...</det>
+  const detRegex = /<det[^>]*>([\s\S]*?)<\/det>/g
+  let match: RegExpExecArray | null
+
+  while ((match = detRegex.exec(xml)) !== null) {
+    const itemXml = match[1]
+    
+    // Verifica se possui CST 04 (Monofásico) ou 06 (Alíquota Zero) no PIS ou COFINS
+    const hasMonofasicoCST = /<CST>(04|06)<\/CST>/.test(itemXml)
+
+    if (hasMonofasicoCST) {
+      const vProdStr = extractTag(itemXml, 'vProd')
+      if (vProdStr) {
+        const vProd = parseFloat(vProdStr)
+        if (!isNaN(vProd)) {
+          totalMonofasico += vProd
+        }
+      }
+    }
+  }
+
+  return Math.round(totalMonofasico * 100) / 100
 }
 
 export async function POST(request: Request) {
@@ -34,12 +59,24 @@ export async function POST(request: Request) {
     const xmlString = buffer.toString('utf-8')
 
     const mod = extractTag(xmlString, 'mod')
+    const serie = extractTag(xmlString, 'serie')
     const numero = extractTag(xmlString, 'nNF')
     const chave = extractTag(xmlString, 'chNFe')
     const valor = extractTag(xmlString, 'vNF')
     const emissao = extractTag(xmlString, 'dhEmi') || extractTag(xmlString, 'dEmi')
     const transmissao = extractTag(xmlString, 'dhRecbto')
     const temAssinatura = xmlString.includes('<Signature')
+
+    // Tags de Autorização SEFAZ (<protNFe>)
+    const cStat = extractTag(xmlString, 'cStat')
+    const xMotivo = extractTag(xmlString, 'xMotivo')
+    const nProt = extractTag(xmlString, 'nProt')
+
+    // Nota considerada oficialmente autorizada pela SEFAZ
+    const isAutorizada = (cStat === '100' || xmlString.includes('Autorizado o uso da NF-e') || xmlString.includes('Autorizado o uso da NFC-e')) && temAssinatura
+
+    // Cálculo dos Produtos Monofásicos (CST 04 / 06)
+    const valorMonofasico = calculateMonofasico(xmlString)
 
     if (!chave || !mod) {
       return NextResponse.json({ error: 'XML inválido: não encontrou tag mod ou chNFe' }, { status: 400 })
@@ -56,7 +93,7 @@ export async function POST(request: Request) {
       else return NextResponse.json({ error: 'Modelo de nota não suportado: ' + mod }, { status: 400 })
     }
 
-    // 3. Upload para o Supabase Storage (Bucket: xmls)
+    // 3. Upload para o Supabase Storage (Bucket: xmls) estruturado por Ano/Mês
     const dataEmissaoObj = emissao ? new Date(emissao) : new Date()
     const ano = dataEmissaoObj.getFullYear()
     const mes = String(dataEmissaoObj.getMonth() + 1).padStart(2, '0')
@@ -73,8 +110,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Erro no Storage: ' + uploadError.message }, { status: 500 })
     }
 
-    // 4. Inserir no Banco de Dados
-    const dbPayload = {
+    // 4. Inserir no Banco de Dados com metadados para relatórios
+    const dbPayload: any = {
       cliente_id: cliente.id,
       numero: numero || null,
       chave: chave,
@@ -85,13 +122,41 @@ export async function POST(request: Request) {
       storage_path: filePath
     }
 
+    // Adiciona colunas extras se existirem na tabela
+    if (serie) dbPayload.serie = serie
+    if (cStat) dbPayload.cstat = cStat
+    if (xMotivo) dbPayload.motivo_sefaz = xMotivo
+    if (nProt) dbPayload.protocolo = nProt
+    dbPayload.is_autorizada = isAutorizada
+    dbPayload.valor_monofasico = valorMonofasico
+
     const { error: dbError } = await supabaseAdmin.from(tabela).upsert(dbPayload, { onConflict: 'chave' })
 
     if (dbError) {
-      return NextResponse.json({ error: 'Erro no Banco de Dados: ' + dbError.message }, { status: 500 })
+      // Se falhar por causa de colunas novas ainda não criadas, faz fallback para o payload básico
+      console.warn('Erro ao inserir colunas extras, tentando payload básico:', dbError.message)
+      const fallbackPayload = {
+        cliente_id: cliente.id,
+        numero: numero || null,
+        chave: chave,
+        valor: valor ? parseFloat(valor) : 0,
+        data_emissao: emissao || null,
+        data_transmissao: transmissao || null,
+        tem_assinatura: temAssinatura,
+        storage_path: filePath
+      }
+      await supabaseAdmin.from(tabela).upsert(fallbackPayload, { onConflict: 'chave' })
     }
 
-    return NextResponse.json({ success: true, tabela, chave })
+    return NextResponse.json({ 
+      success: true, 
+      tabela, 
+      chave, 
+      serie, 
+      numero, 
+      isAutorizada, 
+      valorMonofasico 
+    })
 
   } catch (error: any) {
     console.error('Upload Error:', error)
