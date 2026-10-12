@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { 
   LayoutDashboard, Users, Building2, Settings, FileText, 
   LogOut, BarChart3, Receipt, FileDown, PlugZap, UserCircle,
-  Menu, X
+  Menu, X, Sliders
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
@@ -120,6 +120,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 px-4 mt-6">Sistema</div>
             <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
             <NavItem href="/dashboard/integracoes" icon={PlugZap} label="Integrações (APIs)" />
+            <NavItem href="/dashboard/configuracoes-portal" icon={Sliders} label="Configurações do Portal" />
             <NavItem href="/dashboard/configuracoes" icon={Settings} label="Configurações Hub" />
           </>
         )}
@@ -131,6 +132,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <NavItem href="/dashboard/minhas-faturas" icon={Receipt} label="Minhas Faturas" />
             <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Minhas Notas Fiscais" />
             <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
+            <NavItem href="/dashboard/configuracoes-portal" icon={Sliders} label="Configurações do Portal" />
             <NavItem href="/dashboard/meu-perfil" icon={UserCircle} label="Meu Perfil" />
           </>
         )}
@@ -142,6 +144,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <NavItem href="/dashboard/meus-clientes" icon={Users} label="Meus Clientes" />
             <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Notas Fiscais (XMLs)" />
             <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
+            <NavItem href="/dashboard/configuracoes-portal" icon={Sliders} label="Configurações do Portal" />
             <NavItem href="/dashboard/meu-perfil" icon={Building2} label="Perfil do Escritório" />
           </>
         )}

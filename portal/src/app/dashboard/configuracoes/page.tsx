@@ -22,8 +22,7 @@ export default function ConfiguracoesPage() {
     mensagem_bloqueio: 'SISTEMA BLOQUEADO. Por favor, regularize seu pagamento.',
     pastas_vendas: '',
     pastas_compras: '',
-    exes_monitorados: '',
-    auto_excluir_divergentes: false
+    exes_monitorados: ''
   })
 
   async function loadClientes() {
@@ -57,16 +56,14 @@ export default function ConfiguracoesPage() {
           mensagem_bloqueio: data.mensagem_bloqueio || '',
           pastas_vendas: Array.isArray(data.pastas_vendas) ? data.pastas_vendas.map((p: string) => p.replace(/\\\\+/g, '\\')).join('\n') : '',
           pastas_compras: Array.isArray(data.pastas_compras) ? data.pastas_compras.map((p: string) => p.replace(/\\\\+/g, '\\')).join('\n') : '',
-          exes_monitorados: Array.isArray(data.exes_monitorados) ? data.exes_monitorados.join('\n') : '',
-          auto_excluir_divergentes: data.auto_excluir_divergentes || false
+          exes_monitorados: Array.isArray(data.exes_monitorados) ? data.exes_monitorados.join('\n') : ''
         })
       } else {
         // Reseta se nao tiver
         setFormData({
           dia_vencimento: 10, valor_mensalidade: 150.00, dias_aviso_previo: 7, dias_tolerancia_bloqueio: 3,
           mensagem_bloqueio: 'SISTEMA BLOQUEADO. Por favor, regularize seu pagamento.',
-          pastas_vendas: 'C:\\Sistemas\\Vendas\\XML', pastas_compras: '', exes_monitorados: 'vendas.exe',
-          auto_excluir_divergentes: false
+          pastas_vendas: 'C:\\Sistemas\\Vendas\\XML', pastas_compras: '', exes_monitorados: 'vendas.exe'
         })
       }
       setLoading(false)
@@ -90,7 +87,6 @@ export default function ConfiguracoesPage() {
       pastas_vendas: formData.pastas_vendas.split('\n').filter(Boolean).map(s => s.trim().replace(/\\\\+/g, '\\')),
       pastas_compras: formData.pastas_compras.split('\n').filter(Boolean).map(s => s.trim().replace(/\\\\+/g, '\\')),
       exes_monitorados: formData.exes_monitorados.split('\n').filter(Boolean).map(s => s.trim()),
-      auto_excluir_divergentes: formData.auto_excluir_divergentes,
       updated_at: new Date().toISOString()
     }
 
@@ -198,24 +194,6 @@ export default function ConfiguracoesPage() {
                   <textarea rows={3} className="w-full px-4 py-2 rounded-lg border border-slate-200 placeholder-slate-400"
                     placeholder="vendas.exe&#10;pdv.exe"
                     value={formData.exes_monitorados} onChange={e => setFormData({...formData, exes_monitorados: e.target.value})} />
-                </div>
-
-                <div className="pt-4 border-t border-slate-100">
-                  <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                    <input 
-                      type="checkbox" 
-                      id="auto_excluir_divergentes"
-                      checked={formData.auto_excluir_divergentes}
-                      onChange={e => setFormData({...formData, auto_excluir_divergentes: e.target.checked})}
-                      className="mt-1 h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                    />
-                    <label htmlFor="auto_excluir_divergentes" className="text-sm cursor-pointer select-none">
-                      <span className="font-semibold text-slate-800 block">Excluir/Ignorar automaticamente XMLs de vendas que não pertencem à empresa analisada</span>
-                      <span className="text-slate-500 text-xs">
-                        Quando marcado, caso o Hub encontre na pasta de vendas um arquivo XML cujo CNPJ emitente não seja igual ao CNPJ cadastrado desta empresa, o arquivo será descartado automaticamente e não entrará nos relatórios fiscais.
-                      </span>
-                    </label>
-                  </div>
                 </div>
               </div>
 
