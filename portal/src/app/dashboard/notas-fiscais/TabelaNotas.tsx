@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { useSearchParams } from 'next/navigation'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, X, Trash2, AlertTriangle } from 'lucide-react'
+import toast from 'react-hot-toast'
 
 function AssinaturaChip({ ok }: { ok: boolean }) {
   return ok
@@ -125,24 +126,34 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     return doc
   }
 
-  async function handleDeleteNota(id: string, numero: string) {
-    if (!confirm(`Deseja realmente excluir a nota número ${numero || id}?`)) return
-    const { error } = await supabase.from(tabela).delete().eq('id', id)
-    if (error) {
-      alert('Erro ao excluir: ' + error.message)
-    } else {
-      setNotas(prev => prev.filter(n => n.id !== id))
-    }
-  }
+  const [modalDelete, setModalDelete] = useState<{
+    open: boolean
+    tipo: 'individual' | 'em_lote'
+    id?: string
+    numero?: string
+    idsLote?: string[]
+  }>({ open: false, tipo: 'individual' })
+  const [deleting, setDeleting] = useState(false)
 
-  async function handleDeleteAllDivergentes(divergentesIds: string[]) {
-    if (!confirm(`Deseja realmente excluir todas as ${divergentesIds.length} notas divergentes que não pertencem a esta empresa? Esta ação não pode ser desfeita.`)) return
-    const { error } = await supabase.from(tabela).delete().in('id', divergentesIds)
-    if (error) {
-      alert('Erro ao excluir notas: ' + error.message)
-    } else {
-      setNotas(prev => prev.filter(n => !divergentesIds.includes(n.id)))
-      alert(`Todas as ${divergentesIds.length} notas divergentes foram excluídas com sucesso!`)
+  const confirmDeleteAction = async () => {
+    setDeleting(true)
+    try {
+      if (modalDelete.tipo === 'individual' && modalDelete.id) {
+        const { error } = await supabase.from(tabela).delete().eq('id', modalDelete.id)
+        if (error) throw error
+        setNotas(prev => prev.filter(n => n.id !== modalDelete.id))
+        toast.success(`Nota fiscal ${modalDelete.numero || ''} excluída com sucesso!`)
+      } else if (modalDelete.tipo === 'em_lote' && modalDelete.idsLote) {
+        const { error } = await supabase.from(tabela).delete().in('id', modalDelete.idsLote)
+        if (error) throw error
+        setNotas(prev => prev.filter(n => !modalDelete.idsLote!.includes(n.id)))
+        toast.success(`${modalDelete.idsLote.length} notas divergentes excluídas com sucesso!`)
+      }
+    } catch (err: any) {
+      toast.error('Erro ao excluir: ' + (err.message || 'Falha na exclusão'))
+    } finally {
+      setDeleting(false)
+      setModalDelete({ open: false, tipo: 'individual' })
     }
   }
 
@@ -259,7 +270,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
             </div>
           </div>
           <button
-            onClick={() => handleDeleteAllDivergentes(divergentesList.map(n => n.id))}
+            onClick={() => setModalDelete({ open: true, tipo: 'em_lote', idsLote: divergentesList.map(n => n.id) })}
             className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition shadow whitespace-nowrap flex items-center justify-center gap-2"
           >
             🗑️ Excluir Todas as Divergentes ({divergentesList.length})
@@ -348,7 +359,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                     <td className="p-4 text-center"><AssinaturaChip ok={n.tem_assinatura} /></td>
                     <td className="p-4 text-center">
                       <button 
-                        onClick={() => handleDeleteNota(n.id, n.numero)}
+                        onClick={() => setModalDelete({ open: true, tipo: 'individual', id: n.id, numero: n.numero })}
                         className="p-1.5 rounded-lg text-red-500 hover:bg-red-100 hover:text-red-700 transition" 
                         title="Excluir XML"
                       >
@@ -360,6 +371,64 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Modal Centralizado de Confirmação de Exclusão */}
+      {modalDelete.open && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 sm:p-7 border border-slate-100 animate-in zoom-in-95 duration-200 relative">
+            <button
+              onClick={() => setModalDelete({ open: false, tipo: 'individual' })}
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="flex items-center gap-3.5 mb-4">
+              <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center border border-red-100 shrink-0">
+                <Trash2 size={24} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">
+                  {modalDelete.tipo === 'em_lote' ? 'Excluir Notas Divergentes' : 'Excluir Nota Fiscal'}
+                </h3>
+                <p className="text-xs text-slate-500">Ação irreversível de limpeza</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-600 leading-relaxed mb-6">
+              {modalDelete.tipo === 'em_lote' ? (
+                <>
+                  Tem certeza que deseja excluir permanentemente todas as <strong className="text-red-600 font-semibold">{modalDelete.idsLote?.length} notas fiscais divergentes</strong>? Elas serão removidas do Portal e dos relatórios fiscais.
+                </>
+              ) : (
+                <>
+                  Tem certeza que deseja excluir a nota fiscal número <strong className="text-red-600 font-semibold">{modalDelete.numero || 'selecionada'}</strong>? Esta ação removerá o registro e o arquivo XML associado.
+                </>
+              )}
+            </p>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setModalDelete({ open: false, tipo: 'individual' })}
+                disabled={deleting}
+                className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 font-semibold text-sm transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteAction}
+                disabled={deleting}
+                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold text-sm transition shadow-sm hover:shadow disabled:opacity-50 flex items-center gap-2"
+              >
+                <Trash2 size={16} />
+                {deleting ? 'Excluindo...' : (modalDelete.tipo === 'em_lote' ? 'Sim, Excluir Todas' : 'Sim, Excluir Nota')}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -20,6 +20,8 @@ export default function FaturasPage() {
   const [dataVencimento, setDataVencimento] = useState('')
   const [valor, setValor] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [confirmLoteModalOpen, setConfirmLoteModalOpen] = useState(false)
+  const [deleteModal, setDeleteModal] = useState<{ open: boolean; id: string; clienteNome?: string }>({ open: false, id: '', clienteNome: '' })
 
   async function fetchFaturas() {
     const { data } = await supabase
@@ -41,8 +43,8 @@ export default function FaturasPage() {
   }, [])
 
   // Gerar faturas em lote para todos os clientes ativos mensalistas
-  const handleGerarLoteMensalistas = async () => {
-    if (!confirm('Deseja gerar as faturas do mês atual para todos os clientes ativos mensalistas? Faturas já existentes não serão duplicadas.')) return
+  const executarGerarLote = async () => {
+    setConfirmLoteModalOpen(false)
     setGerandoLote(true)
     const toastId = toast.loading('Processando faturas dos mensalistas...')
     try {
@@ -110,15 +112,16 @@ export default function FaturasPage() {
     setModalOpen(true)
   }
 
-  const handleDeleteFatura = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta fatura?')) return
-    const { error } = await supabase.from('faturas').delete().eq('id', id)
+  const executarExcluirFatura = async () => {
+    if (!deleteModal.id) return
+    const { error } = await supabase.from('faturas').delete().eq('id', deleteModal.id)
     if (error) {
       toast.error('Erro ao excluir fatura: ' + error.message)
     } else {
       toast.success('Fatura excluída com sucesso!')
       fetchFaturas()
     }
+    setDeleteModal({ open: false, id: '', clienteNome: '' })
   }
 
   const handleGerarFatura = async (e: React.FormEvent) => {
@@ -192,7 +195,7 @@ export default function FaturasPage() {
             Atualizar
           </button>
           <button 
-            onClick={handleGerarLoteMensalistas} 
+            onClick={() => setConfirmLoteModalOpen(true)} 
             disabled={gerandoLote}
             className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-emerald-700 transition flex items-center gap-2 shadow-sm disabled:opacity-50"
             title="Gera automaticamente faturas da competência atual para todos os clientes ativos mensalistas (idempotente)"
@@ -254,7 +257,7 @@ export default function FaturasPage() {
                     <button onClick={() => handleEditFatura(f)} className="p-1 text-slate-400 hover:text-blue-600 transition" title="Editar Fatura">
                       <Pencil size={18} />
                     </button>
-                    <button onClick={() => handleDeleteFatura(f.id)} className="p-1 text-slate-400 hover:text-red-600 transition" title="Excluir Fatura">
+                    <button onClick={() => setDeleteModal({ open: true, id: f.id, clienteNome: f.clientes?.razao_social })} className="p-1 text-slate-400 hover:text-red-600 transition" title="Excluir Fatura">
                       <Trash2 size={18} />
                     </button>
 
@@ -354,6 +357,70 @@ export default function FaturasPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Confirmar Geração em Lote */}
+      {confirmLoteModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border border-slate-100 text-center animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Zap size={28} />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 mb-2">Gerar Faturas Mensalistas</h3>
+            <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+              Deseja disparar a geração automática das faturas do mês corrente para todos os clientes ativos mensalistas?
+              <br /><span className="text-xs text-slate-400 mt-1 block">Esta operação é segura e não duplicará faturas existentes.</span>
+            </p>
+            <div className="flex gap-3 justify-center">
+              <button
+                type="button"
+                onClick={() => setConfirmLoteModalOpen(false)}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={executarGerarLote}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition shadow-sm"
+              >
+                Confirmar e Gerar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Confirmar Exclusão de Fatura */}
+      {deleteModal.open && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border border-slate-100 text-center animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-14 h-14 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Trash2 size={28} />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 mb-2">Excluir Fatura</h3>
+            <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+              Deseja realmente excluir esta fatura {deleteModal.clienteNome ? `do cliente "${deleteModal.clienteNome}"` : ''}?
+              <br /><span className="text-xs text-red-500 font-medium mt-1 block">Esta ação é irreversível.</span>
+            </p>
+            <div className="flex gap-3 justify-center">
+              <button
+                type="button"
+                onClick={() => setDeleteModal({ open: false, id: '', clienteNome: '' })}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={executarExcluirFatura}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 transition shadow-sm"
+              >
+                Sim, Excluir
+              </button>
+            </div>
           </div>
         </div>
       )}
