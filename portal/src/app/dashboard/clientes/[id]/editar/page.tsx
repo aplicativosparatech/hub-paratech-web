@@ -36,6 +36,7 @@ export default function EditarClientePage() {
     certificado_validade: '',
     login_email: '',
     login_senha: '',
+    regime_tributario: 'simples_nacional',
     is_ativo: true,
     logo_url: ''
   })
@@ -61,6 +62,7 @@ export default function EditarClientePage() {
           certificado_url: d.certificado_url || '',
           certificado_senha: d.certificado_senha || '',
           certificado_validade: d.certificado_validade ? d.certificado_validade.split('T')[0] : '',
+          regime_tributario: d.regime_tributario || 'simples_nacional',
           login_email: d.login_email || '',
           login_senha: '',
           is_ativo: d.is_ativo,
@@ -274,6 +276,21 @@ export default function EditarClientePage() {
                   {contabilidades.map(c => (
                     <option key={c.id} value={c.id}>{c.razao_social}</option>
                   ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Regime Tributário (CRT)</label>
+                <select 
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-medium"
+                  value={formData.regime_tributario} 
+                  onChange={e => setFormData({...formData, regime_tributario: e.target.value})}
+                >
+                  <option value="simples_nacional">Simples Nacional (CRT 1)</option>
+                  <option value="simples_nacional_excesso">Simples Nacional - Excesso de Sublimite (CRT 2)</option>
+                  <option value="lucro_presumido">Regime Normal - Lucro Presumido (CRT 3)</option>
+                  <option value="lucro_real">Regime Normal - Lucro Real (CRT 3)</option>
+                  <option value="mei">MEI - Microempreendedor Individual (CRT 4)</option>
                 </select>
               </div>
 

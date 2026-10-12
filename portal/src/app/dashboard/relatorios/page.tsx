@@ -359,7 +359,7 @@ export default function RelatoriosPage() {
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-blue-400 mb-3">
               <Building2 size={16} /> Dados Cadastrais da Empresa Selecionada (Conferência Fiscal)
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 text-sm">
               <div>
                 <p className="text-slate-400 text-xs">Razão Social</p>
                 <p className="font-semibold text-slate-100 truncate" title={currentCli.razao_social}>{currentCli.razao_social || '—'}</p>
@@ -371,6 +371,17 @@ export default function RelatoriosPage() {
               <div>
                 <p className="text-slate-400 text-xs">CNPJ</p>
                 <p className="font-semibold font-mono text-blue-300">{currentCli.cnpj || '—'}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs">Regime Tributário</p>
+                <p className="font-semibold text-amber-300">
+                  {currentCli.regime_tributario === 'simples_nacional' && 'Simples Nacional'}
+                  {currentCli.regime_tributario === 'simples_nacional_excesso' && 'Simples (Excesso)'}
+                  {currentCli.regime_tributario === 'lucro_presumido' && 'Lucro Presumido'}
+                  {currentCli.regime_tributario === 'lucro_real' && 'Lucro Real'}
+                  {currentCli.regime_tributario === 'mei' && 'MEI'}
+                  {!currentCli.regime_tributario && 'Simples Nacional'}
+                </p>
               </div>
               <div>
                 <p className="text-slate-400 text-xs">WhatsApp / Contato</p>

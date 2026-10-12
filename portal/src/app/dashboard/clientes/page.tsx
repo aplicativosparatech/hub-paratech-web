@@ -69,6 +69,7 @@ export default function ClientesPage() {
               <th className="p-4 font-semibold text-slate-600 text-sm">Logo</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">Razão Social / Fantasia</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">CNPJ / Responsável</th>
+              <th className="p-4 font-semibold text-slate-600 text-sm">Regime</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">Certificado Digital</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">Contabilidade</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">Status</th>
@@ -78,9 +79,9 @@ export default function ClientesPage() {
           </thead>
           <tbody>
             {loading ? (
-               <tr><td colSpan={8} className="p-8 text-center text-slate-500">Carregando...</td></tr>
+               <tr><td colSpan={9} className="p-8 text-center text-slate-500">Carregando...</td></tr>
             ) : clientes.length === 0 ? (
-              <tr><td colSpan={8} className="p-8 text-center text-slate-500">Nenhum cliente cadastrado.</td></tr>
+              <tr><td colSpan={9} className="p-8 text-center text-slate-500">Nenhum cliente cadastrado.</td></tr>
             ) : (
               clientes.map(c => {
                 let certStatus = <span className="text-slate-400 text-xs">Não cadastrado</span>
@@ -93,6 +94,23 @@ export default function ClientesPage() {
                     certStatus = <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-800">Vence em {diffDays}d</span>
                   } else {
                     certStatus = <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800">Válido ({diffDays}d)</span>
+                  }
+                }
+
+                const getRegimeBadge = (regime?: string) => {
+                  switch (regime) {
+                    case 'simples_nacional':
+                      return <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800 whitespace-nowrap">Simples Nacional</span>
+                    case 'simples_nacional_excesso':
+                      return <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-800 whitespace-nowrap">Simples (Excesso)</span>
+                    case 'lucro_presumido':
+                      return <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-100 text-blue-800 whitespace-nowrap">Lucro Presumido</span>
+                    case 'lucro_real':
+                      return <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-100 text-purple-800 whitespace-nowrap">Lucro Real</span>
+                    case 'mei':
+                      return <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-teal-100 text-teal-800 whitespace-nowrap">MEI</span>
+                    default:
+                      return <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-700 whitespace-nowrap">Simples Nacional</span>
                   }
                 }
 
@@ -115,6 +133,7 @@ export default function ClientesPage() {
                       <div className="font-mono font-medium text-slate-800">{c.cnpj}</div>
                       {c.nome_contato && <div className="text-slate-400 mt-0.5">{c.nome_contato}</div>}
                     </td>
+                    <td className="p-4">{getRegimeBadge(c.regime_tributario)}</td>
                     <td className="p-4">{certStatus}</td>
                     <td className="p-4 text-slate-600 text-xs">{c.contabilidades?.razao_social || <span className="text-slate-400">—</span>}</td>
                     <td className="p-4">

@@ -29,6 +29,9 @@ export default function NovoClientePage() {
     certificado_url: '',
     certificado_senha: '',
     certificado_validade: '',
+    regime_tributario: 'simples_nacional',
+    cidade: '',
+    uf: '',
     login_email: '',
     login_senha: '',
     logo_url: ''
@@ -61,12 +64,24 @@ export default function NovoClientePage() {
 
       const tel = data.ddd_telefone_1 ? `55${data.ddd_telefone_1.replace(/\D/g, '')}` : formData.whatsapp
 
+      let autoRegime = 'simples_nacional'
+      if (data.opcao_pelo_mei) {
+        autoRegime = 'mei'
+      } else if (data.opcao_pelo_simples) {
+        autoRegime = 'simples_nacional'
+      } else if (data.opcao_pelo_simples === false) {
+        autoRegime = 'lucro_presumido'
+      }
+
       setFormData(prev => ({
         ...prev,
         razao_social: data.razao_social || prev.razao_social,
         nome_fantasia: data.nome_fantasia || data.razao_social || prev.nome_fantasia,
         whatsapp: prev.whatsapp || tel,
-        email_fiscal: prev.email_fiscal || data.email || ''
+        email_fiscal: prev.email_fiscal || data.email || '',
+        cidade: prev.cidade || data.municipio || '',
+        uf: prev.uf || data.uf || '',
+        regime_tributario: autoRegime
       }))
 
       toast.success('Dados preenchidos com sucesso!', { id: toastId })
@@ -236,6 +251,21 @@ export default function NovoClientePage() {
                   {contabilidades.map(c => (
                     <option key={c.id} value={c.id}>{c.razao_social}</option>
                   ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Regime Tributário (CRT)</label>
+                <select 
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-medium"
+                  value={formData.regime_tributario} 
+                  onChange={e => setFormData({...formData, regime_tributario: e.target.value})}
+                >
+                  <option value="simples_nacional">Simples Nacional (CRT 1)</option>
+                  <option value="simples_nacional_excesso">Simples Nacional - Excesso de Sublimite (CRT 2)</option>
+                  <option value="lucro_presumido">Regime Normal - Lucro Presumido (CRT 3)</option>
+                  <option value="lucro_real">Regime Normal - Lucro Real (CRT 3)</option>
+                  <option value="mei">MEI - Microempreendedor Individual (CRT 4)</option>
                 </select>
               </div>
 
