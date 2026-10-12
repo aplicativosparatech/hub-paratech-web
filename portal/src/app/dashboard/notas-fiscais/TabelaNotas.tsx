@@ -150,7 +150,29 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                   type="text"
                   placeholder="Buscar por nome, CNPJ ou CPF..."
                   value={clientSearchTerm}
-                  onChange={e => setClientSearchTerm(e.target.value)}
+                  onChange={e => {
+                    const term = e.target.value
+                    setClientSearchTerm(term)
+                    if (term.trim()) {
+                      const t = term.toLowerCase().trim()
+                      const ct = t.replace(/\D/g, '')
+                      const match = clientes.find(c => {
+                        const doc = (c.cnpj || '').toLowerCase()
+                        const cleanDoc = doc.replace(/\D/g, '')
+                        return (
+                          (c.razao_social && c.razao_social.toLowerCase().includes(t)) ||
+                          (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(t)) ||
+                          doc.includes(t) ||
+                          (ct && cleanDoc.includes(ct))
+                        )
+                      })
+                      if (match && match.id !== selectedCliente) {
+                        setSelectedCliente(match.id)
+                      }
+                    } else {
+                      setSelectedCliente('')
+                    }
+                  }}
                   className="w-full sm:w-1/2 bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               )}
@@ -179,7 +201,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                   })
                   .map(c => (
                     <option key={c.id} value={c.id}>
-                      {c.razao_social} {c.nome_fantasia ? `(${c.nome_fantasia})` : ''}
+                      {c.razao_social} {c.nome_fantasia ? `(${c.nome_fantasia})` : ''} {c.cnpj ? `— ${c.cnpj}` : ''}
                     </option>
                   ))}
               </select>

@@ -93,7 +93,19 @@ export default function RelatoriosPage() {
           }))
 
           setClientes(mapped)
-          setSelectedCliente(mapped[0].id)
+
+          // Se tiver cliente_id nos parâmetros da URL, prioriza ele
+          if (typeof window !== 'undefined') {
+            const urlParams = new URLSearchParams(window.location.search)
+            const paramClienteId = urlParams.get('cliente_id')
+            if (paramClienteId && mapped.some(c => c.id === paramClienteId)) {
+              setSelectedCliente(paramClienteId)
+            } else {
+              setSelectedCliente(mapped[0].id)
+            }
+          } else {
+            setSelectedCliente(mapped[0].id)
+          }
         } else {
           setClientes([])
         }
@@ -266,7 +278,27 @@ export default function RelatoriosPage() {
                 type="text"
                 placeholder="Filtrar por nome, CNPJ ou CPF..."
                 value={clientSearchTerm}
-                onChange={e => setClientSearchTerm(e.target.value)}
+                onChange={e => {
+                  const term = e.target.value
+                  setClientSearchTerm(term)
+                  if (term.trim()) {
+                    const t = term.toLowerCase().trim()
+                    const ct = t.replace(/\D/g, '')
+                    const match = clientes.find(c => {
+                      const doc = (c.cnpj || '').toLowerCase()
+                      const cleanDoc = doc.replace(/\D/g, '')
+                      return (
+                        (c.razao_social && c.razao_social.toLowerCase().includes(t)) ||
+                        (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(t)) ||
+                        doc.includes(t) ||
+                        (ct && cleanDoc.includes(ct))
+                      )
+                    })
+                    if (match && match.id !== selectedCliente) {
+                      setSelectedCliente(match.id)
+                    }
+                  }
+                }}
                 className="w-full sm:w-1/2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
 
@@ -292,7 +324,7 @@ export default function RelatoriosPage() {
                   })
                   .map(c => (
                     <option key={c.id} value={c.id}>
-                      {c.razao_social} {c.nome_fantasia ? `(${c.nome_fantasia})` : ''}
+                      {c.razao_social} {c.nome_fantasia ? `(${c.nome_fantasia})` : ''} {c.cnpj ? `— ${c.cnpj}` : ''}
                     </option>
                   ))}
               </select>
