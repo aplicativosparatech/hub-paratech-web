@@ -117,6 +117,14 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
 
   useEffect(() => { load() }, [tabela, selectedCliente])
 
+  function formatDoc(doc?: string | null) {
+    if (!doc) return '—'
+    const clean = doc.replace(/\D/g, '')
+    if (clean.length === 14) return clean.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+    if (clean.length === 11) return clean.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4')
+    return doc
+  }
+
   async function handleDeleteNota(id: string, numero: string) {
     if (!confirm(`Deseja realmente excluir a nota número ${numero || id}?`)) return
     const { error } = await supabase.from(tabela).delete().eq('id', id)
@@ -126,6 +134,28 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
       setNotas(prev => prev.filter(n => n.id !== id))
     }
   }
+
+  async function handleDeleteAllDivergentes(divergentesIds: string[]) {
+    if (!confirm(`Deseja realmente excluir todas as ${divergentesIds.length} notas divergentes que não pertencem a esta empresa? Esta ação não pode ser desfeita.`)) return
+    const { error } = await supabase.from(tabela).delete().in('id', divergentesIds)
+    if (error) {
+      alert('Erro ao excluir notas: ' + error.message)
+    } else {
+      setNotas(prev => prev.filter(n => !divergentesIds.includes(n.id)))
+      alert(`Todas as ${divergentesIds.length} notas divergentes foram excluídas com sucesso!`)
+    }
+  }
+
+  const currentCli = clientes.find(c => c.id === selectedCliente) || (userRole === 'cliente' ? clientes[0] : null)
+  const cleanCurrentCnpj = (currentCli?.cnpj || '').replace(/\D/g, '')
+
+  // Identifica quais notas são divergentes
+  const divergentesList = notas.filter(n => {
+    if (n.cnpj_divergente) return true
+    const cleanChaveCnpj = n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : ''
+    const emit = (n.cnpj_emitente || cleanChaveCnpj || '').replace(/\D/g, '')
+    return Boolean(cleanCurrentCnpj) && Boolean(emit) && cleanCurrentCnpj !== emit
+  })
 
   return (
     <div className="space-y-4">
@@ -214,6 +244,29 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
         </div>
       )}
 
+      {/* Banner de Alerta para Notas Divergentes */}
+      {divergentesList.length > 0 && (
+        <div className="bg-red-50 border-2 border-red-300 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-red-900 shadow-sm">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">⚠️</span>
+            <div>
+              <p className="font-bold text-sm">
+                Atenção: {divergentesList.length} {divergentesList.length === 1 ? 'nota fiscal divergente detectada' : 'notas fiscais divergentes detectadas'}!
+              </p>
+              <p className="text-xs text-red-700 mt-0.5">
+                Os arquivos destacados em vermelho abaixo não pertencem ao CNPJ/CPF da empresa ({currentCli?.razao_social || 'Empresa'}).
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => handleDeleteAllDivergentes(divergentesList.map(n => n.id))}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition shadow whitespace-nowrap flex items-center justify-center gap-2"
+          >
+            🗑️ Excluir Todas as Divergentes ({divergentesList.length})
+          </button>
+        </div>
+      )}
+
       {/* Identificação de Empresa para o perfil Cliente */}
       {userRole === 'cliente' && clientes.length > 0 && (
         <div className="bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-700 font-medium">
@@ -253,15 +306,19 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                   </td>
                 </tr>
               ) : notas.map(n => {
-                const isDivergente = Boolean(n.cnpj_divergente)
+                const cleanChaveCnpj = n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : ''
+                const emitenteDoc = n.cnpj_emitente || cleanChaveCnpj
+                const cleanEmit = (emitenteDoc || '').replace(/\D/g, '')
+                const isDivergente = Boolean(n.cnpj_divergente) || (Boolean(cleanCurrentCnpj) && Boolean(cleanEmit) && cleanCurrentCnpj !== cleanEmit)
+
                 return (
                   <tr 
                     key={n.id} 
-                    className={`border-b transition ${isDivergente ? 'bg-red-50 hover:bg-red-100/80 text-red-900 border-red-200' : 'border-slate-100 hover:bg-slate-50'}`}
+                    className={`border-b transition ${isDivergente ? 'bg-red-50 hover:bg-red-100/90 text-red-900 border-red-200' : 'border-slate-100 hover:bg-slate-50'}`}
                   >
                     <td className="p-4 font-mono">
                       <div className="flex items-center gap-2">
-                        {n.numero || '—'}
+                        <span className={isDivergente ? 'font-bold text-red-700' : ''}>{n.numero || '—'}</span>
                         {isDivergente && (
                           <span 
                             className="bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 shadow-sm"
@@ -277,11 +334,11 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                     </td>
                     <td className="p-4 font-mono text-xs">
                       <div className={isDivergente ? 'text-red-700 font-bold' : ''}>
-                        {n.cnpj_emitente || '—'}
+                        {formatDoc(emitenteDoc)}
                       </div>
-                      {isDivergente && n.motivo_divergencia && (
-                        <div className="text-[11px] text-red-600 mt-0.5 font-sans max-w-xs" title={n.motivo_divergencia}>
-                          {n.motivo_divergencia}
+                      {isDivergente && (
+                        <div className="text-[11px] text-red-600 mt-0.5 font-sans max-w-xs" title={n.motivo_divergencia || 'Emitente diverge da empresa atual'}>
+                          {n.motivo_divergencia || `CNPJ na nota (${formatDoc(emitenteDoc)}) diverge da empresa (${formatDoc(currentCli?.cnpj)})`}
                         </div>
                       )}
                     </td>
