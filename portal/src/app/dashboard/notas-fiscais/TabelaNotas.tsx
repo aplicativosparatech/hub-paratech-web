@@ -148,7 +148,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
               {userRole === 'admin' && (
                 <input
                   type="text"
-                  placeholder="Buscar por nome ou CNPJ..."
+                  placeholder="Buscar por nome, CNPJ ou CPF..."
                   value={clientSearchTerm}
                   onChange={e => setClientSearchTerm(e.target.value)}
                   className="w-full sm:w-1/2 bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -166,11 +166,15 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                 {clientes
                   .filter(c => {
                     if (!clientSearchTerm) return true
-                    const term = clientSearchTerm.toLowerCase()
+                    const term = clientSearchTerm.toLowerCase().trim()
+                    const cleanTerm = term.replace(/\D/g, '')
+                    const doc = (c.cnpj || '').toLowerCase()
+                    const cleanDoc = doc.replace(/\D/g, '')
                     return (
                       (c.razao_social && c.razao_social.toLowerCase().includes(term)) ||
                       (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(term)) ||
-                      (c.cnpj && c.cnpj.includes(term))
+                      doc.includes(term) ||
+                      (cleanTerm && cleanDoc.includes(cleanTerm))
                     )
                   })
                   .map(c => (
@@ -211,7 +215,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
               <tr>
                 <th className="p-4">Número</th>
                 <th className="p-4">Chave de Acesso</th>
-                <th className="p-4">Emitente (CNPJ)</th>
+                <th className="p-4">Emitente (CNPJ / CPF)</th>
                 <th className="p-4">Valor (R$)</th>
                 <th className="p-4">Emissão</th>
                 <th className="p-4">Transmissão</th>

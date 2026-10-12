@@ -81,7 +81,7 @@ export default function MeuPerfilPage() {
     ? [
         { key: 'razao_social', label: 'Razão Social' },
         { key: 'nome_fantasia', label: 'Nome Fantasia' },
-        { key: 'cnpj', label: 'CNPJ' },
+        { key: 'cnpj', label: 'CNPJ / CPF' },
         { key: 'whatsapp', label: 'WhatsApp' },
         { key: 'login_email', label: 'E-mail de Login' },
       ]

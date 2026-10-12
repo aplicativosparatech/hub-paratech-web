@@ -261,10 +261,10 @@ export default function RelatoriosPage() {
             </div>
             
             <div className="flex flex-col sm:flex-row gap-2">
-              {/* Campo de Busca Rápida por Nome ou CNPJ */}
+              {/* Campo de Busca Rápida por Nome, CNPJ ou CPF */}
               <input
                 type="text"
-                placeholder="Filtrar por nome ou CNPJ..."
+                placeholder="Filtrar por nome, CNPJ ou CPF..."
                 value={clientSearchTerm}
                 onChange={e => setClientSearchTerm(e.target.value)}
                 className="w-full sm:w-1/2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -279,11 +279,15 @@ export default function RelatoriosPage() {
                 {clientes
                   .filter(c => {
                     if (!clientSearchTerm) return true
-                    const term = clientSearchTerm.toLowerCase()
+                    const term = clientSearchTerm.toLowerCase().trim()
+                    const cleanTerm = term.replace(/\D/g, '')
+                    const doc = (c.cnpj || '').toLowerCase()
+                    const cleanDoc = doc.replace(/\D/g, '')
                     return (
                       (c.razao_social && c.razao_social.toLowerCase().includes(term)) ||
                       (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(term)) ||
-                      (c.cnpj && c.cnpj.includes(term))
+                      doc.includes(term) ||
+                      (cleanTerm && cleanDoc.includes(cleanTerm))
                     )
                   })
                   .map(c => (
@@ -369,7 +373,7 @@ export default function RelatoriosPage() {
                 <p className="font-semibold text-slate-100 truncate" title={currentCli.nome_fantasia}>{currentCli.nome_fantasia || '—'}</p>
               </div>
               <div>
-                <p className="text-slate-400 text-xs">CNPJ</p>
+                <p className="text-slate-400 text-xs">CNPJ / CPF</p>
                 <p className="font-semibold font-mono text-blue-300">{currentCli.cnpj || '—'}</p>
               </div>
               <div>
@@ -882,7 +886,7 @@ export default function RelatoriosPage() {
                       <thead>
                         <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
                           <th className="p-4">Empresa</th>
-                          <th className="p-4">CNPJ</th>
+                          <th className="p-4">CNPJ / CPF</th>
                           <th className="p-4">Contabilidade</th>
                           <th className="p-4">Data de Validade</th>
                           <th className="p-4">Dias Restantes</th>

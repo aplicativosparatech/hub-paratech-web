@@ -90,22 +90,36 @@ export default function NovoClientePage() {
     fetchContas()
   }, [])
 
-  // Busca de CNPJ via BrasilAPI
+  // Busca de CNPJ via BrasilAPI ou formatação de CPF
   const handleConsultarCnpj = async () => {
-    const rawCnpj = formData.cnpj.replace(/\D/g, '')
-    if (rawCnpj.length !== 14) {
-      toast.error('Informe um CNPJ válido com 14 dígitos.')
+    const rawDoc = formData.cnpj.replace(/\D/g, '')
+
+    if (rawDoc.length === 11) {
+      // É CPF (Pessoa Física / Produtor Rural)
+      const cpfFormatado = rawDoc.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4')
+      setFormData(prev => ({
+        ...prev,
+        cnpj: cpfFormatado,
+        regime_tributario: prev.regime_tributario || 'simples_nacional'
+      }))
+      toast.success('CPF validado e formatado com sucesso! Preencha a Razão Social/Nome.')
+      return
+    }
+
+    if (rawDoc.length !== 14) {
+      toast.error('Informe um CNPJ válido com 14 dígitos ou CPF com 11 dígitos.')
       return
     }
 
     setSearchingCnpj(true)
     const toastId = toast.loading('Consultando dados do CNPJ...')
     try {
-      const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${rawCnpj}`)
+      const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${rawDoc}`)
       if (!res.ok) throw new Error('Não foi possível obter dados para este CNPJ.')
       const data = await res.json()
 
       const tel = data.ddd_telefone_1 ? `55${data.ddd_telefone_1.replace(/\D/g, '')}` : formData.whatsapp
+      const cnpjFormatado = rawDoc.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
 
       let autoRegime = 'simples_nacional'
       if (data.opcao_pelo_mei) {
@@ -118,6 +132,7 @@ export default function NovoClientePage() {
 
       setFormData(prev => ({
         ...prev,
+        cnpj: cnpjFormatado,
         razao_social: data.razao_social || prev.razao_social,
         nome_fantasia: data.nome_fantasia || data.razao_social || prev.nome_fantasia,
         whatsapp: prev.whatsapp || tel,
@@ -254,14 +269,14 @@ export default function NovoClientePage() {
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               
-              {/* Campo CNPJ com Botão de Consulta Automática */}
+              {/* Campo CNPJ / CPF com Botão de Consulta Automática */}
               <div className="md:col-span-1">
-                <label className="block text-sm font-semibold text-slate-700 mb-1">CNPJ</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">CNPJ / CPF</label>
                 <div className="flex gap-2">
                   <input 
                     required 
                     type="text" 
-                    placeholder="00.000.000/0000-00"
+                    placeholder="00.000.000/0000-00 ou 000.000.000-00"
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
                     value={formData.cnpj} 
                     onChange={e => setFormData({...formData, cnpj: e.target.value})} 
@@ -270,12 +285,13 @@ export default function NovoClientePage() {
                     type="button"
                     onClick={handleConsultarCnpj}
                     disabled={searchingCnpj}
-                    title="Buscar dados do CNPJ na Receita Federal via BrasilAPI"
+                    title="Buscar dados do CNPJ na Receita Federal ou validar CPF"
                     className="px-3.5 py-2.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl font-semibold flex items-center justify-center transition border border-blue-200 disabled:opacity-50"
                   >
                     <Search size={18} className={searchingCnpj ? 'animate-spin' : ''} />
                   </button>
                 </div>
+                <p className="text-[11px] text-slate-400 mt-1">Aceita CNPJ de Pessoa Jurídica ou CPF de Pessoa Física</p>
               </div>
 
               <div>

@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Trash2, X, Copy, RefreshCw } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Copy, RefreshCw, Search } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState('')
   const [deleteModal, setDeleteModal] = useState<{ open: boolean; id: string; nome: string }>({ open: false, id: '', nome: '' })
   const [deleting, setDeleting] = useState(false)
   const supabase = createClient()
@@ -62,13 +63,42 @@ export default function ClientesPage() {
         </div>
       </header>
 
+      {/* Barra de Busca Rápida por Razão Social, Nome Fantasia, CNPJ ou CPF */}
+      <div className="mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <div className="relative w-full sm:w-96">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input
+            type="text"
+            placeholder="Buscar por Razão Social, CNPJ ou CPF..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
+          />
+        </div>
+        <div className="text-xs text-slate-500 font-medium">
+          {clientes.filter(c => {
+            if (!searchTerm) return true
+            const term = searchTerm.toLowerCase().trim()
+            const cleanTerm = term.replace(/\D/g, '')
+            const doc = (c.cnpj || '').toLowerCase()
+            const cleanDoc = doc.replace(/\D/g, '')
+            return (
+              (c.razao_social && c.razao_social.toLowerCase().includes(term)) ||
+              (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(term)) ||
+              doc.includes(term) ||
+              (cleanTerm && cleanDoc.includes(cleanTerm))
+            )
+          }).length} {clientes.length === 1 ? 'cliente encontrado' : 'clientes encontrados'}
+        </div>
+      </div>
+
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
               <th className="p-4 font-semibold text-slate-600 text-sm">Logo</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">Razão Social / Ramo</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">CNPJ / Responsável</th>
+              <th className="p-4 font-semibold text-slate-600 text-sm">CNPJ / CPF / Responsável</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">Regime</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">Mensalidade</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">Certificado Digital</th>
@@ -84,7 +114,21 @@ export default function ClientesPage() {
             ) : clientes.length === 0 ? (
               <tr><td colSpan={10} className="p-8 text-center text-slate-500">Nenhum cliente cadastrado.</td></tr>
             ) : (
-              clientes.map(c => {
+              clientes
+                .filter(c => {
+                  if (!searchTerm) return true
+                  const term = searchTerm.toLowerCase().trim()
+                  const cleanTerm = term.replace(/\D/g, '')
+                  const doc = (c.cnpj || '').toLowerCase()
+                  const cleanDoc = doc.replace(/\D/g, '')
+                  return (
+                    (c.razao_social && c.razao_social.toLowerCase().includes(term)) ||
+                    (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(term)) ||
+                    doc.includes(term) ||
+                    (cleanTerm && cleanDoc.includes(cleanTerm))
+                  )
+                })
+                .map(c => {
                 let certStatus = <span className="text-slate-400 text-xs">Não cadastrado</span>
                 if (c.certificado_validade) {
                   const valDate = new Date(c.certificado_validade)

@@ -77,7 +77,7 @@ export default function MeusClientesPage() {
             <tr>
               <th className="p-4">Empresa (Nome Fantasia)</th>
               <th className="p-4">Razão Social</th>
-              <th className="p-4">CNPJ</th>
+              <th className="p-4">CNPJ / CPF</th>
               <th className="p-4">Login (E-mail)</th>
               <th className="p-4 text-right">Ações</th>
             </tr>
