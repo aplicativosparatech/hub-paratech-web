@@ -68,7 +68,8 @@ export default function ClientesPage() {
             <tr className="bg-slate-50 border-b border-slate-200">
               <th className="p-4 font-semibold text-slate-600 text-sm">Logo</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">Razão Social / Fantasia</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">CNPJ</th>
+              <th className="p-4 font-semibold text-slate-600 text-sm">CNPJ / Responsável</th>
+              <th className="p-4 font-semibold text-slate-600 text-sm">Certificado Digital</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">Contabilidade</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">Status</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">Token do Hub</th>
@@ -77,39 +78,58 @@ export default function ClientesPage() {
           </thead>
           <tbody>
             {loading ? (
-               <tr><td colSpan={7} className="p-8 text-center text-slate-500">Carregando...</td></tr>
+               <tr><td colSpan={8} className="p-8 text-center text-slate-500">Carregando...</td></tr>
             ) : clientes.length === 0 ? (
-              <tr><td colSpan={7} className="p-8 text-center text-slate-500">Nenhum cliente cadastrado.</td></tr>
+              <tr><td colSpan={8} className="p-8 text-center text-slate-500">Nenhum cliente cadastrado.</td></tr>
             ) : (
-              clientes.map(c => (
-                <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="p-4">
-                    {c.logo_url ? (
-                      <img src={c.logo_url} alt="Logo" className="w-10 h-10 rounded-full object-cover border border-slate-200" />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-400 text-xs font-bold">
-                        {c.razao_social?.charAt(0)}
+              clientes.map(c => {
+                let certStatus = <span className="text-slate-400 text-xs">Não cadastrado</span>
+                if (c.certificado_validade) {
+                  const valDate = new Date(c.certificado_validade)
+                  const diffDays = Math.ceil((valDate.getTime() - new Date().getTime()) / (1000 * 3600 * 24))
+                  if (diffDays < 0) {
+                    certStatus = <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-red-100 text-red-700">Vencido</span>
+                  } else if (diffDays <= 45) {
+                    certStatus = <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-800">Vence em {diffDays}d</span>
+                  } else {
+                    certStatus = <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800">Válido ({diffDays}d)</span>
+                  }
+                }
+
+                return (
+                  <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="p-4">
+                      {c.logo_url ? (
+                        <img src={c.logo_url} alt="Logo" className="w-10 h-10 rounded-full object-cover border border-slate-200" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-400 text-xs font-bold">
+                          {c.razao_social?.charAt(0)}
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-4 text-slate-800">
+                      <div className="font-bold text-slate-900">{c.razao_social}</div>
+                      <div className="text-xs text-slate-500">{c.nome_fantasia || '—'}</div>
+                    </td>
+                    <td className="p-4 text-slate-600 text-xs">
+                      <div className="font-mono font-medium text-slate-800">{c.cnpj}</div>
+                      {c.nome_contato && <div className="text-slate-400 mt-0.5">{c.nome_contato}</div>}
+                    </td>
+                    <td className="p-4">{certStatus}</td>
+                    <td className="p-4 text-slate-600 text-xs">{c.contabilidades?.razao_social || <span className="text-slate-400">—</span>}</td>
+                    <td className="p-4">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${c.is_ativo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {c.is_ativo ? 'Ativo' : 'Bloqueado'}
+                      </span>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex items-center gap-1">
+                        <code className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded max-w-[120px] truncate">{c.hub_token}</code>
+                        <button onClick={() => copyToken(c.hub_token)} className="p-1 text-slate-400 hover:text-blue-600" title="Copiar Token">
+                          <Copy size={14} />
+                        </button>
                       </div>
-                    )}
-                  </td>
-                  <td className="p-4 text-slate-800 font-medium">
-                    {c.razao_social} <br/><span className="text-xs text-slate-400">{c.nome_fantasia}</span>
-                  </td>
-                  <td className="p-4 text-slate-600">{c.cnpj}</td>
-                  <td className="p-4 text-slate-600">{c.contabilidades?.razao_social || <span className="text-slate-400">—</span>}</td>
-                  <td className="p-4">
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${c.is_ativo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                      {c.is_ativo ? 'Ativo' : 'Bloqueado'}
-                    </span>
-                  </td>
-                  <td className="p-4">
-                    <div className="flex items-center gap-1">
-                      <code className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded max-w-[120px] truncate">{c.hub_token}</code>
-                      <button onClick={() => copyToken(c.hub_token)} className="p-1 text-slate-400 hover:text-blue-600" title="Copiar Token">
-                        <Copy size={14} />
-                      </button>
-                    </div>
-                  </td>
+                    </td>
                   <td className="p-4 text-right">
                     <div className="flex gap-2 justify-end">
                       <Link href={`/dashboard/clientes/${c.id}/editar`} className="p-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition" title="Editar">
@@ -121,7 +141,7 @@ export default function ClientesPage() {
                     </div>
                   </td>
                 </tr>
-              ))
+              )})
             )}
           </tbody>
         </table>

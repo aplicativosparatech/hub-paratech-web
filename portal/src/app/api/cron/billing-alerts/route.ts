@@ -114,6 +114,54 @@ export async function GET(request: Request) {
       }
     }
 
+    // 4. ALERTA DE VENCIMENTO DO CERTIFICADO DIGITAL A1 (A partir de 45 dias antes)
+    const { data: clientesComCert } = await supabase
+      .from('clientes')
+      .select('id, razao_social, nome_fantasia, whatsapp, certificado_validade')
+      .not('certificado_validade', 'is', null)
+
+    for (const cli of clientesComCert || []) {
+      if (!cli.whatsapp || !cli.certificado_validade) continue
+      const dataValidade = new Date(cli.certificado_validade)
+      dataValidade.setHours(0, 0, 0, 0)
+
+      const diasParaVencerCert = Math.floor((dataValidade.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
+
+      // Se estiver a 45 dias ou menos do vencimento, dispara alerta diário
+      if (diasParaVencerCert <= 45 && diasParaVencerCert >= 0) {
+        const dataValidadeFormatada = dataValidade.toLocaleDateString('pt-BR')
+        let msgCert = ''
+        if (diasParaVencerCert === 0) {
+          msgCert = `🚨 ATENÇÃO URGENTE: O Certificado Digital A1 da empresa ${cli.nome_fantasia || cli.razao_social} VENCE HOJE (${dataValidadeFormatada}). A emissão de notas fiscais (NF-e/NFC-e) será interrompida se não for renovado imediatamente.`
+        } else {
+          msgCert = `🔔 AVISO FISCAL: O Certificado Digital A1 da empresa ${cli.nome_fantasia || cli.razao_social} expira em ${diasParaVencerCert} dias (${dataValidadeFormatada}).\nPor favor, providencie a renovação junto à sua Autoridade Certificadora para evitar paralisações na emissão de notas fiscais.`
+        }
+
+        try {
+          await sendWhatsAppMessage({
+            to: cli.whatsapp,
+            message: msgCert
+          })
+          disparosRealizados.push({
+            cliente: cli.nome_fantasia || cli.razao_social,
+            whatsapp: cli.whatsapp,
+            tipo: 'certificado_digital',
+            diasRestantes: diasParaVencerCert,
+            status: 'enviado'
+          })
+        } catch (err: any) {
+          disparosRealizados.push({
+            cliente: cli.nome_fantasia || cli.razao_social,
+            whatsapp: cli.whatsapp,
+            tipo: 'certificado_digital',
+            diasRestantes: diasParaVencerCert,
+            status: 'falha',
+            erro: err.message
+          })
+        }
+      }
+    }
+
     return NextResponse.json({ 
       success: true, 
       processadas: faturas?.length || 0,

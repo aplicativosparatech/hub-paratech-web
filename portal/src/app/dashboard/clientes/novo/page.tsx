@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, UserPlus, Save } from 'lucide-react'
+import { ArrowLeft, UserPlus, Save, Search, Eye, EyeOff, ShieldCheck, FileKey } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 
@@ -11,6 +11,9 @@ export default function NovoClientePage() {
   const router = useRouter()
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
+  const [searchingCnpj, setSearchingCnpj] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showCertPassword, setShowCertPassword] = useState(false)
   const [contabilidades, setContabilidades] = useState<any[]>([])
 
   const [formData, setFormData] = useState({
@@ -20,11 +23,18 @@ export default function NovoClientePage() {
     nome_sistema_utilizado: '',
     contabilidade_id: '',
     whatsapp: '',
+    nome_contato: '',
+    cpf_contato: '',
+    email_fiscal: '',
+    certificado_url: '',
+    certificado_senha: '',
+    certificado_validade: '',
     login_email: '',
     login_senha: '',
     logo_url: ''
   })
   const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [certFile, setCertFile] = useState<File | null>(null)
 
   useEffect(() => {
     async function fetchContas() {
@@ -34,6 +44,39 @@ export default function NovoClientePage() {
     fetchContas()
   }, [])
 
+  // Busca de CNPJ via BrasilAPI
+  const handleConsultarCnpj = async () => {
+    const rawCnpj = formData.cnpj.replace(/\D/g, '')
+    if (rawCnpj.length !== 14) {
+      toast.error('Informe um CNPJ válido com 14 dígitos.')
+      return
+    }
+
+    setSearchingCnpj(true)
+    const toastId = toast.loading('Consultando dados do CNPJ...')
+    try {
+      const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${rawCnpj}`)
+      if (!res.ok) throw new Error('Não foi possível obter dados para este CNPJ.')
+      const data = await res.json()
+
+      const tel = data.ddd_telefone_1 ? `55${data.ddd_telefone_1.replace(/\D/g, '')}` : formData.whatsapp
+
+      setFormData(prev => ({
+        ...prev,
+        razao_social: data.razao_social || prev.razao_social,
+        nome_fantasia: data.nome_fantasia || data.razao_social || prev.nome_fantasia,
+        whatsapp: prev.whatsapp || tel,
+        email_fiscal: prev.email_fiscal || data.email || ''
+      }))
+
+      toast.success('Dados preenchidos com sucesso!', { id: toastId })
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao consultar CNPJ', { id: toastId })
+    } finally {
+      setSearchingCnpj(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -41,7 +84,7 @@ export default function NovoClientePage() {
     let finalLogoUrl = ''
     if (logoFile) {
       const fileName = `${Date.now()}_${logoFile.name}`
-      const { data: uploadData, error: uploadError } = await supabase.storage.from('logos').upload(fileName, logoFile)
+      const { error: uploadError } = await supabase.storage.from('logos').upload(fileName, logoFile)
       if (uploadError) {
         toast.error('Erro ao enviar logo: ' + uploadError.message)
         setLoading(false)
@@ -50,11 +93,27 @@ export default function NovoClientePage() {
       finalLogoUrl = supabase.storage.from('logos').getPublicUrl(fileName).data.publicUrl
     }
 
+    let finalCertUrl = ''
+    if (certFile) {
+      const certName = `cert_${Date.now()}_${certFile.name}`
+      const { error: certUploadError } = await supabase.storage.from('xmls').upload(`certificados/${certName}`, certFile, {
+        upsert: true
+      })
+      if (certUploadError) {
+        toast.error('Erro ao enviar certificado: ' + certUploadError.message)
+        setLoading(false)
+        return
+      }
+      finalCertUrl = `certificados/${certName}`
+    }
+
     const { login_email, login_senha, ...clienteData } = formData
     
     const payload = {
       ...clienteData,
       contabilidade_id: clienteData.contabilidade_id || null,
+      certificado_validade: clienteData.certificado_validade || null,
+      certificado_url: finalCertUrl,
       logo_url: finalLogoUrl
     }
 
@@ -105,7 +164,7 @@ export default function NovoClientePage() {
           <UserPlus className="text-blue-600" size={30} />
           Novo Cliente
         </h1>
-        <p className="text-slate-500 text-sm mt-1">Cadastre uma nova empresa cliente para gerar o Token do Hub e vincular à contabilidade.</p>
+        <p className="text-slate-500 text-sm mt-1">Cadastre uma nova empresa cliente com perfil fiscal completo para gerar o Token do Hub e vincular à contabilidade.</p>
       </header>
 
       {/* Formulário Expandido em Grid */}
@@ -117,35 +176,58 @@ export default function NovoClientePage() {
               Dados da Empresa
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              
+              {/* Campo CNPJ com Botão de Consulta Automática */}
+              <div className="md:col-span-1">
+                <label className="block text-sm font-semibold text-slate-700 mb-1">CNPJ</label>
+                <div className="flex gap-2">
+                  <input 
+                    required 
+                    type="text" 
+                    placeholder="00.000.000/0000-00"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                    value={formData.cnpj} 
+                    onChange={e => setFormData({...formData, cnpj: e.target.value})} 
+                  />
+                  <button
+                    type="button"
+                    onClick={handleConsultarCnpj}
+                    disabled={searchingCnpj}
+                    title="Buscar dados do CNPJ na Receita Federal via BrasilAPI"
+                    className="px-3.5 py-2.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl font-semibold flex items-center justify-center transition border border-blue-200 disabled:opacity-50"
+                  >
+                    <Search size={18} className={searchingCnpj ? 'animate-spin' : ''} />
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Razão Social</label>
                 <input required type="text" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
                   placeholder="Nome oficial da empresa"
                   value={formData.razao_social} onChange={e => setFormData({...formData, razao_social: e.target.value})} />
               </div>
+
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Nome Fantasia</label>
                 <input type="text" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
                   placeholder="Nome comercial"
                   value={formData.nome_fantasia} onChange={e => setFormData({...formData, nome_fantasia: e.target.value})} />
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">CNPJ</label>
-                <input required type="text" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                  placeholder="00.000.000/0000-00"
-                  value={formData.cnpj} onChange={e => setFormData({...formData, cnpj: e.target.value})} />
-              </div>
+
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">WhatsApp (Cobranças / Notificações)</label>
                 <input type="text" placeholder="5511999999999" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
                   value={formData.whatsapp} onChange={e => setFormData({...formData, whatsapp: e.target.value})} />
               </div>
+
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Nome do Sistema Monitorado (ERP/PDV)</label>
                 <input required type="text" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
                   placeholder="Ex: GdoorSlim, SysPDV"
                   value={formData.nome_sistema_utilizado} onChange={e => setFormData({...formData, nome_sistema_utilizado: e.target.value})} />
               </div>
+
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Vincular a uma Contabilidade</label>
                 <select className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
@@ -156,10 +238,94 @@ export default function NovoClientePage() {
                   ))}
                 </select>
               </div>
+
               <div className="md:col-span-3">
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Logomarca da Empresa</label>
                 <input type="file" accept="image/*" className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 text-sm"
                   onChange={e => { if (e.target.files && e.target.files.length > 0) setLogoFile(e.target.files[0]) }} />
+              </div>
+            </div>
+          </div>
+
+          {/* Cadastro Fiscal & Responsável */}
+          <div className="pt-4 border-t border-slate-100">
+            <h3 className="text-base font-bold text-slate-900 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+              <ShieldCheck className="text-blue-600" size={20} />
+              Cadastro Fiscal & Contato Responsável
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Nome do Contato / Responsável</label>
+                <input type="text" placeholder="Ex: João Silva" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  value={formData.nome_contato} onChange={e => setFormData({...formData, nome_contato: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">CPF do Responsável</label>
+                <input type="text" placeholder="000.000.000-00" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  value={formData.cpf_contato} onChange={e => setFormData({...formData, cpf_contato: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">E-mail Fiscal (para envio de guias e relatórios)</label>
+                <input type="email" placeholder="fiscal@empresa.com.br" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  value={formData.email_fiscal} onChange={e => setFormData({...formData, email_fiscal: e.target.value})} />
+              </div>
+            </div>
+          </div>
+
+          {/* Certificado Digital A1 */}
+          <div className="pt-4 border-t border-slate-100">
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <FileKey className="text-indigo-600" size={20} />
+                Certificado Digital A1 (.pfx / .p12)
+              </h3>
+              <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full font-medium">
+                Aviso automático via WhatsApp 45 dias antes do vencimento
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Arquivo do Certificado (.pfx / .p12)</label>
+                <input 
+                  type="file" 
+                  accept=".pfx,.p12" 
+                  className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 text-sm"
+                  onChange={e => { if (e.target.files && e.target.files.length > 0) setCertFile(e.target.files[0]) }} 
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Senha do Certificado Digital</label>
+                <div className="relative">
+                  <input 
+                    type={showCertPassword ? 'text' : 'password'} 
+                    placeholder="Senha do arquivo .pfx" 
+                    className="w-full px-4 py-2.5 pr-11 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-mono"
+                    value={formData.certificado_senha} 
+                    onChange={e => setFormData({...formData, certificado_senha: e.target.value})} 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCertPassword(!showCertPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                    title={showCertPassword ? 'Ocultar senha' : 'Ver senha'}
+                  >
+                    {showCertPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Data de Vencimento do Certificado</label>
+                <div className="relative">
+                  <input 
+                    type="date" 
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                    value={formData.certificado_validade} 
+                    onChange={e => setFormData({...formData, certificado_validade: e.target.value})} 
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -177,8 +343,23 @@ export default function NovoClientePage() {
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Senha de Login</label>
-                <input type="password" placeholder="••••••••" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                  value={formData.login_senha} onChange={e => setFormData({...formData, login_senha: e.target.value})} />
+                <div className="relative">
+                  <input 
+                    type={showPassword ? 'text' : 'password'} 
+                    placeholder="Mínimo 6 caracteres" 
+                    className="w-full px-4 py-2.5 pr-11 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                    value={formData.login_senha} 
+                    onChange={e => setFormData({...formData, login_senha: e.target.value})} 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                    title={showPassword ? 'Ocultar senha' : 'Ver senha'}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

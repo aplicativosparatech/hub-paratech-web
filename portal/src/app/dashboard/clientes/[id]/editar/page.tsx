@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Save, Building2 } from 'lucide-react'
+import { ArrowLeft, Save, Building2, Search, Eye, EyeOff, ShieldCheck, FileKey, Calendar } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 
@@ -13,9 +13,13 @@ export default function EditarClientePage() {
   const supabase = createClient()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [searchingCnpj, setSearchingCnpj] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showCertPassword, setShowCertPassword] = useState(false)
   const [contabilidades, setContabilidades] = useState<any[]>([])
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [currentLogo, setCurrentLogo] = useState('')
+  const [certFile, setCertFile] = useState<File | null>(null)
 
   const [formData, setFormData] = useState({
     razao_social: '',
@@ -24,6 +28,12 @@ export default function EditarClientePage() {
     nome_sistema_utilizado: '',
     contabilidade_id: '',
     whatsapp: '',
+    nome_contato: '',
+    cpf_contato: '',
+    email_fiscal: '',
+    certificado_url: '',
+    certificado_senha: '',
+    certificado_validade: '',
     login_email: '',
     login_senha: '',
     is_ativo: true,
@@ -45,8 +55,14 @@ export default function EditarClientePage() {
           nome_sistema_utilizado: d.nome_sistema_utilizado || '',
           contabilidade_id: d.contabilidade_id || '',
           whatsapp: d.whatsapp || '',
+          nome_contato: d.nome_contato || '',
+          cpf_contato: d.cpf_contato || '',
+          email_fiscal: d.email_fiscal || '',
+          certificado_url: d.certificado_url || '',
+          certificado_senha: d.certificado_senha || '',
+          certificado_validade: d.certificado_validade ? d.certificado_validade.split('T')[0] : '',
           login_email: d.login_email || '',
-          login_senha: d.login_senha || '',
+          login_senha: '',
           is_ativo: d.is_ativo,
           logo_url: d.logo_url || ''
         })
@@ -57,6 +73,39 @@ export default function EditarClientePage() {
     }
     loadData()
   }, [params.id])
+
+  // Busca de CNPJ via BrasilAPI com fallback
+  const handleConsultarCnpj = async () => {
+    const rawCnpj = formData.cnpj.replace(/\D/g, '')
+    if (rawCnpj.length !== 14) {
+      toast.error('Informe um CNPJ válido com 14 dígitos.')
+      return
+    }
+
+    setSearchingCnpj(true)
+    const toastId = toast.loading('Consultando dados do CNPJ...')
+    try {
+      const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${rawCnpj}`)
+      if (!res.ok) throw new Error('Não foi possível obter dados para este CNPJ.')
+      const data = await res.json()
+
+      const tel = data.ddd_telefone_1 ? `55${data.ddd_telefone_1.replace(/\D/g, '')}` : formData.whatsapp
+
+      setFormData(prev => ({
+        ...prev,
+        razao_social: data.razao_social || prev.razao_social,
+        nome_fantasia: data.nome_fantasia || data.razao_social || prev.nome_fantasia,
+        whatsapp: prev.whatsapp || tel,
+        email_fiscal: prev.email_fiscal || data.email || ''
+      }))
+
+      toast.success('Dados preenchidos com sucesso!', { id: toastId })
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao consultar CNPJ', { id: toastId })
+    } finally {
+      setSearchingCnpj(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -74,11 +123,27 @@ export default function EditarClientePage() {
       finalLogoUrl = supabase.storage.from('logos').getPublicUrl(fileName).data.publicUrl
     }
 
+    let finalCertUrl = formData.certificado_url
+    if (certFile) {
+      const certName = `cert_${params.id}_${Date.now()}.pfx`
+      const { error: certUploadError } = await supabase.storage.from('xmls').upload(`certificados/${certName}`, certFile, {
+        upsert: true
+      })
+      if (certUploadError) {
+        toast.error('Erro ao enviar certificado: ' + certUploadError.message)
+        setSaving(false)
+        return
+      }
+      finalCertUrl = `certificados/${certName}`
+    }
+
     const { login_email, login_senha, ...clienteData } = formData
 
     const payload = {
       ...clienteData,
       contabilidade_id: clienteData.contabilidade_id || null,
+      certificado_validade: clienteData.certificado_validade || null,
+      certificado_url: finalCertUrl,
       logo_url: finalLogoUrl
     }
 
@@ -90,14 +155,14 @@ export default function EditarClientePage() {
       return
     }
 
-    // Atualizar o acesso do usuário
-    if (login_email) {
+    // Atualizar o acesso do usuário apenas se digitou email
+    if (login_email && login_email.trim() !== '') {
       const res = await fetch('/api/admin/update-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: login_email,
-          password: login_senha || undefined,
+          password: login_senha && login_senha.trim() !== '' ? login_senha : undefined,
           role: 'cliente',
           entity_id: params.id
         })
@@ -128,7 +193,7 @@ export default function EditarClientePage() {
           <Building2 className="text-blue-600" size={30} />
           Editar Cliente
         </h1>
-        <p className="text-slate-500 text-sm mt-1">Atualize as informações cadastrais, acessos e parâmetros do Hub para esta empresa.</p>
+        <p className="text-slate-500 text-sm mt-1">Atualize as informações cadastrais, perfil fiscal, certificado digital e parâmetros do Hub.</p>
       </header>
 
       {/* Formulário Expandido em Grid */}
@@ -146,37 +211,61 @@ export default function EditarClientePage() {
             </div>
           )}
 
-          {/* Dados Principais da Empresa (Grid de 2 ou 3 colunas) */}
+          {/* Dados Principais da Empresa (Grid de 3 colunas) */}
           <div>
             <h3 className="text-base font-bold text-slate-900 mb-4 pb-2 border-b border-slate-100">
               Dados da Empresa
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              
+              {/* Campo CNPJ com Botão de Consulta Automática */}
+              <div className="md:col-span-1">
+                <label className="block text-sm font-semibold text-slate-700 mb-1">CNPJ</label>
+                <div className="flex gap-2">
+                  <input 
+                    required 
+                    type="text" 
+                    placeholder="00.000.000/0000-00"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                    value={formData.cnpj} 
+                    onChange={e => setFormData({...formData, cnpj: e.target.value})} 
+                  />
+                  <button
+                    type="button"
+                    onClick={handleConsultarCnpj}
+                    disabled={searchingCnpj}
+                    title="Buscar dados do CNPJ na Receita Federal via BrasilAPI"
+                    className="px-3.5 py-2.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl font-semibold flex items-center justify-center transition border border-blue-200 disabled:opacity-50"
+                  >
+                    <Search size={18} className={searchingCnpj ? 'animate-spin' : ''} />
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Razão Social</label>
                 <input required type="text" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
                   value={formData.razao_social} onChange={e => setFormData({...formData, razao_social: e.target.value})} />
               </div>
+
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Nome Fantasia</label>
                 <input type="text" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
                   value={formData.nome_fantasia} onChange={e => setFormData({...formData, nome_fantasia: e.target.value})} />
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">CNPJ</label>
-                <input required type="text" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                  value={formData.cnpj} onChange={e => setFormData({...formData, cnpj: e.target.value})} />
-              </div>
+
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">WhatsApp (Cobranças / Notificações)</label>
                 <input type="text" placeholder="5511999999999" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
                   value={formData.whatsapp} onChange={e => setFormData({...formData, whatsapp: e.target.value})} />
               </div>
+
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Nome do Sistema Monitorado (ERP/PDV)</label>
                 <input required type="text" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
                   value={formData.nome_sistema_utilizado} onChange={e => setFormData({...formData, nome_sistema_utilizado: e.target.value})} />
               </div>
+
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Vincular a uma Contabilidade</label>
                 <select className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
@@ -187,6 +276,7 @@ export default function EditarClientePage() {
                   ))}
                 </select>
               </div>
+
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Status no Sistema</label>
                 <select className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
@@ -195,6 +285,7 @@ export default function EditarClientePage() {
                   <option value="false">Bloqueado Administrativamente</option>
                 </select>
               </div>
+
               <div className="md:col-span-2">
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Alterar Logomarca</label>
                 <input type="file" accept="image/*" className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 text-sm"
@@ -203,7 +294,93 @@ export default function EditarClientePage() {
             </div>
           </div>
 
-          {/* Dados de Acesso */}
+          {/* Cadastro Fiscal & Responsável */}
+          <div className="pt-4 border-t border-slate-100">
+            <h3 className="text-base font-bold text-slate-900 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+              <ShieldCheck className="text-blue-600" size={20} />
+              Cadastro Fiscal & Contato Responsável
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Nome do Contato / Responsável</label>
+                <input type="text" placeholder="Ex: João Silva" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  value={formData.nome_contato} onChange={e => setFormData({...formData, nome_contato: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">CPF do Responsável</label>
+                <input type="text" placeholder="000.000.000-00" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  value={formData.cpf_contato} onChange={e => setFormData({...formData, cpf_contato: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">E-mail Fiscal (para envio de guias e relatórios)</label>
+                <input type="email" placeholder="fiscal@empresa.com.br" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  value={formData.email_fiscal} onChange={e => setFormData({...formData, email_fiscal: e.target.value})} />
+              </div>
+            </div>
+          </div>
+
+          {/* Certificado Digital A1 */}
+          <div className="pt-4 border-t border-slate-100">
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <FileKey className="text-indigo-600" size={20} />
+                Certificado Digital A1 (.pfx / .p12)
+              </h3>
+              <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full font-medium">
+                Aviso automático via WhatsApp 45 dias antes do vencimento
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Arquivo do Certificado (.pfx / .p12)</label>
+                <input 
+                  type="file" 
+                  accept=".pfx,.p12" 
+                  className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 text-sm"
+                  onChange={e => { if (e.target.files && e.target.files.length > 0) setCertFile(e.target.files[0]) }} 
+                />
+                {formData.certificado_url && (
+                  <p className="text-xs text-emerald-600 mt-1 font-medium">✓ Certificado armazenado com sucesso</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Senha do Certificado Digital</label>
+                <div className="relative">
+                  <input 
+                    type={showCertPassword ? 'text' : 'password'} 
+                    placeholder="Senha do arquivo .pfx" 
+                    className="w-full px-4 py-2.5 pr-11 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-mono"
+                    value={formData.certificado_senha} 
+                    onChange={e => setFormData({...formData, certificado_senha: e.target.value})} 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCertPassword(!showCertPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                    title={showCertPassword ? 'Ocultar senha' : 'Ver senha'}
+                  >
+                    {showCertPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Data de Vencimento do Certificado</label>
+                <div className="relative">
+                  <input 
+                    type="date" 
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                    value={formData.certificado_validade} 
+                    onChange={e => setFormData({...formData, certificado_validade: e.target.value})} 
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Dados de Acesso ao Portal */}
           <div className="pt-4 border-t border-slate-100">
             <h3 className="text-base font-bold text-slate-900 mb-4 pb-2 border-b border-slate-100">
               Credenciais de Acesso ao Portal
@@ -216,8 +393,23 @@ export default function EditarClientePage() {
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Nova Senha de Login (deixe em branco para manter a atual)</label>
-                <input type="password" placeholder="••••••••" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                  value={formData.login_senha} onChange={e => setFormData({...formData, login_senha: e.target.value})} />
+                <div className="relative">
+                  <input 
+                    type={showPassword ? 'text' : 'password'} 
+                    placeholder="Mínimo 6 caracteres" 
+                    className="w-full px-4 py-2.5 pr-11 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                    value={formData.login_senha} 
+                    onChange={e => setFormData({...formData, login_senha: e.target.value})} 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                    title={showPassword ? 'Ocultar senha' : 'Ver senha'}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

@@ -48,8 +48,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Faltam dados (token, tipo_pasta ou xml_file)' }, { status: 400 })
     }
 
-    // 1. Validar Cliente
-    const { data: cliente } = await supabaseAdmin.from('clientes').select('id, is_ativo').eq('hub_token', token).single()
+    // 1. Validar Cliente e configurações
+    const { data: cliente } = await supabaseAdmin
+      .from('clientes')
+      .select('id, cnpj, is_ativo, configuracoes_hub(auto_excluir_divergentes)')
+      .eq('hub_token', token)
+      .single()
+
     if (!cliente) return NextResponse.json({ error: 'Cliente não encontrado' }, { status: 404 })
     if (!cliente.is_ativo) return NextResponse.json({ error: 'Cliente bloqueado/inativo' }, { status: 403 })
 
@@ -57,6 +62,32 @@ export async function POST(request: Request) {
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
     const xmlString = buffer.toString('utf-8')
+
+    // Extrair emitente
+    const emitMatch = xmlString.match(/<emit[^>]*>([\s\S]*?)<\/emit>/)
+    const emitXml = emitMatch ? emitMatch[1] : ''
+    const cnpjEmitente = extractTag(emitXml, 'CNPJ') || extractTag(emitXml, 'CPF')
+
+    // Limpar pontuação para comparar
+    const cleanClienteCnpj = (cliente.cnpj || '').replace(/\D/g, '')
+    const cleanEmitCnpj = (cnpjEmitente || '').replace(/\D/g, '')
+
+    // Se for pasta de vendas, o emitente DEVE ser a empresa do cliente
+    let isCnpjDivergente = false
+    if (tipoPasta === 'vendas' && cleanClienteCnpj && cleanEmitCnpj) {
+      if (cleanClienteCnpj !== cleanEmitCnpj) {
+        isCnpjDivergente = true
+      }
+    }
+
+    // Se a opção de auto-excluir estiver ativada nas configurações e for divergente
+    const hubConfig = Array.isArray(cliente.configuracoes_hub) ? cliente.configuracoes_hub[0] : cliente.configuracoes_hub
+    if (isCnpjDivergente && hubConfig?.auto_excluir_divergentes) {
+      return NextResponse.json({ 
+        ignored: true, 
+        reason: 'XML descartado: CNPJ emitente (' + cnpjEmitente + ') diverge da empresa cadastrada (' + cliente.cnpj + '). Auto-exclusão ativada.' 
+      }, { status: 200 })
+    }
 
     const mod = extractTag(xmlString, 'mod')
     const serie = extractTag(xmlString, 'serie')
@@ -119,7 +150,9 @@ export async function POST(request: Request) {
       data_emissao: emissao || null,
       data_transmissao: transmissao || null,
       tem_assinatura: temAssinatura,
-      storage_path: filePath
+      storage_path: filePath,
+      cnpj_emitente: cnpjEmitente || null,
+      cnpj_divergente: isCnpjDivergente
     }
 
     // Adiciona colunas extras se existirem na tabela

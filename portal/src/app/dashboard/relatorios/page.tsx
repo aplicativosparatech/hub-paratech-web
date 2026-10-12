@@ -38,16 +38,31 @@ export default function RelatoriosPage() {
       const { data: roleData } = await supabase.from('user_roles').select('*').eq('user_id', user.id).single()
 
       if (roleData?.role === 'cliente' && roleData.cliente_id) {
-        setSelectedCliente(roleData.cliente_id)
+        const { data: cli } = await supabase
+          .from('clientes')
+          .select('id, razao_social, nome_fantasia, cnpj, whatsapp, contabilidades(razao_social)')
+          .eq('id', roleData.cliente_id)
+          .single()
+        if (cli) {
+          setClientes([cli])
+          setSelectedCliente(cli.id)
+        }
       } else if (roleData?.role === 'contabilidade' && roleData.contabilidade_id) {
-        const { data: clis } = await supabase.from('clientes').select('id, razao_social, nome_fantasia').eq('contabilidade_id', roleData.contabilidade_id)
+        const { data: clis } = await supabase
+          .from('clientes')
+          .select('id, razao_social, nome_fantasia, cnpj, whatsapp, contabilidades(razao_social)')
+          .eq('contabilidade_id', roleData.contabilidade_id)
+          .order('razao_social')
         if (clis && clis.length > 0) {
           setClientes(clis)
           setSelectedCliente(clis[0].id)
         }
       } else {
         // Admin: vê todos os clientes
-        const { data: clis } = await supabase.from('clientes').select('id, razao_social, nome_fantasia').order('razao_social')
+        const { data: clis } = await supabase
+          .from('clientes')
+          .select('id, razao_social, nome_fantasia, cnpj, whatsapp, contabilidades(razao_social)')
+          .order('razao_social')
         if (clis && clis.length > 0) {
           setClientes(clis)
           setSelectedCliente(clis[0].id)
@@ -218,6 +233,42 @@ export default function RelatoriosPage() {
           </div>
         </div>
       </div>
+
+      {/* Card de Detalhes da Empresa Selecionada */}
+      {(() => {
+        const currentCli = clientes.find(c => c.id === selectedCliente)
+        if (!currentCli) return null
+        const contabNome = currentCli.contabilidades?.razao_social || currentCli.contabilidades?.[0]?.razao_social || 'Não vinculada'
+        return (
+          <div className="bg-gradient-to-r from-slate-900 to-blue-950 text-white rounded-2xl p-5 shadow-sm border border-slate-800">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-blue-400 mb-3">
+              <Building2 size={16} /> Dados Cadastrais da Empresa Selecionada (Conferência Fiscal)
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 text-sm">
+              <div>
+                <p className="text-slate-400 text-xs">Razão Social</p>
+                <p className="font-semibold text-slate-100 truncate" title={currentCli.razao_social}>{currentCli.razao_social || '—'}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs">Nome Fantasia</p>
+                <p className="font-semibold text-slate-100 truncate" title={currentCli.nome_fantasia}>{currentCli.nome_fantasia || '—'}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs">CNPJ</p>
+                <p className="font-semibold font-mono text-blue-300">{currentCli.cnpj || '—'}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs">WhatsApp / Contato</p>
+                <p className="font-semibold text-slate-100">{currentCli.whatsapp || '—'}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs">Contabilidade</p>
+                <p className="font-semibold text-emerald-400 truncate" title={contabNome}>{contabNome}</p>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* CARDS DE RESUMO DE FATURAMENTO CONSOLIDADO */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -56,6 +56,16 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
 
   useEffect(() => { load() }, [tabela, clienteIdParam])
 
+  async function handleDeleteNota(id: string, numero: string) {
+    if (!confirm(`Deseja realmente excluir a nota número ${numero || id}?`)) return
+    const { error } = await supabase.from(tabela).delete().eq('id', id)
+    if (error) {
+      alert('Erro ao excluir: ' + error.message)
+    } else {
+      setNotas(prev => prev.filter(n => n.id !== id))
+    }
+  }
+
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
@@ -74,31 +84,60 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
               <tr>
                 <th className="p-4">Número</th>
                 <th className="p-4">Chave de Acesso</th>
+                <th className="p-4">Emitente (CNPJ)</th>
                 <th className="p-4">Valor (R$)</th>
                 <th className="p-4">Emissão</th>
                 <th className="p-4">Transmissão</th>
                 <th className="p-4 text-center">Assinatura</th>
+                <th className="p-4 text-center">Ações</th>
               </tr>
             </thead>
             <tbody>
               {notas.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-400">
+                  <td colSpan={8} className="p-8 text-center text-slate-400">
                     Nenhuma nota encontrada. O Hub ainda não enviou dados para esta seção.
                   </td>
                 </tr>
-              ) : notas.map(n => (
-                <tr key={n.id} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="p-4 font-mono">{n.numero || '—'}</td>
-                  <td className="p-4 font-mono text-xs text-slate-500" title={n.chave}>
-                    {n.chave ? n.chave.substring(0, 22) + '...' : '—'}
-                  </td>
-                  <td className="p-4 font-medium">R$ {Number(n.valor || 0).toFixed(2)}</td>
-                  <td className="p-4">{n.data_emissao ? new Date(n.data_emissao).toLocaleDateString('pt-BR') : '—'}</td>
-                  <td className="p-4">{n.data_transmissao ? new Date(n.data_transmissao).toLocaleDateString('pt-BR') : '—'}</td>
-                  <td className="p-4 text-center"><AssinaturaChip ok={n.tem_assinatura} /></td>
-                </tr>
-              ))}
+              ) : notas.map(n => {
+                const isDivergente = Boolean(n.cnpj_divergente)
+                return (
+                  <tr 
+                    key={n.id} 
+                    className={`border-b transition ${isDivergente ? 'bg-red-50 hover:bg-red-100/80 text-red-900 border-red-200' : 'border-slate-100 hover:bg-slate-50'}`}
+                  >
+                    <td className="p-4 font-mono">
+                      <div className="flex items-center gap-2">
+                        {n.numero || '—'}
+                        {isDivergente && (
+                          <span className="bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded uppercase">
+                            CNPJ Não Pertence à Empresa
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-4 font-mono text-xs text-slate-500" title={n.chave}>
+                      {n.chave ? n.chave.substring(0, 22) + '...' : '—'}
+                    </td>
+                    <td className="p-4 font-mono text-xs">
+                      {n.cnpj_emitente || '—'}
+                    </td>
+                    <td className="p-4 font-medium">R$ {Number(n.valor || 0).toFixed(2)}</td>
+                    <td className="p-4">{n.data_emissao ? new Date(n.data_emissao).toLocaleDateString('pt-BR') : '—'}</td>
+                    <td className="p-4">{n.data_transmissao ? new Date(n.data_transmissao).toLocaleDateString('pt-BR') : '—'}</td>
+                    <td className="p-4 text-center"><AssinaturaChip ok={n.tem_assinatura} /></td>
+                    <td className="p-4 text-center">
+                      <button 
+                        onClick={() => handleDeleteNota(n.id, n.numero)}
+                        className="p-1.5 rounded-lg text-red-500 hover:bg-red-100 hover:text-red-700 transition" 
+                        title="Excluir XML"
+                      >
+                        <span className="font-bold text-sm">✕</span>
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
