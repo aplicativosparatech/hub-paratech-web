@@ -32,6 +32,8 @@ export default function NovoClientePage() {
     regime_tributario: 'simples_nacional',
     ramo_atividade: '',
     valor_mensalidade: '',
+    dia_vencimento: '10',
+    is_ativo: true,
     cidade: '',
     uf: '',
     login_email: '',
@@ -129,6 +131,8 @@ export default function NovoClientePage() {
     
     const payload = {
       ...clienteData,
+      is_ativo: formData.is_ativo,
+      dia_vencimento: parseInt(String(formData.dia_vencimento)) || 10,
       valor_mensalidade: clienteData.valor_mensalidade ? parseFloat(String(clienteData.valor_mensalidade).replace(',', '.')) : 0,
       contabilidade_id: clienteData.contabilidade_id || null,
       certificado_validade: clienteData.certificado_validade || null,
@@ -143,6 +147,15 @@ export default function NovoClientePage() {
       toast.error('Erro ao salvar cliente: ' + error.message)
       setLoading(false)
       return
+    }
+
+    // 1.1 Sincronizar configuracoes_hub com vencimento e valor da mensalidade
+    if (clienteResult?.id) {
+      await supabase.from('configuracoes_hub').upsert({
+        cliente_id: clienteResult.id,
+        dia_vencimento: payload.dia_vencimento,
+        valor_mensalidade: payload.valor_mensalidade
+      })
     }
 
     // 2. Criar a Conta de Usuário (se preencheu e-mail e senha)
@@ -285,7 +298,7 @@ export default function NovoClientePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Valor da Mensalidade do Sistema (R$)</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Valor da Mensalidade (R$)</label>
                 <input 
                   type="number" 
                   step="0.01"
@@ -295,6 +308,34 @@ export default function NovoClientePage() {
                   value={formData.valor_mensalidade} 
                   onChange={e => setFormData({...formData, valor_mensalidade: e.target.value})} 
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Dia de Vencimento da Fatura</label>
+                <input 
+                  type="number" 
+                  min="1"
+                  max="31"
+                  required
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-semibold"
+                  placeholder="10"
+                  value={formData.dia_vencimento} 
+                  onChange={e => setFormData({...formData, dia_vencimento: e.target.value})} 
+                />
+                <p className="text-[11px] text-slate-500 mt-1">Gera fatura automática todo dia 01</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Status no Sistema</label>
+                <select 
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-medium"
+                  value={formData.is_ativo ? 'true' : 'false'} 
+                  onChange={e => setFormData({...formData, is_ativo: e.target.value === 'true'})}
+                >
+                  <option value="true">Ativo (Acesso Liberado)</option>
+                  <option value="false">Inativo / Bloqueado</option>
+                </select>
+                <p className="text-[11px] text-slate-500 mt-1">Ativa/desativa cliente e faturamento</p>
               </div>
 
               <div className="md:col-span-3">

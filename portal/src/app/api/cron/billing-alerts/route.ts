@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { sendWhatsAppMessage } from '@/utils/whatsapp'
 import { calculateEffectiveDates } from '@/utils/businessDays'
+import { gerarFaturasMensalistas } from '@/utils/billing'
 
 export async function GET(request: Request) {
   // Segurança Básica: Em produção, checar cabeçalhos de autenticação do Vercel Cron.
@@ -18,6 +19,15 @@ export async function GET(request: Request) {
   hoje.setHours(0, 0, 0, 0)
 
   try {
+    // 0. Se for dia 01, garante a geração automática das faturas dos clientes ativos mensalistas
+    if (hoje.getDate() === 1) {
+      try {
+        await gerarFaturasMensalistas(hoje)
+      } catch (err) {
+        console.error('Erro ao gerar faturas automaticamente no dia 01:', err)
+      }
+    }
+
     // 1. Busca todas as Faturas que não estão Pagas
     const { data: faturas, error: faturaError } = await supabase
       .from('faturas')

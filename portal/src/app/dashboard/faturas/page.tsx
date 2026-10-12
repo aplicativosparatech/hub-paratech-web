@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
-import { FileText, Plus, X, Pencil, Trash2, RefreshCw } from 'lucide-react'
+import { FileText, Plus, X, Pencil, Trash2, RefreshCw, Zap } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function FaturasPage() {
@@ -11,6 +11,7 @@ export default function FaturasPage() {
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [gerando, setGerando] = useState(false)
+  const [gerandoLote, setGerandoLote] = useState(false)
   const supabase = createClient()
 
   // Form de nova fatura/edição
@@ -39,30 +40,64 @@ export default function FaturasPage() {
     fetchClientes()
   }, [])
 
+  // Gerar faturas em lote para todos os clientes ativos mensalistas
+  const handleGerarLoteMensalistas = async () => {
+    if (!confirm('Deseja gerar as faturas do mês atual para todos os clientes ativos mensalistas? Faturas já existentes não serão duplicadas.')) return
+    setGerandoLote(true)
+    const toastId = toast.loading('Processando faturas dos mensalistas...')
+    try {
+      const res = await fetch('/api/cron/gerar-faturas', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Erro ao gerar faturas')
+      toast.success(`${data.result.faturasCriadas} nova(s) fatura(s) gerada(s) para ${data.result.competencia}!`, { id: toastId })
+      fetchFaturas()
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao gerar faturas em lote', { id: toastId })
+    } finally {
+      setGerandoLote(false)
+    }
+  }
+
   // Quando seleciona um cliente (apenas na criação), preenche automaticamente
   const handleClienteChange = async (clienteId: string) => {
     setSelectedCliente(clienteId)
     if (!clienteId || editingId) return
 
-    const { data: config } = await supabase
-      .from('configuracoes_hub')
+    // Busca dados no cliente primeiro
+    const { data: cli } = await supabase
+      .from('clientes')
       .select('dia_vencimento, valor_mensalidade')
-      .eq('cliente_id', clienteId)
+      .eq('id', clienteId)
       .single()
 
-    if (config) {
+    let diaVenc = cli?.dia_vencimento
+    let valMensal = cli?.valor_mensalidade
+
+    // Fallback para configuracoes_hub se não houver no cliente
+    if (!diaVenc || !valMensal) {
+      const { data: config } = await supabase
+        .from('configuracoes_hub')
+        .select('dia_vencimento, valor_mensalidade')
+        .eq('cliente_id', clienteId)
+        .single()
+      if (config) {
+        diaVenc = diaVenc || config.dia_vencimento
+        valMensal = valMensal || config.valor_mensalidade
+      }
+    }
+
+    if (diaVenc || valMensal) {
       const hoje = new Date()
-      const mesAnterior = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1)
-      const mesComp = `${String(mesAnterior.getMonth() + 1).padStart(2, '0')}/${mesAnterior.getFullYear()}`
+      const mesComp = `${String(hoje.getMonth() + 1).padStart(2, '0')}/${hoje.getFullYear()}`
       
-      const diaVenc = config.dia_vencimento
+      const dia = diaVenc || 10
       const anoVenc = hoje.getFullYear()
       const mesVenc = hoje.getMonth() + 1
-      const dataVenc = `${anoVenc}-${String(mesVenc).padStart(2, '0')}-${String(diaVenc).padStart(2, '0')}`
+      const dataVenc = `${anoVenc}-${String(mesVenc).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
 
       setCompetencia(mesComp)
       setDataVencimento(dataVenc)
-      setValor(String(config.valor_mensalidade))
+      setValor(valMensal ? String(valMensal) : '')
     }
   }
 
@@ -156,9 +191,18 @@ export default function FaturasPage() {
             <RefreshCw size={20} />
             Atualizar
           </button>
+          <button 
+            onClick={handleGerarLoteMensalistas} 
+            disabled={gerandoLote}
+            className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-emerald-700 transition flex items-center gap-2 shadow-sm disabled:opacity-50"
+            title="Gera automaticamente faturas da competência atual para todos os clientes ativos mensalistas (idempotente)"
+          >
+            <Zap size={20} className={gerandoLote ? 'animate-spin' : ''} />
+            {gerandoLote ? 'Gerando...' : 'Gerar Faturas do Mês'}
+          </button>
           <button onClick={() => setModalOpen(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition flex items-center gap-2">
             <Plus size={20} />
-            Gerar Fatura
+            Gerar Fatura Avulsa
           </button>
         </div>
       </header>

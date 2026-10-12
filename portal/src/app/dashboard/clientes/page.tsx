@@ -141,17 +141,22 @@ export default function ClientesPage() {
                     </td>
                     <td className="p-4">{getRegimeBadge(c.regime_tributario)}</td>
                     <td className="p-4">
-                      <span className="font-semibold text-slate-800 text-sm whitespace-nowrap">
+                      <div className="font-semibold text-slate-800 text-sm whitespace-nowrap">
                         {c.valor_mensalidade !== undefined && c.valor_mensalidade !== null
                           ? Number(c.valor_mensalidade).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
                           : 'R$ 0,00'}
-                      </span>
+                      </div>
+                      {c.dia_vencimento && (
+                        <div className="text-[11px] text-slate-500 font-medium mt-0.5 whitespace-nowrap">
+                          Venc. dia {c.dia_vencimento}
+                        </div>
+                      )}
                     </td>
                     <td className="p-4">{certStatus}</td>
                     <td className="p-4 text-slate-600 text-xs">{c.contabilidades?.razao_social || <span className="text-slate-400">—</span>}</td>
                     <td className="p-4">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${c.is_ativo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {c.is_ativo ? 'Ativo' : 'Bloqueado'}
+                      <span className={`px-2 py-1 rounded text-xs font-semibold ${c.is_ativo ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'}`}>
+                        {c.is_ativo ? 'Ativo' : 'Inativo'}
                       </span>
                     </td>
                     <td className="p-4">
