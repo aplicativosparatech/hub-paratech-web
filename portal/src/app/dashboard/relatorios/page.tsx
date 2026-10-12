@@ -42,36 +42,49 @@ export default function RelatoriosPage() {
       const role = (roleData?.role as any) || 'admin'
       setUserRole(role)
 
+      let clisData: any[] = []
+
       if (role === 'cliente' && roleData?.cliente_id) {
         const { data: cli } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, whatsapp, contabilidades(razao_social)')
+          .select('id, razao_social, nome_fantasia, cnpj, whatsapp, contabilidade_id')
           .eq('id', roleData.cliente_id)
           .single()
-        if (cli) {
-          setClientes([cli])
-          setSelectedCliente(cli.id)
-        }
+        if (cli) clisData = [cli]
       } else if (role === 'contabilidade' && roleData?.contabilidade_id) {
         const { data: clis } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, whatsapp, contabilidades(razao_social)')
+          .select('id, razao_social, nome_fantasia, cnpj, whatsapp, contabilidade_id')
           .eq('contabilidade_id', roleData.contabilidade_id)
           .order('razao_social')
-        if (clis && clis.length > 0) {
-          setClientes(clis)
-          setSelectedCliente(clis[0].id)
-        }
+        if (clis) clisData = clis
       } else {
-        // Admin: busca todas as empresas
-        const { data: clis } = await supabase
+        // Admin: busca todas as empresas cadastradas
+        const { data: clis, error: errClis } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, whatsapp, contabilidades(razao_social)')
+          .select('id, razao_social, nome_fantasia, cnpj, whatsapp, contabilidade_id')
           .order('razao_social')
-        if (clis && clis.length > 0) {
-          setClientes(clis)
-          setSelectedCliente(clis[0].id)
+        
+        if (errClis) {
+          console.error('Erro ao buscar clientes para relatorios:', errClis)
         }
+        if (clis) clisData = clis
+      }
+
+      // Se temos clientes, buscar os nomes das contabilidades vinculadas para exibição no card
+      if (clisData.length > 0) {
+        const { data: contabs } = await supabase.from('contabilidades').select('id, razao_social')
+        const contabMap = new Map((contabs || []).map(c => [c.id, c.razao_social]))
+
+        const mapped = clisData.map(c => ({
+          ...c,
+          contabilidade_nome: c.contabilidade_id ? contabMap.get(c.contabilidade_id) : 'Não vinculada'
+        }))
+
+        setClientes(mapped)
+        setSelectedCliente(mapped[0].id)
+      } else {
+        setClientes([])
       }
 
       setLoading(false)
@@ -287,7 +300,7 @@ export default function RelatoriosPage() {
       {(() => {
         const currentCli = clientes.find(c => c.id === selectedCliente)
         if (!currentCli) return null
-        const contabNome = currentCli.contabilidades?.razao_social || currentCli.contabilidades?.[0]?.razao_social || 'Não vinculada'
+        const contabNome = currentCli.contabilidade_nome || 'Não vinculada'
         return (
           <div className="bg-gradient-to-r from-slate-900 to-blue-950 text-white rounded-2xl p-5 shadow-sm border border-slate-800">
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-blue-400 mb-3">
