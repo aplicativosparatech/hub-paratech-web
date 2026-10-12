@@ -67,9 +67,10 @@ export default function ClientesPage() {
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
               <th className="p-4 font-semibold text-slate-600 text-sm">Logo</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">Razão Social / Fantasia</th>
+              <th className="p-4 font-semibold text-slate-600 text-sm">Razão Social / Ramo</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">CNPJ / Responsável</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">Regime</th>
+              <th className="p-4 font-semibold text-slate-600 text-sm">Mensalidade</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">Certificado Digital</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">Contabilidade</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">Status</th>
@@ -79,9 +80,9 @@ export default function ClientesPage() {
           </thead>
           <tbody>
             {loading ? (
-               <tr><td colSpan={9} className="p-8 text-center text-slate-500">Carregando...</td></tr>
+               <tr><td colSpan={10} className="p-8 text-center text-slate-500">Carregando...</td></tr>
             ) : clientes.length === 0 ? (
-              <tr><td colSpan={9} className="p-8 text-center text-slate-500">Nenhum cliente cadastrado.</td></tr>
+              <tr><td colSpan={10} className="p-8 text-center text-slate-500">Nenhum cliente cadastrado.</td></tr>
             ) : (
               clientes.map(c => {
                 let certStatus = <span className="text-slate-400 text-xs">Não cadastrado</span>
@@ -128,12 +129,24 @@ export default function ClientesPage() {
                     <td className="p-4 text-slate-800">
                       <div className="font-bold text-slate-900">{c.razao_social}</div>
                       <div className="text-xs text-slate-500">{c.nome_fantasia || '—'}</div>
+                      {c.ramo_atividade && (
+                        <div className="text-[11px] text-blue-600 font-medium mt-0.5 max-w-[200px] truncate" title={c.ramo_atividade}>
+                          🏢 {c.ramo_atividade}
+                        </div>
+                      )}
                     </td>
                     <td className="p-4 text-slate-600 text-xs">
                       <div className="font-mono font-medium text-slate-800">{c.cnpj}</div>
                       {c.nome_contato && <div className="text-slate-400 mt-0.5">{c.nome_contato}</div>}
                     </td>
                     <td className="p-4">{getRegimeBadge(c.regime_tributario)}</td>
+                    <td className="p-4">
+                      <span className="font-semibold text-slate-800 text-sm whitespace-nowrap">
+                        {c.valor_mensalidade !== undefined && c.valor_mensalidade !== null
+                          ? Number(c.valor_mensalidade).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                          : 'R$ 0,00'}
+                      </span>
+                    </td>
                     <td className="p-4">{certStatus}</td>
                     <td className="p-4 text-slate-600 text-xs">{c.contabilidades?.razao_social || <span className="text-slate-400">—</span>}</td>
                     <td className="p-4">

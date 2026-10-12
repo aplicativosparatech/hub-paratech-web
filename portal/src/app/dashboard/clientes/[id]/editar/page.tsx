@@ -36,7 +36,11 @@ export default function EditarClientePage() {
     certificado_validade: '',
     login_email: '',
     login_senha: '',
+    cidade: '',
+    uf: '',
     regime_tributario: 'simples_nacional',
+    ramo_atividade: '',
+    valor_mensalidade: '',
     is_ativo: true,
     logo_url: ''
   })
@@ -62,7 +66,11 @@ export default function EditarClientePage() {
           certificado_url: d.certificado_url || '',
           certificado_senha: d.certificado_senha || '',
           certificado_validade: d.certificado_validade ? d.certificado_validade.split('T')[0] : '',
+          cidade: d.cidade || '',
+          uf: d.uf || '',
           regime_tributario: d.regime_tributario || 'simples_nacional',
+          ramo_atividade: d.ramo_atividade || '',
+          valor_mensalidade: d.valor_mensalidade !== undefined && d.valor_mensalidade !== null ? String(d.valor_mensalidade) : '',
           login_email: d.login_email || '',
           login_senha: '',
           is_ativo: d.is_ativo,
@@ -93,12 +101,25 @@ export default function EditarClientePage() {
 
       const tel = data.ddd_telefone_1 ? `55${data.ddd_telefone_1.replace(/\D/g, '')}` : formData.whatsapp
 
+      let autoRegime = formData.regime_tributario || 'simples_nacional'
+      if (data.opcao_pelo_mei) {
+        autoRegime = 'mei'
+      } else if (data.opcao_pelo_simples) {
+        autoRegime = 'simples_nacional'
+      } else if (data.opcao_pelo_simples === false) {
+        autoRegime = 'lucro_presumido'
+      }
+
       setFormData(prev => ({
         ...prev,
         razao_social: data.razao_social || prev.razao_social,
         nome_fantasia: data.nome_fantasia || data.razao_social || prev.nome_fantasia,
         whatsapp: prev.whatsapp || tel,
-        email_fiscal: prev.email_fiscal || data.email || ''
+        email_fiscal: prev.email_fiscal || data.email || '',
+        ramo_atividade: prev.ramo_atividade || data.cnae_fiscal_descricao || '',
+        cidade: prev.cidade || data.municipio || '',
+        uf: prev.uf || data.uf || '',
+        regime_tributario: autoRegime
       }))
 
       toast.success('Dados preenchidos com sucesso!', { id: toastId })
@@ -143,6 +164,7 @@ export default function EditarClientePage() {
 
     const payload = {
       ...clienteData,
+      valor_mensalidade: clienteData.valor_mensalidade ? parseFloat(String(clienteData.valor_mensalidade).replace(',', '.')) : 0,
       contabilidade_id: clienteData.contabilidade_id || null,
       certificado_validade: clienteData.certificado_validade || null,
       certificado_url: finalCertUrl,
@@ -292,6 +314,30 @@ export default function EditarClientePage() {
                   <option value="lucro_real">Regime Normal - Lucro Real (CRT 3)</option>
                   <option value="mei">MEI - Microempreendedor Individual (CRT 4)</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Ramo de Atividade</label>
+                <input 
+                  type="text" 
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  placeholder="Ex: Supermercado, Depósito, Farmácia"
+                  value={formData.ramo_atividade} 
+                  onChange={e => setFormData({...formData, ramo_atividade: e.target.value})} 
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Valor da Mensalidade do Sistema (R$)</label>
+                <input 
+                  type="number" 
+                  step="0.01"
+                  min="0"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-semibold"
+                  placeholder="0.00"
+                  value={formData.valor_mensalidade} 
+                  onChange={e => setFormData({...formData, valor_mensalidade: e.target.value})} 
+                />
               </div>
 
               <div>
