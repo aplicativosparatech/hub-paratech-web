@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ArrowLeft, Save, Building2, Search, Eye, EyeOff, ShieldCheck, FileKey, Calendar } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
+import CertificadoAlertaBanner from '@/components/CertificadoAlertaBanner'
 
 export default function EditarClientePage() {
   const router = useRouter()
@@ -20,6 +21,10 @@ export default function EditarClientePage() {
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [currentLogo, setCurrentLogo] = useState('')
   const [certFile, setCertFile] = useState<File | null>(null)
+  const [certInfo, setCertInfo] = useState<{ titular: string; documento: string; validade: string; diasRestantes: number } | null>(null)
+  const [readingCert, setReadingCert] = useState(false)
+  const [certError, setCertError] = useState<string | null>(null)
+  const [hubConfig, setHubConfig] = useState<any>(null)
 
   const [formData, setFormData] = useState({
     razao_social: '',
@@ -48,9 +53,10 @@ export default function EditarClientePage() {
 
   useEffect(() => {
     async function loadData() {
-      const [clienteRes, contabRes] = await Promise.all([
+      const [clienteRes, contabRes, hubRes] = await Promise.all([
         supabase.from('clientes').select('*').eq('id', params.id).single(),
-        supabase.from('contabilidades').select('id, razao_social')
+        supabase.from('contabilidades').select('id, razao_social'),
+        supabase.from('configuracoes_hub').select('*').eq('cliente_id', params.id).maybeSingle()
       ])
       if (clienteRes.data) {
         const d = clienteRes.data
@@ -81,10 +87,48 @@ export default function EditarClientePage() {
         if (d.logo_url) setCurrentLogo(d.logo_url)
       }
       if (contabRes.data) setContabilidades(contabRes.data)
+      if (hubRes.data) setHubConfig(hubRes.data)
       setLoading(false)
     }
     loadData()
   }, [params.id])
+
+  // Leitura automática do certificado digital A1 (.pfx)
+  const handleLerCertificado = async (fileToRead = certFile, passToUse = formData.certificado_senha) => {
+    if (!fileToRead || !passToUse) return
+    setReadingCert(true)
+    setCertError(null)
+    const toastId = toast.loading('Lendo dados do certificado A1...')
+    try {
+      const fd = new FormData()
+      fd.append('file', fileToRead)
+      fd.append('senha', passToUse)
+      const res = await fetch('/api/certificados/ler-pfx', {
+        method: 'POST',
+        body: fd
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Erro ao ler certificado')
+      }
+      setCertInfo({
+        titular: data.titular,
+        documento: data.documento,
+        validade: data.dataValidadeFormatada,
+        diasRestantes: data.diasRestantes
+      })
+      setFormData(prev => ({
+        ...prev,
+        certificado_validade: data.dataValidade
+      }))
+      toast.success(`Certificado lido com sucesso! Titular: ${data.titular}`, { id: toastId })
+    } catch (err: any) {
+      setCertError(err.message)
+      toast.error(err.message, { id: toastId })
+    } finally {
+      setReadingCert(false)
+    }
+  }
 
   // Busca de CNPJ via BrasilAPI com fallback
   const handleConsultarCnpj = async () => {
@@ -150,16 +194,22 @@ export default function EditarClientePage() {
 
     let finalCertUrl = formData.certificado_url
     if (certFile) {
-      const certName = `cert_${params.id}_${Date.now()}.pfx`
-      const { error: certUploadError } = await supabase.storage.from('xmls').upload(`certificados/${certName}`, certFile, {
-        upsert: true
+      const certFd = new FormData()
+      certFd.append('file', certFile)
+      certFd.append('senha', formData.certificado_senha)
+      certFd.append('clienteId', String(params.id))
+
+      const certUploadRes = await fetch('/api/certificados/upload', {
+        method: 'POST',
+        body: certFd
       })
-      if (certUploadError) {
-        toast.error('Erro ao enviar certificado: ' + certUploadError.message)
+      const certUploadData = await certUploadRes.json()
+      if (!certUploadRes.ok || !certUploadData.success) {
+        toast.error('Erro ao enviar certificado: ' + (certUploadData.error || 'Falha no envio'))
         setSaving(false)
         return
       }
-      finalCertUrl = `certificados/${certName}`
+      finalCertUrl = certUploadData.storagePath
     }
 
     const { login_email, login_senha, ...clienteData } = formData
@@ -230,6 +280,16 @@ export default function EditarClientePage() {
         </h1>
         <p className="text-slate-500 text-sm mt-1">Atualize as informações cadastrais, perfil fiscal, certificado digital e parâmetros do Hub.</p>
       </header>
+
+      {/* Faixa Vermelha de Alerta de Certificado Digital */}
+      <CertificadoAlertaBanner 
+        validade={formData.certificado_validade}
+        titular={certInfo?.titular}
+        documento={certInfo?.documento || formData.cnpj}
+        razaoSocial={formData.razao_social}
+        userRole="admin"
+        config={hubConfig}
+      />
 
       {/* Formulário Expandido em Grid */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 w-full">
@@ -428,15 +488,35 @@ export default function EditarClientePage() {
                   type="file" 
                   accept=".pfx,.p12" 
                   className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 text-sm"
-                  onChange={e => { if (e.target.files && e.target.files.length > 0) setCertFile(e.target.files[0]) }} 
+                  onChange={e => { 
+                    if (e.target.files && e.target.files.length > 0) {
+                      const f = e.target.files[0]
+                      setCertFile(f)
+                      if (formData.certificado_senha) {
+                        handleLerCertificado(f, formData.certificado_senha)
+                      }
+                    } 
+                  }} 
                 />
-                {formData.certificado_url && (
-                  <p className="text-xs text-emerald-600 mt-1 font-medium">✓ Certificado armazenado com sucesso</p>
+                {formData.certificado_url && !certFile && (
+                  <p className="text-xs text-emerald-600 mt-1 font-medium">✓ Certificado atual ativo no sistema</p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Senha do Certificado Digital</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-semibold text-slate-700">Senha do Certificado Digital</label>
+                  {certFile && formData.certificado_senha && (
+                    <button
+                      type="button"
+                      onClick={() => handleLerCertificado(certFile, formData.certificado_senha)}
+                      disabled={readingCert}
+                      className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold"
+                    >
+                      {readingCert ? 'Lendo...' : 'Ler Certificado'}
+                    </button>
+                  )}
+                </div>
                 <div className="relative">
                   <input 
                     type={showCertPassword ? 'text' : 'password'} 
@@ -444,6 +524,11 @@ export default function EditarClientePage() {
                     className="w-full px-4 py-2.5 pr-11 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-mono"
                     value={formData.certificado_senha} 
                     onChange={e => setFormData({...formData, certificado_senha: e.target.value})} 
+                    onBlur={() => {
+                      if (certFile && formData.certificado_senha) {
+                        handleLerCertificado(certFile, formData.certificado_senha)
+                      }
+                    }}
                   />
                   <button
                     type="button"
@@ -461,12 +546,45 @@ export default function EditarClientePage() {
                 <div className="relative">
                   <input 
                     type="date" 
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-medium"
                     value={formData.certificado_validade} 
                     onChange={e => setFormData({...formData, certificado_validade: e.target.value})} 
                   />
                 </div>
+                <p className="text-[11px] text-slate-500 mt-1">Preenchida automaticamente ao ler o certificado</p>
               </div>
+
+              {/* Informações extraídas do certificado digital */}
+              {certInfo && (
+                <div className="md:col-span-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-emerald-950">
+                  <div className="space-y-1 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-emerald-900">Titular:</span>
+                      <span className="font-semibold text-slate-900 bg-white px-2 py-0.5 rounded border border-emerald-200">{certInfo.titular}</span>
+                    </div>
+                    {certInfo.documento && (
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-emerald-900">CNPJ / CPF:</span>
+                        <span className="font-mono font-bold text-blue-700 bg-white px-2 py-0.5 rounded border border-emerald-200">{certInfo.documento}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-emerald-900">Vencimento:</span>
+                      <span className="font-medium text-slate-800">{certInfo.validade} ({certInfo.diasRestantes < 0 ? 'Vencido' : `Vence em ${certInfo.diasRestantes} dias`})</span>
+                    </div>
+                  </div>
+                  <span className="px-3 py-1 bg-emerald-600 text-white rounded-full font-bold uppercase text-[10px] tracking-wider shrink-0 self-start sm:self-auto">
+                    ✓ Certificado Válido
+                  </span>
+                </div>
+              )}
+
+              {/* Mensagem de Erro de Senha */}
+              {certError && (
+                <div className="md:col-span-3 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-medium">
+                  ⚠️ {certError}
+                </div>
+              )}
             </div>
           </div>
 

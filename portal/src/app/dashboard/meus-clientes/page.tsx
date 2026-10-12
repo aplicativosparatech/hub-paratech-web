@@ -4,11 +4,13 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import Link from 'next/link'
 import { FileDown } from 'lucide-react'
+import CertificadoAlertaBanner from '@/components/CertificadoAlertaBanner'
 
 export default function MeusClientesPage() {
   const supabase = createClient()
   const [clientes, setClientes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [certAlerta, setCertAlerta] = useState<any>(null)
 
   useEffect(() => {
     async function load() {
@@ -25,11 +27,27 @@ export default function MeusClientesPage() {
 
       const { data } = await supabase
         .from('clientes')
-        .select('id, razao_social, nome_fantasia, cnpj, login_email')
+        .select('id, razao_social, nome_fantasia, cnpj, login_email, certificado_validade, configuracoes_hub(exibir_faixa_topo_certificado, exibir_certificados_contabilidade)')
         .eq('contabilidade_id', roleData.contabilidade_id)
         .order('nome_fantasia')
 
-      setClientes(data || [])
+      if (data) {
+        setClientes(data)
+        const clienteVencendo = data.find(c => {
+          if (!c.certificado_validade) return false
+          const diff = Math.ceil((new Date(c.certificado_validade).getTime() - new Date().getTime()) / (1000 * 3600 * 24))
+          return diff <= 45
+        })
+        if (clienteVencendo) {
+          const cfg = Array.isArray(clienteVencendo.configuracoes_hub) ? clienteVencendo.configuracoes_hub[0] : clienteVencendo.configuracoes_hub
+          setCertAlerta({
+            validade: clienteVencendo.certificado_validade,
+            razaoSocial: clienteVencendo.nome_fantasia || clienteVencendo.razao_social,
+            documento: clienteVencendo.cnpj,
+            config: cfg
+          })
+        }
+      }
       setLoading(false)
     }
     load()
@@ -39,6 +57,15 @@ export default function MeusClientesPage() {
 
   return (
     <div className="p-8">
+      {certAlerta && (
+        <CertificadoAlertaBanner 
+          validade={certAlerta.validade}
+          razaoSocial={certAlerta.razaoSocial}
+          documento={certAlerta.documento}
+          userRole="contabilidade"
+          config={certAlerta.config}
+        />
+      )}
       <header className="mb-6">
         <h1 className="text-3xl font-bold text-slate-900">Meus Clientes</h1>
         <p className="text-slate-500 mt-1">Empresas vinculadas ao seu escritório de contabilidade.</p>

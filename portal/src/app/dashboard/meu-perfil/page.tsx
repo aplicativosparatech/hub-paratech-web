@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { User, Save } from 'lucide-react'
+import CertificadoAlertaBanner from '@/components/CertificadoAlertaBanner'
 
 export default function MeuPerfilPage() {
   const supabase = createClient()
@@ -12,6 +13,7 @@ export default function MeuPerfilPage() {
   const [saving, setSaving] = useState(false)
   const [formData, setFormData] = useState<any>({})
   const [entityId, setEntityId] = useState<string | null>(null)
+  const [certAlerta, setCertAlerta] = useState<any>(null)
 
   useEffect(() => {
     async function loadProfile() {
@@ -29,9 +31,23 @@ export default function MeuPerfilPage() {
 
       if (roleData.role === 'cliente' && roleData.cliente_id) {
         setEntityId(roleData.cliente_id)
-        const { data, error } = await supabase.from('clientes').select('nome_fantasia, razao_social, cnpj, whatsapp, login_email').eq('id', roleData.cliente_id).single()
+        const { data, error } = await supabase
+          .from('clientes')
+          .select('nome_fantasia, razao_social, cnpj, whatsapp, login_email, certificado_validade, configuracoes_hub(exibir_faixa_topo_certificado, exibir_certificados_cliente)')
+          .eq('id', roleData.cliente_id)
+          .single()
         if (error) console.error('Erro ao buscar cliente:', error)
-        if (data) setFormData(data)
+        if (data) {
+          const { configuracoes_hub, certificado_validade, ...rest } = data as any
+          setFormData(rest)
+          const cfg = Array.isArray(configuracoes_hub) ? configuracoes_hub[0] : configuracoes_hub
+          setCertAlerta({
+            validade: certificado_validade,
+            razaoSocial: data.nome_fantasia || data.razao_social,
+            documento: data.cnpj,
+            config: cfg
+          })
+        }
       } else if (roleData.role === 'contabilidade' && roleData.contabilidade_id) {
         setEntityId(roleData.contabilidade_id)
         const { data, error } = await supabase.from('contabilidades').select('razao_social, cnpj, email_contato, login_email').eq('id', roleData.contabilidade_id).single()
@@ -85,6 +101,17 @@ export default function MeuPerfilPage() {
         </h1>
         <p className="text-slate-500 text-sm mt-1">Atualize e gerencie os dados cadastrais da sua empresa no portal.</p>
       </header>
+
+      {/* Faixa Vermelha de Alerta de Certificado Digital */}
+      {certAlerta && (
+        <CertificadoAlertaBanner 
+          validade={certAlerta.validade}
+          razaoSocial={certAlerta.razaoSocial}
+          documento={certAlerta.documento}
+          userRole="cliente"
+          config={certAlerta.config}
+        />
+      )}
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 w-full space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

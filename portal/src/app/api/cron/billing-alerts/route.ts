@@ -134,7 +134,7 @@ export async function GET(request: Request) {
     // Busca configurações de todos os clientes
     const { data: todasConfigs } = await supabase
       .from('configuracoes_hub')
-      .select('cliente_id, exibir_certificados_contabilidade, exibir_certificados_cliente')
+      .select('cliente_id, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado')
 
     const configMap = new Map((todasConfigs || []).map(cfg => [cfg.cliente_id, cfg]))
 
@@ -146,6 +146,11 @@ export async function GET(request: Request) {
 
     for (const cli of clientesComCert || []) {
       if (!cli.certificado_validade) continue
+      const cliConfig = configMap.get(cli.id)
+
+      // Se o envio por WhatsApp de aviso de certificado estiver desativado pelo Admin, pula
+      if (cliConfig?.avisar_whatsapp_certificado === false) continue
+
       const dataValidade = new Date(cli.certificado_validade)
       dataValidade.setHours(0, 0, 0, 0)
 

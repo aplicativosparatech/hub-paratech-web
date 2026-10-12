@@ -17,7 +17,9 @@ export default function ConfiguracoesPortalPage() {
   const [formData, setFormData] = useState({
     auto_excluir_divergentes: false,
     exibir_certificados_contabilidade: false,
-    exibir_certificados_cliente: false
+    exibir_certificados_cliente: false,
+    avisar_whatsapp_certificado: true,
+    exibir_faixa_topo_certificado: true
   })
 
   // Configuração Global de Valores Fictícios do Dashboard (Exclusivo Super Admin)
@@ -46,7 +48,7 @@ export default function ConfiguracoesPortalPage() {
         setSelectedCliente(roleData.cliente_id)
         const { data: cli } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, exibir_certificados_contabilidade, exibir_certificados_cliente)')
+          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado)')
           .eq('id', roleData.cliente_id)
           .single()
         if (cli) {
@@ -55,13 +57,15 @@ export default function ConfiguracoesPortalPage() {
           setFormData({ 
             auto_excluir_divergentes: Boolean(config?.auto_excluir_divergentes),
             exibir_certificados_contabilidade: Boolean(config?.exibir_certificados_contabilidade),
-            exibir_certificados_cliente: Boolean(config?.exibir_certificados_cliente)
+            exibir_certificados_cliente: Boolean(config?.exibir_certificados_cliente),
+            avisar_whatsapp_certificado: config?.avisar_whatsapp_certificado !== false,
+            exibir_faixa_topo_certificado: config?.exibir_faixa_topo_certificado !== false
           })
         }
       } else if (role === 'contabilidade' && roleData?.contabilidade_id) {
         const { data: clis } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, exibir_certificados_contabilidade, exibir_certificados_cliente)')
+          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado)')
           .eq('contabilidade_id', roleData.contabilidade_id)
           .order('razao_social')
         if (clis && clis.length > 0) {
@@ -72,7 +76,7 @@ export default function ConfiguracoesPortalPage() {
         // Admin
         const { data: clis } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, exibir_certificados_contabilidade, exibir_certificados_cliente)')
+          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado)')
           .order('razao_social')
         if (clis && clis.length > 0) {
           setClientes(clis)
@@ -113,7 +117,7 @@ export default function ConfiguracoesPortalPage() {
     async function loadConfig() {
       const { data } = await supabase
         .from('configuracoes_hub')
-        .select('auto_excluir_divergentes, exibir_certificados_contabilidade, exibir_certificados_cliente')
+        .select('auto_excluir_divergentes, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado')
         .eq('cliente_id', selectedCliente)
         .single()
 
@@ -121,13 +125,17 @@ export default function ConfiguracoesPortalPage() {
         setFormData({
           auto_excluir_divergentes: Boolean(data.auto_excluir_divergentes),
           exibir_certificados_contabilidade: Boolean(data.exibir_certificados_contabilidade),
-          exibir_certificados_cliente: Boolean(data.exibir_certificados_cliente)
+          exibir_certificados_cliente: Boolean(data.exibir_certificados_cliente),
+          avisar_whatsapp_certificado: data.avisar_whatsapp_certificado !== false,
+          exibir_faixa_topo_certificado: data.exibir_faixa_topo_certificado !== false
         })
       } else {
         setFormData({ 
           auto_excluir_divergentes: false,
           exibir_certificados_contabilidade: false,
-          exibir_certificados_cliente: false
+          exibir_certificados_cliente: false,
+          avisar_whatsapp_certificado: true,
+          exibir_faixa_topo_certificado: true
         })
       }
     }
@@ -154,6 +162,8 @@ export default function ConfiguracoesPortalPage() {
     if (userRole === 'admin') {
       payload.exibir_certificados_contabilidade = formData.exibir_certificados_contabilidade
       payload.exibir_certificados_cliente = formData.exibir_certificados_cliente
+      payload.avisar_whatsapp_certificado = formData.avisar_whatsapp_certificado
+      payload.exibir_faixa_topo_certificado = formData.exibir_faixa_topo_certificado
 
       // Salva também as configurações globais de valores fictícios do dashboard
       const { error: errFicticio } = await supabase
@@ -344,6 +354,49 @@ export default function ConfiguracoesPortalPage() {
               </div>
 
               <div className="space-y-4">
+                {/* Opção de Envio por WhatsApp */}
+                <div className="flex items-start gap-3.5 p-5 bg-slate-50 rounded-2xl border border-slate-200 hover:border-slate-300 transition">
+                  <input 
+                    type="checkbox" 
+                    id="avisar_whatsapp_certificado"
+                    checked={formData.avisar_whatsapp_certificado}
+                    onChange={e => setFormData({ ...formData, avisar_whatsapp_certificado: e.target.checked })}
+                    className="mt-1 h-5 w-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                  />
+                  <label htmlFor="avisar_whatsapp_certificado" className="cursor-pointer select-none">
+                    <span className="font-bold text-slate-900 block text-base mb-1">
+                      Aviso automático via WhatsApp 45 dias antes do vencimento
+                    </span>
+                    <span className="text-slate-600 text-sm leading-relaxed block">
+                      Envia mensagem automática de alerta no WhatsApp cadastrado para a empresa 45 dias antes de expirar o Certificado Digital A1 e nos dias subsequentes até a renovação.
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 mt-3 text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800">
+                      Disparo Automático Integrado à Régua Diária
+                    </span>
+                  </label>
+                </div>
+
+                {/* Opção de Faixa Vermelha no Topo do Portal */}
+                <div className="flex items-start gap-3.5 p-5 bg-slate-50 rounded-2xl border border-slate-200 hover:border-slate-300 transition">
+                  <input 
+                    type="checkbox" 
+                    id="exibir_faixa_topo_certificado"
+                    checked={formData.exibir_faixa_topo_certificado}
+                    onChange={e => setFormData({ ...formData, exibir_faixa_topo_certificado: e.target.checked })}
+                    className="mt-1 h-5 w-5 rounded border-slate-300 text-red-600 focus:ring-red-500 cursor-pointer"
+                  />
+                  <label htmlFor="exibir_faixa_topo_certificado" className="cursor-pointer select-none">
+                    <span className="font-bold text-slate-900 block text-base mb-1">
+                      Exibir faixa vermelha no topo do Portal quando o certificado estiver a vencer ou vencido
+                    </span>
+                    <span className="text-slate-600 text-sm leading-relaxed block">
+                      Exibe um banner vermelho de destaque no topo da tela do cliente com nome do titular, CNPJ/CPF e dias restantes. Visível para o Admin e também para a Contabilidade e Cliente se as permissões abaixo estiverem ativadas.
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 mt-3 text-xs font-medium px-2.5 py-1 rounded-full bg-red-100 text-red-800">
+                      Alerta Visual Prioritário no Portal
+                    </span>
+                  </label>
+                </div>
                 {/* Opção para Contabilidade */}
                 <div className="flex items-start gap-3.5 p-5 bg-slate-50 rounded-2xl border border-slate-200 hover:border-slate-300 transition">
                   <input 

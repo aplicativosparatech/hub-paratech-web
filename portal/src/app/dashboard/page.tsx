@@ -7,12 +7,14 @@ import {
   Sparkles, ShieldCheck, ArrowRight
 } from 'lucide-react'
 import Link from 'next/link'
+import CertificadoAlertaBanner from '@/components/CertificadoAlertaBanner'
 
 export default function DashboardPage() {
   const supabase = createClient()
   const [loading, setLoading] = useState(true)
   const [userRole, setUserRole] = useState<'admin' | 'contabilidade' | 'cliente'>('admin')
   const [isFicticioAtivo, setIsFicticioAtivo] = useState(false)
+  const [certAlerta, setCertAlerta] = useState<any>(null)
 
   const [metrics, setMetrics] = useState({
     clientes: 0,
@@ -31,11 +33,72 @@ export default function DashboardPage() {
         // 1. Identifica usuário e role
         const { data: { user } } = await supabase.auth.getUser()
         let currentRole: 'admin' | 'contabilidade' | 'cliente' = 'admin'
+        let userRoleData: any = null
         if (user) {
-          const { data: roleData } = await supabase.from('user_roles').select('role').eq('user_id', user.id).single()
+          const { data: roleData } = await supabase.from('user_roles').select('*').eq('user_id', user.id).single()
+          userRoleData = roleData
           if (roleData?.role) currentRole = roleData.role as any
         }
         setUserRole(currentRole)
+
+        // Busca alertas de certificado
+        if (currentRole === 'cliente' && userRoleData?.cliente_id) {
+          const { data: cliCert } = await supabase
+            .from('clientes')
+            .select('certificado_validade, razao_social, nome_fantasia, cnpj, configuracoes_hub(exibir_faixa_topo_certificado, exibir_certificados_cliente)')
+            .eq('id', userRoleData.cliente_id)
+            .single()
+          if (cliCert?.certificado_validade) {
+            const cfg = Array.isArray(cliCert.configuracoes_hub) ? cliCert.configuracoes_hub[0] : cliCert.configuracoes_hub
+            setCertAlerta({
+              validade: cliCert.certificado_validade,
+              razaoSocial: cliCert.nome_fantasia || cliCert.razao_social,
+              documento: cliCert.cnpj,
+              config: cfg
+            })
+          }
+        } else if (currentRole === 'contabilidade' && userRoleData?.contabilidade_id) {
+          const { data: clisCert } = await supabase
+            .from('clientes')
+            .select('certificado_validade, razao_social, nome_fantasia, cnpj, configuracoes_hub(exibir_faixa_topo_certificado, exibir_certificados_contabilidade)')
+            .eq('contabilidade_id', userRoleData.contabilidade_id)
+            .not('certificado_validade', 'is', null)
+          
+          const primeiroVencendo = (clisCert || []).find(c => {
+            if (!c.certificado_validade) return false
+            const diff = Math.ceil((new Date(c.certificado_validade).getTime() - new Date().getTime()) / (1000 * 3600 * 24))
+            return diff <= 45
+          })
+          if (primeiroVencendo) {
+            const cfg = Array.isArray(primeiroVencendo.configuracoes_hub) ? primeiroVencendo.configuracoes_hub[0] : primeiroVencendo.configuracoes_hub
+            setCertAlerta({
+              validade: primeiroVencendo.certificado_validade,
+              razaoSocial: primeiroVencendo.nome_fantasia || primeiroVencendo.razao_social,
+              documento: primeiroVencendo.cnpj,
+              config: cfg
+            })
+          }
+        } else if (currentRole === 'admin') {
+          const { data: clisCert } = await supabase
+            .from('clientes')
+            .select('certificado_validade, razao_social, nome_fantasia, cnpj, configuracoes_hub(exibir_faixa_topo_certificado)')
+            .not('certificado_validade', 'is', null)
+          
+          const primeiroVencendo = (clisCert || []).find(c => {
+            if (!c.certificado_validade) return false
+            const diff = Math.ceil((new Date(c.certificado_validade).getTime() - new Date().getTime()) / (1000 * 3600 * 24))
+            return diff <= 45
+          })
+          if (primeiroVencendo) {
+            const cfg = Array.isArray(primeiroVencendo.configuracoes_hub) ? primeiroVencendo.configuracoes_hub[0] : primeiroVencendo.configuracoes_hub
+            setCertAlerta({
+              validade: primeiroVencendo.certificado_validade,
+              razaoSocial: primeiroVencendo.nome_fantasia || primeiroVencendo.razao_social,
+              documento: primeiroVencendo.cnpj,
+              config: cfg
+            })
+          }
+        }
 
         // 2. Busca configuração geral de valores fictícios
         const { data: geralConfig } = await supabase
@@ -154,6 +217,17 @@ export default function DashboardPage() {
           </div>
         )}
       </header>
+
+      {/* Faixa Vermelha de Alerta de Certificado Digital */}
+      {certAlerta && (
+        <CertificadoAlertaBanner 
+          validade={certAlerta.validade}
+          razaoSocial={certAlerta.razaoSocial}
+          documento={certAlerta.documento}
+          userRole={userRole}
+          config={certAlerta.config}
+        />
+      )}
 
       {/* Grid de Cards Compactos (6 Cards) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5 sm:gap-4">
