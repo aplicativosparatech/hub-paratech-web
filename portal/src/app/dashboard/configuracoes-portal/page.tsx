@@ -145,6 +145,8 @@ export default function ConfiguracoesPortalPage() {
     const payload: any = {
       cliente_id: selectedCliente,
       auto_excluir_divergentes: formData.auto_excluir_divergentes,
+      dia_vencimento: 10,
+      valor_mensalidade: 0.00,
       updated_at: new Date().toISOString()
     }
 
@@ -305,10 +307,14 @@ export default function ConfiguracoesPortalPage() {
               />
               <label htmlFor="auto_excluir_divergentes" className="cursor-pointer select-none">
                 <span className="font-bold text-slate-900 block text-base mb-1">
-                  Excluir/Ignorar automaticamente XMLs de vendas que não pertencem à empresa analisada
+                  Excluir automaticamente XMLs de vendas que não pertencem à empresa analisada
                 </span>
                 <span className="text-slate-600 text-sm leading-relaxed block">
-                  Quando marcado, caso o Hub encontre na pasta de vendas um arquivo XML cujo CNPJ emitente não seja igual ao CNPJ cadastrado desta empresa, o arquivo será descartado automaticamente no recebimento e não entrará nos relatórios fiscais.
+                  O portal verifica se os XMLs enviados para a pasta de vendas realmente pertencem à empresa cadastrada (evitando equívocos como arquivos de fornecedores ou compras misturados com as vendas).
+                </span>
+                <span className="text-slate-600 text-sm leading-relaxed block mt-2">
+                  • <strong>Se marcado:</strong> o sistema <strong>exclui diretamente</strong> o arquivo divergente no recebimento, impedindo que dados incorretos contaminem os relatórios fiscais.<br />
+                  • <strong>Se desmarcado:</strong> o arquivo é importado, porém <strong>destacado em vermelho</strong> no painel de notas fiscais com aviso de divergência de titularidade e botão para exclusão manual.
                 </span>
                 <span className="inline-flex items-center gap-1.5 mt-3 text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100/70 text-blue-800">
                   <CheckCircle2 size={14} /> Ativo para: Super Admin, Contabilidade e Empresa Cliente
