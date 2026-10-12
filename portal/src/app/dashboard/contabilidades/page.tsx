@@ -53,18 +53,19 @@ export default function ContabilidadesPage() {
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
               <th className="p-4 font-semibold text-slate-600 text-sm">Logo</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">Razão Social</th>
+              <th className="p-4 font-semibold text-slate-600 text-sm">Escritório / Fantasia</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">CNPJ</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">E-mail</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">Login</th>
+              <th className="p-4 font-semibold text-slate-600 text-sm">Contato / WhatsApp</th>
+              <th className="p-4 font-semibold text-slate-600 text-sm">Contador / CRC</th>
+              <th className="p-4 font-semibold text-slate-600 text-sm">Login de Acesso</th>
               <th className="p-4 font-semibold text-slate-600 text-sm text-right">Ações</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} className="p-8 text-center text-slate-500">Carregando...</td></tr>
+              <tr><td colSpan={7} className="p-8 text-center text-slate-500">Carregando...</td></tr>
             ) : contabilidades.length === 0 ? (
-              <tr><td colSpan={6} className="p-8 text-center text-slate-500">Nenhuma contabilidade cadastrada ainda.</td></tr>
+              <tr><td colSpan={7} className="p-8 text-center text-slate-500">Nenhuma contabilidade cadastrada ainda.</td></tr>
             ) : (
               contabilidades.map(c => (
                 <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
@@ -77,10 +78,20 @@ export default function ContabilidadesPage() {
                       </div>
                     )}
                   </td>
-                  <td className="p-4 text-slate-800 font-medium">{c.razao_social}</td>
-                  <td className="p-4 text-slate-600">{c.cnpj}</td>
-                  <td className="p-4 text-slate-600">{c.email_contato}</td>
-                  <td className="p-4 text-slate-600 text-xs">{c.login_email || '—'}</td>
+                  <td className="p-4 text-slate-800">
+                    <div className="font-bold text-slate-900">{c.razao_social}</div>
+                    <div className="text-xs text-slate-500">{c.nome_fantasia || '—'}</div>
+                  </td>
+                  <td className="p-4 text-slate-700 font-mono text-xs">{c.cnpj || '—'}</td>
+                  <td className="p-4 text-slate-600 text-xs">
+                    <div>{c.whatsapp || c.telefone || '—'}</div>
+                    <div className="text-slate-400">{c.email_contato}</div>
+                  </td>
+                  <td className="p-4 text-slate-600 text-xs">
+                    <div className="font-medium text-slate-800">{c.nome_responsavel || '—'}</div>
+                    {c.crc && <div className="text-emerald-700 font-semibold">{c.crc}</div>}
+                  </td>
+                  <td className="p-4 text-slate-600 text-xs font-mono">{c.login_email || '—'}</td>
                   <td className="p-4 text-right">
                     <div className="flex gap-2 justify-end">
                       <Link href={`/dashboard/contabilidades/${c.id}/editar`} className="p-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition" title="Editar">
