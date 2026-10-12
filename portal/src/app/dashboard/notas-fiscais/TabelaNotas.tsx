@@ -18,6 +18,64 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
   const [notas, setNotas] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Controle de Papel e Filtro de Cliente
+  const [userRole, setUserRole] = useState<'admin' | 'contabilidade' | 'cliente'>('admin')
+  const [clientes, setClientes] = useState<any[]>([])
+  const [selectedCliente, setSelectedCliente] = useState<string>(clienteIdParam || '')
+  const [clientSearchTerm, setClientSearchTerm] = useState('')
+
+  // Carrega Clientes disponíveis de acordo com o perfil
+  useEffect(() => {
+    async function loadUserAndClients() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role, cliente_id, contabilidade_id')
+        .eq('user_id', user.id)
+        .single()
+
+      const role = (roleData?.role as any) || 'admin'
+      setUserRole(role)
+
+      if (role === 'cliente' && roleData?.cliente_id) {
+        setSelectedCliente(roleData.cliente_id)
+        const { data: cli } = await supabase
+          .from('clientes')
+          .select('id, razao_social, nome_fantasia, cnpj')
+          .eq('id', roleData.cliente_id)
+          .single()
+        if (cli) setClientes([cli])
+      } else if (role === 'contabilidade' && roleData?.contabilidade_id) {
+        const { data: clis } = await supabase
+          .from('clientes')
+          .select('id, razao_social, nome_fantasia, cnpj')
+          .eq('contabilidade_id', roleData.contabilidade_id)
+          .order('razao_social')
+        if (clis) {
+          setClientes(clis)
+          if (!clienteIdParam && clis.length > 0) {
+            setSelectedCliente(clis[0].id)
+          }
+        }
+      } else {
+        // Admin: busca todos os clientes
+        const { data: clis } = await supabase
+          .from('clientes')
+          .select('id, razao_social, nome_fantasia, cnpj')
+          .order('razao_social')
+        if (clis) {
+          setClientes(clis)
+          if (!clienteIdParam && clis.length > 0) {
+            setSelectedCliente('') // vazio = Todos os clientes ou pode escolher um específico
+          }
+        }
+      }
+    }
+    loadUserAndClients()
+  }, [])
+
   async function load() {
     setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
@@ -34,27 +92,30 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     if (roleData?.role === 'cliente') {
       query = query.eq('cliente_id', roleData.cliente_id)
     } else if (roleData?.role === 'contabilidade') {
-      if (clienteIdParam) {
-        query = query.eq('cliente_id', clienteIdParam)
+      if (selectedCliente) {
+        query = query.eq('cliente_id', selectedCliente)
       } else {
-        // Buscar todos os clientes vinculados
-        const { data: clientes } = await supabase
+        const { data: clis } = await supabase
           .from('clientes')
           .select('id')
           .eq('contabilidade_id', roleData.contabilidade_id)
-        const ids = clientes?.map((c: any) => c.id) || []
+        const ids = clis?.map((c: any) => c.id) || []
         if (ids.length === 0) { setNotas([]); setLoading(false); return }
         query = query.in('cliente_id', ids)
       }
+    } else {
+      // Admin: se escolheu um cliente específico, filtra por ele. Senão, mostra todos!
+      if (selectedCliente) {
+        query = query.eq('cliente_id', selectedCliente)
+      }
     }
-    // admin: sem filtro, busca tudo
 
     const { data } = await query
     setNotas(data || [])
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [tabela, clienteIdParam])
+  useEffect(() => { load() }, [tabela, selectedCliente])
 
   async function handleDeleteNota(id: string, numero: string) {
     if (!confirm(`Deseja realmente excluir a nota número ${numero || id}?`)) return
@@ -67,8 +128,74 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
   }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-4">
+    <div className="space-y-4">
+      {/* Barra de Filtro de Clientes para Admin e Contabilidade */}
+      {userRole !== 'cliente' && clientes.length > 0 && (
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="flex-1 max-w-lg space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                {userRole === 'admin' ? '🔍 Localizar Cliente (Admin)' : '🏢 Empresa Selecionada'}
+              </span>
+              {userRole === 'admin' && (
+                <span className="text-[11px] text-blue-600 font-medium">
+                  {selectedCliente ? 'Filtrado por empresa' : 'Exibindo todas as empresas'}
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              {userRole === 'admin' && (
+                <input
+                  type="text"
+                  placeholder="Buscar por nome ou CNPJ..."
+                  value={clientSearchTerm}
+                  onChange={e => setClientSearchTerm(e.target.value)}
+                  className="w-full sm:w-1/2 bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              )}
+
+              <select
+                value={selectedCliente}
+                onChange={e => setSelectedCliente(e.target.value)}
+                className={`w-full ${userRole === 'admin' ? 'sm:w-1/2' : ''} bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium`}
+              >
+                {userRole === 'admin' && (
+                  <option value="">-- Todos os Clientes --</option>
+                )}
+                {clientes
+                  .filter(c => {
+                    if (!clientSearchTerm) return true
+                    const term = clientSearchTerm.toLowerCase()
+                    return (
+                      (c.razao_social && c.razao_social.toLowerCase().includes(term)) ||
+                      (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(term)) ||
+                      (c.cnpj && c.cnpj.includes(term))
+                    )
+                  })
+                  .map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.razao_social} {c.nome_fantasia ? `(${c.nome_fantasia})` : ''}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="text-xs text-slate-500 text-right sm:self-end">
+            <span className="font-semibold text-slate-700">{notas.length}</span> notas carregadas
+          </div>
+        </div>
+      )}
+
+      {/* Identificação de Empresa para o perfil Cliente */}
+      {userRole === 'cliente' && clientes.length > 0 && (
+        <div className="bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-700 font-medium">
+          Empresa Titular: <strong className="text-slate-900">{clientes[0].razao_social}</strong> ({clientes[0].cnpj})
+        </div>
+      )}
+
+      <div className="flex justify-between items-center">
         <h2 className="text-xl font-bold text-slate-800">{label}</h2>
         <button onClick={load} className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-800 transition">
           <RefreshCw size={16} /> Atualizar

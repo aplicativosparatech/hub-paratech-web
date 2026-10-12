@@ -28,6 +28,9 @@ export default function RelatoriosPage() {
 
   // Dados da Auditoria
   const [auditData, setAuditData] = useState<any>(null)
+  // Papel do usuário logado ('admin' | 'contabilidade' | 'cliente')
+  const [userRole, setUserRole] = useState<'admin' | 'contabilidade' | 'cliente'>('admin')
+  const [clientSearchTerm, setClientSearchTerm] = useState('')
 
   // Carrega clientes disponíveis para o usuário
   useEffect(() => {
@@ -36,8 +39,10 @@ export default function RelatoriosPage() {
       if (!user) return
 
       const { data: roleData } = await supabase.from('user_roles').select('*').eq('user_id', user.id).single()
+      const role = (roleData?.role as any) || 'admin'
+      setUserRole(role)
 
-      if (roleData?.role === 'cliente' && roleData.cliente_id) {
+      if (role === 'cliente' && roleData?.cliente_id) {
         const { data: cli } = await supabase
           .from('clientes')
           .select('id, razao_social, nome_fantasia, cnpj, whatsapp, contabilidades(razao_social)')
@@ -47,7 +52,7 @@ export default function RelatoriosPage() {
           setClientes([cli])
           setSelectedCliente(cli.id)
         }
-      } else if (roleData?.role === 'contabilidade' && roleData.contabilidade_id) {
+      } else if (role === 'contabilidade' && roleData?.contabilidade_id) {
         const { data: clis } = await supabase
           .from('clientes')
           .select('id, razao_social, nome_fantasia, cnpj, whatsapp, contabilidades(razao_social)')
@@ -58,7 +63,7 @@ export default function RelatoriosPage() {
           setSelectedCliente(clis[0].id)
         }
       } else {
-        // Admin: vê todos os clientes
+        // Admin: busca todas as empresas
         const { data: clis } = await supabase
           .from('clientes')
           .select('id, razao_social, nome_fantasia, cnpj, whatsapp, contabilidades(razao_social)')
@@ -183,23 +188,67 @@ export default function RelatoriosPage() {
       {/* Barra de Filtros (Cliente + Mês) */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         
-        {/* Seletor de Cliente */}
-        {clientes.length > 0 && (
+        {/* Seletor e Localizador de Cliente */}
+        {userRole !== 'cliente' && clientes.length > 0 && (
+          <div className="flex-1 max-w-lg space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                {userRole === 'admin' ? '🔍 Localizar Cliente (Admin)' : '🏢 Empresa da Contabilidade'}
+              </label>
+              {userRole === 'admin' && (
+                <span className="text-[11px] text-blue-600 font-medium">
+                  {clientes.length} empresas disponíveis
+                </span>
+              )}
+            </div>
+            
+            <div className="flex flex-col sm:flex-row gap-2">
+              {/* Campo de Busca Rápida por Nome ou CNPJ para o Admin */}
+              {userRole === 'admin' && (
+                <input
+                  type="text"
+                  placeholder="Filtrar por nome ou CNPJ..."
+                  value={clientSearchTerm}
+                  onChange={e => setClientSearchTerm(e.target.value)}
+                  className="w-full sm:w-1/2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              )}
+
+              {/* Select filtrado */}
+              <select
+                value={selectedCliente}
+                onChange={e => setSelectedCliente(e.target.value)}
+                className={`w-full ${userRole === 'admin' ? 'sm:w-1/2' : ''} bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium`}
+              >
+                {clientes
+                  .filter(c => {
+                    if (!clientSearchTerm) return true
+                    const term = clientSearchTerm.toLowerCase()
+                    return (
+                      (c.razao_social && c.razao_social.toLowerCase().includes(term)) ||
+                      (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(term)) ||
+                      (c.cnpj && c.cnpj.includes(term))
+                    )
+                  })
+                  .map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.razao_social} {c.nome_fantasia ? `(${c.nome_fantasia})` : ''}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* Exibição para o Cliente logado (apenas visualização da própria titularidade) */}
+        {userRole === 'cliente' && clientes.length > 0 && (
           <div className="flex-1 max-w-md">
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-              Empresa / Cliente
+              Sua Empresa
             </label>
-            <select
-              value={selectedCliente}
-              onChange={e => setSelectedCliente(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-            >
-              {clientes.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.razao_social} {c.nome_fantasia ? `(${c.nome_fantasia})` : ''}
-                </option>
-              ))}
-            </select>
+            <div className="px-4 py-2 bg-slate-100 rounded-xl text-sm font-bold text-slate-800 border border-slate-200">
+              {clientes[0].razao_social}
+            </div>
           </div>
         )}
 
