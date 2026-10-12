@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
-import { Sliders, ShieldAlert, CheckCircle2, Building2, Save, RefreshCw, KeyRound, BellRing } from 'lucide-react'
+import { Sliders, ShieldAlert, CheckCircle2, Building2, Save, RefreshCw, KeyRound, BellRing, LayoutDashboard, Sparkles, MapPin, FileCheck2, DollarSign } from 'lucide-react'
 
 export default function ConfiguracoesPortalPage() {
   const supabase = createClient()
@@ -18,6 +18,18 @@ export default function ConfiguracoesPortalPage() {
     auto_excluir_divergentes: false,
     exibir_certificados_contabilidade: false,
     exibir_certificados_cliente: false
+  })
+
+  // Configuração Global de Valores Fictícios do Dashboard (Exclusivo Super Admin)
+  const [ficticioData, setFicticioData] = useState({
+    valores_ficticios_ativos: false,
+    ficticio_clientes: 28,
+    ficticio_contabilidades: 8,
+    ficticio_faturas_atrasadas: 0,
+    ficticio_nf_quantidade: 14500,
+    ficticio_nf_valor: 894520.50,
+    ficticio_relatorios: 120,
+    ficticio_cidades: 14
   })
 
   // Carrega permissões e empresas disponíveis
@@ -65,6 +77,28 @@ export default function ConfiguracoesPortalPage() {
         if (clis && clis.length > 0) {
           setClientes(clis)
           setSelectedCliente(clis[0].id)
+        }
+      }
+
+      // Se for Admin, carregar valores fictícios do dashboard
+      if (role === 'admin') {
+        const { data: geralData } = await supabase
+          .from('configuracoes_portal_geral')
+          .select('*')
+          .eq('id', 1)
+          .maybeSingle()
+
+        if (geralData) {
+          setFicticioData({
+            valores_ficticios_ativos: Boolean(geralData.valores_ficticios_ativos),
+            ficticio_clientes: Number(geralData.ficticio_clientes ?? 28),
+            ficticio_contabilidades: Number(geralData.ficticio_contabilidades ?? 8),
+            ficticio_faturas_atrasadas: Number(geralData.ficticio_faturas_atrasadas ?? 0),
+            ficticio_nf_quantidade: Number(geralData.ficticio_nf_quantidade ?? 14500),
+            ficticio_nf_valor: Number(geralData.ficticio_nf_valor ?? 894520.50),
+            ficticio_relatorios: Number(geralData.ficticio_relatorios ?? 120),
+            ficticio_cidades: Number(geralData.ficticio_cidades ?? 14)
+          })
         }
       }
 
@@ -118,6 +152,26 @@ export default function ConfiguracoesPortalPage() {
     if (userRole === 'admin') {
       payload.exibir_certificados_contabilidade = formData.exibir_certificados_contabilidade
       payload.exibir_certificados_cliente = formData.exibir_certificados_cliente
+
+      // Salva também as configurações globais de valores fictícios do dashboard
+      const { error: errFicticio } = await supabase
+        .from('configuracoes_portal_geral')
+        .upsert({
+          id: 1,
+          valores_ficticios_ativos: ficticioData.valores_ficticios_ativos,
+          ficticio_clientes: ficticioData.ficticio_clientes,
+          ficticio_contabilidades: ficticioData.ficticio_contabilidades,
+          ficticio_faturas_atrasadas: ficticioData.ficticio_faturas_atrasadas,
+          ficticio_nf_quantidade: ficticioData.ficticio_nf_quantidade,
+          ficticio_nf_valor: ficticioData.ficticio_nf_valor,
+          ficticio_relatorios: ficticioData.ficticio_relatorios,
+          ficticio_cidades: ficticioData.ficticio_cidades,
+          updated_at: new Date().toISOString()
+        })
+
+      if (errFicticio) {
+        console.error('Erro ao salvar valores fictícios:', errFicticio)
+      }
     }
 
     const { error } = await supabase
@@ -328,6 +382,150 @@ export default function ConfiguracoesPortalPage() {
                   </label>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Configuração de Valores Fictícios do Dashboard - Exclusivo Super Admin */}
+          {userRole === 'admin' && (
+            <div className="mt-8 pt-8 border-t border-slate-200">
+              <div className="flex items-center gap-3 pb-4 border-b border-slate-100 mb-6">
+                <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+                  <LayoutDashboard size={24} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold text-slate-900">Personalização de Métricas do Dashboard (Contabilidades & Clientes)</h3>
+                    <span className="text-[10px] uppercase font-black tracking-wider bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-md border border-indigo-200">
+                      Exclusivo Admin
+                    </span>
+                  </div>
+                  <p className="text-slate-500 text-xs">
+                    Defina valores fictícios para exibição nos cards do Dashboard dos perfis de Contabilidade e Cliente. Se desativado, o sistema calculará e exibirá os valores reais.
+                  </p>
+                </div>
+              </div>
+
+              {/* Toggle Principal de Ativação */}
+              <div className="flex items-start gap-3.5 p-5 bg-indigo-50/50 rounded-2xl border border-indigo-200 hover:border-indigo-300 transition mb-6">
+                <input 
+                  type="checkbox" 
+                  id="valores_ficticios_ativos"
+                  checked={ficticioData.valores_ficticios_ativos}
+                  onChange={e => setFicticioData({ ...ficticioData, valores_ficticios_ativos: e.target.checked })}
+                  className="mt-1 h-5 w-5 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+                <label htmlFor="valores_ficticios_ativos" className="cursor-pointer select-none">
+                  <span className="font-bold text-slate-900 block text-base mb-1">
+                    Ativar exibição de valores fictícios no Dashboard para Contabilidades e Clientes
+                  </span>
+                  <span className="text-slate-600 text-sm leading-relaxed block">
+                    Quando esta opção estiver marcada, os cards do Dashboard de todos os clientes e contabilidades exibirão os números personalizados abaixo, gerando maior autoridade visual.
+                  </span>
+                  <span className={`inline-flex items-center gap-1.5 mt-3 text-xs font-semibold px-2.5 py-1 rounded-full ${
+                    ficticioData.valores_ficticios_ativos 
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                      : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    {ficticioData.valores_ficticios_ativos ? 'Status: Valores Fictícios ATIVOS para terceiros' : 'Status: Exibindo Valores REAIS do Sistema'}
+                  </span>
+                </label>
+              </div>
+
+              {/* Inputs dos Valores Fictícios (disponíveis quando ativo) */}
+              {ficticioData.valores_ficticios_ativos && (
+                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 mb-2 flex items-center gap-1.5">
+                    <Sparkles size={14} className="text-indigo-600" /> Digite os valores para cada card do Dashboard:
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Total de Clientes</label>
+                      <input 
+                        type="number"
+                        min="0"
+                        value={ficticioData.ficticio_clientes}
+                        onChange={e => setFicticioData({ ...ficticioData, ficticio_clientes: Number(e.target.value) })}
+                        className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Ex: 28"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Contabilidades</label>
+                      <input 
+                        type="number"
+                        min="0"
+                        value={ficticioData.ficticio_contabilidades}
+                        onChange={e => setFicticioData({ ...ficticioData, ficticio_contabilidades: Number(e.target.value) })}
+                        className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Ex: 8"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Faturas Atrasadas</label>
+                      <input 
+                        type="number"
+                        min="0"
+                        value={ficticioData.ficticio_faturas_atrasadas}
+                        onChange={e => setFicticioData({ ...ficticioData, ficticio_faturas_atrasadas: Number(e.target.value) })}
+                        className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Ex: 0"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">NF Processadas (Quantidade)</label>
+                      <input 
+                        type="number"
+                        min="0"
+                        value={ficticioData.ficticio_nf_quantidade}
+                        onChange={e => setFicticioData({ ...ficticioData, ficticio_nf_quantidade: Number(e.target.value) })}
+                        className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Ex: 14500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">NF Processadas (Valor Total R$)</label>
+                      <input 
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={ficticioData.ficticio_nf_valor}
+                        onChange={e => setFicticioData({ ...ficticioData, ficticio_nf_valor: Number(e.target.value) })}
+                        className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Ex: 894520.50"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Total de Relatórios Gerados</label>
+                      <input 
+                        type="number"
+                        min="0"
+                        value={ficticioData.ficticio_relatorios}
+                        onChange={e => setFicticioData({ ...ficticioData, ficticio_relatorios: Number(e.target.value) })}
+                        className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Ex: 120"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Cidades Atendidas</label>
+                      <input 
+                        type="number"
+                        min="0"
+                        value={ficticioData.ficticio_cidades}
+                        onChange={e => setFicticioData({ ...ficticioData, ficticio_cidades: Number(e.target.value) })}
+                        className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Ex: 14"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
