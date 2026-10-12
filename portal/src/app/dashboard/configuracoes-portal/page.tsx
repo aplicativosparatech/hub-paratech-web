@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
-import { Sliders, ShieldAlert, CheckCircle2, Building2, Save, RefreshCw } from 'lucide-react'
+import { Sliders, ShieldAlert, CheckCircle2, Building2, Save, RefreshCw, KeyRound, BellRing } from 'lucide-react'
 
 export default function ConfiguracoesPortalPage() {
   const supabase = createClient()
@@ -15,7 +15,9 @@ export default function ConfiguracoesPortalPage() {
   const [clientSearchTerm, setClientSearchTerm] = useState('')
 
   const [formData, setFormData] = useState({
-    auto_excluir_divergentes: false
+    auto_excluir_divergentes: false,
+    exibir_certificados_contabilidade: false,
+    exibir_certificados_cliente: false
   })
 
   // Carrega permissões e empresas disponíveis
@@ -32,18 +34,22 @@ export default function ConfiguracoesPortalPage() {
         setSelectedCliente(roleData.cliente_id)
         const { data: cli } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes)')
+          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, exibir_certificados_contabilidade, exibir_certificados_cliente)')
           .eq('id', roleData.cliente_id)
           .single()
         if (cli) {
           setClientes([cli])
           const config = Array.isArray(cli.configuracoes_hub) ? cli.configuracoes_hub[0] : cli.configuracoes_hub
-          setFormData({ auto_excluir_divergentes: Boolean(config?.auto_excluir_divergentes) })
+          setFormData({ 
+            auto_excluir_divergentes: Boolean(config?.auto_excluir_divergentes),
+            exibir_certificados_contabilidade: Boolean(config?.exibir_certificados_contabilidade),
+            exibir_certificados_cliente: Boolean(config?.exibir_certificados_cliente)
+          })
         }
       } else if (role === 'contabilidade' && roleData?.contabilidade_id) {
         const { data: clis } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes)')
+          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, exibir_certificados_contabilidade, exibir_certificados_cliente)')
           .eq('contabilidade_id', roleData.contabilidade_id)
           .order('razao_social')
         if (clis && clis.length > 0) {
@@ -54,7 +60,7 @@ export default function ConfiguracoesPortalPage() {
         // Admin
         const { data: clis } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes)')
+          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, exibir_certificados_contabilidade, exibir_certificados_cliente)')
           .order('razao_social')
         if (clis && clis.length > 0) {
           setClientes(clis)
@@ -73,16 +79,22 @@ export default function ConfiguracoesPortalPage() {
     async function loadConfig() {
       const { data } = await supabase
         .from('configuracoes_hub')
-        .select('auto_excluir_divergentes')
+        .select('auto_excluir_divergentes, exibir_certificados_contabilidade, exibir_certificados_cliente')
         .eq('cliente_id', selectedCliente)
         .single()
 
       if (data) {
         setFormData({
-          auto_excluir_divergentes: Boolean(data.auto_excluir_divergentes)
+          auto_excluir_divergentes: Boolean(data.auto_excluir_divergentes),
+          exibir_certificados_contabilidade: Boolean(data.exibir_certificados_contabilidade),
+          exibir_certificados_cliente: Boolean(data.exibir_certificados_cliente)
         })
       } else {
-        setFormData({ auto_excluir_divergentes: false })
+        setFormData({ 
+          auto_excluir_divergentes: false,
+          exibir_certificados_contabilidade: false,
+          exibir_certificados_cliente: false
+        })
       }
     }
     loadConfig()
@@ -96,13 +108,21 @@ export default function ConfiguracoesPortalPage() {
     }
 
     setSaving(true)
+    const payload: any = {
+      cliente_id: selectedCliente,
+      auto_excluir_divergentes: formData.auto_excluir_divergentes,
+      updated_at: new Date().toISOString()
+    }
+
+    // Apenas Admin pode alterar a visibilidade/avisos de certificados
+    if (userRole === 'admin') {
+      payload.exibir_certificados_contabilidade = formData.exibir_certificados_contabilidade
+      payload.exibir_certificados_cliente = formData.exibir_certificados_cliente
+    }
+
     const { error } = await supabase
       .from('configuracoes_hub')
-      .upsert({
-        cliente_id: selectedCliente,
-        auto_excluir_divergentes: formData.auto_excluir_divergentes,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'cliente_id' })
+      .upsert(payload, { onConflict: 'cliente_id' })
 
     if (error) {
       toast.error('Erro ao salvar: ' + error.message)
@@ -242,6 +262,74 @@ export default function ConfiguracoesPortalPage() {
               </label>
             </div>
           </div>
+
+          {/* Controle de Visibilidade de Certificados A1 - Exclusivo do Super Admin */}
+          {userRole === 'admin' && (
+            <div className="mt-8 pt-8 border-t border-slate-200">
+              <div className="flex items-center gap-3 pb-4 border-b border-slate-100 mb-6">
+                <div className="p-2.5 bg-amber-50 text-amber-600 rounded-xl">
+                  <KeyRound size={24} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold text-slate-900">Visibilidade e Alertas de Certificados Digitais A1</h3>
+                    <span className="text-[10px] uppercase font-black tracking-wider bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md border border-amber-200">
+                      Exclusivo Admin
+                    </span>
+                  </div>
+                  <p className="text-slate-500 text-xs">
+                    Defina quem além do Admin pode visualizar o relatório de certificados a vencer e receber avisos diários de expiração.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {/* Opção para Contabilidade */}
+                <div className="flex items-start gap-3.5 p-5 bg-slate-50 rounded-2xl border border-slate-200 hover:border-slate-300 transition">
+                  <input 
+                    type="checkbox" 
+                    id="exibir_certificados_contabilidade"
+                    checked={formData.exibir_certificados_contabilidade}
+                    onChange={e => setFormData({ ...formData, exibir_certificados_contabilidade: e.target.checked })}
+                    className="mt-1 h-5 w-5 rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                  />
+                  <label htmlFor="exibir_certificados_contabilidade" className="cursor-pointer select-none">
+                    <span className="font-bold text-slate-900 block text-base mb-1">
+                      Exibir relatório e avisar vencimento do certificado para a Contabilidade
+                    </span>
+                    <span className="text-slate-600 text-sm leading-relaxed block">
+                      Permite que a contabilidade responsável por este cliente visualize a aba de Certificados a Vencer no painel e receba alertas diários caso faltem 45 dias ou menos para expirar.
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 mt-3 text-xs font-medium px-2.5 py-1 rounded-full bg-slate-200 text-slate-700">
+                      Padrão do Sistema: Desativado (Apenas Admin)
+                    </span>
+                  </label>
+                </div>
+
+                {/* Opção para Cliente */}
+                <div className="flex items-start gap-3.5 p-5 bg-slate-50 rounded-2xl border border-slate-200 hover:border-slate-300 transition">
+                  <input 
+                    type="checkbox" 
+                    id="exibir_certificados_cliente"
+                    checked={formData.exibir_certificados_cliente}
+                    onChange={e => setFormData({ ...formData, exibir_certificados_cliente: e.target.checked })}
+                    className="mt-1 h-5 w-5 rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                  />
+                  <label htmlFor="exibir_certificados_cliente" className="cursor-pointer select-none">
+                    <span className="font-bold text-slate-900 block text-base mb-1">
+                      Exibir relatório e avisar vencimento do certificado para o Cliente
+                    </span>
+                    <span className="text-slate-600 text-sm leading-relaxed block">
+                      Permite que os usuários da própria empresa cliente visualizem a aba de Certificados a Vencer e recebam notificações automáticas de aviso de vencimento via WhatsApp/Portal.
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 mt-3 text-xs font-medium px-2.5 py-1 rounded-full bg-slate-200 text-slate-700">
+                      Padrão do Sistema: Desativado (Apenas Admin)
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="pt-6 mt-6 border-t border-slate-100 flex justify-end">
             <button 

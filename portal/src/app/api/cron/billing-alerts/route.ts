@@ -115,49 +115,102 @@ export async function GET(request: Request) {
     }
 
     // 4. ALERTA DE VENCIMENTO DO CERTIFICADO DIGITAL A1 (A partir de 45 dias antes)
+    // Respeita as permissões definidas pelo Admin em configuracoes_hub (padrão: desativado)
     const { data: clientesComCert } = await supabase
       .from('clientes')
-      .select('id, razao_social, nome_fantasia, whatsapp, certificado_validade')
+      .select('id, razao_social, nome_fantasia, whatsapp, certificado_validade, contabilidade_id')
       .not('certificado_validade', 'is', null)
 
+    // Busca configurações de todos os clientes
+    const { data: todasConfigs } = await supabase
+      .from('configuracoes_hub')
+      .select('cliente_id, exibir_certificados_contabilidade, exibir_certificados_cliente')
+
+    const configMap = new Map((todasConfigs || []).map(cfg => [cfg.cliente_id, cfg]))
+
+    // Se houver contabilidades com whatsapp, busca dados das contabilidades
+    const { data: todasContabs } = await supabase
+      .from('contabilidades')
+      .select('id, razao_social, whatsapp')
+    const contabMap = new Map((todasContabs || []).map(c => [c.id, c]))
+
     for (const cli of clientesComCert || []) {
-      if (!cli.whatsapp || !cli.certificado_validade) continue
+      if (!cli.certificado_validade) continue
       const dataValidade = new Date(cli.certificado_validade)
       dataValidade.setHours(0, 0, 0, 0)
 
       const diasParaVencerCert = Math.floor((dataValidade.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
 
-      // Se estiver a 45 dias ou menos do vencimento, dispara alerta diário
+      // Se estiver a 45 dias ou menos do vencimento, processa os alertas
       if (diasParaVencerCert <= 45 && diasParaVencerCert >= 0) {
         const dataValidadeFormatada = dataValidade.toLocaleDateString('pt-BR')
-        let msgCert = ''
-        if (diasParaVencerCert === 0) {
-          msgCert = `🚨 ATENÇÃO URGENTE: O Certificado Digital A1 da empresa ${cli.nome_fantasia || cli.razao_social} VENCE HOJE (${dataValidadeFormatada}). A emissão de notas fiscais (NF-e/NFC-e) será interrompida se não for renovado imediatamente.`
-        } else {
-          msgCert = `🔔 AVISO FISCAL: O Certificado Digital A1 da empresa ${cli.nome_fantasia || cli.razao_social} expira em ${diasParaVencerCert} dias (${dataValidadeFormatada}).\nPor favor, providencie a renovação junto à sua Autoridade Certificadora para evitar paralisações na emissão de notas fiscais.`
+        const cliConfig = configMap.get(cli.id)
+        
+        // 4.1 Envio para o Cliente (Somente se Admin autorizou exibir_certificados_cliente)
+        if (cliConfig?.exibir_certificados_cliente && cli.whatsapp) {
+          let msgCert = ''
+          if (diasParaVencerCert === 0) {
+            msgCert = `🚨 ATENÇÃO URGENTE: O Certificado Digital A1 da empresa ${cli.nome_fantasia || cli.razao_social} VENCE HOJE (${dataValidadeFormatada}). A emissão de notas fiscais (NF-e/NFC-e) será interrompida se não for renovado imediatamente.`
+          } else {
+            msgCert = `🔔 AVISO FISCAL: O Certificado Digital A1 da empresa ${cli.nome_fantasia || cli.razao_social} expira em ${diasParaVencerCert} dias (${dataValidadeFormatada}).\nPor favor, providencie a renovação junto à sua Autoridade Certificadora para evitar paralisações na emissão de notas fiscais.`
+          }
+
+          try {
+            await sendWhatsAppMessage({
+              to: cli.whatsapp,
+              message: msgCert
+            })
+            disparosRealizados.push({
+              cliente: cli.nome_fantasia || cli.razao_social,
+              destinatario: 'cliente',
+              whatsapp: cli.whatsapp,
+              tipo: 'certificado_digital',
+              diasRestantes: diasParaVencerCert,
+              status: 'enviado'
+            })
+          } catch (err: any) {
+            disparosRealizados.push({
+              cliente: cli.nome_fantasia || cli.razao_social,
+              destinatario: 'cliente',
+              whatsapp: cli.whatsapp,
+              tipo: 'certificado_digital',
+              diasRestantes: diasParaVencerCert,
+              status: 'falha',
+              erro: err.message
+            })
+          }
         }
 
-        try {
-          await sendWhatsAppMessage({
-            to: cli.whatsapp,
-            message: msgCert
-          })
-          disparosRealizados.push({
-            cliente: cli.nome_fantasia || cli.razao_social,
-            whatsapp: cli.whatsapp,
-            tipo: 'certificado_digital',
-            diasRestantes: diasParaVencerCert,
-            status: 'enviado'
-          })
-        } catch (err: any) {
-          disparosRealizados.push({
-            cliente: cli.nome_fantasia || cli.razao_social,
-            whatsapp: cli.whatsapp,
-            tipo: 'certificado_digital',
-            diasRestantes: diasParaVencerCert,
-            status: 'falha',
-            erro: err.message
-          })
+        // 4.2 Envio para a Contabilidade (Somente se Admin autorizou exibir_certificados_contabilidade)
+        if (cliConfig?.exibir_certificados_contabilidade && cli.contabilidade_id) {
+          const contab = contabMap.get(cli.contabilidade_id)
+          if (contab?.whatsapp) {
+            const msgContab = `🔔 AVISO PARA CONTABILIDADE: O Certificado Digital A1 do seu cliente ${cli.razao_social} expira em ${diasParaVencerCert} dias (${dataValidadeFormatada}).`
+            try {
+              await sendWhatsAppMessage({
+                to: contab.whatsapp,
+                message: msgContab
+              })
+              disparosRealizados.push({
+                cliente: cli.razao_social,
+                destinatario: 'contabilidade',
+                whatsapp: contab.whatsapp,
+                tipo: 'certificado_digital',
+                diasRestantes: diasParaVencerCert,
+                status: 'enviado'
+              })
+            } catch (err: any) {
+              disparosRealizados.push({
+                cliente: cli.razao_social,
+                destinatario: 'contabilidade',
+                whatsapp: contab.whatsapp,
+                tipo: 'certificado_digital',
+                diasRestantes: diasParaVencerCert,
+                status: 'falha',
+                erro: err.message
+              })
+            }
+          }
         }
       }
     }

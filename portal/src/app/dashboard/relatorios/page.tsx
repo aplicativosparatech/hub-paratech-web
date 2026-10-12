@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import { 
   BarChart3, Download, RefreshCw, AlertTriangle, CheckCircle2, 
-  FileText, Hash, ShieldAlert, Sparkles, Building2, Calendar, FileArchive
+  FileText, Hash, ShieldAlert, Sparkles, Building2, Calendar, FileArchive,
+  KeyRound, Clock, ShieldCheck
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
@@ -24,7 +25,13 @@ export default function RelatoriosPage() {
   const [selectedMonth, setSelectedMonth] = useState<string>(defaultMonth)
 
   // Abas do Relatório
-  const [activeTab, setActiveTab] = useState<'faturamento' | 'monofasicos' | 'quebra' | 'nao_assinadas' | 'inutilizadas'>('faturamento')
+  const [activeTab, setActiveTab] = useState<'faturamento' | 'monofasicos' | 'quebra' | 'nao_assinadas' | 'inutilizadas' | 'certificados'>('faturamento')
+
+  // Configurações do Hub do Cliente Atual (permissões de exibição)
+  const [configHub, setConfigHub] = useState<{
+    exibir_certificados_contabilidade: boolean
+    exibir_certificados_cliente: boolean
+  } | null>(null)
 
   // Dados da Auditoria
   const [auditData, setAuditData] = useState<any>(null)
@@ -47,14 +54,14 @@ export default function RelatoriosPage() {
       if (role === 'cliente' && roleData?.cliente_id) {
         const { data: cli } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, whatsapp, contabilidade_id')
+          .select('id, razao_social, nome_fantasia, cnpj, whatsapp, contabilidade_id, certificado_validade')
           .eq('id', roleData.cliente_id)
           .single()
         if (cli) clisData = [cli]
       } else if (role === 'contabilidade' && roleData?.contabilidade_id) {
         const { data: clis } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, whatsapp, contabilidade_id')
+          .select('id, razao_social, nome_fantasia, cnpj, whatsapp, contabilidade_id, certificado_validade')
           .eq('contabilidade_id', roleData.contabilidade_id)
           .order('razao_social')
         if (clis) clisData = clis
@@ -62,7 +69,7 @@ export default function RelatoriosPage() {
         // Admin: busca todas as empresas cadastradas
         const { data: clis, error: errClis } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, whatsapp, contabilidade_id')
+          .select('id, razao_social, nome_fantasia, cnpj, whatsapp, contabilidade_id, certificado_validade')
           .order('razao_social')
         
         if (errClis) {
@@ -91,6 +98,39 @@ export default function RelatoriosPage() {
     }
     init()
   }, [])
+
+  // Carrega permissões de configuração do Hub para a empresa selecionada
+  useEffect(() => {
+    async function loadConfigHub() {
+      if (!selectedCliente) {
+        setConfigHub(null)
+        return
+      }
+      const { data: cfg } = await supabase
+        .from('configuracoes_hub')
+        .select('exibir_certificados_contabilidade, exibir_certificados_cliente')
+        .eq('cliente_id', selectedCliente)
+        .maybeSingle()
+
+      setConfigHub(cfg || {
+        exibir_certificados_contabilidade: false,
+        exibir_certificados_cliente: false
+      })
+    }
+    loadConfigHub()
+  }, [selectedCliente])
+
+  // Define se o usuário tem permissão para visualizar o relatório de certificados
+  const canViewCertificados = userRole === 'admin' ||
+    (userRole === 'contabilidade' && configHub?.exibir_certificados_contabilidade === true) ||
+    (userRole === 'cliente' && configHub?.exibir_certificados_cliente === true)
+
+  // Se o usuário perder a permissão (por ex. ao alternar de cliente), volta para faturamento
+  useEffect(() => {
+    if (!canViewCertificados && activeTab === 'certificados') {
+      setActiveTab('faturamento')
+    }
+  }, [canViewCertificados, activeTab])
 
   // Dispara a auditoria ao mudar cliente ou mês
   useEffect(() => {
@@ -434,6 +474,17 @@ export default function RelatoriosPage() {
         >
           <CheckCircle2 size={18} /> Inutilizadas ({inutilizadas?.total || 0})
         </button>
+
+        {canViewCertificados && (
+          <button
+            onClick={() => setActiveTab('certificados')}
+            className={`flex items-center gap-2 px-5 py-3 font-semibold text-sm border-b-2 transition whitespace-nowrap ${
+              activeTab === 'certificados' ? 'border-amber-600 text-amber-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <KeyRound size={18} /> Certificados Digitais A1
+          </button>
+        )}
       </div>
 
       {/* CONTEÚDO DAS ABAS */}
@@ -698,6 +749,194 @@ export default function RelatoriosPage() {
                 </table>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ABA 6: CERTIFICADOS DIGITAIS A1 (A VENCER) */}
+        {canViewCertificados && activeTab === 'certificados' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xl font-bold text-slate-900">Relatório de Certificados Digitais A1</h3>
+                  <span className="text-xs bg-amber-100 text-amber-800 font-bold px-2.5 py-0.5 rounded-full">
+                    Alerta com 45 dias de antecedência
+                  </span>
+                </div>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  Monitoramento proativo de validade dos certificados para evitar paralisação da emissão de notas fiscais.
+                </p>
+              </div>
+            </div>
+
+            {(() => {
+              // Lista de clientes a exibir:
+              // Se usuário for 'cliente', exibe apenas a sua empresa.
+              // Se for 'contabilidade' ou 'admin', exibe todas as empresas acessíveis com os dados calculados de certificado.
+              const clisCert = (userRole === 'cliente' 
+                ? clientes.filter(c => c.id === selectedCliente) 
+                : clientes
+              ).map(c => {
+                let dias = null
+                let status: 'sem_certificado' | 'vencido' | 'alerta' | 'valido' = 'sem_certificado'
+                let validadeFormatada = '—'
+
+                if (c.certificado_validade) {
+                  const dVal = new Date(c.certificado_validade)
+                  dVal.setHours(0, 0, 0, 0)
+                  const hojeMid = new Date()
+                  hojeMid.setHours(0, 0, 0, 0)
+                  dias = Math.ceil((dVal.getTime() - hojeMid.getTime()) / (1000 * 60 * 60 * 24))
+                  validadeFormatada = new Date(c.certificado_validade + 'T00:00:00').toLocaleDateString('pt-BR')
+
+                  if (dias < 0) {
+                    status = 'vencido'
+                  } else if (dias <= 45) {
+                    status = 'alerta'
+                  } else {
+                    status = 'valido'
+                  }
+                }
+
+                return {
+                  ...c,
+                  dias,
+                  status,
+                  validadeFormatada
+                }
+              })
+
+              const totalAlerta = clisCert.filter(c => c.status === 'alerta').length
+              const totalVencidos = clisCert.filter(c => c.status === 'vencido').length
+              const totalValidos = clisCert.filter(c => c.status === 'valido').length
+              const totalSemCert = clisCert.filter(c => c.status === 'sem_certificado').length
+
+              return (
+                <div className="space-y-6">
+                  {/* Resumo Rápido */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-amber-50 border border-amber-200 p-5 rounded-2xl">
+                      <div className="flex items-center justify-between text-amber-700 mb-1">
+                        <span className="text-xs font-bold uppercase tracking-wider">A Vencer (≤ 45 Dias)</span>
+                        <Clock size={18} />
+                      </div>
+                      <p className="text-3xl font-black text-amber-800">{totalAlerta}</p>
+                      <p className="text-xs text-amber-600 mt-1">Requerem renovação imediata</p>
+                    </div>
+
+                    <div className="bg-red-50 border border-red-200 p-5 rounded-2xl">
+                      <div className="flex items-center justify-between text-red-700 mb-1">
+                        <span className="text-xs font-bold uppercase tracking-wider">Vencidos / Expirados</span>
+                        <AlertTriangle size={18} />
+                      </div>
+                      <p className="text-3xl font-black text-red-800">{totalVencidos}</p>
+                      <p className="text-xs text-red-600 mt-1">Emissão fiscal bloqueada</p>
+                    </div>
+
+                    <div className="bg-emerald-50 border border-emerald-200 p-5 rounded-2xl">
+                      <div className="flex items-center justify-between text-emerald-700 mb-1">
+                        <span className="text-xs font-bold uppercase tracking-wider">Certificados Válidos</span>
+                        <ShieldCheck size={18} />
+                      </div>
+                      <p className="text-3xl font-black text-emerald-800">{totalValidos}</p>
+                      <p className="text-xs text-emerald-600 mt-1">Mais de 45 dias restantes</p>
+                    </div>
+
+                    <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl">
+                      <div className="flex items-center justify-between text-slate-600 mb-1">
+                        <span className="text-xs font-bold uppercase tracking-wider">Sem Certificado</span>
+                        <KeyRound size={18} />
+                      </div>
+                      <p className="text-3xl font-black text-slate-800">{totalSemCert}</p>
+                      <p className="text-xs text-slate-500 mt-1">Validade não informada</p>
+                    </div>
+                  </div>
+
+                  {/* Tabela de Certificados */}
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
+                          <th className="p-4">Empresa</th>
+                          <th className="p-4">CNPJ</th>
+                          <th className="p-4">Contabilidade</th>
+                          <th className="p-4">Data de Validade</th>
+                          <th className="p-4">Dias Restantes</th>
+                          <th className="p-4 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-sm">
+                        {clisCert.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="p-8 text-center text-slate-400">
+                              Nenhuma empresa encontrada para exibição.
+                            </td>
+                          </tr>
+                        ) : (
+                          clisCert.map(c => (
+                            <tr key={c.id} className="hover:bg-slate-50/80 transition">
+                              <td className="p-4">
+                                <div className="font-bold text-slate-900">{c.razao_social}</div>
+                                {c.nome_fantasia && (
+                                  <div className="text-xs text-slate-500">{c.nome_fantasia}</div>
+                                )}
+                              </td>
+                              <td className="p-4 font-mono text-xs font-semibold text-slate-700">
+                                {c.cnpj}
+                              </td>
+                              <td className="p-4 text-xs text-slate-600">
+                                {c.contabilidade_nome || 'Não vinculada'}
+                              </td>
+                              <td className="p-4 font-medium text-slate-800">
+                                {c.validadeFormatada}
+                              </td>
+                              <td className="p-4">
+                                {c.dias !== null ? (
+                                  <span className={`font-bold ${
+                                    c.dias < 0 
+                                      ? 'text-red-600' 
+                                      : c.dias <= 45 
+                                      ? 'text-amber-600' 
+                                      : 'text-emerald-700'
+                                  }`}>
+                                    {c.dias < 0 ? `Expirado há ${Math.abs(c.dias)} dias` : `${c.dias} dias`}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )}
+                              </td>
+                              <td className="p-4 text-center">
+                                {c.status === 'vencido' && (
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800">
+                                    <AlertTriangle size={14} /> Vencido
+                                  </span>
+                                )}
+                                {c.status === 'alerta' && (
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 animate-pulse">
+                                    <Clock size={14} /> A Vencer (≤ 45d)
+                                  </span>
+                                )}
+                                {c.status === 'valido' && (
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                                    <CheckCircle2 size={14} /> Regular
+                                  </span>
+                                )}
+                                {c.status === 'sem_certificado' && (
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
+                                    Não Informado
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                </div>
+              )
+            })()}
           </div>
         )}
 
