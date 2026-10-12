@@ -42,59 +42,66 @@ export default function RelatoriosPage() {
   // Carrega clientes disponíveis para o usuário
   useEffect(() => {
     async function init() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      const { data: roleData } = await supabase.from('user_roles').select('*').eq('user_id', user.id).single()
-      const role = (roleData?.role as any) || 'admin'
-      setUserRole(role)
-
-      let clisData: any[] = []
-
-      if (role === 'cliente' && roleData?.cliente_id) {
-        const { data: cli } = await supabase
-          .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, whatsapp, contabilidade_id, certificado_validade')
-          .eq('id', roleData.cliente_id)
-          .single()
-        if (cli) clisData = [cli]
-      } else if (role === 'contabilidade' && roleData?.contabilidade_id) {
-        const { data: clis } = await supabase
-          .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, whatsapp, contabilidade_id, certificado_validade')
-          .eq('contabilidade_id', roleData.contabilidade_id)
-          .order('razao_social')
-        if (clis) clisData = clis
-      } else {
-        // Admin: busca todas as empresas cadastradas
-        const { data: clis, error: errClis } = await supabase
-          .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, whatsapp, contabilidade_id, certificado_validade')
-          .order('razao_social')
-        
-        if (errClis) {
-          console.error('Erro ao buscar clientes para relatorios:', errClis)
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          setLoading(false)
+          return
         }
-        if (clis) clisData = clis
+
+        const { data: roleData } = await supabase.from('user_roles').select('*').eq('user_id', user.id).maybeSingle()
+        const role = (roleData?.role as any) || 'admin'
+        setUserRole(role)
+
+        let clisData: any[] = []
+
+        if (role === 'cliente' && roleData?.cliente_id) {
+          const { data: cli } = await supabase
+            .from('clientes')
+            .select('*')
+            .eq('id', roleData.cliente_id)
+            .maybeSingle()
+          if (cli) clisData = [cli]
+        } else if (role === 'contabilidade' && roleData?.contabilidade_id) {
+          const { data: clis } = await supabase
+            .from('clientes')
+            .select('*')
+            .eq('contabilidade_id', roleData.contabilidade_id)
+            .order('razao_social')
+          if (clis) clisData = clis
+        } else {
+          // Admin: busca todas as empresas cadastradas
+          const { data: clis, error: errClis } = await supabase
+            .from('clientes')
+            .select('*')
+            .order('razao_social')
+          
+          if (errClis) {
+            console.error('Erro ao buscar clientes para relatorios:', errClis)
+          }
+          if (clis) clisData = clis
+        }
+
+        // Se temos clientes, buscar os nomes das contabilidades vinculadas para exibição no card
+        if (clisData.length > 0) {
+          const { data: contabs } = await supabase.from('contabilidades').select('id, razao_social')
+          const contabMap = new Map((contabs || []).map(c => [c.id, c.razao_social]))
+
+          const mapped = clisData.map(c => ({
+            ...c,
+            contabilidade_nome: c.contabilidade_id ? contabMap.get(c.contabilidade_id) : 'Não vinculada'
+          }))
+
+          setClientes(mapped)
+          setSelectedCliente(mapped[0].id)
+        } else {
+          setClientes([])
+        }
+      } catch (err) {
+        console.error('Erro geral no init de relatorios:', err)
+      } finally {
+        setLoading(false)
       }
-
-      // Se temos clientes, buscar os nomes das contabilidades vinculadas para exibição no card
-      if (clisData.length > 0) {
-        const { data: contabs } = await supabase.from('contabilidades').select('id, razao_social')
-        const contabMap = new Map((contabs || []).map(c => [c.id, c.razao_social]))
-
-        const mapped = clisData.map(c => ({
-          ...c,
-          contabilidade_nome: c.contabilidade_id ? contabMap.get(c.contabilidade_id) : 'Não vinculada'
-        }))
-
-        setClientes(mapped)
-        setSelectedCliente(mapped[0].id)
-      } else {
-        setClientes([])
-      }
-
-      setLoading(false)
     }
     init()
   }, [])
@@ -243,35 +250,31 @@ export default function RelatoriosPage() {
         
         {/* Seletor e Localizador de Cliente */}
         {userRole !== 'cliente' && clientes.length > 0 && (
-          <div className="flex-1 max-w-lg space-y-1.5">
+          <div className="flex-1 max-w-xl space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                {userRole === 'admin' ? '🔍 Localizar Cliente (Admin)' : '🏢 Empresa da Contabilidade'}
+                {userRole === 'admin' ? '🔍 Localizar Cliente (Admin)' : '🏢 Empresa Selecionada (Contabilidade)'}
               </label>
-              {userRole === 'admin' && (
-                <span className="text-[11px] text-blue-600 font-medium">
-                  {clientes.length} empresas disponíveis
-                </span>
-              )}
+              <span className="text-[11px] text-blue-600 font-medium">
+                {clientes.length} {clientes.length === 1 ? 'empresa' : 'empresas'}
+              </span>
             </div>
             
             <div className="flex flex-col sm:flex-row gap-2">
-              {/* Campo de Busca Rápida por Nome ou CNPJ para o Admin */}
-              {userRole === 'admin' && (
-                <input
-                  type="text"
-                  placeholder="Filtrar por nome ou CNPJ..."
-                  value={clientSearchTerm}
-                  onChange={e => setClientSearchTerm(e.target.value)}
-                  className="w-full sm:w-1/2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              )}
+              {/* Campo de Busca Rápida por Nome ou CNPJ */}
+              <input
+                type="text"
+                placeholder="Filtrar por nome ou CNPJ..."
+                value={clientSearchTerm}
+                onChange={e => setClientSearchTerm(e.target.value)}
+                className="w-full sm:w-1/2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
 
               {/* Select filtrado */}
               <select
                 value={selectedCliente}
                 onChange={e => setSelectedCliente(e.target.value)}
-                className={`w-full ${userRole === 'admin' ? 'sm:w-1/2' : ''} bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium`}
+                className="w-full sm:w-1/2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
               >
                 {clientes
                   .filter(c => {
@@ -297,11 +300,21 @@ export default function RelatoriosPage() {
         {userRole === 'cliente' && clientes.length > 0 && (
           <div className="flex-1 max-w-md">
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-              Sua Empresa
+              🏢 Sua Empresa Titular
             </label>
-            <div className="px-4 py-2 bg-slate-100 rounded-xl text-sm font-bold text-slate-800 border border-slate-200">
-              {clientes[0].razao_social}
+            <div className="px-4 py-2.5 bg-blue-50/60 rounded-xl text-sm font-bold text-slate-900 border border-blue-200 flex items-center justify-between">
+              <span>{clientes[0].razao_social}</span>
+              <span className="text-xs font-mono font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-md">
+                {clientes[0].cnpj}
+              </span>
             </div>
+          </div>
+        )}
+
+        {/* Caso nenhuma empresa seja encontrada */}
+        {clientes.length === 0 && (
+          <div className="flex-1 p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-xs font-medium">
+            ⚠️ Nenhuma empresa vinculada encontrada para este usuário.
           </div>
         )}
 
