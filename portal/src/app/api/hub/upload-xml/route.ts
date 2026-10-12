@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     // 1. Validar Cliente e configurações
     const { data: cliente } = await supabaseAdmin
       .from('clientes')
-      .select('id, cnpj, is_ativo, configuracoes_hub(auto_excluir_divergentes)')
+      .select('id, cnpj, razao_social, inscricao_estadual, is_ativo, configuracoes_hub(auto_excluir_divergentes)')
       .eq('hub_token', token)
       .single()
 
@@ -63,20 +63,33 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(arrayBuffer)
     const xmlString = buffer.toString('utf-8')
 
-    // Extrair emitente
+    // Extrair emitente (<emit>)
     const emitMatch = xmlString.match(/<emit[^>]*>([\s\S]*?)<\/emit>/)
     const emitXml = emitMatch ? emitMatch[1] : ''
     const cnpjEmitente = extractTag(emitXml, 'CNPJ') || extractTag(emitXml, 'CPF')
+    const xNomeEmitente = extractTag(emitXml, 'xNome')
+    const ieEmitente = extractTag(emitXml, 'IE')
 
-    // Limpar pontuação para comparar
-    const cleanClienteCnpj = (cliente.cnpj || '').replace(/\D/g, '')
-    const cleanEmitCnpj = (cnpjEmitente || '').replace(/\D/g, '')
+    // Limpar caracteres não-numéricos para comparação precisa
+    const cleanClienteDoc = (cliente.cnpj || '').replace(/\D/g, '')
+    const cleanEmitDoc = (cnpjEmitente || '').replace(/\D/g, '')
+    const cleanClienteIE = (cliente.inscricao_estadual || '').replace(/\D/g, '')
+    const cleanEmitIE = (ieEmitente || '').replace(/\D/g, '')
 
-    // Se for pasta de vendas, o emitente DEVE ser a empresa do cliente
+    // Se for pasta de vendas, o emitente (<emit>) DEVE ser estritamente a empresa do cliente cadastrado
     let isCnpjDivergente = false
-    if (tipoPasta === 'vendas' && cleanClienteCnpj && cleanEmitCnpj) {
-      if (cleanClienteCnpj !== cleanEmitCnpj) {
+    let motivoDivergencia = ''
+
+    if (tipoPasta === 'vendas') {
+      if (!cleanEmitDoc) {
         isCnpjDivergente = true
+        motivoDivergencia = 'Tag <emit> do XML não contém CNPJ ou CPF válido.'
+      } else if (cleanClienteDoc && cleanEmitDoc !== cleanClienteDoc) {
+        isCnpjDivergente = true
+        motivoDivergencia = `Emitente (${cnpjEmitente || 'Desconhecido'}${xNomeEmitente ? ' - ' + xNomeEmitente : ''}) não pertence à empresa (${cliente.cnpj} - ${cliente.razao_social || ''}).`
+      } else if (cleanClienteIE && cleanEmitIE && cleanClienteIE !== cleanEmitIE && cleanEmitIE.toUpperCase() !== 'ISENTO') {
+        isCnpjDivergente = true
+        motivoDivergencia = `Inscrição Estadual do emitente (${ieEmitente}) diverge da cadastrada no sistema (${cliente.inscricao_estadual}).`
       }
     }
 
@@ -85,7 +98,8 @@ export async function POST(request: Request) {
     if (isCnpjDivergente && hubConfig?.auto_excluir_divergentes) {
       return NextResponse.json({ 
         ignored: true, 
-        reason: 'XML descartado: CNPJ emitente (' + cnpjEmitente + ') diverge da empresa cadastrada (' + cliente.cnpj + '). Auto-exclusão ativada.' 
+        deleted: true,
+        reason: 'XML excluído: ' + motivoDivergencia + ' (Auto-exclusão ativada nas configurações do Portal)' 
       }, { status: 200 })
     }
 
@@ -152,7 +166,8 @@ export async function POST(request: Request) {
       tem_assinatura: temAssinatura,
       storage_path: filePath,
       cnpj_emitente: cnpjEmitente || null,
-      cnpj_divergente: isCnpjDivergente
+      cnpj_divergente: isCnpjDivergente,
+      motivo_divergencia: isCnpjDivergente ? motivoDivergencia : null
     }
 
     // Adiciona colunas extras se existirem na tabela

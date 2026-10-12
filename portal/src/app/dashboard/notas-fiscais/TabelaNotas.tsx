@@ -263,8 +263,11 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                       <div className="flex items-center gap-2">
                         {n.numero || '—'}
                         {isDivergente && (
-                          <span className="bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded uppercase">
-                            CNPJ Não Pertence à Empresa
+                          <span 
+                            className="bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 shadow-sm"
+                            title={n.motivo_divergencia || 'Emitente não pertence à empresa cadastrada'}
+                          >
+                            ⚠️ Não Pertence à Empresa
                           </span>
                         )}
                       </div>
@@ -273,7 +276,14 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                       {n.chave ? n.chave.substring(0, 22) + '...' : '—'}
                     </td>
                     <td className="p-4 font-mono text-xs">
-                      {n.cnpj_emitente || '—'}
+                      <div className={isDivergente ? 'text-red-700 font-bold' : ''}>
+                        {n.cnpj_emitente || '—'}
+                      </div>
+                      {isDivergente && n.motivo_divergencia && (
+                        <div className="text-[11px] text-red-600 mt-0.5 font-sans max-w-xs" title={n.motivo_divergencia}>
+                          {n.motivo_divergencia}
+                        </div>
+                      )}
                     </td>
                     <td className="p-4 font-medium">R$ {Number(n.valor || 0).toFixed(2)}</td>
                     <td className="p-4">{n.data_emissao ? new Date(n.data_emissao).toLocaleDateString('pt-BR') : '—'}</td>

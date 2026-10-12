@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Save, Building2, Search, Eye, EyeOff, ShieldCheck, FileKey, Calendar } from 'lucide-react'
+import { ArrowLeft, Save, Building2, Search, Eye, EyeOff, ShieldCheck, FileKey, Calendar, FileCode, Upload } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import CertificadoAlertaBanner from '@/components/CertificadoAlertaBanner'
@@ -12,6 +12,7 @@ export default function EditarClientePage() {
   const router = useRouter()
   const params = useParams()
   const supabase = createClient()
+  const xmlSampleRef = useRef<HTMLInputElement>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [searchingCnpj, setSearchingCnpj] = useState(false)
@@ -30,6 +31,7 @@ export default function EditarClientePage() {
     razao_social: '',
     nome_fantasia: '',
     cnpj: '',
+    inscricao_estadual: '',
     nome_sistema_utilizado: '',
     contabilidade_id: '',
     whatsapp: '',
@@ -64,6 +66,7 @@ export default function EditarClientePage() {
           razao_social: d.razao_social || '',
           nome_fantasia: d.nome_fantasia || '',
           cnpj: d.cnpj || '',
+          inscricao_estadual: d.inscricao_estadual || '',
           nome_sistema_utilizado: d.nome_sistema_utilizado || '',
           contabilidade_id: d.contabilidade_id || '',
           whatsapp: d.whatsapp || '',
@@ -189,6 +192,71 @@ export default function EditarClientePage() {
     } finally {
       setSearchingCnpj(false)
     }
+  }
+
+  // Leitura inteligente de um XML de Amostra / Gabarito da Empresa
+  const handleCarregarXmlAmostra = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      try {
+        const xmlText = event.target?.result as string
+        if (!xmlText) throw new Error('Arquivo XML vazio')
+
+        const extractTag = (xml: string, tag: string) => {
+          const match = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`))
+          return match ? match[1].trim() : ''
+        }
+
+        const emitMatch = xmlText.match(/<emit[^>]*>([\s\S]*?)<\/emit>/)
+        const emitXml = emitMatch ? emitMatch[1] : ''
+
+        const cnpj = extractTag(emitXml, 'CNPJ')
+        const cpf = extractTag(emitXml, 'CPF')
+        const doc = cnpj || cpf
+        const xNome = extractTag(emitXml, 'xNome')
+        const xFant = extractTag(emitXml, 'xFant')
+        const ie = extractTag(emitXml, 'IE')
+        const xMun = extractTag(emitXml, 'xMun')
+        const uf = extractTag(emitXml, 'UF')
+        const crt = extractTag(emitXml, 'CRT')
+
+        if (!doc && !xNome) {
+          throw new Error('Não foi possível identificar a tag <emit> com os dados da empresa neste XML.')
+        }
+
+        let formattedDoc = doc
+        if (doc.length === 14) {
+          formattedDoc = doc.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+        } else if (doc.length === 11) {
+          formattedDoc = doc.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4')
+        }
+
+        let autoRegime = formData.regime_tributario
+        if (crt === '1') autoRegime = 'simples_nacional'
+        else if (crt === '2') autoRegime = 'simples_nacional_excesso'
+        else if (crt === '3') autoRegime = 'lucro_presumido'
+        else if (crt === '4') autoRegime = 'mei'
+
+        setFormData(prev => ({
+          ...prev,
+          cnpj: formattedDoc || prev.cnpj,
+          razao_social: xNome || prev.razao_social,
+          nome_fantasia: xFant || xNome || prev.nome_fantasia,
+          inscricao_estadual: ie || prev.inscricao_estadual,
+          cidade: xMun || prev.cidade,
+          uf: uf || prev.uf,
+          regime_tributario: autoRegime || prev.regime_tributario
+        }))
+
+        toast.success(`XML de amostra lido com sucesso! Emitente: ${xNome || formattedDoc}`)
+      } catch (err: any) {
+        toast.error(err.message || 'Erro ao processar XML de amostra')
+      }
+    }
+    reader.readAsText(file)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -323,9 +391,30 @@ export default function EditarClientePage() {
 
           {/* Dados Principais da Empresa (Grid de 3 colunas) */}
           <div>
-            <h3 className="text-base font-bold text-slate-900 mb-4 pb-2 border-b border-slate-100">
-              Dados da Empresa
-            </h3>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-4 border-b border-slate-100 gap-3">
+              <h3 className="text-base font-bold text-slate-900">
+                Dados da Empresa
+              </h3>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => xmlSampleRef.current?.click()}
+                  title="Carregar um XML emitido pela empresa para preencher automaticamente CNPJ/CPF, Razão Social, IE e endereço"
+                  className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl text-xs font-semibold border border-emerald-200 transition"
+                >
+                  <FileCode size={15} />
+                  <span>Importar XML de Amostra da Empresa</span>
+                </button>
+                <input
+                  ref={xmlSampleRef}
+                  type="file"
+                  accept=".xml"
+                  className="hidden"
+                  onChange={handleCarregarXmlAmostra}
+                />
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               
               {/* Campo CNPJ / CPF com Botão de Consulta Automática */}
@@ -351,6 +440,19 @@ export default function EditarClientePage() {
                   </button>
                 </div>
                 <p className="text-[11px] text-slate-400 mt-1">Aceita CNPJ (14 dígitos) ou CPF (11 dígitos para produtor rural / pessoa física).</p>
+              </div>
+
+              {/* Inscrição Estadual (IE) */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Inscrição Estadual (IE)</label>
+                <input 
+                  type="text" 
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  placeholder="Ex: 151234567 ou ISENTO"
+                  value={formData.inscricao_estadual} 
+                  onChange={e => setFormData({...formData, inscricao_estadual: e.target.value})} 
+                />
+                <p className="text-[11px] text-slate-400 mt-1">Utilizada na validação de titularidade dos XMLs de vendas</p>
               </div>
 
               <div>

@@ -40,9 +40,9 @@ export async function GET(request: Request) {
     const { data: nfceSaidas, error: errNfce } = await queryNfce
     if (errNfce) throw errNfce
 
-    // 4. Totais e Consolidação de Faturamento
-    const nfeValidas = (nfeSaidas || []).filter(n => n.tem_assinatura && (n.cstat === '100' || n.is_autorizada || !n.cstat))
-    const nfceValidas = (nfceSaidas || []).filter(n => n.tem_assinatura && (n.cstat === '100' || n.is_autorizada || !n.cstat))
+    // 4. Totais e Consolidação de Faturamento (exclui notas divergentes de outras empresas)
+    const nfeValidas = (nfeSaidas || []).filter(n => !n.cnpj_divergente && n.tem_assinatura && (n.cstat === '100' || n.is_autorizada || !n.cstat))
+    const nfceValidas = (nfceSaidas || []).filter(n => !n.cnpj_divergente && n.tem_assinatura && (n.cstat === '100' || n.is_autorizada || !n.cstat))
 
     const somaNfe = nfeValidas.reduce((acc, n) => acc + (Number(n.valor) || 0), 0)
     const somaNfce = nfceValidas.reduce((acc, n) => acc + (Number(n.valor) || 0), 0)
