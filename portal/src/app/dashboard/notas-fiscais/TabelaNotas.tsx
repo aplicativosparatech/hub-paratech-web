@@ -1,11 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { RefreshCw, X, Trash2, AlertTriangle, ArrowRight } from 'lucide-react'
+import { 
+  RefreshCw, X, Trash2, AlertTriangle, ArrowRight, 
+  Calendar, Filter, Search, Clock, RotateCcw, CheckCircle2 
+} from 'lucide-react'
 import toast from 'react-hot-toast'
+import Pagination from '@/components/Pagination'
 
 function AssinaturaChip({ ok }: { ok: boolean }) {
   return ok
@@ -25,6 +29,21 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
   const [clientes, setClientes] = useState<any[]>([])
   const [selectedCliente, setSelectedCliente] = useState<string>(clienteIdParam || '')
   const [clientSearchTerm, setClientSearchTerm] = useState('')
+
+  // Filtros Avançados solicitados pelo usuário
+  const [filtroMes, setFiltroMes] = useState<string>('') // 'YYYY-MM' ou vazio
+  const [dataInicio, setDataInicio] = useState<string>('') // 'YYYY-MM-DD'
+  const [dataFim, setDataFim] = useState<string>('') // 'YYYY-MM-DD'
+  const [buscaNumero, setBuscaNumero] = useState<string>('')
+  const [buscaGeral, setBuscaGeral] = useState<string>('')
+
+  // Paginação com registros por página configuráveis
+  const [currentPage, setCurrentPage] = useState<number>(1)
+  const [pageSize, setPageSize] = useState<number>(25)
+
+  // Horário da Última Sincronização do Hub e Última Consulta
+  const [ultimaSincronizacaoHub, setUltimaSincronizacaoHub] = useState<string | null>(null)
+  const [ultimaConsultaHora, setUltimaConsultaHora] = useState<string>('')
 
   // Carrega Clientes disponíveis de acordo com o perfil
   useEffect(() => {
@@ -78,8 +97,32 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     loadUserAndClients()
   }, [])
 
+  // Carrega o horário em que o Hub sincronizou pela última vez
+  async function loadUltimaSincronizacao() {
+    try {
+      let query = supabase.from('configuracoes_hub').select('ultima_sincronizacao')
+      if (selectedCliente) {
+        query = query.eq('cliente_id', selectedCliente)
+      } else {
+        query = query.not('ultima_sincronizacao', 'is', null).order('ultima_sincronizacao', { ascending: false }).limit(1)
+      }
+      const { data } = await query
+      if (data && data.length > 0 && data[0].ultima_sincronizacao) {
+        setUltimaSincronizacaoHub(data[0].ultima_sincronizacao)
+      } else {
+        setUltimaSincronizacaoHub(null)
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar ultima sincronizacao:', e)
+    }
+  }
+
   async function load() {
     setLoading(true)
+    const agora = new Date()
+    setUltimaConsultaHora(agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
+    loadUltimaSincronizacao()
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
@@ -175,6 +218,102 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
 
   // Apenas notas 100% regulares e autorizadas são exibidas nas abas oficiais
   const notasOficiaisValidas = notas.filter(n => !pendentesList.some(p => p.id === n.id))
+
+  // Formatação humanizada do horário da última sincronização do Hub
+  function formatRelativeSync(dateStr?: string | null) {
+    if (!dateStr) return null
+    try {
+      const syncDate = new Date(dateStr)
+      const now = new Date()
+      const diffMs = now.getTime() - syncDate.getTime()
+      const diffMin = Math.floor(diffMs / (1000 * 60))
+      const diffHours = Math.floor(diffMin / 60)
+      const diffDays = Math.floor(diffHours / 24)
+
+      const horaFormatada = syncDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      const dataFormatada = syncDate.toLocaleDateString('pt-BR')
+
+      let relStr = ''
+      if (diffMin < 1) relStr = 'agora mesmo'
+      else if (diffMin < 60) relStr = `há ${diffMin} min`
+      else if (diffHours < 24) relStr = `há ${diffHours}h`
+      else relStr = `há ${diffDays}d`
+
+      return {
+        textoCompleto: `${dataFormatada} às ${horaFormatada}`,
+        tempoRelativo: relStr,
+        isRecente: diffMin <= 60
+      }
+    } catch {
+      return null
+    }
+  }
+
+  // Filtragem Dinâmica das Notas (por Mês, Data de Emissão, Número e Busca Geral)
+  const notasFiltradas = useMemo(() => {
+    return notasOficiaisValidas.filter(n => {
+      // 1. Filtro por Mês de Competência (YYYY-MM)
+      if (filtroMes && n.data_emissao) {
+        const emissaoMes = n.data_emissao.substring(0, 7)
+        if (emissaoMes !== filtroMes) return false
+      }
+
+      // 2. Filtro por Intervalo de Data de Emissão
+      if (dataInicio && n.data_emissao) {
+        const emissaoData = n.data_emissao.substring(0, 10)
+        if (emissaoData < dataInicio) return false
+      }
+      if (dataFim && n.data_emissao) {
+        const emissaoData = n.data_emissao.substring(0, 10)
+        if (emissaoData > dataFim) return false
+      }
+
+      // 3. Filtro por Número da Nota ou Chave
+      if (buscaNumero.trim()) {
+        const term = buscaNumero.trim().toLowerCase()
+        const num = String(n.numero || '').toLowerCase()
+        const chave = String(n.chave || '').toLowerCase()
+        if (!num.includes(term) && !chave.includes(term)) return false
+      }
+
+      // 4. Busca Geral (CNPJ, Emitente, Valor)
+      if (buscaGeral.trim()) {
+        const term = buscaGeral.trim().toLowerCase()
+        const emit = String(n.cnpj_emitente || '').toLowerCase()
+        const num = String(n.numero || '').toLowerCase()
+        const chave = String(n.chave || '').toLowerCase()
+        const valor = String(n.valor || '').toLowerCase()
+        if (!emit.includes(term) && !num.includes(term) && !chave.includes(term) && !valor.includes(term)) {
+          return false
+        }
+      }
+
+      return true
+    })
+  }, [notasOficiaisValidas, filtroMes, dataInicio, dataFim, buscaNumero, buscaGeral])
+
+  // Resetar para página 1 ao alterar qualquer filtro
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filtroMes, dataInicio, dataFim, buscaNumero, buscaGeral, selectedCliente, pageSize])
+
+  // Paginação dos registros filtrados
+  const notasPaginadas = useMemo(() => {
+    const start = (currentPage - 1) * pageSize
+    return notasFiltradas.slice(start, start + pageSize)
+  }, [notasFiltradas, currentPage, pageSize])
+
+  const temFiltroAtivo = Boolean(filtroMes || dataInicio || dataFim || buscaNumero || buscaGeral)
+
+  const limparFiltros = () => {
+    setFiltroMes('')
+    setDataInicio('')
+    setDataFim('')
+    setBuscaNumero('')
+    setBuscaGeral('')
+  }
+
+  const syncInfo = formatRelativeSync(ultimaSincronizacaoHub)
 
   return (
     <div className="space-y-4">
@@ -294,17 +433,159 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
         </div>
       )}
 
-      <div className="flex justify-between items-center">
-        <h2 className="text-xl font-bold text-slate-800">{label}</h2>
-        <button onClick={load} className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-800 transition">
-          <RefreshCw size={16} /> Atualizar
+      {/* CABEÇALHO COM HORÁRIO DA ÚLTIMA SINCRONIZAÇÃO E ATUALIZAÇÃO */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1 border-b border-slate-100">
+        <div>
+          <h2 className="text-xl font-bold text-slate-800">{label}</h2>
+          <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-slate-500">
+            {/* Horário da Última Sincronização do Hub */}
+            <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-lg">
+              <Clock size={13} className="text-blue-600" />
+              <span>
+                Última sincronização do Hub:{' '}
+                {syncInfo ? (
+                  <strong className="text-slate-800 font-semibold" title={syncInfo.textoCompleto}>
+                    {syncInfo.textoCompleto} <span className="text-blue-600 font-bold">({syncInfo.tempoRelativo})</span>
+                  </strong>
+                ) : (
+                  <span className="text-slate-400 italic">Aguardando primeira sincronização</span>
+                )}
+              </span>
+            </div>
+
+            {/* Consulta em tela */}
+            {ultimaConsultaHora && (
+              <span className="text-slate-400">
+                Consulta atualizada às <strong className="text-slate-600">{ultimaConsultaHora}</strong>
+              </span>
+            )}
+          </div>
+        </div>
+
+        <button 
+          onClick={load} 
+          disabled={loading}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition disabled:opacity-50 self-start sm:self-auto"
+        >
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> 
+          Atualizar Dados
         </button>
+      </div>
+
+      {/* PAINEL DE FILTROS AVANÇADOS: MÊS, DATA, NÚMERO E BUSCA */}
+      <div className="bg-slate-50/90 p-3.5 rounded-2xl border border-slate-200 space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+            <Filter size={14} className="text-blue-600" />
+            Filtros de Notas Fiscais
+          </span>
+
+          {temFiltroAtivo && (
+            <button
+              onClick={limparFiltros}
+              className="text-xs text-rose-600 hover:text-rose-800 font-bold flex items-center gap-1 transition"
+            >
+              <RotateCcw size={12} /> Limpar Filtros
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+          {/* 1. Mês de Competência */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+              Mês de Competência:
+            </label>
+            <div className="flex items-center gap-1">
+              <input
+                type="month"
+                value={filtroMes}
+                onChange={e => setFiltroMes(e.target.value)}
+                className="w-full bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+              />
+              {filtroMes && (
+                <button
+                  onClick={() => setFiltroMes('')}
+                  title="Remover filtro de mês"
+                  className="p-1.5 text-slate-400 hover:text-slate-600 bg-white rounded-lg border border-slate-200"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 2. Data de Emissão (De/Até) */}
+          <div className="sm:col-span-1 md:col-span-1">
+            <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+              Período de Emissão:
+            </label>
+            <div className="flex items-center gap-1">
+              <input
+                type="date"
+                placeholder="De"
+                value={dataInicio}
+                onChange={e => setDataInicio(e.target.value)}
+                className="w-1/2 bg-white border border-slate-200 px-2 py-1.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+              />
+              <span className="text-slate-400 text-xs">até</span>
+              <input
+                type="date"
+                placeholder="Até"
+                value={dataFim}
+                onChange={e => setDataFim(e.target.value)}
+                className="w-1/2 bg-white border border-slate-200 px-2 py-1.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+              />
+            </div>
+          </div>
+
+          {/* 3. Número da Nota ou Chave */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+              Nº da Nota ou Chave:
+            </label>
+            <div className="relative">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Ex: 44086 ou chave..."
+                value={buscaNumero}
+                onChange={e => setBuscaNumero(e.target.value)}
+                className="w-full pl-8 pr-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+              />
+            </div>
+          </div>
+
+          {/* 4. Busca Geral */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+              Busca Textual (CNPJ / Valor):
+            </label>
+            <div className="relative">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Buscar por CNPJ, valor..."
+                value={buscaGeral}
+                onChange={e => setBuscaGeral(e.target.value)}
+                className="w-full pl-8 pr-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Resumo do Filtro Ativo */}
+        {temFiltroAtivo && (
+          <div className="flex items-center gap-2 pt-1 text-xs text-slate-500">
+            <span>Resultados encontrados: <strong className="text-blue-600 font-bold">{notasFiltradas.length}</strong> de {notasOficiaisValidas.length} notas oficiais</span>
+          </div>
+        )}
       </div>
 
       {loading ? (
         <div className="text-slate-400 py-8 text-center animate-pulse">Carregando notas...</div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs bg-white">
           <table className="w-full text-left text-sm text-slate-600">
             <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
               <tr>
@@ -319,13 +600,15 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
               </tr>
             </thead>
             <tbody>
-              {notasOficiaisValidas.length === 0 ? (
+              {notasFiltradas.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="p-8 text-center text-slate-400">
-                    Nenhuma nota encontrada. O Hub ainda não enviou dados para esta seção.
+                    {temFiltroAtivo 
+                      ? 'Nenhuma nota encontrada com os filtros selecionados. Tente ajustar os parâmetros ou limpar os filtros.' 
+                      : 'Nenhuma nota encontrada. O Hub ainda não enviou dados para esta seção.'}
                   </td>
                 </tr>
-              ) : notasOficiaisValidas.map(n => {
+              ) : notasPaginadas.map(n => {
                 const cleanChaveCnpj = n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : ''
                 const emitenteDoc = n.cnpj_emitente || cleanChaveCnpj
                 const cleanEmit = (emitenteDoc || '').replace(/\D/g, '')
@@ -380,6 +663,16 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
               })}
             </tbody>
           </table>
+
+          {/* Paginação de Registros */}
+          <Pagination
+            currentPage={currentPage}
+            totalItems={notasFiltradas.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            itemLabel="notas oficiais"
+          />
         </div>
       )}
 

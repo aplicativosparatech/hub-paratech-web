@@ -312,6 +312,12 @@ export async function POST(request: Request) {
       await supabaseAdmin.from(tabela).upsert(fallbackPayload, { onConflict: 'chave' })
     }
 
+    // Atualiza o registro da última sincronização do Hub para esta empresa
+    await supabaseAdmin
+      .from('configuracoes_hub')
+      .update({ ultima_sincronizacao: new Date().toISOString() })
+      .eq('cliente_id', cliente.id)
+
     return NextResponse.json({ 
       success: true, 
       tabela, 

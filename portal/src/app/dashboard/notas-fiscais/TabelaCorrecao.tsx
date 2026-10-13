@@ -1,11 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { useSearchParams } from 'next/navigation'
-import { RefreshCw, Trash2, AlertTriangle, Sparkles, Sliders, CheckCircle2, ShieldAlert, FileText, ArrowRight } from 'lucide-react'
+import { 
+  RefreshCw, Trash2, AlertTriangle, Sparkles, Sliders, CheckCircle2, 
+  ShieldAlert, FileText, ArrowRight, Calendar, Filter, Search, RotateCcw, Clock, X 
+} from 'lucide-react'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
+import Pagination from '@/components/Pagination'
 
 export default function TabelaCorrecao() {
   const supabase = createClient()
@@ -19,6 +23,18 @@ export default function TabelaCorrecao() {
   const [clientes, setClientes] = useState<any[]>([])
   const [selectedCliente, setSelectedCliente] = useState<string>(clienteIdParam || '')
   const [clientSearchTerm, setClientSearchTerm] = useState('')
+
+  // Filtros Avançados
+  const [filtroMes, setFiltroMes] = useState<string>('')
+  const [dataInicio, setDataInicio] = useState<string>('')
+  const [dataFim, setDataFim] = useState<string>('')
+  const [buscaNumero, setBuscaNumero] = useState<string>('')
+  const [buscaGeral, setBuscaGeral] = useState<string>('')
+
+  // Paginação
+  const [currentPage, setCurrentPage] = useState<number>(1)
+  const [pageSize, setPageSize] = useState<number>(25)
+  const [ultimaConsultaHora, setUltimaConsultaHora] = useState<string>('')
 
   // Modais
   const [modalManual, setModalManual] = useState<{
@@ -98,9 +114,33 @@ export default function TabelaCorrecao() {
     loadUserAndClients()
   }, [])
 
+  const [ultimaSincronizacaoHub, setUltimaSincronizacaoHub] = useState<string | null>(null)
+
+  // Busca horário da última sincronização do Hub
+  async function loadUltimaSincronizacao() {
+    try {
+      let query = supabase.from('configuracoes_hub').select('ultima_sincronizacao').order('ultima_sincronizacao', { ascending: false }).limit(1)
+      if (selectedCliente) {
+        query = query.eq('cliente_id', selectedCliente)
+      }
+      const { data } = await query
+      if (data && data.length > 0 && data[0].ultima_sincronizacao) {
+        setUltimaSincronizacaoHub(data[0].ultima_sincronizacao)
+      } else {
+        setUltimaSincronizacaoHub(null)
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar ultima sincronizacao:', e)
+    }
+  }
+
   // Carrega notas com pendências de correção (nfce_saidas e nfe_saidas)
   async function loadNotas() {
     setLoading(true)
+    const agora = new Date()
+    setUltimaConsultaHora(agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
+    loadUltimaSincronizacao()
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
@@ -167,6 +207,102 @@ export default function TabelaCorrecao() {
   useEffect(() => {
     loadNotas()
   }, [selectedCliente])
+
+  // Formatação humanizada do horário da última sincronização do Hub
+  function formatRelativeSync(dateStr?: string | null) {
+    if (!dateStr) return null
+    try {
+      const syncDate = new Date(dateStr)
+      const now = new Date()
+      const diffMs = now.getTime() - syncDate.getTime()
+      const diffMin = Math.floor(diffMs / (1000 * 60))
+      const diffHours = Math.floor(diffMin / 60)
+      const diffDays = Math.floor(diffHours / 24)
+
+      const horaFormatada = syncDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      const dataFormatada = syncDate.toLocaleDateString('pt-BR')
+
+      let relStr = ''
+      if (diffMin < 1) relStr = 'agora mesmo'
+      else if (diffMin < 60) relStr = `há ${diffMin} min`
+      else if (diffHours < 24) relStr = `há ${diffHours}h`
+      else relStr = `há ${diffDays}d`
+
+      return {
+        textoCompleto: `${dataFormatada} às ${horaFormatada}`,
+        tempoRelativo: relStr,
+        isRecente: diffMin <= 60
+      }
+    } catch {
+      return null
+    }
+  }
+
+  // Filtragem Dinâmica das Notas em Quarentena (por Mês, Data de Emissão, Número e Busca Geral)
+  const notasFiltradas = useMemo(() => {
+    return notas.filter(n => {
+      // 1. Filtro por Mês de Competência (YYYY-MM)
+      if (filtroMes && n.data_emissao) {
+        const emissaoMes = n.data_emissao.substring(0, 7)
+        if (emissaoMes !== filtroMes) return false
+      }
+
+      // 2. Filtro por Intervalo de Data de Emissão
+      if (dataInicio && n.data_emissao) {
+        const emissaoData = n.data_emissao.substring(0, 10)
+        if (emissaoData < dataInicio) return false
+      }
+      if (dataFim && n.data_emissao) {
+        const emissaoData = n.data_emissao.substring(0, 10)
+        if (emissaoData > dataFim) return false
+      }
+
+      // 3. Filtro por Número da Nota ou Chave
+      if (buscaNumero.trim()) {
+        const term = buscaNumero.trim().toLowerCase()
+        const num = String(n.numero || '').toLowerCase()
+        const chave = String(n.chave || '').toLowerCase()
+        if (!num.includes(term) && !chave.includes(term)) return false
+      }
+
+      // 4. Busca Geral (CNPJ, Emitente, Valor)
+      if (buscaGeral.trim()) {
+        const term = buscaGeral.trim().toLowerCase()
+        const emit = String(n.cnpj_emitente || '').toLowerCase()
+        const num = String(n.numero || '').toLowerCase()
+        const chave = String(n.chave || '').toLowerCase()
+        const valor = String(n.valor || '').toLowerCase()
+        if (!emit.includes(term) && !num.includes(term) && !chave.includes(term) && !valor.includes(term)) {
+          return false
+        }
+      }
+
+      return true
+    })
+  }, [notas, filtroMes, dataInicio, dataFim, buscaNumero, buscaGeral])
+
+  // Resetar para página 1 ao alterar qualquer filtro
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filtroMes, dataInicio, dataFim, buscaNumero, buscaGeral, selectedCliente, pageSize])
+
+  // Paginação dos registros filtrados
+  const notasPaginadas = useMemo(() => {
+    const start = (currentPage - 1) * pageSize
+    return notasFiltradas.slice(start, start + pageSize)
+  }, [notasFiltradas, currentPage, pageSize])
+
+  const temFiltroAtivo = Boolean(filtroMes || dataInicio || dataFim || buscaNumero || buscaGeral)
+
+  const limparFiltros = () => {
+    setFiltroMes('')
+    setDataInicio('')
+    setDataFim('')
+    setBuscaNumero('')
+    setBuscaGeral('')
+  }
+
+  const syncInfo = formatRelativeSync(ultimaSincronizacaoHub)
 
   // Ação 1: Consultar e Corrigir via SEFAZ
   const handleCorrigirSefaz = async (nota: any) => {
@@ -407,22 +543,154 @@ export default function TabelaCorrecao() {
         )}
       </div>
 
-      {/* Cabeçalho da Tabela */}
-      <div className="flex justify-between items-center pt-2">
+      {/* Cabeçalho da Tabela com Horário da Última Sincronização */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 pb-1 border-b border-slate-100">
         <div>
-          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-            <span>Arquivos para Correção Fiscal</span>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold text-slate-800">Arquivos para Correção Fiscal</h2>
             <span className="text-xs bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full font-bold">
               {notas.length} pendente(s)
             </span>
-          </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
+          </div>
+          <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-slate-500">
+            {/* Horário da Última Sincronização do Hub */}
+            <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-lg">
+              <Clock size={13} className="text-blue-600" />
+              <span>
+                Última sincronização do Hub:{' '}
+                {syncInfo ? (
+                  <strong className="text-slate-800 font-semibold" title={syncInfo.textoCompleto}>
+                    {syncInfo.textoCompleto} <span className="text-blue-600 font-bold">({syncInfo.tempoRelativo})</span>
+                  </strong>
+                ) : (
+                  <span className="text-slate-400 italic">Aguardando primeira sincronização</span>
+                )}
+              </span>
+            </div>
+
+            {/* Consulta em tela */}
+            {ultimaConsultaHora && (
+              <span className="text-slate-400">
+                Consulta atualizada às <strong className="text-slate-600">{ultimaConsultaHora}</strong>
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-slate-400 mt-1">
             Ao serem corrigidas com protocolo e assinatura, as notas serão transferidas automaticamente para as abas oficiais <strong>NF-e (Mod 55)</strong> ou <strong>NFC-e (Mod 65)</strong>.
           </p>
         </div>
-        <button onClick={loadNotas} className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-800 transition">
-          <RefreshCw size={16} /> Atualizar
+
+        <button 
+          onClick={loadNotas} 
+          disabled={loading}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition disabled:opacity-50 self-start sm:self-auto"
+        >
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> 
+          Atualizar Dados
         </button>
+      </div>
+
+      {/* PAINEL DE FILTROS AVANÇADOS: MÊS, DATA, NÚMERO E BUSCA */}
+      <div className="bg-slate-50/90 p-3.5 rounded-2xl border border-slate-200 space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+            <Filter size={14} className="text-blue-600" />
+            Filtros de Arquivos em Quarentena
+          </span>
+
+          {temFiltroAtivo && (
+            <button
+              onClick={limparFiltros}
+              className="text-xs text-rose-600 hover:text-rose-800 font-bold flex items-center gap-1 transition"
+            >
+              <RotateCcw size={12} /> Limpar Filtros
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+          {/* 1. Mês de Competência */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+              Mês de Competência:
+            </label>
+            <div className="flex items-center gap-1">
+              <input
+                type="month"
+                value={filtroMes}
+                onChange={e => setFiltroMes(e.target.value)}
+                className="w-full bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+              />
+              {filtroMes && (
+                <button
+                  onClick={() => setFiltroMes('')}
+                  title="Remover filtro de mês"
+                  className="p-1.5 text-slate-400 hover:text-slate-600 bg-white rounded-lg border border-slate-200"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 2. Data de Emissão (De/Até) */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+              Período de Emissão:
+            </label>
+            <div className="flex items-center gap-1">
+              <input
+                type="date"
+                placeholder="De"
+                value={dataInicio}
+                onChange={e => setDataInicio(e.target.value)}
+                className="w-1/2 bg-white border border-slate-200 px-2 py-1.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+              />
+              <span className="text-slate-400 text-xs">até</span>
+              <input
+                type="date"
+                placeholder="Até"
+                value={dataFim}
+                onChange={e => setDataFim(e.target.value)}
+                className="w-1/2 bg-white border border-slate-200 px-2 py-1.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+              />
+            </div>
+          </div>
+
+          {/* 3. Número da Nota ou Chave */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+              Nº da Nota ou Chave:
+            </label>
+            <div className="relative">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Ex: 44086 ou chave..."
+                value={buscaNumero}
+                onChange={e => setBuscaNumero(e.target.value)}
+                className="w-full pl-8 pr-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+              />
+            </div>
+          </div>
+
+          {/* 4. Busca Geral */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+              Busca Textual (CNPJ / Valor):
+            </label>
+            <div className="relative">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Filtrar por qualquer dado..."
+                value={buscaGeral}
+                onChange={e => setBuscaGeral(e.target.value)}
+                className="w-full pl-8 pr-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Tabela de Arquivos para Correção */}
@@ -437,6 +705,22 @@ export default function TabelaCorrecao() {
           <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
             Todos os XMLs importados no sistema estão com assinatura digital válida e autorização confirmada pela SEFAZ.
           </p>
+        </div>
+      ) : notasFiltradas.length === 0 ? (
+        <div className="text-center py-16 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+          <div className="w-14 h-14 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-3">
+            <Search size={28} />
+          </div>
+          <h3 className="font-bold text-slate-800 text-base">Nenhum arquivo encontrado</h3>
+          <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+            Nenhuma nota em quarentena corresponde aos filtros aplicados.
+          </p>
+          <button
+            onClick={limparFiltros}
+            className="mt-4 px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold transition inline-flex items-center gap-1.5"
+          >
+            <RotateCcw size={14} /> Limpar Filtros de Busca
+          </button>
         </div>
       ) : (
         <div className="overflow-x-auto border border-slate-200 rounded-2xl">
@@ -453,7 +737,7 @@ export default function TabelaCorrecao() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {notas.map(n => {
+              {notasPaginadas.map(n => {
                 const isCorrigindo = corrigindoId === n.id
                 return (
                   <tr key={n.id} className="hover:bg-amber-50/40 transition">
@@ -544,6 +828,16 @@ export default function TabelaCorrecao() {
               })}
             </tbody>
           </table>
+
+          {/* Paginação de Registros */}
+          <Pagination
+            currentPage={currentPage}
+            totalItems={notasFiltradas.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            itemLabel="arquivos pendentes"
+          />
         </div>
       )}
 

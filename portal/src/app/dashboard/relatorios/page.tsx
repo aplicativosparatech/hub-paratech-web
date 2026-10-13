@@ -14,6 +14,7 @@ import {
   FormatoExportacao, 
   EmpresaDados 
 } from '@/utils/relatorioExporter'
+import Pagination from '@/components/Pagination'
 
 export default function RelatoriosPage() {
   const supabase = createClient()
@@ -39,6 +40,9 @@ export default function RelatoriosPage() {
     exibir_certificados_cliente: boolean
   } | null>(null)
 
+  // Horário da Última Sincronização do Hub da Empresa
+  const [ultimaSincronizacaoHub, setUltimaSincronizacaoHub] = useState<string | null>(null)
+
   // Dados da Auditoria
   const [auditData, setAuditData] = useState<any>(null)
   // Papel do usuário logado ('admin' | 'contabilidade' | 'cliente')
@@ -52,6 +56,19 @@ export default function RelatoriosPage() {
   const [filtroNcmSelecionado, setFiltroNcmSelecionado] = useState<string>('todos')
   const [modoAgrupamentoMonofasico, setModoAgrupamentoMonofasico] = useState<'cupom' | 'agrupado'>('cupom')
   const [buscaMonofasico, setBuscaMonofasico] = useState<string>('')
+
+  // Estados de Paginação
+  const [pageMonofasico, setPageMonofasico] = useState<number>(1)
+  const [pageSizeMonofasico, setPageSizeMonofasico] = useState<number>(25)
+
+  const [pageQuebras, setPageQuebras] = useState<number>(1)
+  const [pageSizeQuebras, setPageSizeQuebras] = useState<number>(25)
+
+  const [pageNaoAssinadas, setPageNaoAssinadas] = useState<number>(1)
+  const [pageSizeNaoAssinadas, setPageSizeNaoAssinadas] = useState<number>(25)
+
+  const [pageCertificados, setPageCertificados] = useState<number>(1)
+  const [pageSizeCertificados, setPageSizeCertificados] = useState<number>(25)
 
   // Carrega clientes disponíveis para o usuário
   useEffect(() => {
@@ -152,6 +169,66 @@ export default function RelatoriosPage() {
     }
     loadConfigHub()
   }, [selectedCliente])
+
+  // Busca horário da última sincronização do Hub para a empresa selecionada
+  async function loadUltimaSincronizacao() {
+    try {
+      if (!selectedCliente) {
+        setUltimaSincronizacaoHub(null)
+        return
+      }
+      const { data } = await supabase
+        .from('configuracoes_hub')
+        .select('ultima_sincronizacao')
+        .eq('cliente_id', selectedCliente)
+        .order('ultima_sincronizacao', { ascending: false })
+        .limit(1)
+
+      if (data && data.length > 0 && data[0].ultima_sincronizacao) {
+        setUltimaSincronizacaoHub(data[0].ultima_sincronizacao)
+      } else {
+        setUltimaSincronizacaoHub(null)
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar ultima sincronizacao:', e)
+    }
+  }
+
+  useEffect(() => {
+    loadUltimaSincronizacao()
+  }, [selectedCliente])
+
+  // Formatação humanizada do horário da última sincronização do Hub
+  function formatRelativeSync(dateStr?: string | null) {
+    if (!dateStr) return null
+    try {
+      const syncDate = new Date(dateStr)
+      const now = new Date()
+      const diffMs = now.getTime() - syncDate.getTime()
+      const diffMin = Math.floor(diffMs / (1000 * 60))
+      const diffHours = Math.floor(diffMin / 60)
+      const diffDays = Math.floor(diffHours / 24)
+
+      const horaFormatada = syncDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      const dataFormatada = syncDate.toLocaleDateString('pt-BR')
+
+      let relStr = ''
+      if (diffMin < 1) relStr = 'agora mesmo'
+      else if (diffMin < 60) relStr = `há ${diffMin} min`
+      else if (diffHours < 24) relStr = `há ${diffHours}h`
+      else relStr = `há ${diffDays}d`
+
+      return {
+        textoCompleto: `${dataFormatada} às ${horaFormatada}`,
+        tempoRelativo: relStr,
+        isRecente: diffMin <= 60
+      }
+    } catch {
+      return null
+    }
+  }
+
+  const syncInfo = formatRelativeSync(ultimaSincronizacaoHub)
 
   // Define se o usuário tem permissão para visualizar o relatório de certificados
   const canViewCertificados = userRole === 'admin' ||
@@ -258,6 +335,23 @@ export default function RelatoriosPage() {
       percentual: totalGeral > 0 ? ((r.valor_total / totalGeral) * 100) : 0
     })).sort((a, b) => b.valor_total - a.valor_total)
   }, [produtosMonofasicosFiltrados])
+
+  // Reset de página dos produtos monofásicos ao alterar filtros ou competência
+  useEffect(() => {
+    setPageMonofasico(1)
+  }, [filtroNcmSelecionado, modoAgrupamentoMonofasico, buscaMonofasico, selectedMonth, selectedCliente, pageSizeMonofasico])
+
+  // Fatiamento Paginado - Monofásicos Analítico (Cupom)
+  const produtosMonofasicosFiltradosPaginados = useMemo(() => {
+    const start = (pageMonofasico - 1) * pageSizeMonofasico
+    return produtosMonofasicosFiltrados.slice(start, start + pageSizeMonofasico)
+  }, [produtosMonofasicosFiltrados, pageMonofasico, pageSizeMonofasico])
+
+  // Fatiamento Paginado - Monofásicos Agrupado (NCM/Produto)
+  const produtosMonofasicosAgrupadosPaginados = useMemo(() => {
+    const start = (pageMonofasico - 1) * pageSizeMonofasico
+    return produtosMonofasicosAgrupados.slice(start, start + pageSizeMonofasico)
+  }, [produtosMonofasicosAgrupados, pageMonofasico, pageSizeMonofasico])
 
   // Função Específica para Exportação de Monofásicos com os Filtros e Agrupamentos Ativos
   const handleExportarMonofasicosPersonalizado = (formato: FormatoExportacao) => {
@@ -410,6 +504,35 @@ export default function RelatoriosPage() {
   const naoAssinadas = auditData?.nao_assinadas
   const inutilizadas = auditData?.inutilizadas
 
+  // Reset de páginas ao alterar competência ou cliente
+  useEffect(() => {
+    setPageQuebras(1)
+  }, [selectedCliente, selectedMonth, pageSizeQuebras])
+
+  useEffect(() => {
+    setPageNaoAssinadas(1)
+  }, [selectedCliente, selectedMonth, pageSizeNaoAssinadas])
+
+  useEffect(() => {
+    setPageCertificados(1)
+  }, [selectedCliente, selectedMonth, pageSizeCertificados])
+
+  // Fatiamento Paginado - Quebras de Sequência
+  const quebrasPaginadas = useMemo(() => {
+    const start = (pageQuebras - 1) * pageSizeQuebras
+    return (quebras || []).slice(start, start + pageSizeQuebras)
+  }, [quebras, pageQuebras, pageSizeQuebras])
+
+  // Fatiamento Paginado - Não Assinadas / Sem Protocolo
+  const listaNaoAssinadas = useMemo(() => {
+    return [...(naoAssinadas?.nfe || []), ...(naoAssinadas?.nfce || [])]
+  }, [naoAssinadas])
+
+  const naoAssinadasPaginadas = useMemo(() => {
+    const start = (pageNaoAssinadas - 1) * pageSizeNaoAssinadas
+    return listaNaoAssinadas.slice(start, start + pageSizeNaoAssinadas)
+  }, [listaNaoAssinadas, pageNaoAssinadas, pageSizeNaoAssinadas])
+
   return (
     <div className="w-full space-y-6 animate-in fade-in duration-300">
       
@@ -423,6 +546,28 @@ export default function RelatoriosPage() {
           <p className="text-slate-500 text-sm mt-1">
             Painel completo de faturamento, segregação de monofásicos (PIS/COFINS), quebras de numeração e download de XMLs.
           </p>
+          <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-500">
+            {/* Horário da Última Sincronização do Hub */}
+            <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-lg">
+              <Clock size={13} className="text-blue-600" />
+              <span>
+                Última sincronização do Hub:{' '}
+                {syncInfo ? (
+                  <strong className="text-slate-800 font-semibold" title={syncInfo.textoCompleto}>
+                    {syncInfo.textoCompleto} <span className="text-blue-600 font-bold">({syncInfo.tempoRelativo})</span>
+                  </strong>
+                ) : (
+                  <span className="text-slate-400 italic">Aguardando primeira sincronização</span>
+                )}
+              </span>
+            </div>
+
+            {auditData?.gerado_em && (
+              <span className="text-slate-400">
+                Auditoria gerada em: <strong className="text-slate-600">{new Date(auditData.gerado_em).toLocaleTimeString('pt-BR')}</strong>
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -1172,7 +1317,7 @@ export default function RelatoriosPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-sm bg-white">
-                      {produtosMonofasicosFiltrados.map((item: any) => (
+                      {produtosMonofasicosFiltradosPaginados.map((item: any) => (
                         <tr key={item.id} className="hover:bg-amber-50/30 transition">
                           <td className="p-3.5 whitespace-nowrap">
                             <div className="flex items-center gap-2">
@@ -1226,6 +1371,16 @@ export default function RelatoriosPage() {
                       ))}
                     </tbody>
                   </table>
+
+                  {/* Paginação do Modo Analítico */}
+                  <Pagination
+                    currentPage={pageMonofasico}
+                    totalItems={produtosMonofasicosFiltrados.length}
+                    pageSize={pageSizeMonofasico}
+                    onPageChange={setPageMonofasico}
+                    onPageSizeChange={setPageSizeMonofasico}
+                    itemLabel="itens monofásicos"
+                  />
                 </div>
 
               ) : (
@@ -1245,7 +1400,7 @@ export default function RelatoriosPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-sm bg-white">
-                      {produtosMonofasicosAgrupados.map((item: any, idx: number) => (
+                      {produtosMonofasicosAgrupadosPaginados.map((item: any, idx: number) => (
                         <tr key={idx} className="hover:bg-amber-50/30 transition">
                           <td className="p-3.5 whitespace-nowrap">
                             <span className="font-mono text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200/60 px-2 py-0.5 rounded-md">
@@ -1301,6 +1456,16 @@ export default function RelatoriosPage() {
                       ))}
                     </tbody>
                   </table>
+
+                  {/* Paginação do Modo Agrupado */}
+                  <Pagination
+                    currentPage={pageMonofasico}
+                    totalItems={produtosMonofasicosAgrupados.length}
+                    pageSize={pageSizeMonofasico}
+                    onPageChange={setPageMonofasico}
+                    onPageSizeChange={setPageSizeMonofasico}
+                    itemLabel="produtos agrupados"
+                  />
                 </div>
 
               )}
@@ -1367,7 +1532,7 @@ export default function RelatoriosPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm">
-                    {quebras.map((q: any, idx: number) => (
+                    {quebrasPaginadas.map((q: any, idx: number) => (
                       <tr key={idx} className="hover:bg-red-50/30 transition">
                         <td className="p-4 font-semibold text-slate-800">{q.modelo}</td>
                         <td className="p-4 text-slate-600">Série {q.serie}</td>
@@ -1386,6 +1551,16 @@ export default function RelatoriosPage() {
                     ))}
                   </tbody>
                 </table>
+
+                {/* Paginação de Quebras */}
+                <Pagination
+                  currentPage={pageQuebras}
+                  totalItems={quebras.length}
+                  pageSize={pageSizeQuebras}
+                  onPageChange={setPageQuebras}
+                  onPageSizeChange={setPageSizeQuebras}
+                  itemLabel="quebras de sequência"
+                />
               </div>
             )}
           </div>
@@ -1448,7 +1623,7 @@ export default function RelatoriosPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm">
-                    {[...(naoAssinadas?.nfe || []), ...(naoAssinadas?.nfce || [])].map((n: any) => (
+                    {naoAssinadasPaginadas.map((n: any) => (
                       <tr key={n.id} className="hover:bg-orange-50/30 transition">
                         <td className="p-4 font-bold text-slate-800">Nº {n.numero || '-'}</td>
                         <td className="p-4 font-mono text-xs text-slate-600">{n.chave}</td>
@@ -1468,6 +1643,16 @@ export default function RelatoriosPage() {
                     ))}
                   </tbody>
                 </table>
+
+                {/* Paginação de Não Assinadas */}
+                <Pagination
+                  currentPage={pageNaoAssinadas}
+                  totalItems={listaNaoAssinadas.length}
+                  pageSize={pageSizeNaoAssinadas}
+                  onPageChange={setPageNaoAssinadas}
+                  onPageSizeChange={setPageSizeNaoAssinadas}
+                  itemLabel="notas pendentes"
+                />
               </div>
             )}
           </div>
@@ -1596,6 +1781,11 @@ export default function RelatoriosPage() {
               const totalValidos = clisCert.filter(c => c.status === 'valido').length
               const totalSemCert = clisCert.filter(c => c.status === 'sem_certificado').length
 
+              const clisCertPaginados = clisCert.slice(
+                (pageCertificados - 1) * pageSizeCertificados,
+                pageCertificados * pageSizeCertificados
+              )
+
               return (
                 <div className="space-y-6">
                   {/* Resumo Rápido */}
@@ -1651,14 +1841,14 @@ export default function RelatoriosPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-sm">
-                        {clisCert.length === 0 ? (
+                        {clisCertPaginados.length === 0 ? (
                           <tr>
                             <td colSpan={6} className="p-8 text-center text-slate-400">
                               Nenhuma empresa encontrada para exibição.
                             </td>
                           </tr>
                         ) : (
-                          clisCert.map(c => (
+                          clisCertPaginados.map(c => (
                             <tr key={c.id} className="hover:bg-slate-50/80 transition">
                               <td className="p-4">
                                 <div className="font-bold text-slate-900">{c.razao_social}</div>
@@ -1717,6 +1907,16 @@ export default function RelatoriosPage() {
                         )}
                       </tbody>
                     </table>
+
+                    {/* Paginação de Certificados */}
+                    <Pagination
+                      currentPage={pageCertificados}
+                      totalItems={clisCert.length}
+                      pageSize={pageSizeCertificados}
+                      onPageChange={setPageCertificados}
+                      onPageSizeChange={setPageSizeCertificados}
+                      itemLabel="empresas / certificados"
+                    />
                   </div>
 
                 </div>
