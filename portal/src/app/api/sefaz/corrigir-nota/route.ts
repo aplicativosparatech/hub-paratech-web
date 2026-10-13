@@ -61,10 +61,19 @@ export async function POST(request: Request) {
     // 4. Baixa o Certificado Digital A1 se cadastrado
     let certBuffer: Buffer | null = null
     if (cliente.certificado_url) {
-      const { data: certBlob } = await supabaseAdmin
+      let { data: certBlob } = await supabaseAdmin
         .storage
         .from('certificados')
         .download(cliente.certificado_url)
+
+      if (!certBlob) {
+        const { data: certBlobXmls } = await supabaseAdmin
+          .storage
+          .from('xmls')
+          .download(cliente.certificado_url)
+        certBlob = certBlobXmls
+      }
+
       if (certBlob) {
         const ab = await certBlob.arrayBuffer()
         certBuffer = Buffer.from(ab)

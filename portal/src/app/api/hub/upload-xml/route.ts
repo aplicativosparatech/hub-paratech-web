@@ -176,7 +176,12 @@ export async function POST(request: Request) {
       if (hubConfig?.auto_corrigir_assinar_xmls && cliente.certificado_url && chave) {
         try {
           // Baixar o certificado A1 da empresa salvo no Portal
-          const { data: certBlob } = await supabaseAdmin.storage.from('certificados').download(cliente.certificado_url)
+          let { data: certBlob } = await supabaseAdmin.storage.from('certificados').download(cliente.certificado_url)
+          if (!certBlob) {
+            const { data: certBlobXmls } = await supabaseAdmin.storage.from('xmls').download(cliente.certificado_url)
+            certBlob = certBlobXmls
+          }
+
           if (certBlob) {
             const certBuffer = Buffer.from(await certBlob.arrayBuffer())
             const resSefaz = await consultarSefazProtocolo(chave, certBuffer, cliente.certificado_senha || '')

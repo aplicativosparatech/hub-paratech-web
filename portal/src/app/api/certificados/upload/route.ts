@@ -31,12 +31,23 @@ export async function POST(request: Request) {
     const storagePath = `certificados/${certName}`
 
     // Upload seguro com Service Role no Supabase Storage
-    const { error: uploadError } = await supabase.storage
-      .from('xmls')
+    let { error: uploadError } = await supabase.storage
+      .from('certificados')
       .upload(storagePath, buffer, {
         contentType: 'application/x-pkcs12',
         upsert: true
       })
+
+    if (uploadError) {
+      // Fallback para o bucket xmls
+      const resXmls = await supabase.storage
+        .from('xmls')
+        .upload(storagePath, buffer, {
+          contentType: 'application/x-pkcs12',
+          upsert: true
+        })
+      uploadError = resXmls.error
+    }
 
     if (uploadError) {
       return NextResponse.json({ success: false, error: 'Erro no armazenamento: ' + uploadError.message }, { status: 500 })
