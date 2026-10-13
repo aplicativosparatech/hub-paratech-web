@@ -208,6 +208,8 @@ export default function TabelaCorrecao() {
     let sucesso = 0
     let falhas = 0
 
+    let ultimoErro = ''
+
     for (const nota of notas) {
       try {
         const res = await fetch('/api/sefaz/corrigir-nota', {
@@ -223,9 +225,13 @@ export default function TabelaCorrecao() {
           sucesso++
         } else {
           falhas++
+          if (!ultimoErro && (data.error || data.xMotivo)) {
+            ultimoErro = data.error || data.xMotivo
+          }
         }
-      } catch {
+      } catch (err: any) {
         falhas++
+        if (!ultimoErro) ultimoErro = err.message
       }
     }
 
@@ -233,7 +239,8 @@ export default function TabelaCorrecao() {
     if (sucesso > 0) {
       toast.success(`${sucesso} nota(s) corrigida(s) e autorizada(s) via SEFAZ!`, { id: toastId })
     } else {
-      toast.error(`Nenhuma nota pôde ser autorizada pela SEFAZ (${falhas} falhas). Verifique o certificado ou situação na SEFAZ.`, { id: toastId })
+      const msg = ultimoErro ? `Nenhuma nota autorizada (${falhas} falhas): ${ultimoErro}` : `Nenhuma nota pôde ser autorizada pela SEFAZ (${falhas} falhas). Verifique o certificado ou situação na SEFAZ.`
+      toast.error(msg, { id: toastId })
     }
     loadNotas()
   }
