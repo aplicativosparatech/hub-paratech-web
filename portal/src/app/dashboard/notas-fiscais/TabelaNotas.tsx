@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { useSearchParams } from 'next/navigation'
-import { RefreshCw, X, Trash2, AlertTriangle } from 'lucide-react'
+import Link from 'next/link'
+import { RefreshCw, X, Trash2, AlertTriangle, ArrowRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 function AssinaturaChip({ ok }: { ok: boolean }) {
@@ -160,13 +161,20 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
   const currentCli = clientes.find(c => c.id === selectedCliente) || (userRole === 'cliente' ? clientes[0] : null)
   const cleanCurrentCnpj = (currentCli?.cnpj || '').replace(/\D/g, '')
 
-  // Identifica quais notas são divergentes
-  const divergentesList = notas.filter(n => {
+  // Separação solicitada pelo usuário:
+  // Se a nota tiver erro/pendência (não autorizada pela SEFAZ, sem assinatura, divergente),
+  // ela NÃO é listada nas abas normais (NFC-e e NF-e), e sim exclusivamente na nova aba "Arquivos para Correção".
+  const pendentesList = notas.filter(n => {
+    if (n.is_autorizada === false) return true
+    if (!n.tem_assinatura) return true
     if (n.cnpj_divergente) return true
     const cleanChaveCnpj = n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : ''
     const emit = (n.cnpj_emitente || cleanChaveCnpj || '').replace(/\D/g, '')
     return Boolean(cleanCurrentCnpj) && Boolean(emit) && cleanCurrentCnpj !== emit
   })
+
+  // Apenas notas 100% regulares e autorizadas são exibidas nas abas oficiais
+  const notasOficiaisValidas = notas.filter(n => !pendentesList.some(p => p.id === n.id))
 
   return (
     <div className="space-y-4">
@@ -250,31 +258,32 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
           </div>
 
           <div className="text-xs text-slate-500 text-right sm:self-end">
-            <span className="font-semibold text-slate-700">{notas.length}</span> notas carregadas
+            <span className="font-semibold text-slate-700">{notasOficiaisValidas.length}</span> notas oficiais autorizadas
           </div>
         </div>
       )}
 
-      {/* Banner de Alerta para Notas Divergentes */}
-      {divergentesList.length > 0 && (
-        <div className="bg-red-50 border-2 border-red-300 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-red-900 shadow-sm">
+      {/* Banner Informativo de Redirecionamento para a Aba de Correção */}
+      {pendentesList.length > 0 && (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-950 shadow-sm">
           <div className="flex items-center gap-3">
             <span className="text-2xl">⚠️</span>
             <div>
-              <p className="font-bold text-sm">
-                Atenção: {divergentesList.length} {divergentesList.length === 1 ? 'nota fiscal divergente detectada' : 'notas fiscais divergentes detectadas'}!
+              <p className="font-bold text-sm text-amber-900">
+                {pendentesList.length} {pendentesList.length === 1 ? 'arquivo com pendência foi movido' : 'arquivos com pendências foram movidos'} para a aba de Correção!
               </p>
-              <p className="text-xs text-red-700 mt-0.5">
-                Os arquivos destacados em vermelho abaixo não pertencem ao CNPJ/CPF da empresa ({currentCli?.razao_social || 'Empresa'}).
+              <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
+                Para manter a escrituração contábil 100% segura, notas sem protocolo da SEFAZ, sem assinatura ou divergentes são listadas exclusivamente em <strong>Arquivos para Correção</strong>.
               </p>
             </div>
           </div>
-          <button
-            onClick={() => setModalDelete({ open: true, tipo: 'em_lote', idsLote: divergentesList.map(n => n.id) })}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition shadow whitespace-nowrap flex items-center justify-center gap-2"
+          <Link
+            href="/dashboard/notas-fiscais/saidas/correcao"
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition shadow whitespace-nowrap flex items-center justify-center gap-1.5 shrink-0"
           >
-            🗑️ Excluir Todas as Divergentes ({divergentesList.length})
-          </button>
+            <span>Ir para Correção ({pendentesList.length})</span>
+            <ArrowRight size={15} />
+          </Link>
         </div>
       )}
 
@@ -310,13 +319,13 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
               </tr>
             </thead>
             <tbody>
-              {notas.length === 0 ? (
+              {notasOficiaisValidas.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="p-8 text-center text-slate-400">
                     Nenhuma nota encontrada. O Hub ainda não enviou dados para esta seção.
                   </td>
                 </tr>
-              ) : notas.map(n => {
+              ) : notasOficiaisValidas.map(n => {
                 const cleanChaveCnpj = n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : ''
                 const emitenteDoc = n.cnpj_emitente || cleanChaveCnpj
                 const cleanEmit = (emitenteDoc || '').replace(/\D/g, '')

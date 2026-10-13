@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { consultarSefazProtocolo, gerarProcNFeFinal } from '@/utils/sefazXmlService'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
     // 1. Validar Cliente e configurações
     const { data: cliente } = await supabaseAdmin
       .from('clientes')
-      .select('id, cnpj, razao_social, inscricao_estadual, is_ativo, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados)')
+      .select('id, cnpj, razao_social, inscricao_estadual, is_ativo, certificado_url, certificado_senha, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls)')
       .eq('hub_token', token)
       .single()
 
@@ -157,16 +158,68 @@ export async function POST(request: Request) {
       emissao = `20${ano2}-${mes2}-01T00:00:00-03:00`
     }
 
-    const transmissao = extractTag(xmlString, 'dhRecbto')
-    const temAssinatura = xmlString.includes('<Signature')
+    let transmissao = extractTag(xmlString, 'dhRecbto')
+    let temAssinatura = xmlString.includes('<Signature')
 
     // Tags de Autorização SEFAZ (<protNFe>)
-    const cStat = extractTag(xmlString, 'cStat')
-    const xMotivo = extractTag(xmlString, 'xMotivo')
-    const nProt = extractTag(xmlString, 'nProt')
+    let cStat = extractTag(xmlString, 'cStat')
+    let xMotivo = extractTag(xmlString, 'xMotivo')
+    let nProt = extractTag(xmlString, 'nProt')
 
     // Nota considerada oficialmente autorizada pela SEFAZ
-    const isAutorizada = (cStat === '100' || xmlString.includes('Autorizado o uso da NF-e') || xmlString.includes('Autorizado o uso da NFC-e')) && temAssinatura
+    let isAutorizada = (cStat === '100' || xmlString.includes('Autorizado o uso da NF-e') || xmlString.includes('Autorizado o uso da NFC-e')) && temAssinatura
+    let statusCorrecao: string | null = null
+    let bufferFinal = buffer
+
+    // LÓGICA DE CORREÇÃO AUTOMÁTICA VIA SEFAZ + CERTIFICADO A1
+    if (tipoPasta === 'vendas' && !isAutorizada) {
+      if (hubConfig?.auto_corrigir_assinar_xmls && cliente.certificado_url && chave) {
+        try {
+          // Baixar o certificado A1 da empresa salvo no Portal
+          const { data: certBlob } = await supabaseAdmin.storage.from('certificados').download(cliente.certificado_url)
+          if (certBlob) {
+            const certBuffer = Buffer.from(await certBlob.arrayBuffer())
+            const resSefaz = await consultarSefazProtocolo(chave, certBuffer, cliente.certificado_senha || '')
+            if (resSefaz.success && resSefaz.cStat === '100') {
+              const dadosProtocolo = {
+                nProt: resSefaz.nProt || '',
+                dhRecbto: resSefaz.dhRecbto || new Date().toISOString(),
+                digVal: resSefaz.digVal,
+                verAplic: resSefaz.verAplic || 'W-1.5.0',
+                cStat: '100',
+                xMotivo: resSefaz.xMotivo || 'Autorizado o uso da NF-e'
+              }
+              const xmlCorrigido = gerarProcNFeFinal(
+                xmlString,
+                certBuffer,
+                cliente.certificado_senha || '',
+                dadosProtocolo,
+                chave
+              )
+              bufferFinal = Buffer.from(xmlCorrigido, 'utf-8')
+              temAssinatura = true
+              isAutorizada = true
+              statusCorrecao = 'corrigido_auto'
+              nProt = dadosProtocolo.nProt
+              transmissao = dadosProtocolo.dhRecbto
+              cStat = '100'
+              xMotivo = dadosProtocolo.xMotivo
+            } else {
+              statusCorrecao = 'pendente'
+            }
+          } else {
+            statusCorrecao = 'pendente'
+          }
+        } catch (e: any) {
+          console.warn('Erro ao tentar auto-correção via SEFAZ no upload:', e?.message)
+          statusCorrecao = 'pendente'
+        }
+      } else {
+        statusCorrecao = 'pendente'
+      }
+    } else if (isCnpjDivergente) {
+      statusCorrecao = 'divergente'
+    }
 
     // Se o cliente configurou para aceitar APENAS XMLs autorizados com protocolo e assinatura
     if (hubConfig?.apenas_xmls_autorizados && !isAutorizada) {
@@ -203,7 +256,7 @@ export async function POST(request: Request) {
     
     const filePath = `${cliente.id}/${tabela}/${ano}/${mes}/${dia}/${file.name}`
     
-    const { error: uploadError } = await supabaseAdmin.storage.from('xmls').upload(filePath, buffer, {
+    const { error: uploadError } = await supabaseAdmin.storage.from('xmls').upload(filePath, bufferFinal, {
       contentType: 'application/xml',
       upsert: true
     })
@@ -224,7 +277,8 @@ export async function POST(request: Request) {
       storage_path: filePath,
       cnpj_emitente: cnpjEmitente || null,
       cnpj_divergente: isCnpjDivergente,
-      motivo_divergencia: isCnpjDivergente ? motivoDivergencia : null
+      motivo_divergencia: isCnpjDivergente ? motivoDivergencia : null,
+      status_correcao: statusCorrecao
     }
 
     // Adiciona colunas extras se existirem na tabela

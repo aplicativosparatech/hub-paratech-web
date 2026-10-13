@@ -17,6 +17,7 @@ export default function ConfiguracoesPortalPage() {
   const [formData, setFormData] = useState({
     auto_excluir_divergentes: false,
     apenas_xmls_autorizados: false,
+    auto_corrigir_assinar_xmls: false,
     exibir_certificados_contabilidade: false,
     exibir_certificados_cliente: false,
     avisar_whatsapp_certificado: true,
@@ -49,7 +50,7 @@ export default function ConfiguracoesPortalPage() {
         setSelectedCliente(roleData.cliente_id)
         const { data: cli } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado)')
+          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado)')
           .eq('id', roleData.cliente_id)
           .single()
         if (cli) {
@@ -58,6 +59,7 @@ export default function ConfiguracoesPortalPage() {
           setFormData({ 
             auto_excluir_divergentes: Boolean(config?.auto_excluir_divergentes),
             apenas_xmls_autorizados: Boolean(config?.apenas_xmls_autorizados),
+            auto_corrigir_assinar_xmls: Boolean(config?.auto_corrigir_assinar_xmls),
             exibir_certificados_contabilidade: Boolean(config?.exibir_certificados_contabilidade),
             exibir_certificados_cliente: Boolean(config?.exibir_certificados_cliente),
             avisar_whatsapp_certificado: config?.avisar_whatsapp_certificado !== false,
@@ -67,7 +69,7 @@ export default function ConfiguracoesPortalPage() {
       } else if (role === 'contabilidade' && roleData?.contabilidade_id) {
         const { data: clis } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado)')
+          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado)')
           .eq('contabilidade_id', roleData.contabilidade_id)
           .order('razao_social')
         if (clis && clis.length > 0) {
@@ -78,7 +80,7 @@ export default function ConfiguracoesPortalPage() {
         // Admin
         const { data: clis } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado)')
+          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado)')
           .order('razao_social')
         if (clis && clis.length > 0) {
           setClientes(clis)
@@ -119,7 +121,7 @@ export default function ConfiguracoesPortalPage() {
     async function loadConfig() {
       const { data } = await supabase
         .from('configuracoes_hub')
-        .select('auto_excluir_divergentes, apenas_xmls_autorizados, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado')
+        .select('auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado')
         .eq('cliente_id', selectedCliente)
         .single()
 
@@ -127,6 +129,7 @@ export default function ConfiguracoesPortalPage() {
         setFormData({
           auto_excluir_divergentes: Boolean(data.auto_excluir_divergentes),
           apenas_xmls_autorizados: Boolean(data.apenas_xmls_autorizados),
+          auto_corrigir_assinar_xmls: Boolean(data.auto_corrigir_assinar_xmls),
           exibir_certificados_contabilidade: Boolean(data.exibir_certificados_contabilidade),
           exibir_certificados_cliente: Boolean(data.exibir_certificados_cliente),
           avisar_whatsapp_certificado: data.avisar_whatsapp_certificado !== false,
@@ -136,6 +139,7 @@ export default function ConfiguracoesPortalPage() {
         setFormData({ 
           auto_excluir_divergentes: false,
           apenas_xmls_autorizados: false,
+          auto_corrigir_assinar_xmls: false,
           exibir_certificados_contabilidade: false,
           exibir_certificados_cliente: false,
           avisar_whatsapp_certificado: true,
@@ -158,6 +162,7 @@ export default function ConfiguracoesPortalPage() {
       cliente_id: selectedCliente,
       auto_excluir_divergentes: formData.auto_excluir_divergentes,
       apenas_xmls_autorizados: formData.apenas_xmls_autorizados,
+      auto_corrigir_assinar_xmls: formData.auto_corrigir_assinar_xmls,
       dia_vencimento: 10,
       valor_mensalidade: 0.00,
       updated_at: new Date().toISOString()
@@ -362,6 +367,37 @@ export default function ConfiguracoesPortalPage() {
                   • <strong>Se desmarcado (Padrão):</strong> o sistema <strong>aceita e importa todos os XMLs</strong> gerados pelo PDV/ERP mesmo sem protocolo ou assinatura, registrando-os para fins de histórico e conferência interna.
                 </span>
                 <span className="inline-flex items-center gap-1.5 mt-3 text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100/70 text-blue-800">
+                  <CheckCircle2 size={14} /> Ativo para: Super Admin, Contabilidade e Empresa Cliente
+                </span>
+              </label>
+            </div>
+
+            {/* Corrigir e Assinar Automaticamente via SEFAZ */}
+            <div className="flex items-start gap-3.5 p-5 bg-indigo-50/60 rounded-2xl border border-indigo-200 hover:border-indigo-300 transition">
+              <input 
+                type="checkbox" 
+                id="auto_corrigir_assinar_xmls"
+                checked={formData.auto_corrigir_assinar_xmls}
+                onChange={e => setFormData({ ...formData, auto_corrigir_assinar_xmls: e.target.checked })}
+                className="mt-1 h-5 w-5 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+              />
+              <label htmlFor="auto_corrigir_assinar_xmls" className="cursor-pointer select-none">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-bold text-slate-900 block text-base">
+                    Corrigir e Assinar Automaticamente XMLs na Nuvem (SEFAZ + Certificado A1)
+                  </span>
+                  <span className="text-[10px] uppercase font-bold tracking-wider bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-md border border-indigo-200">
+                    Substitui AssinaXML Delphi
+                  </span>
+                </div>
+                <span className="text-slate-600 text-sm leading-relaxed block">
+                  Utiliza o Certificado Digital A1 da empresa salvo no Portal para consultar online na SEFAZ os dados de autorização (<code className="text-xs bg-slate-200 px-1 py-0.5 rounded">nProt</code>, <code className="text-xs bg-slate-200 px-1 py-0.5 rounded">dhRecbto</code>, <code className="text-xs bg-slate-200 px-1 py-0.5 rounded">digVal</code>), assinar o XML no padrão ICP-Brasil e envelopar o arquivo oficial <code className="text-xs bg-slate-200 px-1 py-0.5 rounded">&lt;nfeProc&gt;</code>.
+                </span>
+                <span className="text-slate-600 text-sm leading-relaxed block mt-2">
+                  • <strong>Se marcado:</strong> Todo XML sem assinatura ou sem protocolo é <strong>corrigido, assinado e protocolado automaticamente</strong> logo ao ser recebido pelo Hub, sem nenhum trabalho manual.<br />
+                  • <strong>Se desmarcado:</strong> Os arquivos são importados e direcionados com segurança para a aba exclusiva <strong>Arquivos para Correção</strong>, onde você pode consultar e corrigir com 1 clique ou manualmente quando desejar.
+                </span>
+                <span className="inline-flex items-center gap-1.5 mt-3 text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-800">
                   <CheckCircle2 size={14} /> Ativo para: Super Admin, Contabilidade e Empresa Cliente
                 </span>
               </label>

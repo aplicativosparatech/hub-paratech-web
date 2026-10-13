@@ -53,6 +53,13 @@ export default function NotasFiscaisLayout({
           >
             NFC-e (Mod 65)
           </Link>
+          <Link 
+            href="/dashboard/notas-fiscais/saidas/correcao"
+            className={`px-4 py-1.5 rounded-full text-sm font-medium transition flex items-center gap-1.5 ${pathname.endsWith('/saidas/correcao') ? 'bg-amber-100 text-amber-800 font-bold border border-amber-300' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+          >
+            <span className="text-amber-500">⚠️</span>
+            Arquivos para Correção
+          </Link>
         </div>
       )}
 
