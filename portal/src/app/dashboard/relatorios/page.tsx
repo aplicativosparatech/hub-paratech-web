@@ -4,10 +4,16 @@ import { useState, useEffect } from 'react'
 import { 
   BarChart3, Download, RefreshCw, AlertTriangle, CheckCircle2, 
   FileText, Hash, ShieldAlert, Sparkles, Building2, Calendar, FileArchive,
-  KeyRound, Clock, ShieldCheck
+  KeyRound, Clock, ShieldCheck, FileSpreadsheet
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
+import { 
+  exportarRelatorioIndividual, 
+  TipoRelatorio, 
+  FormatoExportacao, 
+  EmpresaDados 
+} from '@/utils/relatorioExporter'
 
 export default function RelatoriosPage() {
   const supabase = createClient()
@@ -210,6 +216,67 @@ export default function RelatoriosPage() {
       toast.error(err.message, { id: toastId })
     } finally {
       setDownloadingZip(false)
+    }
+  }
+
+  // Função Universal para Exportação Individual de Relatórios (PDF, XLS, CSV)
+  const handleExportar = (tipo: TipoRelatorio, formato: FormatoExportacao) => {
+    const currentCli = clientes.find(c => c.id === selectedCliente) || (userRole === 'cliente' ? clientes[0] : null)
+    if (!currentCli) {
+      toast.error('Selecione uma empresa para exportar o relatório.')
+      return
+    }
+    if (!auditData) {
+      toast.error('Aguarde o carregamento dos dados da auditoria.')
+      return
+    }
+
+    try {
+      const empresaDados: EmpresaDados = {
+        razao_social: currentCli.razao_social || 'Empresa',
+        nome_fantasia: currentCli.nome_fantasia,
+        cnpj: currentCli.cnpj || '',
+        regime_tributario: currentCli.regime_tributario,
+        contabilidade_nome: currentCli.contabilidade_nome
+      }
+
+      const payloadDados = {
+        ...auditData,
+        certificados: (userRole === 'cliente' 
+          ? clientes.filter(c => c.id === selectedCliente) 
+          : clientes
+        ).map(c => {
+          let dias = null
+          let status: 'sem_certificado' | 'vencido' | 'alerta' | 'valido' = 'sem_certificado'
+          let validadeFormatada = '—'
+
+          if (c.certificado_validade) {
+            const dVal = new Date(c.certificado_validade)
+            dVal.setHours(0, 0, 0, 0)
+            const hojeMid = new Date()
+            hojeMid.setHours(0, 0, 0, 0)
+            dias = Math.ceil((dVal.getTime() - hojeMid.getTime()) / (1000 * 60 * 60 * 24))
+            validadeFormatada = new Date(c.certificado_validade + 'T00:00:00').toLocaleDateString('pt-BR')
+            if (dias < 0) status = 'vencido'
+            else if (dias <= 45) status = 'alerta'
+            else status = 'valido'
+          }
+
+          return {
+            razao_social: c.razao_social,
+            cnpj: c.cnpj,
+            validadeFormatada,
+            dias,
+            status,
+            whatsapp: c.whatsapp
+          }
+        })
+      }
+
+      exportarRelatorioIndividual(tipo, formato, empresaDados, selectedMonth, payloadDados)
+      toast.success(`Download do relatório (${formato.toUpperCase()}) concluído!`)
+    } catch (err: any) {
+      toast.error('Erro ao gerar relatório: ' + err.message)
     }
   }
 
@@ -436,54 +503,170 @@ export default function RelatoriosPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
         {/* NF-e Modelo 55 */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
-          <div className="flex justify-between items-start mb-2">
-            <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md">Modelo 55</span>
-            <span className="text-xs text-slate-400 font-medium">{consolidado?.nfe?.quantidade || 0} notas</span>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden flex flex-col justify-between">
+          <div>
+            <div className="flex justify-between items-start mb-2">
+              <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md">Modelo 55</span>
+              <span className="text-xs text-slate-400 font-medium">{consolidado?.nfe?.quantidade || 0} notas</span>
+            </div>
+            <p className="text-xs font-medium text-slate-500">NF-e (Vendas / Grandes Operações)</p>
+            <p className="text-2xl font-bold text-slate-900 mt-2">
+              R$ {(consolidado?.nfe?.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </p>
           </div>
-          <p className="text-xs font-medium text-slate-500">NF-e (Vendas / Grandes Operações)</p>
-          <p className="text-2xl font-bold text-slate-900 mt-2">
-            R$ {(consolidado?.nfe?.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </p>
+
+          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Baixar:</span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => handleExportar('nfe', 'pdf')}
+                title="Baixar Relatório NF-e em PDF"
+                className="px-2 py-1 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 rounded-md transition flex items-center gap-1 shadow-2xs"
+              >
+                <FileText size={12} className="text-rose-600" /> PDF
+              </button>
+              <button
+                onClick={() => handleExportar('nfe', 'xls')}
+                title="Baixar Relatório NF-e em Excel (XLSX)"
+                className="px-2 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 rounded-md transition flex items-center gap-1 shadow-2xs"
+              >
+                <FileSpreadsheet size={12} className="text-emerald-600" /> XLS
+              </button>
+              <button
+                onClick={() => handleExportar('nfe', 'csv')}
+                title="Baixar Relatório NF-e em CSV"
+                className="px-2 py-1 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-md transition flex items-center gap-1 shadow-2xs"
+              >
+                <Download size={12} className="text-slate-500" /> CSV
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* NFC-e Modelo 65 */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
-          <div className="flex justify-between items-start mb-2">
-            <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-md">Modelo 65</span>
-            <span className="text-xs text-slate-400 font-medium">{consolidado?.nfce?.quantidade || 0} notas</span>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden flex flex-col justify-between">
+          <div>
+            <div className="flex justify-between items-start mb-2">
+              <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-md">Modelo 65</span>
+              <span className="text-xs text-slate-400 font-medium">{consolidado?.nfce?.quantidade || 0} notas</span>
+            </div>
+            <p className="text-xs font-medium text-slate-500">NFC-e (Consumidor / Cupom PDV)</p>
+            <p className="text-2xl font-bold text-slate-900 mt-2">
+              R$ {(consolidado?.nfce?.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </p>
           </div>
-          <p className="text-xs font-medium text-slate-500">NFC-e (Consumidor / Cupom PDV)</p>
-          <p className="text-2xl font-bold text-slate-900 mt-2">
-            R$ {(consolidado?.nfce?.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </p>
+
+          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Baixar:</span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => handleExportar('nfce', 'pdf')}
+                title="Baixar Relatório NFC-e em PDF"
+                className="px-2 py-1 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 rounded-md transition flex items-center gap-1 shadow-2xs"
+              >
+                <FileText size={12} className="text-rose-600" /> PDF
+              </button>
+              <button
+                onClick={() => handleExportar('nfce', 'xls')}
+                title="Baixar Relatório NFC-e em Excel (XLSX)"
+                className="px-2 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 rounded-md transition flex items-center gap-1 shadow-2xs"
+              >
+                <FileSpreadsheet size={12} className="text-emerald-600" /> XLS
+              </button>
+              <button
+                onClick={() => handleExportar('nfce', 'csv')}
+                title="Baixar Relatório NFC-e em CSV"
+                className="px-2 py-1 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-md transition flex items-center gap-1 shadow-2xs"
+              >
+                <Download size={12} className="text-slate-500" /> CSV
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Faturamento Geral Consolidado */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
-          <div className="flex justify-between items-start mb-2">
-            <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">Soma Total</span>
-            <span className="text-xs text-slate-400 font-medium">{consolidado?.geral?.quantidade_total || 0} notas</span>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden flex flex-col justify-between">
+          <div>
+            <div className="flex justify-between items-start mb-2">
+              <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">Soma Total</span>
+              <span className="text-xs text-slate-400 font-medium">{consolidado?.geral?.quantidade_total || 0} notas</span>
+            </div>
+            <p className="text-xs font-medium text-slate-500">Faturamento Bruto Consolidado</p>
+            <p className="text-2xl font-bold text-emerald-600 mt-2">
+              R$ {(consolidado?.geral?.total_faturado || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </p>
           </div>
-          <p className="text-xs font-medium text-slate-500">Faturamento Bruto Consolidado</p>
-          <p className="text-2xl font-bold text-emerald-600 mt-2">
-            R$ {(consolidado?.geral?.total_faturado || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </p>
+
+          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Baixar:</span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => handleExportar('consolidado', 'pdf')}
+                title="Baixar Relatório Consolidado em PDF"
+                className="px-2 py-1 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 rounded-md transition flex items-center gap-1 shadow-2xs"
+              >
+                <FileText size={12} className="text-rose-600" /> PDF
+              </button>
+              <button
+                onClick={() => handleExportar('consolidado', 'xls')}
+                title="Baixar Relatório Consolidado em Excel (XLSX)"
+                className="px-2 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 rounded-md transition flex items-center gap-1 shadow-2xs"
+              >
+                <FileSpreadsheet size={12} className="text-emerald-600" /> XLS
+              </button>
+              <button
+                onClick={() => handleExportar('consolidado', 'csv')}
+                title="Baixar Relatório Consolidado em CSV"
+                className="px-2 py-1 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-md transition flex items-center gap-1 shadow-2xs"
+              >
+                <Download size={12} className="text-slate-500" /> CSV
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Produtos Monofásicos */}
-        <div className="bg-gradient-to-br from-amber-50 to-orange-50/40 p-6 rounded-2xl border border-amber-200 shadow-sm relative overflow-hidden">
-          <div className="flex justify-between items-start mb-2">
-            <span className="text-xs font-bold text-amber-700 bg-amber-100 px-2.5 py-1 rounded-md flex items-center gap-1">
-              <Sparkles size={12} /> Monofásicos
-            </span>
-            <span className="text-xs text-amber-800 font-semibold">Economia DAS</span>
+        <div className="bg-gradient-to-br from-amber-50 to-orange-50/40 p-5 rounded-2xl border border-amber-200 shadow-sm relative overflow-hidden flex flex-col justify-between">
+          <div>
+            <div className="flex justify-between items-start mb-2">
+              <span className="text-xs font-bold text-amber-700 bg-amber-100 px-2.5 py-1 rounded-md flex items-center gap-1">
+                <Sparkles size={12} /> Monofásicos
+              </span>
+              <span className="text-xs text-amber-800 font-semibold">Economia DAS</span>
+            </div>
+            <p className="text-xs font-medium text-amber-800">Total Monofásico a Segregar</p>
+            <p className="text-2xl font-bold text-amber-700 mt-2">
+              R$ {(consolidado?.geral?.total_monofasico || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </p>
+            <p className="text-[11px] text-amber-600 mt-1">Dedução no PGDAS (Simples Nacional)</p>
           </div>
-          <p className="text-xs font-medium text-amber-800">Total Monofásico a Segregar</p>
-          <p className="text-2xl font-bold text-amber-700 mt-2">
-            R$ {(consolidado?.geral?.total_monofasico || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </p>
-          <p className="text-[11px] text-amber-600 mt-1">Dedução no PGDAS (Simples Nacional)</p>
+
+          <div className="mt-4 pt-3 border-t border-amber-200/70 flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider">Baixar:</span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => handleExportar('monofasicos', 'pdf')}
+                title="Baixar Demonstrativo de Monofásicos em PDF"
+                className="px-2 py-1 text-xs font-semibold text-rose-700 bg-white/90 hover:bg-white border border-rose-200 rounded-md transition flex items-center gap-1 shadow-2xs"
+              >
+                <FileText size={12} className="text-rose-600" /> PDF
+              </button>
+              <button
+                onClick={() => handleExportar('monofasicos', 'xls')}
+                title="Baixar Demonstrativo de Monofásicos em Excel (XLSX)"
+                className="px-2 py-1 text-xs font-semibold text-emerald-800 bg-white/90 hover:bg-white border border-emerald-200 rounded-md transition flex items-center gap-1 shadow-2xs"
+              >
+                <FileSpreadsheet size={12} className="text-emerald-600" /> XLS
+              </button>
+              <button
+                onClick={() => handleExportar('monofasicos', 'csv')}
+                title="Baixar Demonstrativo de Monofásicos em CSV"
+                className="px-2 py-1 text-xs font-semibold text-slate-700 bg-white/90 hover:bg-white border border-amber-200 rounded-md transition flex items-center gap-1 shadow-2xs"
+              >
+                <Download size={12} className="text-slate-500" /> CSV
+              </button>
+            </div>
+          </div>
         </div>
 
       </div>
@@ -553,9 +736,33 @@ export default function RelatoriosPage() {
         {/* ABA 1: FATURAMENTO VALIDADO */}
         {activeTab === 'faturamento' && (
           <div className="space-y-6">
-            <div>
-              <h3 className="text-xl font-bold text-slate-900 mb-1">Faturamento Consolidado do Período</h3>
-              <p className="text-sm text-slate-500">Notas com assinatura digital e protocolo SEFAZ autorizado (cStat 100).</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900 mb-1">Faturamento Consolidado do Período</h3>
+                <p className="text-sm text-slate-500">Notas com assinatura digital e protocolo SEFAZ autorizado (cStat 100).</p>
+              </div>
+
+              <div className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
+                <span className="text-xs font-semibold text-slate-500 px-2">Baixar Relatório:</span>
+                <button
+                  onClick={() => handleExportar('consolidado', 'pdf')}
+                  className="px-2.5 py-1.5 text-xs font-semibold text-rose-700 bg-white hover:bg-rose-50 border border-rose-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                >
+                  <FileText size={13} className="text-rose-600" /> PDF
+                </button>
+                <button
+                  onClick={() => handleExportar('consolidado', 'xls')}
+                  className="px-2.5 py-1.5 text-xs font-semibold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                >
+                  <FileSpreadsheet size={13} className="text-emerald-600" /> XLS
+                </button>
+                <button
+                  onClick={() => handleExportar('consolidado', 'csv')}
+                  className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                >
+                  <Download size={13} className="text-slate-500" /> CSV
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -604,14 +811,38 @@ export default function RelatoriosPage() {
         {/* ABA 2: AUDITOR DE MONOFÁSICOS */}
         {activeTab === 'monofasicos' && (
           <div className="space-y-6">
-            <div>
-              <h3 className="text-xl font-bold text-slate-900 mb-1 flex items-center gap-2">
-                <Sparkles className="text-amber-600" size={24} />
-                Auditor de Produtos Monofásicos (PIS & COFINS)
-              </h3>
-              <p className="text-sm text-slate-500">
-                Análise automática de itens por cruzamento de <strong>NCM Oficial da Receita x CST de PIS/COFINS</strong>.
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900 mb-1 flex items-center gap-2">
+                  <Sparkles className="text-amber-600" size={24} />
+                  Auditor de Produtos Monofásicos (PIS & COFINS)
+                </h3>
+                <p className="text-sm text-slate-500">
+                  Análise automática de itens por cruzamento de <strong>NCM Oficial da Receita x CST de PIS/COFINS</strong>.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-1.5 bg-amber-50/60 p-1.5 rounded-xl border border-amber-200">
+                <span className="text-xs font-semibold text-amber-800 px-2">Baixar Monofásicos:</span>
+                <button
+                  onClick={() => handleExportar('monofasicos', 'pdf')}
+                  className="px-2.5 py-1.5 text-xs font-semibold text-rose-700 bg-white hover:bg-rose-50 border border-rose-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                >
+                  <FileText size={13} className="text-rose-600" /> PDF
+                </button>
+                <button
+                  onClick={() => handleExportar('monofasicos', 'xls')}
+                  className="px-2.5 py-1.5 text-xs font-semibold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                >
+                  <FileSpreadsheet size={13} className="text-emerald-600" /> XLS
+                </button>
+                <button
+                  onClick={() => handleExportar('monofasicos', 'csv')}
+                  className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                >
+                  <Download size={13} className="text-slate-500" /> CSV
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -657,14 +888,38 @@ export default function RelatoriosPage() {
         {/* ABA 3: QUEBRA DE SEQUÊNCIA */}
         {activeTab === 'quebra' && (
           <div className="space-y-6">
-            <div>
-              <h3 className="text-xl font-bold text-slate-900 mb-1 flex items-center gap-2">
-                <Hash className="text-red-600" size={24} />
-                Relatório de Quebra de Sequência de Numeração
-              </h3>
-              <p className="text-sm text-slate-500">
-                Identificação automática de números de notas que foram pulados ou faltam na sequência cronológica da SEFAZ.
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900 mb-1 flex items-center gap-2">
+                  <Hash className="text-red-600" size={24} />
+                  Relatório de Quebra de Sequência de Numeração
+                </h3>
+                <p className="text-sm text-slate-500">
+                  Identificação automática de números de notas que foram pulados ou faltam na sequência cronológica da SEFAZ.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-1.5 bg-red-50/50 p-1.5 rounded-xl border border-red-200">
+                <span className="text-xs font-semibold text-red-800 px-2">Baixar Quebras:</span>
+                <button
+                  onClick={() => handleExportar('quebra', 'pdf')}
+                  className="px-2.5 py-1.5 text-xs font-semibold text-rose-700 bg-white hover:bg-rose-50 border border-rose-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                >
+                  <FileText size={13} className="text-rose-600" /> PDF
+                </button>
+                <button
+                  onClick={() => handleExportar('quebra', 'xls')}
+                  className="px-2.5 py-1.5 text-xs font-semibold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                >
+                  <FileSpreadsheet size={13} className="text-emerald-600" /> XLS
+                </button>
+                <button
+                  onClick={() => handleExportar('quebra', 'csv')}
+                  className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                >
+                  <Download size={13} className="text-slate-500" /> CSV
+                </button>
+              </div>
             </div>
 
             {quebras.length === 0 ? (
@@ -715,14 +970,38 @@ export default function RelatoriosPage() {
         {/* ABA 4: NÃO ASSINADAS / SEM PROTOCOLO */}
         {activeTab === 'nao_assinadas' && (
           <div className="space-y-6">
-            <div>
-              <h3 className="text-xl font-bold text-slate-900 mb-1 flex items-center gap-2">
-                <ShieldAlert className="text-orange-600" size={24} />
-                Notas Não Assinadas ou Sem Protocolo SEFAZ
-              </h3>
-              <p className="text-sm text-slate-500">
-                Arquivos XML locais que não contêm a assinatura digital válida ou autorização de uso (cStat != 100).
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900 mb-1 flex items-center gap-2">
+                  <ShieldAlert className="text-orange-600" size={24} />
+                  Notas Não Assinadas ou Sem Protocolo SEFAZ
+                </h3>
+                <p className="text-sm text-slate-500">
+                  Arquivos XML locais que não contêm a assinatura digital válida ou autorização de uso (cStat != 100).
+                </p>
+              </div>
+
+              <div className="flex items-center gap-1.5 bg-orange-50/50 p-1.5 rounded-xl border border-orange-200">
+                <span className="text-xs font-semibold text-orange-800 px-2">Baixar Pendentes:</span>
+                <button
+                  onClick={() => handleExportar('nao_assinadas', 'pdf')}
+                  className="px-2.5 py-1.5 text-xs font-semibold text-rose-700 bg-white hover:bg-rose-50 border border-rose-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                >
+                  <FileText size={13} className="text-rose-600" /> PDF
+                </button>
+                <button
+                  onClick={() => handleExportar('nao_assinadas', 'xls')}
+                  className="px-2.5 py-1.5 text-xs font-semibold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                >
+                  <FileSpreadsheet size={13} className="text-emerald-600" /> XLS
+                </button>
+                <button
+                  onClick={() => handleExportar('nao_assinadas', 'csv')}
+                  className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                >
+                  <Download size={13} className="text-slate-500" /> CSV
+                </button>
+              </div>
             </div>
 
             {(!naoAssinadas?.total || naoAssinadas.total === 0) ? (
@@ -826,6 +1105,28 @@ export default function RelatoriosPage() {
                 <p className="text-sm text-slate-500 mt-0.5">
                   Monitoramento proativo de validade dos certificados para evitar paralisação da emissão de notas fiscais.
                 </p>
+              </div>
+
+              <div className="flex items-center gap-1.5 bg-amber-50/50 p-1.5 rounded-xl border border-amber-200">
+                <span className="text-xs font-semibold text-amber-800 px-2">Baixar Certificados:</span>
+                <button
+                  onClick={() => handleExportar('certificados', 'pdf')}
+                  className="px-2.5 py-1.5 text-xs font-semibold text-rose-700 bg-white hover:bg-rose-50 border border-rose-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                >
+                  <FileText size={13} className="text-rose-600" /> PDF
+                </button>
+                <button
+                  onClick={() => handleExportar('certificados', 'xls')}
+                  className="px-2.5 py-1.5 text-xs font-semibold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                >
+                  <FileSpreadsheet size={13} className="text-emerald-600" /> XLS
+                </button>
+                <button
+                  onClick={() => handleExportar('certificados', 'csv')}
+                  className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                >
+                  <Download size={13} className="text-slate-500" /> CSV
+                </button>
               </div>
             </div>
 

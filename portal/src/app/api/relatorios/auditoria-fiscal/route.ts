@@ -130,6 +130,32 @@ export async function GET(request: Request) {
         total: nfeInutilizadas.length + nfceInutilizadas.length,
         nfe: nfeInutilizadas,
         nfce: nfceInutilizadas
+      },
+      notas_detalhadas: {
+        nfe: nfeValidas.map(n => ({
+          id: n.id,
+          numero: n.numero,
+          serie: n.serie || '1',
+          chave: n.chave,
+          data_emissao: n.data_emissao,
+          valor: Number(n.valor) || 0,
+          valor_monofasico: Number(n.valor_monofasico) || 0,
+          protocolo: n.protocolo,
+          cstat: n.cstat || '100',
+          is_autorizada: n.is_autorizada
+        })),
+        nfce: nfceValidas.map(n => ({
+          id: n.id,
+          numero: n.numero,
+          serie: n.serie || '1',
+          chave: n.chave,
+          data_emissao: n.data_emissao,
+          valor: Number(n.valor) || 0,
+          valor_monofasico: Number(n.valor_monofasico) || 0,
+          protocolo: n.protocolo,
+          cstat: n.cstat || '100',
+          is_autorizada: n.is_autorizada
+        }))
       }
     })
 
