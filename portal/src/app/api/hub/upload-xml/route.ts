@@ -184,18 +184,24 @@ export async function POST(request: Request) {
       }, { status: 200 })
     }
 
-    const chave = extractChave(xmlString, file.name)
-    let mod = extractTag(xmlString, 'mod')
+    const formasPagamentoJsonHub = formData.get('formas_pagamento_json') as string
+    const modeloHub = formData.get('modelo') as string
+    const chaveHub = formData.get('chave') as string
+    const numeroHub = formData.get('numero') as string
+    const serieHub = formData.get('serie') as string
+
+    const chave = (chaveHub && chaveHub.length === 44) ? chaveHub : extractChave(xmlString, file.name)
+    let mod = (modeloHub === '55' || modeloHub === '65') ? modeloHub : extractTag(xmlString, 'mod')
     if (!mod && chave && chave.length === 44) {
       mod = chave.substring(20, 22)
     }
 
-    let serie = extractTag(xmlString, 'serie')
+    let serie = serieHub || extractTag(xmlString, 'serie')
     if (!serie && chave && chave.length === 44) {
       serie = String(parseInt(chave.substring(22, 25), 10) || 1)
     }
 
-    let numero = extractTag(xmlString, 'nNF')
+    let numero = numeroHub || extractTag(xmlString, 'nNF')
     if (!numero && chave && chave.length === 44) {
       numero = String(parseInt(chave.substring(25, 34), 10) || 0)
     }
@@ -341,9 +347,19 @@ export async function POST(request: Request) {
     if (cStat) dbPayload.cstat = cStat
     if (xMotivo) dbPayload.motivo_sefaz = xMotivo
     if (nProt) dbPayload.protocolo = nProt
-    dbPayload.is_autorizada = isAutorizada
-    dbPayload.valor_monofasico = valorMonofasico
-    dbPayload.formas_pagamento = extrairFormasPagamento(xmlString, dbPayload.valor)
+    let formasPagamentoFinal: any[] = []
+    if (formasPagamentoJsonHub) {
+      try {
+        const parsed = JSON.parse(formasPagamentoJsonHub)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          formasPagamentoFinal = parsed
+        }
+      } catch {}
+    }
+    if (formasPagamentoFinal.length === 0) {
+      formasPagamentoFinal = extrairFormasPagamento(xmlString, dbPayload.valor)
+    }
+    dbPayload.formas_pagamento = formasPagamentoFinal
 
     const { error: dbError } = await supabaseAdmin.from(tabela).upsert(dbPayload, { onConflict: 'chave' })
 

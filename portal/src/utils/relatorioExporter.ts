@@ -14,6 +14,7 @@ export type TipoRelatorio =
   | 'nfe' 
   | 'nfce' 
   | 'consolidado' 
+  | 'pagamentos'
   | 'monofasicos' 
   | 'monofasicos_produtos_analitico'
   | 'monofasicos_produtos_agrupado'
@@ -108,6 +109,21 @@ export function exportarCSV(
     linhas.push(`FATURAMENTO BRUTO TOTAL;R$ ${formatMoney(c?.geral?.total_faturado || 0)};${c?.geral?.quantidade_total || 0} notas`)
     linhas.push(`(-) DEDUCAO PRODUTOS MONOFASICOS;R$ ${formatMoney(c?.geral?.total_monofasico || 0)}`)
     linhas.push(`(=) BASE TRIBUTAVEL RESTANTE (PGDAS);R$ ${formatMoney(c?.geral?.total_tributavel_restante || 0)}`)
+
+    if (dados.formas_pagamento && dados.formas_pagamento.length > 0) {
+      linhas.push('')
+      linhas.push('MODALIDADES DE PAGAMENTO RECEBIDAS')
+      linhas.push('FORMA DE PAGAMENTO;VALOR TOTAL (R$);QUANTIDADE;% DO TOTAL')
+      dados.formas_pagamento.forEach((fp: any) => {
+        linhas.push([
+          fp.nome,
+          Number(fp.total || 0).toFixed(2).replace('.', ','),
+          fp.quantidade,
+          Number(fp.percentual || 0).toFixed(1).replace('.', ',') + '%'
+        ].join(';'))
+      })
+    }
+
     linhas.push('')
     linhas.push('MODELO;NUMERO;SERIE;CHAVE DE ACESSO;DATA EMISSAO;VALOR TOTAL (R$);MONOFASICO (R$);PROTOCOLO')
 
@@ -127,6 +143,57 @@ export function exportarCSV(
         Number(n.valor_monofasico || 0).toFixed(2).replace('.', ','),
         n.protocolo || '—'
       ].join(';'))
+    })
+
+  } else if (tipo === 'pagamentos') {
+    linhas.push('TITULO;DEMONSTRATIVO DE MODALIDADES DE PAGAMENTO')
+    linhas.push(`FATURAMENTO TOTAL;R$ ${formatMoney(dados.consolidado?.geral?.total_faturado || 0)}`)
+    linhas.push(`QUANTIDADE TOTAL DE NOTAS;${dados.consolidado?.geral?.quantidade_total || 0}`)
+    linhas.push('')
+    linhas.push('RESUMO CONSOLIDADO POR FORMA DE PAGAMENTO')
+    linhas.push('MODALIDADE;VALOR TOTAL (R$);QTD NOTAS/CUPONS;% PARTICIPACAO')
+    const fps = dados.formas_pagamento || []
+    fps.forEach((fp: any) => {
+      linhas.push([
+        fp.nome,
+        Number(fp.total || 0).toFixed(2).replace('.', ','),
+        fp.quantidade,
+        Number(fp.percentual || 0).toFixed(1).replace('.', ',') + '%'
+      ].join(';'))
+    })
+    linhas.push('')
+    linhas.push('DETALHAMENTO ANALITICO DAS NOTAS COM MODALIDADES DE PAGAMENTO')
+    linhas.push('MODELO;NUMERO;SERIE;CHAVE;DATA;VALOR NOTA (R$);FORMA DE PAGAMENTO;VALOR PARCELA (R$)')
+    const todos = [
+      ...(dados.notas_detalhadas?.nfe || []).map((n: any) => ({ ...n, modelo: 'NF-e (55)' })),
+      ...(dados.notas_detalhadas?.nfce || []).map((n: any) => ({ ...n, modelo: 'NFC-e (65)' }))
+    ]
+    todos.forEach((n: any) => {
+      if (Array.isArray(n.formas_pagamento) && n.formas_pagamento.length > 0) {
+        n.formas_pagamento.forEach((fp: any) => {
+          linhas.push([
+            n.modelo,
+            n.numero || '—',
+            n.serie || '1',
+            n.chave || '—',
+            formatDate(n.data_emissao),
+            Number(n.valor || 0).toFixed(2).replace('.', ','),
+            fp.nome || 'Outros',
+            Number(fp.valor || 0).toFixed(2).replace('.', ',')
+          ].join(';'))
+        })
+      } else {
+        linhas.push([
+          n.modelo,
+          n.numero || '—',
+          n.serie || '1',
+          n.chave || '—',
+          formatDate(n.data_emissao),
+          Number(n.valor || 0).toFixed(2).replace('.', ','),
+          'Outros',
+          Number(n.valor || 0).toFixed(2).replace('.', ',')
+        ].join(';'))
+      }
     })
 
   } else if (tipo === 'monofasicos') {
@@ -328,6 +395,16 @@ export function exportarExcel(
     rows.push(['Faturamento Bruto Total', c?.geral?.quantidade_total || 0, c?.geral?.total_faturado || 0])
     rows.push(['(-) Produtos Monofásicos a Segregar', '', -(c?.geral?.total_monofasico || 0)])
     rows.push(['(=) Base Tributável Restante (PGDAS)', '', c?.geral?.total_tributavel_restante || 0])
+
+    if (dados.formas_pagamento && dados.formas_pagamento.length > 0) {
+      rows.push([])
+      rows.push(['MODALIDADES DE PAGAMENTO RECEBIDAS'])
+      rows.push(['Forma de Pagamento', 'Total Recebido (R$)', 'Qtd. Notas/Cupons', '% do Faturamento'])
+      dados.formas_pagamento.forEach((fp: any) => {
+        rows.push([fp.nome, Number(fp.total || 0), fp.quantidade, `${fp.percentual || 0}%`])
+      })
+    }
+
     rows.push([])
     rows.push(['Modelo', 'Número', 'Série', 'Chave de Acesso', 'Data Emissão', 'Valor (R$)', 'Monofásico (R$)', 'Protocolo'])
 
@@ -347,6 +424,53 @@ export function exportarExcel(
         Number(n.valor_monofasico || 0),
         n.protocolo || ''
       ])
+    })
+
+  } else if (tipo === 'pagamentos') {
+    sheetName = 'Modalidades Pagamento'
+    rows.push(['DEMONSTRATIVO DE MODALIDADES DE PAGAMENTO'])
+    rows.push(['Faturamento Total (R$)', dados.consolidado?.geral?.total_faturado || 0])
+    rows.push(['Quantidade Total de Notas', dados.consolidado?.geral?.quantidade_total || 0])
+    rows.push([])
+    rows.push(['RESUMO POR FORMA DE PAGAMENTO'])
+    rows.push(['Modalidade de Pagamento', 'Valor Total (R$)', 'Qtd. Notas/Cupons', '% Participação'])
+    const fps = dados.formas_pagamento || []
+    fps.forEach((fp: any) => {
+      rows.push([fp.nome, Number(fp.total || 0), fp.quantidade, `${fp.percentual || 0}%`])
+    })
+    rows.push([])
+    rows.push(['DETALHAMENTO ANALÍTICO POR NOTA FISCAL'])
+    rows.push(['Modelo', 'Número', 'Série', 'Chave de Acesso', 'Data Emissão', 'Valor Total Nota (R$)', 'Forma de Pagamento', 'Valor Parcela (R$)'])
+    const todos = [
+      ...(dados.notas_detalhadas?.nfe || []).map((n: any) => ({ ...n, modelo: 'NF-e (55)' })),
+      ...(dados.notas_detalhadas?.nfce || []).map((n: any) => ({ ...n, modelo: 'NFC-e (65)' }))
+    ]
+    todos.forEach((n: any) => {
+      if (Array.isArray(n.formas_pagamento) && n.formas_pagamento.length > 0) {
+        n.formas_pagamento.forEach((fp: any) => {
+          rows.push([
+            n.modelo,
+            n.numero || '',
+            n.serie || '1',
+            n.chave || '',
+            formatDate(n.data_emissao),
+            Number(n.valor || 0),
+            fp.nome || 'Outros',
+            Number(fp.valor || 0)
+          ])
+        })
+      } else {
+        rows.push([
+          n.modelo,
+          n.numero || '',
+          n.serie || '1',
+          n.chave || '',
+          formatDate(n.data_emissao),
+          Number(n.valor || 0),
+          'Outros',
+          Number(n.valor || 0)
+        ])
+      }
     })
 
   } else if (tipo === 'monofasicos') {
@@ -636,7 +760,32 @@ export function exportarPDF(
       footStyles: { fillColor: [241, 245, 249], fontStyle: 'bold' }
     })
 
-    const finalY = (doc as any).lastAutoTable.finalY + 8
+    let currentPdfY = (doc as any).lastAutoTable.finalY + 6
+
+    // Tabela de Modalidades de Pagamento no Consolidado (se houver)
+    if (dados.formas_pagamento && dados.formas_pagamento.length > 0) {
+      const fps = dados.formas_pagamento
+      autoTable(doc, {
+        startY: currentPdfY,
+        head: [['Modalidade de Pagamento', 'Total Recebido (R$)', 'Qtd. Notas/Cupons', '% do Faturamento']],
+        body: fps.map((fp: any) => [
+          fp.nome,
+          `R$ ${formatMoney(fp.total || 0)}`,
+          `${fp.quantidade}`,
+          `${fp.percentual || 0}%`
+        ]),
+        theme: 'striped',
+        headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+        bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59] },
+        columnStyles: {
+          0: { fontStyle: 'bold' },
+          1: { halign: 'right', fontStyle: 'bold' },
+          2: { halign: 'center' },
+          3: { halign: 'right' }
+        }
+      })
+      currentPdfY = (doc as any).lastAutoTable.finalY + 8
+    }
 
     // Relação Analítica de Notas
     const todos = [
@@ -656,7 +805,7 @@ export function exportarPDF(
     ])
 
     autoTable(doc, {
-      startY: finalY,
+      startY: currentPdfY,
       head: [['Mod', 'Número', 'Série', 'Chave de Acesso', 'Emissão', 'Valor Total', 'Monofásico', 'Protocolo']],
       body: tableBody,
       theme: 'striped',
@@ -671,6 +820,116 @@ export function exportarPDF(
         5: { cellWidth: 28, halign: 'right', fontStyle: 'bold' },
         6: { cellWidth: 28, halign: 'right' },
         7: { cellWidth: 35 }
+      },
+      didDrawPage: (data: any) => {
+        const str = `Página ${data.pageNumber} de ${doc.getNumberOfPages()}`
+        doc.setFontSize(8)
+        doc.setTextColor(148, 163, 184)
+        doc.text(str, pageWidth - 30, pageHeight - 8)
+      }
+    })
+
+  } else if (tipo === 'pagamentos') {
+    const fps = dados.formas_pagamento || []
+    const totalGeral = dados.consolidado?.geral?.total_faturado || 0
+    const qtdNotas = dados.consolidado?.geral?.quantidade_total || 0
+
+    doc.setFillColor(240, 253, 250) // teal-50
+    doc.setDrawColor(153, 246, 228) // teal-200
+    doc.roundedRect(14, startY, 80, 16, 2, 2, 'FD')
+    doc.roundedRect(100, startY, 80, 16, 2, 2, 'FD')
+    doc.roundedRect(186, startY, 90, 16, 2, 2, 'FD')
+
+    doc.setFontSize(8)
+    doc.setTextColor(15, 118, 110)
+    doc.text('Faturamento Total', 18, startY + 5)
+    doc.text('Quantidade de Notas', 104, startY + 5)
+    doc.text('Modalidade Principal', 190, startY + 5)
+
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(19, 78, 74)
+    doc.text(`R$ ${formatMoney(totalGeral)}`, 18, startY + 12)
+    doc.text(`${qtdNotas} notas/cupons`, 104, startY + 12)
+    const principal = fps[0] ? `${fps[0].nome} (${fps[0].percentual || 0}%)` : '—'
+    doc.text(principal, 190, startY + 12)
+
+    startY += 22
+
+    // Tabela Consolidada de Modalidades de Pagamento
+    autoTable(doc, {
+      startY,
+      head: [['Modalidade de Pagamento', 'Total Recebido (R$)', 'Qtd. Cupons/Notas', '% Participação']],
+      body: fps.map((fp: any) => [
+        fp.nome,
+        `R$ ${formatMoney(fp.total || 0)}`,
+        `${fp.quantidade}`,
+        `${fp.percentual || 0}%`
+      ]),
+      theme: 'grid',
+      headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+      bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
+      columnStyles: {
+        0: { fontStyle: 'bold' },
+        1: { halign: 'right', fontStyle: 'bold' },
+        2: { halign: 'center' },
+        3: { halign: 'right' }
+      }
+    })
+
+    const finalYPag = (doc as any).lastAutoTable.finalY + 8
+
+    // Tabela Analítica das Notas com suas respectivas Formas de Pagamento
+    const todos = [
+      ...(dados.notas_detalhadas?.nfe || []).map((n: any) => ({ ...n, modelo: '55' })),
+      ...(dados.notas_detalhadas?.nfce || []).map((n: any) => ({ ...n, modelo: '65' }))
+    ]
+
+    const tableBodyPag: any[] = []
+    todos.forEach((n: any) => {
+      if (Array.isArray(n.formas_pagamento) && n.formas_pagamento.length > 0) {
+        n.formas_pagamento.forEach((fp: any) => {
+          tableBodyPag.push([
+            `Mod ${n.modelo}`,
+            n.numero || '—',
+            n.serie || '1',
+            n.chave || '—',
+            formatDate(n.data_emissao),
+            `R$ ${formatMoney(n.valor || 0)}`,
+            fp.nome || 'Outros',
+            `R$ ${formatMoney(fp.valor || 0)}`
+          ])
+        })
+      } else {
+        tableBodyPag.push([
+          `Mod ${n.modelo}`,
+          n.numero || '—',
+          n.serie || '1',
+          n.chave || '—',
+          formatDate(n.data_emissao),
+          `R$ ${formatMoney(n.valor || 0)}`,
+          'Outros',
+          `R$ ${formatMoney(n.valor || 0)}`
+        ])
+      }
+    })
+
+    autoTable(doc, {
+      startY: finalYPag,
+      head: [['Mod', 'Número', 'Série', 'Chave de Acesso', 'Emissão', 'Valor Total', 'Forma Pagamento', 'Valor Parcela']],
+      body: tableBodyPag,
+      theme: 'striped',
+      headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5 },
+      bodyStyles: { fontSize: 7, textColor: [30, 41, 59] },
+      columnStyles: {
+        0: { cellWidth: 16 },
+        1: { cellWidth: 18, fontStyle: 'bold' },
+        2: { cellWidth: 12 },
+        3: { cellWidth: 85, font: 'courier' },
+        4: { cellWidth: 20 },
+        5: { cellWidth: 25, halign: 'right' },
+        6: { cellWidth: 40, fontStyle: 'bold' },
+        7: { cellWidth: 25, halign: 'right', fontStyle: 'bold' }
       },
       didDrawPage: (data: any) => {
         const str = `Página ${data.pageNumber} de ${doc.getNumberOfPages()}`

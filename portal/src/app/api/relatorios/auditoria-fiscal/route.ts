@@ -52,6 +52,37 @@ export async function GET(request: Request) {
     const monofasicosNfce = nfceValidas.reduce((acc, n) => acc + (Number(n.valor_monofasico) || 0), 0)
     const somaMonofasicos = monofasicosNfe + monofasicosNfce
 
+    // Consolidação de Formas de Pagamento (PIX, Dinheiro, Cartões, etc.)
+    const formasMap: Record<string, { total: number; qtd: number }> = {}
+    const todasValidas = [...nfeValidas, ...nfceValidas]
+
+    for (const nota of todasValidas) {
+      const vNota = Number(nota.valor || 0)
+      if (Array.isArray(nota.formas_pagamento) && nota.formas_pagamento.length > 0) {
+        for (const fp of nota.formas_pagamento) {
+          const nome = fp.nome || 'Outros'
+          const v = Number(fp.valor || 0)
+          if (!formasMap[nome]) formasMap[nome] = { total: 0, qtd: 0 }
+          formasMap[nome].total += v
+          formasMap[nome].qtd += 1
+        }
+      } else {
+        const nome = 'Outros'
+        if (!formasMap[nome]) formasMap[nome] = { total: 0, qtd: 0 }
+        formasMap[nome].total += vNota
+        formasMap[nome].qtd += 1
+      }
+    }
+
+    const formasPagamentoConsolidadas = Object.entries(formasMap)
+      .map(([nome, dados]) => ({
+        nome,
+        total: Math.round(dados.total * 100) / 100,
+        quantidade: dados.qtd,
+        percentual: somaGeral > 0 ? Math.round((dados.total / somaGeral) * 1000) / 10 : 0
+      }))
+      .sort((a, b) => b.total - a.total)
+
     // 5. Relatório de Quebra de Sequência de Numeração
     function detectarQuebras(notas: any[], modelo: string) {
       const quebras: any[] = []
@@ -120,6 +151,7 @@ export async function GET(request: Request) {
           total_tributavel_restante: Math.round((somaGeral - somaMonofasicos) * 100) / 100
         }
       },
+      formas_pagamento: formasPagamentoConsolidadas,
       quebras_sequencia: quebrasSequencia,
       nao_assinadas: {
         total: nfeNaoAssinadas.length + nfceNaoAssinadas.length,
@@ -142,7 +174,8 @@ export async function GET(request: Request) {
           valor_monofasico: Number(n.valor_monofasico) || 0,
           protocolo: n.protocolo,
           cstat: n.cstat || '100',
-          is_autorizada: n.is_autorizada
+          is_autorizada: n.is_autorizada,
+          formas_pagamento: n.formas_pagamento || []
         })),
         nfce: nfceValidas.map(n => ({
           id: n.id,
@@ -154,7 +187,8 @@ export async function GET(request: Request) {
           valor_monofasico: Number(n.valor_monofasico) || 0,
           protocolo: n.protocolo,
           cstat: n.cstat || '100',
-          is_autorizada: n.is_autorizada
+          is_autorizada: n.is_autorizada,
+          formas_pagamento: n.formas_pagamento || []
         }))
       }
     })
