@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { 
   BarChart3, Download, RefreshCw, AlertTriangle, CheckCircle2, 
   FileText, Hash, ShieldAlert, Sparkles, Building2, Calendar, FileArchive,
-  KeyRound, Clock, ShieldCheck, FileSpreadsheet
+  KeyRound, Clock, ShieldCheck, FileSpreadsheet, Filter, Layers, Search, Receipt, ShoppingBag
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
@@ -44,6 +44,14 @@ export default function RelatoriosPage() {
   // Papel do usuário logado ('admin' | 'contabilidade' | 'cliente')
   const [userRole, setUserRole] = useState<'admin' | 'contabilidade' | 'cliente'>('admin')
   const [clientSearchTerm, setClientSearchTerm] = useState('')
+
+  // Estados Específicos do Auditor de Produtos Monofásicos
+  const [produtosMonofasicos, setProdutosMonofasicos] = useState<any[]>([])
+  const [filtrosNcmDisponiveis, setFiltrosNcmDisponiveis] = useState<any[]>([])
+  const [loadingProdutosMonofasicos, setLoadingProdutosMonofasicos] = useState(false)
+  const [filtroNcmSelecionado, setFiltroNcmSelecionado] = useState<string>('todos')
+  const [modoAgrupamentoMonofasico, setModoAgrupamentoMonofasico] = useState<'cupom' | 'agrupado'>('cupom')
+  const [buscaMonofasico, setBuscaMonofasico] = useState<string>('')
 
   // Carrega clientes disponíveis para o usuário
   useEffect(() => {
@@ -177,6 +185,119 @@ export default function RelatoriosPage() {
     } finally {
       setLoadingAudit(false)
     }
+  }
+
+  // Carrega lista detalhada de produtos monofásicos extraídos dos XMLs
+  const loadProdutosMonofasicos = async () => {
+    if (!selectedCliente) return
+    setLoadingProdutosMonofasicos(true)
+    try {
+      const res = await fetch(`/api/relatorios/produtos-monofasicos?cliente_id=${selectedCliente}&mes=${selectedMonth}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erro ao carregar produtos monofásicos')
+      setProdutosMonofasicos(data.produtos || [])
+      setFiltrosNcmDisponiveis(data.filtros_disponiveis || [])
+    } catch (err: any) {
+      console.warn('Erro ao carregar produtos monofásicos:', err)
+    } finally {
+      setLoadingProdutosMonofasicos(false)
+    }
+  }
+
+  // Dispara carregamento de produtos monofásicos quando a aba correspondente for selecionada ou competência mudar
+  useEffect(() => {
+    if (selectedCliente && activeTab === 'monofasicos') {
+      loadProdutosMonofasicos()
+    }
+  }, [selectedCliente, selectedMonth, activeTab])
+
+  // Produtos Monofásicos Filtrados pelo NCM e Termo de Busca
+  const produtosMonofasicosFiltrados = useMemo(() => {
+    return produtosMonofasicos.filter(item => {
+      const matchNcm = filtroNcmSelecionado === 'todos' || item.ncm === filtroNcmSelecionado
+      const matchBusca = !buscaMonofasico || 
+        item.xProd?.toLowerCase().includes(buscaMonofasico.toLowerCase()) ||
+        item.cProd?.toLowerCase().includes(buscaMonofasico.toLowerCase()) ||
+        item.cupom_numero?.toLowerCase().includes(buscaMonofasico.toLowerCase()) ||
+        item.descricao_ncm?.toLowerCase().includes(buscaMonofasico.toLowerCase())
+      return matchNcm && matchBusca
+    })
+  }, [produtosMonofasicos, filtroNcmSelecionado, buscaMonofasico])
+
+  // Produtos Agrupados por Produto e NCM (Sintético)
+  const produtosMonofasicosAgrupados = useMemo(() => {
+    const map = new Map<string, any>()
+    const totalGeral = produtosMonofasicosFiltrados.reduce((a, b) => a + (b.vProd || 0), 0)
+
+    for (const item of produtosMonofasicosFiltrados) {
+      const key = `${item.ncm}_${item.xProd}`
+      if (!map.has(key)) {
+        map.set(key, {
+          ncm: item.ncm,
+          ncm_formatado: item.ncm_formatado,
+          categoria: item.categoria,
+          descricao_ncm: item.descricao_ncm,
+          cProd: item.cProd,
+          xProd: item.xProd,
+          uCom: item.uCom,
+          qtd_total: 0,
+          valor_total: 0,
+          cupons: new Set<string>()
+        })
+      }
+      const reg = map.get(key)!
+      reg.qtd_total += Number(item.qCom || 0)
+      reg.valor_total += Number(item.vProd || 0)
+      reg.cupons.add(item.chave || item.cupom_numero)
+    }
+
+    return Array.from(map.values()).map(r => ({
+      ...r,
+      qtd_cupons: r.cupons.size,
+      preco_medio: r.qtd_total > 0 ? (r.valor_total / r.qtd_total) : 0,
+      percentual: totalGeral > 0 ? ((r.valor_total / totalGeral) * 100) : 0
+    })).sort((a, b) => b.valor_total - a.valor_total)
+  }, [produtosMonofasicosFiltrados])
+
+  // Função Específica para Exportação de Monofásicos com os Filtros e Agrupamentos Ativos
+  const handleExportarMonofasicosPersonalizado = (formato: FormatoExportacao) => {
+    const currentCli = clientes.find(c => c.id === selectedCliente) || (userRole === 'cliente' ? clientes[0] : null)
+    if (!currentCli) {
+      toast.error('Selecione uma empresa.')
+      return
+    }
+
+    const filtroObj = filtrosNcmDisponiveis.find(f => f.ncm === filtroNcmSelecionado)
+    const filtroRotulo = filtroNcmSelecionado === 'todos' 
+      ? 'Todos os Produtos Monofásicos' 
+      : (filtroObj?.label || `NCM ${filtroNcmSelecionado}`)
+
+    const empresaDados: EmpresaDados = {
+      razao_social: currentCli.razao_social || 'Empresa',
+      nome_fantasia: currentCli.nome_fantasia,
+      cnpj: currentCli.cnpj || '',
+      regime_tributario: currentCli.regime_tributario,
+      contabilidade_nome: currentCli.contabilidade_nome
+    }
+
+    if (modoAgrupamentoMonofasico === 'cupom') {
+      const payload = {
+        produtos: produtosMonofasicosFiltrados,
+        filtro_rotulo: filtroRotulo,
+        total_valor: produtosMonofasicosFiltrados.reduce((a, b) => a + (b.vProd || 0), 0),
+        cupons_distintos: new Set(produtosMonofasicosFiltrados.map(i => i.chave || i.cupom_numero)).size
+      }
+      exportarRelatorioIndividual('monofasicos_produtos_analitico', formato, empresaDados, selectedMonth, payload)
+    } else {
+      const payload = {
+        produtos_agrupados: produtosMonofasicosAgrupados,
+        filtro_rotulo: filtroRotulo,
+        total_valor: produtosMonofasicosAgrupados.reduce((a, b) => a + (b.valor_total || 0), 0)
+      }
+      exportarRelatorioIndividual('monofasicos_produtos_agrupado', formato, empresaDados, selectedMonth, payload)
+    }
+
+    toast.success(`Download do relatório monofásico (${formato.toUpperCase()}) concluído!`)
   }
 
   // Atalhos para Mês Anterior / Mês Atual
@@ -818,33 +939,48 @@ export default function RelatoriosPage() {
                   Auditor de Produtos Monofásicos (PIS & COFINS)
                 </h3>
                 <p className="text-sm text-slate-500">
-                  Análise automática de itens por cruzamento de <strong>NCM Oficial da Receita x CST de PIS/COFINS</strong>.
+                  Análise detalhada de itens nos XMLs por cruzamento de <strong>NCM Oficial x CST 04/06</strong> com destaque por cupom ou produto.
                 </p>
               </div>
 
-              <div className="flex items-center gap-1.5 bg-amber-50/60 p-1.5 rounded-xl border border-amber-200">
-                <span className="text-xs font-semibold text-amber-800 px-2">Baixar Monofásicos:</span>
+              <div className="flex flex-wrap items-center gap-2">
                 <button
-                  onClick={() => handleExportar('monofasicos', 'pdf')}
-                  className="px-2.5 py-1.5 text-xs font-semibold text-rose-700 bg-white hover:bg-rose-50 border border-rose-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                  onClick={loadProdutosMonofasicos}
+                  disabled={loadingProdutosMonofasicos}
+                  title="Atualizar lista de produtos dos XMLs"
+                  className="p-2 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition disabled:opacity-50"
                 >
-                  <FileText size={13} className="text-rose-600" /> PDF
+                  <RefreshCw size={16} className={loadingProdutosMonofasicos ? 'animate-spin' : ''} />
                 </button>
-                <button
-                  onClick={() => handleExportar('monofasicos', 'xls')}
-                  className="px-2.5 py-1.5 text-xs font-semibold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
-                >
-                  <FileSpreadsheet size={13} className="text-emerald-600" /> XLS
-                </button>
-                <button
-                  onClick={() => handleExportar('monofasicos', 'csv')}
-                  className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
-                >
-                  <Download size={13} className="text-slate-500" /> CSV
-                </button>
+
+                <div className="flex items-center gap-1.5 bg-amber-50/70 p-1.5 rounded-xl border border-amber-200">
+                  <span className="text-xs font-semibold text-amber-800 px-2">Baixar Relatório:</span>
+                  <button
+                    onClick={() => handleExportarMonofasicosPersonalizado('pdf')}
+                    title="Baixar Relatório Monofásico em PDF (com os filtros ativos)"
+                    className="px-2.5 py-1.5 text-xs font-semibold text-rose-700 bg-white hover:bg-rose-50 border border-rose-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                  >
+                    <FileText size={13} className="text-rose-600" /> PDF
+                  </button>
+                  <button
+                    onClick={() => handleExportarMonofasicosPersonalizado('xls')}
+                    title="Baixar Relatório Monofásico em Excel (com os filtros ativos)"
+                    className="px-2.5 py-1.5 text-xs font-semibold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                  >
+                    <FileSpreadsheet size={13} className="text-emerald-600" /> XLS
+                  </button>
+                  <button
+                    onClick={() => handleExportarMonofasicosPersonalizado('csv')}
+                    title="Baixar Relatório Monofásico em CSV (com os filtros ativos)"
+                    className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                  >
+                    <Download size={13} className="text-slate-500" /> CSV
+                  </button>
+                </div>
               </div>
             </div>
 
+            {/* Vias de Auditoria */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               
               {/* Via 1: Dinheiro a Recuperar */}
@@ -854,7 +990,7 @@ export default function RelatoriosPage() {
                   Via 1: Segregação Correta (Dedução no DAS)
                 </div>
                 <p className="text-xs text-emerald-700 leading-relaxed mb-4">
-                  Produtos monofásicos (Bebidas, Autopeças, Remédios, Cosméticos) que possuem alíquota zero de PIS/COFINS na revenda e geram redução direta no boleto do Simples Nacional.
+                  Produtos monofásicos (Bebidas frias, Autopeças, Medicamentos, Cosméticos) possuem alíquota zero de PIS/COFINS na revenda e geram abatimento legal no DAS do Simples Nacional.
                 </p>
                 <div className="p-4 bg-white rounded-xl border border-emerald-200 text-center">
                   <span className="text-xs text-slate-500 block uppercase font-bold tracking-wider">Valor Total a Segregar</span>
@@ -868,18 +1004,306 @@ export default function RelatoriosPage() {
               <div className="p-6 rounded-2xl bg-amber-50/60 border border-amber-200">
                 <div className="flex items-center gap-2 text-amber-800 font-bold mb-3">
                   <AlertTriangle size={20} className="text-amber-600" />
-                  Via 2: Alerta de Inconsistência Cadastral
+                  Via 2: Auditoria Cadastral dos XMLs
                 </div>
                 <p className="text-xs text-amber-700 leading-relaxed mb-4">
-                  O motor do Hub verifica se algum produto com NCM comum foi cadastrado erroneamente com CST 04 (falso monofásico) ou se produtos monofásicos foram tributados integralmente no ERP.
+                  O motor do Hub audita se produtos tributados integralmente possuem NCM monofásico ou se cadastros no PDV/ERP precisam de revisão fiscal para evitar pagamento indevido de impostos.
                 </p>
                 <div className="p-4 bg-white rounded-xl border border-amber-200 text-center">
-                  <span className="text-xs text-slate-500 block uppercase font-bold tracking-wider">Status da Base Cadastral</span>
+                  <span className="text-xs text-slate-500 block uppercase font-bold tracking-wider">Itens Monofásicos nos XMLs</span>
                   <span className="text-sm font-bold text-amber-800 block mt-2">
-                    ✅ Itens auditados conforme tabela NCM Receita Federal
+                    {loadingProdutosMonofasicos ? 'Auditando arquivos...' : `${produtosMonofasicos.length} item(ns) identificados no período`}
                   </span>
                 </div>
               </div>
+
+            </div>
+
+            {/* SEÇÃO PRINCIPAL: EXPLORADOR E AUDITOR DE PRODUTOS MONOFÁSICOS */}
+            <div className="mt-8 pt-6 border-t border-slate-200 space-y-6">
+              
+              {/* Barra de Filtros e Controles */}
+              <div className="bg-slate-50/80 p-5 rounded-2xl border border-slate-200 space-y-4">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  
+                  {/* Filtro Dinâmico por NCM / Tipo de Produto */}
+                  <div className="flex-1 min-w-[280px]">
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                      <Filter size={14} className="text-amber-600" />
+                      Filtrar por Produto / NCM (Detectados nos XMLs):
+                    </label>
+                    <select
+                      value={filtroNcmSelecionado}
+                      onChange={e => setFiltroNcmSelecionado(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    >
+                      <option value="todos">
+                        Todos os Produtos Monofásicos ({produtosMonofasicos.length} itens — R$ {produtosMonofasicos.reduce((a, b) => a + (b.vProd || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+                      </option>
+                      {filtrosNcmDisponiveis.map(f => (
+                        <option key={f.ncm} value={f.ncm}>
+                          [{f.ncm_formatado}] {f.descricao} ({f.categoria}) — {f.total_itens} item(ns) | R$ {f.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} {f.produtos_exemplo.length > 0 ? `(Ex: ${f.produtos_exemplo.slice(0, 2).join(', ')})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Alternador de Modo de Agrupamento */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                      <Layers size={14} className="text-blue-600" />
+                      Visualização & Agrupamento:
+                    </label>
+                    <div className="inline-flex p-1 bg-white border border-slate-200 rounded-xl shadow-2xs">
+                      <button
+                        onClick={() => setModoAgrupamentoMonofasico('cupom')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                          modoAgrupamentoMonofasico === 'cupom'
+                            ? 'bg-blue-600 text-white shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                        }`}
+                      >
+                        <Receipt size={14} />
+                        Por Cupom / Item a Item
+                      </button>
+                      <button
+                        onClick={() => setModoAgrupamentoMonofasico('agrupado')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                          modoAgrupamentoMonofasico === 'agrupado'
+                            ? 'bg-amber-600 text-white shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                        }`}
+                      >
+                        <ShoppingBag size={14} />
+                        Agrupado por Produto / NCM
+                      </button>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Linha 2: Busca rápida por texto */}
+                <div className="relative">
+                  <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Buscar produto por nome (ex: cerveja, coca, red bull), código ou número de cupom..."
+                    value={buscaMonofasico}
+                    onChange={e => setBuscaMonofasico(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                  {buscaMonofasico && (
+                    <button
+                      onClick={() => setBuscaMonofasico('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 font-bold"
+                    >
+                      Limpar
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Indicadores Rápidos do Filtro */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-amber-50/80 border border-amber-200/80 p-3.5 rounded-xl">
+                  <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider block">Total Monofásico Filtrado</span>
+                  <span className="text-xl font-bold text-amber-700 mt-0.5 block">
+                    R$ {produtosMonofasicosFiltrados.reduce((a, b) => a + (b.vProd || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+
+                <div className="bg-blue-50/80 border border-blue-200/80 p-3.5 rounded-xl">
+                  <span className="text-[11px] font-bold text-blue-800 uppercase tracking-wider block">Itens / Vendas</span>
+                  <span className="text-xl font-bold text-blue-700 mt-0.5 block">
+                    {modoAgrupamentoMonofasico === 'cupom' 
+                      ? `${produtosMonofasicosFiltrados.length} item(ns)` 
+                      : `${produtosMonofasicosAgrupados.length} produto(s)`
+                    }
+                  </span>
+                </div>
+
+                <div className="bg-indigo-50/80 border border-indigo-200/80 p-3.5 rounded-xl">
+                  <span className="text-[11px] font-bold text-indigo-800 uppercase tracking-wider block">Cupons / Notas</span>
+                  <span className="text-xl font-bold text-indigo-700 mt-0.5 block">
+                    {new Set(produtosMonofasicosFiltrados.map(i => i.chave || i.cupom_numero)).size} cupom(ns)
+                  </span>
+                </div>
+
+                <div className="bg-emerald-50/80 border border-emerald-200/80 p-3.5 rounded-xl">
+                  <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block">Modo Atual</span>
+                  <span className="text-xs font-bold text-emerald-700 mt-1 block">
+                    {modoAgrupamentoMonofasico === 'cupom' ? '📄 Analítico por Cupom' : '📊 Agrupado por NCM'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Tabela de Produtos Monofásicos */}
+              {loadingProdutosMonofasicos ? (
+                <div className="p-12 text-center bg-slate-50 rounded-2xl border border-slate-200">
+                  <RefreshCw size={32} className="text-amber-600 animate-spin mx-auto mb-3" />
+                  <h4 className="font-bold text-slate-800 text-base">Lendo Produtos Monofásicos nos XMLs...</h4>
+                  <p className="text-xs text-slate-500 mt-1">Extraindo itens com CST 04/06 e NCM oficial das notas fiscais do período.</p>
+                </div>
+              ) : produtosMonofasicosFiltrados.length === 0 ? (
+                <div className="p-12 text-center bg-slate-50 rounded-2xl border border-slate-200">
+                  <Sparkles size={36} className="text-slate-400 mx-auto mb-3" />
+                  <h4 className="font-bold text-slate-800 text-base">Nenhum Produto Monofásico Encontrado</h4>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {buscaMonofasico 
+                      ? 'Nenhum resultado corresponde ao termo pesquisado. Tente limpar a busca.' 
+                      : 'Não foram localizados produtos com CST 04/06 ou NCM monofásico para o filtro selecionado nesta competência.'
+                    }
+                  </p>
+                </div>
+              ) : modoAgrupamentoMonofasico === 'cupom' ? (
+                
+                /* TABELA MODO 1: ANALÍTICO POR CUPOM */
+                <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100/80 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
+                        <th className="p-3.5">Cupom / Nota Fiscal</th>
+                        <th className="p-3.5">Produto</th>
+                        <th className="p-3.5">NCM & Classificação</th>
+                        <th className="p-3.5">CFOP & CST</th>
+                        <th className="p-3.5 text-right">Qtd</th>
+                        <th className="p-3.5 text-right">Vlr Unit</th>
+                        <th className="p-3.5 text-right">Total Monofásico</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-sm bg-white">
+                      {produtosMonofasicosFiltrados.map((item: any) => (
+                        <tr key={item.id} className="hover:bg-amber-50/30 transition">
+                          <td className="p-3.5 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-extrabold rounded-md">
+                                {item.modelo === '65' ? 'NFC-e' : 'NF-e'} Nº {item.cupom_numero}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-400 mt-1">
+                              {item.data_emissao ? new Date(item.data_emissao).toLocaleDateString('pt-BR') : '—'} {item.hora_emissao ? `às ${item.hora_emissao}` : ''}
+                            </div>
+                          </td>
+
+                          <td className="p-3.5">
+                            <span className="font-bold text-slate-900 block">{item.xProd}</span>
+                            <span className="text-[11px] text-slate-400 font-mono">Cód: {item.cProd}</span>
+                          </td>
+
+                          <td className="p-3.5 whitespace-nowrap">
+                            <span className="font-mono text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200/60 px-2 py-0.5 rounded-md">
+                              {item.ncm_formatado}
+                            </span>
+                            <span className="text-xs text-slate-600 block mt-1 font-medium truncate max-w-[220px]" title={item.descricao_ncm}>
+                              {item.descricao_ncm} ({item.categoria})
+                            </span>
+                          </td>
+
+                          <td className="p-3.5 whitespace-nowrap">
+                            <span className="text-xs text-slate-600 font-mono font-medium block">CFOP: {item.cfop}</span>
+                            <span className="text-[11px] text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded font-bold">
+                              CST: {item.cst} (Alíq. Zero)
+                            </span>
+                          </td>
+
+                          <td className="p-3.5 text-right whitespace-nowrap">
+                            <span className="font-semibold text-slate-800">
+                              {Number(item.qCom || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </span>
+                            <span className="text-xs text-slate-400 ml-1">{item.uCom}</span>
+                          </td>
+
+                          <td className="p-3.5 text-right whitespace-nowrap text-slate-600 text-xs">
+                            R$ {Number(item.vUnCom || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+
+                          <td className="p-3.5 text-right whitespace-nowrap">
+                            <span className="font-bold text-amber-700 text-base">
+                              R$ {Number(item.vProd || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+              ) : (
+
+                /* TABELA MODO 2: AGRUPADO POR PRODUTO / NCM */
+                <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100/80 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
+                        <th className="p-3.5">NCM & Classificação</th>
+                        <th className="p-3.5">Produto</th>
+                        <th className="p-3.5 text-center">Cupons</th>
+                        <th className="p-3.5 text-right">Qtd Total</th>
+                        <th className="p-3.5 text-right">Preço Médio</th>
+                        <th className="p-3.5 text-right">Total Monofásico</th>
+                        <th className="p-3.5 text-right">% do Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-sm bg-white">
+                      {produtosMonofasicosAgrupados.map((item: any, idx: number) => (
+                        <tr key={idx} className="hover:bg-amber-50/30 transition">
+                          <td className="p-3.5 whitespace-nowrap">
+                            <span className="font-mono text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200/60 px-2 py-0.5 rounded-md">
+                              {item.ncm_formatado}
+                            </span>
+                            <span className="text-xs text-slate-600 block mt-1 font-medium">
+                              {item.descricao_ncm} ({item.categoria})
+                            </span>
+                          </td>
+
+                          <td className="p-3.5">
+                            <span className="font-bold text-slate-900 block">{item.xProd}</span>
+                            <span className="text-[11px] text-slate-400 font-mono">Cód: {item.cProd}</span>
+                          </td>
+
+                          <td className="p-3.5 text-center whitespace-nowrap">
+                            <span className="px-2.5 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg border border-blue-200/50">
+                              {item.qtd_cupons} cupom(ns)
+                            </span>
+                          </td>
+
+                          <td className="p-3.5 text-right whitespace-nowrap">
+                            <span className="font-bold text-slate-800">
+                              {Number(item.qtd_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </span>
+                            <span className="text-xs text-slate-400 ml-1">{item.uCom}</span>
+                          </td>
+
+                          <td className="p-3.5 text-right whitespace-nowrap text-slate-600 text-xs">
+                            R$ {Number(item.preco_medio || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+
+                          <td className="p-3.5 text-right whitespace-nowrap">
+                            <span className="font-bold text-amber-700 text-base">
+                              R$ {Number(item.valor_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </span>
+                          </td>
+
+                          <td className="p-3.5 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-2">
+                              <span className="text-xs font-bold text-slate-700">
+                                {Number(item.percentual || 0).toFixed(1)}%
+                              </span>
+                              <div className="w-12 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                <div 
+                                  className="bg-amber-500 h-1.5 rounded-full" 
+                                  style={{ width: `${Math.min(100, Math.max(2, item.percentual || 0))}%` }}
+                                />
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+              )}
 
             </div>
           </div>

@@ -61,3 +61,28 @@ export function isNcmMonofasico(ncm: string): { isMonofasico: boolean; regra?: N
 
   return { isMonofasico: false }
 }
+
+export function formatarNcm(ncm?: string): string {
+  if (!ncm) return '—'
+  const clean = ncm.replace(/\D/g, '')
+  if (clean.length === 8) {
+    return `${clean.substring(0, 4)}.${clean.substring(4, 6)}.${clean.substring(6, 8)}`
+  }
+  return ncm
+}
+
+export function identificarDescricaoNcm(ncm: string): { categoria: string; descricao: string } {
+  const clean = (ncm || '').replace(/\D/g, '')
+  if (clean.startsWith('2203')) return { categoria: 'Bebidas', descricao: 'Cervejas de malte' }
+  if (clean.startsWith('220210')) return { categoria: 'Bebidas', descricao: 'Refrigerantes' }
+  if (clean.startsWith('220299') || clean.startsWith('220290')) return { categoria: 'Bebidas', descricao: 'Energéticos e outras bebidas' }
+  if (clean.startsWith('2202')) return { categoria: 'Bebidas', descricao: 'Refrigerantes e outras bebidas' }
+  if (clean.startsWith('2201')) return { categoria: 'Bebidas', descricao: 'Águas minerais' }
+  
+  const res = isNcmMonofasico(ncm)
+  if (res.isMonofasico && res.regra) {
+    return { categoria: res.regra.categoria, descricao: res.regra.descricao }
+  }
+  return { categoria: 'Outros Monofásicos', descricao: 'Produto Monofásico (CST 04/06)' }
+}
+

@@ -15,6 +15,8 @@ export type TipoRelatorio =
   | 'nfce' 
   | 'consolidado' 
   | 'monofasicos' 
+  | 'monofasicos_produtos_analitico'
+  | 'monofasicos_produtos_agrupado'
   | 'quebra' 
   | 'nao_assinadas' 
   | 'inutilizadas'
@@ -150,6 +152,63 @@ export function exportarCSV(
         formatDate(n.data_emissao),
         Number(n.valor || 0).toFixed(2).replace('.', ','),
         Number(n.valor_monofasico || 0).toFixed(2).replace('.', ',')
+      ].join(';'))
+    })
+
+  } else if (tipo === 'monofasicos_produtos_analitico') {
+    const lista = dados.produtos || []
+    linhas.push('TITULO;RELATORIO ANALITICO DE PRODUTOS MONOFASICOS (POR CUPOM/NOTA)')
+    linhas.push(`FILTRO APLICADO;${dados.filtro_rotulo || 'Todos os Produtos'}`)
+    linhas.push(`TOTAL DE ITENS MONOFASICOS;${lista.length}`)
+    linhas.push(`VALOR TOTAL MONOFASICO;R$ ${formatMoney(dados.total_valor || lista.reduce((a: number, b: any) => a + (b.vProd || 0), 0))}`)
+    linhas.push('')
+    linhas.push('CUPOM / NOTA;MODELO;SERIE;DATA;HORA;COD PROD;DESCRICAO DO PRODUTO;NCM;CATEGORIA;DESCRICAO NCM;CFOP;QTD;UN;VALOR UNIT (R$);VALOR TOTAL (R$);CST;CHAVE DE ACESSO;PROTOCOLO')
+
+    lista.forEach((item: any) => {
+      linhas.push([
+        `Nº ${item.cupom_numero || '—'}`,
+        item.modelo_nome || 'NFC-e',
+        item.serie || '1',
+        formatDate(item.data_emissao),
+        item.hora_emissao || '—',
+        item.cProd || '—',
+        item.xProd || '—',
+        item.ncm_formatado || item.ncm || '—',
+        item.categoria || '—',
+        item.descricao_ncm || '—',
+        item.cfop || '5405',
+        Number(item.qCom || 0).toFixed(2).replace('.', ','),
+        item.uCom || 'UN',
+        Number(item.vUnCom || 0).toFixed(2).replace('.', ','),
+        Number(item.vProd || 0).toFixed(2).replace('.', ','),
+        item.cst || '04',
+        item.chave || '—',
+        item.protocolo || '—'
+      ].join(';'))
+    })
+
+  } else if (tipo === 'monofasicos_produtos_agrupado') {
+    const lista = dados.produtos_agrupados || []
+    linhas.push('TITULO;RELATORIO AGRUPADO / SINTETICO DE PRODUTOS MONOFASICOS')
+    linhas.push(`FILTRO APLICADO;${dados.filtro_rotulo || 'Todos os Produtos'}`)
+    linhas.push(`TOTAL DE PRODUTOS DISTINTOS;${lista.length}`)
+    linhas.push(`VALOR TOTAL MONOFASICO;R$ ${formatMoney(dados.total_valor || lista.reduce((a: number, b: any) => a + (b.valor_total || 0), 0))}`)
+    linhas.push('')
+    linhas.push('NCM;CATEGORIA;DESCRICAO NCM;COD PROD;DESCRICAO DO PRODUTO;QTD CUPONS;QTD TOTAL VENDIDA;UN;PRECO MEDIO (R$);VALOR TOTAL (R$);% DO TOTAL')
+
+    lista.forEach((item: any) => {
+      linhas.push([
+        item.ncm_formatado || item.ncm || '—',
+        item.categoria || '—',
+        item.descricao_ncm || '—',
+        item.cProd || '—',
+        item.xProd || '—',
+        item.qtd_cupons || 1,
+        Number(item.qtd_total || 0).toFixed(2).replace('.', ','),
+        item.uCom || 'UN',
+        Number(item.preco_medio || 0).toFixed(2).replace('.', ','),
+        Number(item.valor_total || 0).toFixed(2).replace('.', ','),
+        Number(item.percentual || 0).toFixed(2).replace('.', ',') + '%'
       ].join(';'))
     })
 
@@ -314,6 +373,65 @@ export function exportarExcel(
         formatDate(n.data_emissao),
         Number(n.valor || 0),
         Number(n.valor_monofasico || 0)
+      ])
+    })
+
+  } else if (tipo === 'monofasicos_produtos_analitico') {
+    sheetName = 'Itens Monofásicos'
+    const lista = dados.produtos || []
+    rows.push(['RELATÓRIO ANALÍTICO DE PRODUTOS MONOFÁSICOS POR CUPOM/NOTA'])
+    rows.push([`Filtro Aplicado: ${dados.filtro_rotulo || 'Todos os Produtos'}`])
+    rows.push(['Total de Itens Monofásicos', lista.length])
+    rows.push(['Valor Total Monofásico (R$)', Number(dados.total_valor || lista.reduce((a: number, b: any) => a + (b.vProd || 0), 0))])
+    rows.push([])
+    rows.push(['Cupom / Nota', 'Modelo', 'Série', 'Data', 'Hora', 'Cód. Prod', 'Descrição do Produto', 'NCM', 'Categoria', 'Descrição NCM', 'CFOP', 'Qtd', 'Un', 'Valor Unit (R$)', 'Valor Total (R$)', 'CST', 'Chave de Acesso', 'Protocolo SEFAZ'])
+
+    lista.forEach((item: any) => {
+      rows.push([
+        `Nº ${item.cupom_numero || '—'}`,
+        item.modelo_nome || 'NFC-e',
+        item.serie || '1',
+        formatDate(item.data_emissao),
+        item.hora_emissao || '',
+        item.cProd || '',
+        item.xProd || '',
+        item.ncm_formatado || item.ncm || '',
+        item.categoria || '',
+        item.descricao_ncm || '',
+        item.cfop || '5405',
+        Number(item.qCom || 0),
+        item.uCom || 'UN',
+        Number(item.vUnCom || 0),
+        Number(item.vProd || 0),
+        item.cst || '04',
+        item.chave || '',
+        item.protocolo || ''
+      ])
+    })
+
+  } else if (tipo === 'monofasicos_produtos_agrupado') {
+    sheetName = 'Monofásicos Agrupados'
+    const lista = dados.produtos_agrupados || []
+    rows.push(['RELATÓRIO AGRUPADO / SINTÉTICO DE PRODUTOS MONOFÁSICOS'])
+    rows.push([`Filtro Aplicado: ${dados.filtro_rotulo || 'Todos os Produtos'}`])
+    rows.push(['Total de Produtos Distintos', lista.length])
+    rows.push(['Valor Total Monofásico (R$)', Number(dados.total_valor || lista.reduce((a: number, b: any) => a + (b.valor_total || 0), 0))])
+    rows.push([])
+    rows.push(['NCM', 'Categoria', 'Descrição NCM', 'Cód. Prod', 'Descrição do Produto', 'Qtd Cupons', 'Qtd Total Vendida', 'Un', 'Preço Médio (R$)', 'Valor Total (R$)', '% do Total'])
+
+    lista.forEach((item: any) => {
+      rows.push([
+        item.ncm_formatado || item.ncm || '',
+        item.categoria || '',
+        item.descricao_ncm || '',
+        item.cProd || '',
+        item.xProd || '',
+        item.qtd_cupons || 1,
+        Number(item.qtd_total || 0),
+        item.uCom || 'UN',
+        Number(item.preco_medio || 0),
+        Number(item.valor_total || 0),
+        `${Number(item.percentual || 0).toFixed(2)}%`
       ])
     })
 
@@ -610,6 +728,138 @@ export function exportarPDF(
         4: { cellWidth: 22 },
         5: { cellWidth: 32, halign: 'right' },
         6: { cellWidth: 35, halign: 'right', fontStyle: 'bold', textColor: [180, 83, 9] }
+      },
+      didDrawPage: (data: any) => {
+        const str = `Página ${data.pageNumber} de ${doc.getNumberOfPages()}`
+        doc.setFontSize(8)
+        doc.setTextColor(148, 163, 184)
+        doc.text(str, pageWidth - 30, pageHeight - 8)
+      }
+    })
+
+  } else if (tipo === 'monofasicos_produtos_analitico') {
+    const lista = dados.produtos || []
+    const totalValor = dados.total_valor || lista.reduce((a: number, b: any) => a + (b.vProd || 0), 0)
+
+    // Caixa de Resumo
+    autoTable(doc, {
+      startY,
+      head: [['Relatório Analítico de Itens Monofásicos', 'Filtro Aplicado', 'Qtd. Itens', 'Total Monofásico (R$)']],
+      body: [
+        [
+          'Discriminação detalhada de produtos por cupom/nota',
+          dados.filtro_rotulo || 'Todos os Produtos',
+          `${lista.length} item(ns)`,
+          `R$ ${formatMoney(totalValor)}`
+        ]
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: [180, 83, 9], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+      bodyStyles: { fontSize: 8 }
+    })
+
+    const finalY = (doc as any).lastAutoTable.finalY + 6
+
+    const tableBody = lista.map((item: any) => [
+      `Nº ${item.cupom_numero || '—'}`,
+      item.modelo === '65' ? 'NFC-e' : 'NF-e',
+      formatDate(item.data_emissao),
+      item.cProd || '—',
+      item.xProd || '—',
+      item.ncm_formatado || item.ncm || '—',
+      item.descricao_ncm || item.categoria || '—',
+      Number(item.qCom || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
+      item.uCom || 'UN',
+      `R$ ${formatMoney(item.vUnCom || 0)}`,
+      `R$ ${formatMoney(item.vProd || 0)}`,
+      item.cst || '04'
+    ])
+
+    autoTable(doc, {
+      startY: finalY,
+      head: [['Cupom/Nota', 'Mod', 'Data', 'Cód.', 'Descrição do Produto', 'NCM', 'Classificação / Categoria', 'Qtd', 'Un', 'Vlr Unit', 'Vlr Total', 'CST']],
+      body: tableBody,
+      theme: 'striped',
+      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5 },
+      bodyStyles: { fontSize: 7, textColor: [30, 41, 59] },
+      columnStyles: {
+        0: { cellWidth: 20, fontStyle: 'bold', textColor: [29, 78, 216] },
+        1: { cellWidth: 12 },
+        2: { cellWidth: 18 },
+        3: { cellWidth: 14, font: 'courier' },
+        4: { cellWidth: 60, fontStyle: 'bold' },
+        5: { cellWidth: 22, font: 'courier' },
+        6: { cellWidth: 45 },
+        7: { cellWidth: 14, halign: 'right' },
+        8: { cellWidth: 10, halign: 'center' },
+        9: { cellWidth: 20, halign: 'right' },
+        10: { cellWidth: 22, halign: 'right', fontStyle: 'bold', textColor: [180, 83, 9] },
+        11: { cellWidth: 12, halign: 'center' }
+      },
+      didDrawPage: (data: any) => {
+        const str = `Página ${data.pageNumber} de ${doc.getNumberOfPages()}`
+        doc.setFontSize(8)
+        doc.setTextColor(148, 163, 184)
+        doc.text(str, pageWidth - 30, pageHeight - 8)
+      }
+    })
+
+  } else if (tipo === 'monofasicos_produtos_agrupado') {
+    const lista = dados.produtos_agrupados || []
+    const totalValor = dados.total_valor || lista.reduce((a: number, b: any) => a + (b.valor_total || 0), 0)
+
+    // Caixa de Resumo
+    autoTable(doc, {
+      startY,
+      head: [['Relatório Agrupado de Produtos Monofásicos', 'Filtro Aplicado', 'Produtos Distintos', 'Total Monofásico (R$)']],
+      body: [
+        [
+          'Consolidação sintetizada por produto e NCM',
+          dados.filtro_rotulo || 'Todos os Produtos',
+          `${lista.length} produto(s)`,
+          `R$ ${formatMoney(totalValor)}`
+        ]
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: [180, 83, 9], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+      bodyStyles: { fontSize: 8 }
+    })
+
+    const finalY = (doc as any).lastAutoTable.finalY + 6
+
+    const tableBody = lista.map((item: any) => [
+      item.ncm_formatado || item.ncm || '—',
+      item.categoria || '—',
+      item.descricao_ncm || '—',
+      item.cProd || '—',
+      item.xProd || '—',
+      `${item.qtd_cupons || 1} cupom(ns)`,
+      Number(item.qtd_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
+      item.uCom || 'UN',
+      `R$ ${formatMoney(item.preco_medio || 0)}`,
+      `R$ ${formatMoney(item.valor_total || 0)}`,
+      `${Number(item.percentual || 0).toFixed(1)}%`
+    ])
+
+    autoTable(doc, {
+      startY: finalY,
+      head: [['NCM', 'Categoria', 'Classificação NCM', 'Cód.', 'Descrição do Produto', 'Frequência', 'Qtd Total', 'Un', 'Preço Médio', 'Valor Total', '% Total']],
+      body: tableBody,
+      theme: 'striped',
+      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5 },
+      bodyStyles: { fontSize: 7, textColor: [30, 41, 59] },
+      columnStyles: {
+        0: { cellWidth: 22, font: 'courier', fontStyle: 'bold' },
+        1: { cellWidth: 22 },
+        2: { cellWidth: 46 },
+        3: { cellWidth: 14, font: 'courier' },
+        4: { cellWidth: 62, fontStyle: 'bold' },
+        5: { cellWidth: 24, halign: 'center' },
+        6: { cellWidth: 18, halign: 'right' },
+        7: { cellWidth: 10, halign: 'center' },
+        8: { cellWidth: 22, halign: 'right' },
+        9: { cellWidth: 24, halign: 'right', fontStyle: 'bold', textColor: [180, 83, 9] },
+        10: { cellWidth: 15, halign: 'right' }
       },
       didDrawPage: (data: any) => {
         const str = `Página ${data.pageNumber} de ${doc.getNumberOfPages()}`
