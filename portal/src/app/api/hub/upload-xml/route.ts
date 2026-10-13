@@ -132,12 +132,15 @@ export async function POST(request: Request) {
     // 1. Validar Cliente e configurações
     const { data: cliente } = await supabaseAdmin
       .from('clientes')
-      .select('id, cnpj, razao_social, inscricao_estadual, is_ativo, certificado_url, certificado_senha, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls)')
+      .select('id, cnpj, razao_social, inscricao_estadual, is_ativo, certificado_url, certificado_senha, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, modo_processamento_xml)')
       .eq('hub_token', token)
       .single()
 
     if (!cliente) return NextResponse.json({ error: 'Cliente não encontrado' }, { status: 404 })
     if (!cliente.is_ativo) return NextResponse.json({ error: 'Cliente bloqueado/inativo' }, { status: 403 })
+
+    const hubConfig = Array.isArray(cliente.configuracoes_hub) ? cliente.configuracoes_hub[0] : cliente.configuracoes_hub
+    const processarPeloPortal = hubConfig?.modo_processamento_xml === 'portal'
 
     // 2. Extrair dados do XML
     const arrayBuffer = await file.arrayBuffer()
@@ -175,7 +178,6 @@ export async function POST(request: Request) {
     }
 
     // Se a opção de auto-excluir estiver ativada nas configurações e for divergente
-    const hubConfig = Array.isArray(cliente.configuracoes_hub) ? cliente.configuracoes_hub[0] : cliente.configuracoes_hub
     if (isCnpjDivergente && hubConfig?.auto_excluir_divergentes) {
       return NextResponse.json({ 
         ignored: true, 
@@ -184,11 +186,11 @@ export async function POST(request: Request) {
       }, { status: 200 })
     }
 
-    const formasPagamentoJsonHub = formData.get('formas_pagamento_json') as string
-    const modeloHub = formData.get('modelo') as string
-    const chaveHub = formData.get('chave') as string
-    const numeroHub = formData.get('numero') as string
-    const serieHub = formData.get('serie') as string
+    const formasPagamentoJsonHub = processarPeloPortal ? null : formData.get('formas_pagamento_json') as string
+    const modeloHub = processarPeloPortal ? null : formData.get('modelo') as string
+    const chaveHub = processarPeloPortal ? null : formData.get('chave') as string
+    const numeroHub = processarPeloPortal ? null : formData.get('numero') as string
+    const serieHub = processarPeloPortal ? null : formData.get('serie') as string
 
     const chave = (chaveHub && chaveHub.length === 44) ? chaveHub : extractChave(xmlString, file.name)
     let mod = (modeloHub === '55' || modeloHub === '65') ? modeloHub : extractTag(xmlString, 'mod')

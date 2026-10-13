@@ -37,6 +37,7 @@ namespace HubParatechDesktop
         private string tipoPasta; // "vendas" ou "compras"
         private HttpClient http;
         private bool isRunning = true;
+        private string modoProcessamento = "hub"; // "hub" (pré-processa localmente) ou "portal" (envia bruto)
 
         private static readonly Dictionary<string, string> NomesFormasPagamento = new Dictionary<string, string>
         {
@@ -66,12 +67,13 @@ namespace HubParatechDesktop
             "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"
         };
 
-        public XmlMonitor(string path, string tipoPasta, string token, HttpClient httpClient)
+        public XmlMonitor(string path, string tipoPasta, string token, HttpClient httpClient, string modoProcessamento = "hub")
         {
             this.rootPath = path;
             this.tipoPasta = tipoPasta;
             this.hubToken = token;
             this.http = httpClient;
+            this.modoProcessamento = string.Equals(modoProcessamento, "portal", StringComparison.OrdinalIgnoreCase) ? "portal" : "hub";
 
             if (!Directory.Exists(path))
             {
@@ -99,6 +101,11 @@ namespace HubParatechDesktop
         public void TriggerScan()
         {
             Task.Run(ScanExistingFilesAsync);
+        }
+
+        public void SetModoProcessamento(string modo)
+        {
+            this.modoProcessamento = string.Equals(modo, "portal", StringComparison.OrdinalIgnoreCase) ? "portal" : "hub";
         }
 
         private async Task StartPeriodicScanAsync()
@@ -304,29 +311,37 @@ namespace HubParatechDesktop
                 byte[]? fileBytes = await ReadFileWithRetryAsync(filePath, maxRetries: 4, delayMs: 1500);
                 if (fileBytes == null || fileBytes.Length == 0) return false;
 
-                // Extração local pré-processada pelo Hub no computador do cliente
-                var dadosLocais = ExtrairDadosXmlLocal(fileBytes, fileName);
+                // Se estiver no modo "hub", realiza pré-processamento local e anexa os metadados.
+                // Se estiver no modo "portal", envia apenas o arquivo bruto para processamento 100% em nuvem.
+                DadosXmlExtraidos? dadosLocais = null;
+                if (modoProcessamento == "hub")
+                {
+                    dadosLocais = ExtrairDadosXmlLocal(fileBytes, fileName);
+                }
 
                 using (var content = new MultipartFormDataContent())
                 {
                     content.Add(new StringContent(hubToken), "hub_token");
                     content.Add(new StringContent(tipoPasta), "tipo_pasta");
 
-                    // Anexa metadados já mastigados pelo Hub (economiza CPU na nuvem)
-                    if (!string.IsNullOrEmpty(dadosLocais.FormasPagamentoJson))
-                        content.Add(new StringContent(dadosLocais.FormasPagamentoJson), "formas_pagamento_json");
+                    // Anexa metadados já mastigados pelo Hub apenas quando o processamento for local
+                    if (dadosLocais != null)
+                    {
+                        if (!string.IsNullOrEmpty(dadosLocais.FormasPagamentoJson))
+                            content.Add(new StringContent(dadosLocais.FormasPagamentoJson), "formas_pagamento_json");
 
-                    if (!string.IsNullOrEmpty(dadosLocais.Modelo))
-                        content.Add(new StringContent(dadosLocais.Modelo), "modelo");
+                        if (!string.IsNullOrEmpty(dadosLocais.Modelo))
+                            content.Add(new StringContent(dadosLocais.Modelo), "modelo");
 
-                    if (!string.IsNullOrEmpty(dadosLocais.Chave))
-                        content.Add(new StringContent(dadosLocais.Chave), "chave");
+                        if (!string.IsNullOrEmpty(dadosLocais.Chave))
+                            content.Add(new StringContent(dadosLocais.Chave), "chave");
 
-                    if (!string.IsNullOrEmpty(dadosLocais.Numero))
-                        content.Add(new StringContent(dadosLocais.Numero), "numero");
+                        if (!string.IsNullOrEmpty(dadosLocais.Numero))
+                            content.Add(new StringContent(dadosLocais.Numero), "numero");
 
-                    if (!string.IsNullOrEmpty(dadosLocais.Serie))
-                        content.Add(new StringContent(dadosLocais.Serie), "serie");
+                        if (!string.IsNullOrEmpty(dadosLocais.Serie))
+                            content.Add(new StringContent(dadosLocais.Serie), "serie");
+                    }
 
                     var fileContent = new ByteArrayContent(fileBytes);
                     fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("application/xml");
@@ -342,7 +357,7 @@ namespace HubParatechDesktop
                         // 2. Cria cópia de conferência em Contabilidade_Paratech/{MM-MES-AAAA} SEM mexer no original
                         SaveBackupCopy(filePath, fileBytes);
 
-                        Debug.WriteLine($"[Hub Local] XML enviado e conferido com sucesso: {fileName} (Mod {dadosLocais.Modelo})");
+                        Debug.WriteLine($"[Hub Local] XML enviado e conferido com sucesso: {fileName} (Modo: {modoProcessamento})");
                         return true;
                     }
                     else

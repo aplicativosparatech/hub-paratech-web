@@ -16,6 +16,7 @@ namespace HubParatechDesktop
         public string[]? pastas_vendas { get; set; }
         public string[]? pastas_compras { get; set; }
         public string? offline_secret { get; set; }
+        public string? modo_processamento { get; set; }
         public FaturaSync? fatura { get; set; }
     }
 
@@ -48,6 +49,7 @@ namespace HubParatechDesktop
         private List<XmlMonitor> activeMonitors = new List<XmlMonitor>();
         private string currentVendasStr = "";
         private string currentComprasStr = "";
+        private string currentModoProcessamento = "hub";
         private DateTime lastSync = DateTime.MinValue;
 
         public TrayContext()
@@ -155,6 +157,16 @@ namespace HubParatechDesktop
                         }
                         lastSync = DateTime.Now;
                         
+                        // Configurar modo de processamento (hub ou portal)
+                        string novoModo = !string.IsNullOrWhiteSpace(data.modo_processamento) ? data.modo_processamento : "hub";
+                        currentModoProcessamento = novoModo;
+
+                        // Atualiza o modo nos monitores já em execução
+                        foreach (var m in activeMonitors)
+                        {
+                            m.SetModoProcessamento(currentModoProcessamento);
+                        }
+
                         // Configurar monitores de XML
                         string novasVendasStr = data.pastas_vendas != null ? string.Join("|", data.pastas_vendas) : "";
                         string novasComprasStr = data.pastas_compras != null ? string.Join("|", data.pastas_compras) : "";
@@ -168,7 +180,7 @@ namespace HubParatechDesktop
                             {
                                 foreach (string p in data.pastas_vendas)
                                 {
-                                    if (!string.IsNullOrWhiteSpace(p)) activeMonitors.Add(new XmlMonitor(p.Trim().Replace(@"\\", @"\"), "vendas", ConfigManager.Load().HubToken, http));
+                                    if (!string.IsNullOrWhiteSpace(p)) activeMonitors.Add(new XmlMonitor(p.Trim().Replace(@"\\", @"\"), "vendas", ConfigManager.Load().HubToken, http, currentModoProcessamento));
                                 }
                             }
 
@@ -176,7 +188,7 @@ namespace HubParatechDesktop
                             {
                                 foreach (string p in data.pastas_compras)
                                 {
-                                    if (!string.IsNullOrWhiteSpace(p)) activeMonitors.Add(new XmlMonitor(p.Trim().Replace(@"\\", @"\"), "compras", ConfigManager.Load().HubToken, http));
+                                    if (!string.IsNullOrWhiteSpace(p)) activeMonitors.Add(new XmlMonitor(p.Trim().Replace(@"\\", @"\"), "compras", ConfigManager.Load().HubToken, http, currentModoProcessamento));
                                 }
                             }
 

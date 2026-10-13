@@ -15,8 +15,8 @@ export async function POST(request: Request) {
     const { data: cliente } = await supabase.from('clientes').select('id, nome_sistema_utilizado, is_ativo').eq('hub_token', token).single()
     if (!cliente) return NextResponse.json({ error: 'Cliente não encontrado' }, { status: 404 })
 
-    // 2. Busca configuração (offline_secret, exes_monitorados)
-    const { data: config } = await supabase.from('configuracoes_hub').select('offline_secret, exes_monitorados, pastas_vendas, pastas_compras').eq('cliente_id', cliente.id).maybeSingle()
+    // 2. Busca configuração (offline_secret, exes_monitorados, modo_processamento_xml)
+    const { data: config } = await supabase.from('configuracoes_hub').select('offline_secret, exes_monitorados, pastas_vendas, pastas_compras, modo_processamento_xml').eq('cliente_id', cliente.id).maybeSingle()
 
     // 3. Verifica faturas vencidas
     const hoje = new Date().toISOString().split('T')[0]
@@ -78,6 +78,7 @@ export async function POST(request: Request) {
       pastas_vendas: config?.pastas_vendas || [],
       pastas_compras: config?.pastas_compras || [],
       offline_secret: config?.offline_secret || '123456',
+      modo_processamento: config?.modo_processamento_xml || 'hub',
       fatura: faturaVencida ? {
         valor: faturaVencida.valor,
         pix_payload: finalPix || 'ERRO_PIX',

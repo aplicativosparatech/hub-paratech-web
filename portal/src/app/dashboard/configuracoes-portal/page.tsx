@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
-import { Sliders, ShieldAlert, CheckCircle2, Building2, Save, RefreshCw, KeyRound, BellRing, LayoutDashboard, Sparkles, MapPin, FileCheck2, DollarSign } from 'lucide-react'
+import { Sliders, ShieldAlert, CheckCircle2, Building2, Save, RefreshCw, KeyRound, BellRing, LayoutDashboard, Sparkles, MapPin, FileCheck2, DollarSign, Cpu } from 'lucide-react'
 
 export default function ConfiguracoesPortalPage() {
   const supabase = createClient()
@@ -15,6 +15,7 @@ export default function ConfiguracoesPortalPage() {
   const [clientSearchTerm, setClientSearchTerm] = useState('')
 
   const [formData, setFormData] = useState({
+    modo_processamento_xml: 'hub' as 'hub' | 'portal',
     auto_excluir_divergentes: false,
     apenas_xmls_autorizados: false,
     auto_corrigir_assinar_xmls: false,
@@ -50,13 +51,14 @@ export default function ConfiguracoesPortalPage() {
         setSelectedCliente(roleData.cliente_id)
         const { data: cli } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado)')
+          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado, modo_processamento_xml)')
           .eq('id', roleData.cliente_id)
           .single()
         if (cli) {
           setClientes([cli])
           const config = Array.isArray(cli.configuracoes_hub) ? cli.configuracoes_hub[0] : cli.configuracoes_hub
           setFormData({ 
+            modo_processamento_xml: (config?.modo_processamento_xml as 'hub' | 'portal') || 'hub',
             auto_excluir_divergentes: Boolean(config?.auto_excluir_divergentes),
             apenas_xmls_autorizados: Boolean(config?.apenas_xmls_autorizados),
             auto_corrigir_assinar_xmls: Boolean(config?.auto_corrigir_assinar_xmls),
@@ -69,7 +71,7 @@ export default function ConfiguracoesPortalPage() {
       } else if (role === 'contabilidade' && roleData?.contabilidade_id) {
         const { data: clis } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado)')
+          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado, modo_processamento_xml)')
           .eq('contabilidade_id', roleData.contabilidade_id)
           .order('razao_social')
         if (clis && clis.length > 0) {
@@ -80,7 +82,7 @@ export default function ConfiguracoesPortalPage() {
         // Admin
         const { data: clis } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado)')
+          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado, modo_processamento_xml)')
           .order('razao_social')
         if (clis && clis.length > 0) {
           setClientes(clis)
@@ -121,12 +123,13 @@ export default function ConfiguracoesPortalPage() {
     async function loadConfig() {
       const { data } = await supabase
         .from('configuracoes_hub')
-        .select('auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado')
+        .select('auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado, modo_processamento_xml')
         .eq('cliente_id', selectedCliente)
         .single()
 
       if (data) {
         setFormData({
+          modo_processamento_xml: (data.modo_processamento_xml as 'hub' | 'portal') || 'hub',
           auto_excluir_divergentes: Boolean(data.auto_excluir_divergentes),
           apenas_xmls_autorizados: Boolean(data.apenas_xmls_autorizados),
           auto_corrigir_assinar_xmls: Boolean(data.auto_corrigir_assinar_xmls),
@@ -137,6 +140,7 @@ export default function ConfiguracoesPortalPage() {
         })
       } else {
         setFormData({ 
+          modo_processamento_xml: 'hub',
           auto_excluir_divergentes: false,
           apenas_xmls_autorizados: false,
           auto_corrigir_assinar_xmls: false,
@@ -160,6 +164,7 @@ export default function ConfiguracoesPortalPage() {
     setSaving(true)
     const payload: any = {
       cliente_id: selectedCliente,
+      modo_processamento_xml: formData.modo_processamento_xml || 'hub',
       auto_excluir_divergentes: formData.auto_excluir_divergentes,
       apenas_xmls_autorizados: formData.apenas_xmls_autorizados,
       auto_corrigir_assinar_xmls: formData.auto_corrigir_assinar_xmls,
@@ -326,6 +331,76 @@ export default function ConfiguracoesPortalPage() {
           </div>
 
           <div className="space-y-4">
+            {/* Escolha do Modo de Processamento: Hub vs Portal */}
+            <div className="p-5 bg-gradient-to-br from-blue-50/70 via-indigo-50/40 to-slate-50 rounded-2xl border-2 border-blue-200/90 shadow-2xs space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <span className="font-bold text-slate-900 block text-base flex items-center gap-2">
+                  <Cpu className="text-blue-600" size={20} />
+                  Modo de Processamento e Extração de XMLs (Hub vs Portal)
+                </span>
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 self-start sm:self-auto">
+                  Performance & Nuvem
+                </span>
+              </div>
+              <p className="text-slate-600 text-sm leading-relaxed">
+                Defina como as notas fiscais e modalidades de pagamento devem ser decodificadas e calculadas no sistema:
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                {/* Opção 1: Hub Desktop */}
+                <label 
+                  className={`p-4 rounded-xl border-2 cursor-pointer transition flex items-start gap-3 ${
+                    formData.modo_processamento_xml === 'hub'
+                      ? 'border-blue-600 bg-white shadow-xs'
+                      : 'border-slate-200 bg-white/70 hover:border-slate-300'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="modo_processamento_xml"
+                    value="hub"
+                    checked={formData.modo_processamento_xml === 'hub'}
+                    onChange={() => setFormData({ ...formData, modo_processamento_xml: 'hub' })}
+                    className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500"
+                  />
+                  <div>
+                    <span className="font-bold text-slate-900 block text-sm flex items-center gap-1.5">
+                      🚀 Processar pelo Hub Desktop (Recomendado)
+                    </span>
+                    <span className="text-xs text-slate-600 mt-1 block leading-relaxed">
+                      O aplicativo Hub na máquina local lê os XMLs, extrai modalidades de pagamento e dados fiscais em microssegundos e transmite tudo já estruturado. 
+                      <strong> Máxima velocidade e menor consumo de recursos na nuvem.</strong>
+                    </span>
+                  </div>
+                </label>
+
+                {/* Opção 2: Portal Web */}
+                <label 
+                  className={`p-4 rounded-xl border-2 cursor-pointer transition flex items-start gap-3 ${
+                    formData.modo_processamento_xml === 'portal'
+                      ? 'border-blue-600 bg-white shadow-xs'
+                      : 'border-slate-200 bg-white/70 hover:border-slate-300'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="modo_processamento_xml"
+                    value="portal"
+                    checked={formData.modo_processamento_xml === 'portal'}
+                    onChange={() => setFormData({ ...formData, modo_processamento_xml: 'portal' })}
+                    className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500"
+                  />
+                  <div>
+                    <span className="font-bold text-slate-900 block text-sm flex items-center gap-1.5">
+                      ☁️ Processar pelo Portal Web (Nuvem)
+                    </span>
+                    <span className="text-xs text-slate-600 mt-1 block leading-relaxed">
+                      O Hub envia o arquivo XML bruto e o Portal Web na nuvem faz a abertura, expressões regulares e cálculo dos totais e formas de pagamento diretamente nos servidores.
+                    </span>
+                  </div>
+                </label>
+              </div>
+            </div>
             <div className="flex items-start gap-3.5 p-5 bg-slate-50 rounded-2xl border border-slate-200 hover:border-slate-300 transition">
               <input 
                 type="checkbox" 
