@@ -49,8 +49,22 @@ namespace HubParatechDesktop
                 Debug.WriteLine($"Erro ao iniciar watcher em {path}: {ex.Message}");
             }
 
-            // Inicia varredura de arquivos existentes em segundo plano
+            // Inicia varredura e monitoramento periódico de arquivos existentes em segundo plano
+            Task.Run(StartPeriodicScanAsync);
+        }
+
+        public void TriggerScan()
+        {
             Task.Run(ScanExistingFilesAsync);
+        }
+
+        private async Task StartPeriodicScanAsync()
+        {
+            while (isRunning)
+            {
+                await ScanExistingFilesAsync();
+                await Task.Delay(120000); // Re-varre a cada 2 minutos para resiliência de rede e arquivos copiados
+            }
         }
 
         private async Task ScanExistingFilesAsync()

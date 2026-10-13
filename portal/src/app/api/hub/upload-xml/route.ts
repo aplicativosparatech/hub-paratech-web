@@ -11,6 +11,36 @@ function extractTag(xml: string, tag: string): string | null {
   return match ? match[1].trim() : null
 }
 
+function extractChave(xml: string, fileName?: string): string | null {
+  // 1. Tag direta <chNFe>, <chCTe>, <chMDFe>
+  const tagChave = extractTag(xml, 'chNFe') || extractTag(xml, 'chCTe') || extractTag(xml, 'chMDFe')
+  if (tagChave && tagChave.replace(/\D/g, '').length === 44) {
+    return tagChave.replace(/\D/g, '')
+  }
+
+  // 2. Atributo Id="NFe..." ou Id="NFCe..." em <infNFe>, <infCte>, etc.
+  const idMatch = xml.match(/Id\s*=\s*["'](?:NFe|NFCe|CTe|MDFe)?(\d{44})["']/i)
+  if (idMatch && idMatch[1]) {
+    return idMatch[1]
+  }
+
+  // 3. Qualquer atributo Id contendo 44 dígitos numéricos
+  const anyIdMatch = xml.match(/Id\s*=\s*["'][^"']*?(\d{44})[^"']*?["']/i)
+  if (anyIdMatch && anyIdMatch[1]) {
+    return anyIdMatch[1]
+  }
+
+  // 4. Do próprio nome do arquivo se contiver a chave de 44 dígitos
+  if (fileName) {
+    const fileMatch = fileName.match(/(\d{44})/)
+    if (fileMatch && fileMatch[1]) {
+      return fileMatch[1]
+    }
+  }
+
+  return null
+}
+
 function calculateMonofasico(xml: string): number {
   let totalMonofasico = 0
   // Pega cada bloco de item <det nItem="...">...</det>
@@ -103,12 +133,30 @@ export async function POST(request: Request) {
       }, { status: 200 })
     }
 
-    const mod = extractTag(xmlString, 'mod')
-    const serie = extractTag(xmlString, 'serie')
-    const numero = extractTag(xmlString, 'nNF')
-    const chave = extractTag(xmlString, 'chNFe')
+    const chave = extractChave(xmlString, file.name)
+    let mod = extractTag(xmlString, 'mod')
+    if (!mod && chave && chave.length === 44) {
+      mod = chave.substring(20, 22)
+    }
+
+    let serie = extractTag(xmlString, 'serie')
+    if (!serie && chave && chave.length === 44) {
+      serie = String(parseInt(chave.substring(22, 25), 10) || 1)
+    }
+
+    let numero = extractTag(xmlString, 'nNF')
+    if (!numero && chave && chave.length === 44) {
+      numero = String(parseInt(chave.substring(25, 34), 10) || 0)
+    }
+
     const valor = extractTag(xmlString, 'vNF')
-    const emissao = extractTag(xmlString, 'dhEmi') || extractTag(xmlString, 'dEmi')
+    let emissao = extractTag(xmlString, 'dhEmi') || extractTag(xmlString, 'dEmi')
+    if (!emissao && chave && chave.length === 44) {
+      const ano2 = chave.substring(2, 4)
+      const mes2 = chave.substring(4, 6)
+      emissao = `20${ano2}-${mes2}-01T00:00:00-03:00`
+    }
+
     const transmissao = extractTag(xmlString, 'dhRecbto')
     const temAssinatura = xmlString.includes('<Signature')
 
@@ -124,7 +172,7 @@ export async function POST(request: Request) {
     const valorMonofasico = calculateMonofasico(xmlString)
 
     if (!chave || !mod) {
-      return NextResponse.json({ error: 'XML inválido: não encontrou tag mod ou chNFe' }, { status: 400 })
+      return NextResponse.json({ error: 'XML inválido: não encontrou modelo ou chave de acesso (chNFe / Id)' }, { status: 400 })
     }
 
     // Identificar a Tabela Destino

@@ -68,6 +68,7 @@ namespace HubParatechDesktop
             trayIcon.ContextMenuStrip.Items.Add("Configurar Token", null, SetupToken);
             trayIcon.ContextMenuStrip.Items.Add("Sincronizar Agora", null, async (s, e) => {
                 await SyncWithServer();
+                foreach (var m in activeMonitors) m.TriggerScan();
                 MessageBox.Show("Sincronização forçada concluída!", "Sincronizar", MessageBoxButtons.OK, MessageBoxIcon.Information);
             });
             trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
