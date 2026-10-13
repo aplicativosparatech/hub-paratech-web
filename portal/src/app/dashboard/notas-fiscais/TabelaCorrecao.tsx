@@ -10,6 +10,12 @@ import {
 import toast from 'react-hot-toast'
 import Link from 'next/link'
 import Pagination from '@/components/Pagination'
+import { 
+  formatarDataBrasil, 
+  formatarHoraBrasil, 
+  extrairCompetenciaBrasil, 
+  extrairDataIsoBrasil 
+} from '@/utils/dateBrasil'
 
 export default function TabelaCorrecao() {
   const supabase = createClient()
@@ -241,20 +247,17 @@ export default function TabelaCorrecao() {
   // Filtragem Dinâmica das Notas em Quarentena (por Mês, Data de Emissão, Número e Busca Geral)
   const notasFiltradas = useMemo(() => {
     return notas.filter(n => {
-      // 1. Filtro por Mês de Competência (YYYY-MM)
-      if (filtroMes && n.data_emissao) {
-        const emissaoMes = n.data_emissao.substring(0, 7)
+      // 1. Filtro por Mês de Competência (YYYY-MM) no fuso de Minas Gerais / SEFAZ
+      if (filtroMes) {
+        const emissaoMes = extrairCompetenciaBrasil(n.data_emissao, n.chave)
         if (emissaoMes !== filtroMes) return false
       }
 
-      // 2. Filtro por Intervalo de Data de Emissão
-      if (dataInicio && n.data_emissao) {
-        const emissaoData = n.data_emissao.substring(0, 10)
-        if (emissaoData < dataInicio) return false
-      }
-      if (dataFim && n.data_emissao) {
-        const emissaoData = n.data_emissao.substring(0, 10)
-        if (emissaoData > dataFim) return false
+      // 2. Filtro por Intervalo de Data de Emissão no fuso de Minas Gerais / Brasil
+      if (dataInicio || dataFim) {
+        const emissaoData = extrairDataIsoBrasil(n.data_emissao)
+        if (dataInicio && emissaoData < dataInicio) return false
+        if (dataFim && emissaoData > dataFim) return false
       }
 
       // 3. Filtro por Número da Nota ou Chave
@@ -771,8 +774,13 @@ export default function TabelaCorrecao() {
                     <td className="p-4 font-semibold text-slate-900">
                       R$ {Number(n.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="p-4 text-xs text-slate-500">
-                      {n.data_emissao ? new Date(n.data_emissao).toLocaleDateString('pt-BR') : '—'}
+                    <td className="p-4 text-xs">
+                      <div className="font-semibold text-slate-800">{formatarDataBrasil(n.data_emissao)}</div>
+                      {n.data_emissao && (
+                        <div className="text-[11px] text-slate-400 font-mono mt-0.5" title="Horário Oficial de Brasília / MG">
+                          {formatarHoraBrasil(n.data_emissao)}
+                        </div>
+                      )}
                     </td>
                     <td className="p-4">
                       <div className="flex flex-col gap-1 text-xs">

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { isNcmMonofasico } from '@/utils/ncmMonofasicos'
+import { obterIntervaloMesBrasil } from '@/utils/dateBrasil'
 
 export async function GET(request: Request) {
   try {
@@ -14,14 +15,14 @@ export async function GET(request: Request) {
 
     const supabase = createAdminClient()
 
-    // 1. Monta o filtro de data (por mês ou geral)
+    // 1. Monta o filtro de data no fuso de Minas Gerais / Brasília (-03:00)
     let startDate: string | null = null
     let endDate: string | null = null
 
     if (mesAno) {
-      const [ano, mes] = mesAno.split('-').map(Number)
-      startDate = new Date(Date.UTC(ano, mes - 1, 1, 0, 0, 0)).toISOString()
-      endDate = new Date(Date.UTC(ano, mes, 0, 23, 59, 59, 999)).toISOString()
+      const intervalo = obterIntervaloMesBrasil(mesAno)
+      startDate = intervalo.startDate
+      endDate = intervalo.endDate
     }
 
     // 2. Busca NF-e de Saídas (Modelo 55)

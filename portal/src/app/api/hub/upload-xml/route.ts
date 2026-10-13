@@ -311,11 +311,23 @@ export async function POST(request: Request) {
       else return NextResponse.json({ error: 'Modelo de nota não suportado: ' + mod }, { status: 400 })
     }
 
-    // 3. Upload para o Supabase Storage (Bucket: xmls) estruturado por Ano/Mês
-    const dataEmissaoObj = emissao ? new Date(emissao) : new Date()
-    const ano = dataEmissaoObj.getFullYear()
-    const mes = String(dataEmissaoObj.getMonth() + 1).padStart(2, '0')
-    const dia = String(dataEmissaoObj.getDate()).padStart(2, '0')
+    // 3. Upload para o Supabase Storage (Bucket: xmls) estruturado por Ano/Mês no fuso do Brasil / MG
+    let ano = String(new Date().getFullYear())
+    let mes = String(new Date().getMonth() + 1).padStart(2, '0')
+    let dia = String(new Date().getDate()).padStart(2, '0')
+
+    if (emissao) {
+      const match = emissao.match(/^(\d{4})-(\d{2})-(\d{2})/)
+      if (match) {
+        ano = match[1]
+        mes = match[2]
+        dia = match[3]
+      }
+    } else if (chave && chave.length === 44) {
+      ano = '20' + chave.substring(2, 4)
+      mes = chave.substring(4, 6)
+      dia = '01'
+    }
     
     const filePath = `${cliente.id}/${tabela}/${ano}/${mes}/${dia}/${file.name}`
     

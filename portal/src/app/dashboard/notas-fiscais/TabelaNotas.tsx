@@ -10,6 +10,12 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Pagination from '@/components/Pagination'
+import { 
+  formatarDataBrasil, 
+  formatarHoraBrasil, 
+  extrairCompetenciaBrasil, 
+  extrairDataIsoBrasil 
+} from '@/utils/dateBrasil'
 
 function AssinaturaChip({ ok }: { ok: boolean }) {
   return ok
@@ -252,20 +258,17 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
   // Filtragem Dinâmica das Notas (por Mês, Data de Emissão, Número e Busca Geral)
   const notasFiltradas = useMemo(() => {
     return notasOficiaisValidas.filter(n => {
-      // 1. Filtro por Mês de Competência (YYYY-MM)
-      if (filtroMes && n.data_emissao) {
-        const emissaoMes = n.data_emissao.substring(0, 7)
+      // 1. Filtro por Mês de Competência (YYYY-MM) no fuso de Minas Gerais / SEFAZ
+      if (filtroMes) {
+        const emissaoMes = extrairCompetenciaBrasil(n.data_emissao, n.chave)
         if (emissaoMes !== filtroMes) return false
       }
 
-      // 2. Filtro por Intervalo de Data de Emissão
-      if (dataInicio && n.data_emissao) {
-        const emissaoData = n.data_emissao.substring(0, 10)
-        if (emissaoData < dataInicio) return false
-      }
-      if (dataFim && n.data_emissao) {
-        const emissaoData = n.data_emissao.substring(0, 10)
-        if (emissaoData > dataFim) return false
+      // 2. Filtro por Intervalo de Data de Emissão no fuso de Minas Gerais / Brasil
+      if (dataInicio || dataFim) {
+        const emissaoData = extrairDataIsoBrasil(n.data_emissao)
+        if (dataInicio && emissaoData < dataInicio) return false
+        if (dataFim && emissaoData > dataFim) return false
       }
 
       // 3. Filtro por Número da Nota ou Chave
@@ -809,8 +812,22 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                       )}
                     </td>
                     <td className="p-4 font-medium">R$ {Number(n.valor || 0).toFixed(2)}</td>
-                    <td className="p-4">{n.data_emissao ? new Date(n.data_emissao).toLocaleDateString('pt-BR') : '—'}</td>
-                    <td className="p-4">{n.data_transmissao ? new Date(n.data_transmissao).toLocaleDateString('pt-BR') : '—'}</td>
+                    <td className="p-4 text-xs">
+                      <div className="font-semibold text-slate-800">{formatarDataBrasil(n.data_emissao)}</div>
+                      {n.data_emissao && (
+                        <div className="text-[11px] text-slate-400 font-mono mt-0.5" title="Horário Oficial de Brasília / MG">
+                          {formatarHoraBrasil(n.data_emissao)}
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-4 text-xs">
+                      <div className="font-semibold text-slate-800">{formatarDataBrasil(n.data_transmissao)}</div>
+                      {n.data_transmissao && (
+                        <div className="text-[11px] text-slate-400 font-mono mt-0.5" title="Horário de Transmissão SEFAZ">
+                          {formatarHoraBrasil(n.data_transmissao)}
+                        </div>
+                      )}
+                    </td>
                     <td className="p-4 text-center"><AssinaturaChip ok={n.tem_assinatura} /></td>
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center gap-1">

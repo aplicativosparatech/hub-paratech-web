@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { isNcmMonofasico, formatarNcm, identificarDescricaoNcm } from '@/utils/ncmMonofasicos'
+import { obterIntervaloMesBrasil } from '@/utils/dateBrasil'
 
 function extractTag(xml: string, tag: string): string {
   const match = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`))
@@ -23,9 +24,9 @@ export async function GET(request: Request) {
     let endDate: string | null = null
 
     if (mesAno) {
-      const [ano, mes] = mesAno.split('-').map(Number)
-      startDate = new Date(Date.UTC(ano, mes - 1, 1, 0, 0, 0)).toISOString()
-      endDate = new Date(Date.UTC(ano, mes, 0, 23, 59, 59, 999)).toISOString()
+      const intervalo = obterIntervaloMesBrasil(mesAno)
+      startDate = intervalo.startDate
+      endDate = intervalo.endDate
     }
 
     // 1. Busca notas de NFC-e (65) e NF-e (55) com monofásico > 0 no período
