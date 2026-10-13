@@ -84,6 +84,9 @@ namespace HubParatechDesktop
             panel.Controls.Add(btnCopy);
             panel.Controls.Add(lblOfflineInfo);
             panel.Controls.Add(btnUnlock);
+
+            var lblVersao = new Label { Text = "Hub Paratech v2.1.0", Location = new Point(20, 715), Font = new Font("Arial", 8, FontStyle.Regular), ForeColor = Color.Silver, AutoSize = true };
+            panel.Controls.Add(lblVersao);
             
             Controls.Add(panel);
         }

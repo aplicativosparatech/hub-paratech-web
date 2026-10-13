@@ -219,10 +219,15 @@ export default function ConfiguracoesPortalPage() {
       
       {/* Cabeçalho */}
       <header className="pb-4 border-b border-slate-200">
-        <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
-          <Sliders className="text-blue-600" size={32} />
-          Configurações do Portal
-        </h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
+            <Sliders className="text-blue-600" size={32} />
+            Configurações do Portal
+          </h1>
+          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
+            v2.1.0
+          </span>
+        </div>
         <p className="text-slate-500 text-sm mt-1">
           Gerenciamento de regras de exibição, segregação e conformidade fiscal do Portal Paratech.
         </p>

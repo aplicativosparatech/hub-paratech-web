@@ -57,12 +57,16 @@ namespace HubParatechDesktop
                 Icon = new Icon("icon.ico"),
                 ContextMenuStrip = new ContextMenuStrip(),
                 Visible = true,
-                Text = "Hub Paratech - Monitorando"
+                Text = "Hub Paratech v2.1.0 - Monitorando"
             };
+
+            var itemVersao = new ToolStripMenuItem("Hub Paratech v2.1.0") { Enabled = false, Font = new Font(Control.DefaultFont, FontStyle.Bold) };
+            trayIcon.ContextMenuStrip.Items.Add(itemVersao);
+            trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
 
             trayIcon.ContextMenuStrip.Items.Add("Ver Status Interno", null, (s, e) => {
                 string procs = string.Join(", ", targetProcesses);
-                MessageBox.Show($"Bloqueado: {isBlocked}\nProcessos Alvo: {procs}\nFatura: R$ {faturaValor:F2}\nÚltima Sincronização: {lastSync}", "Status do Hub", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show($"Hub Paratech Desktop v2.1.0\n\nBloqueado: {isBlocked}\nProcessos Alvo: {procs}\nFatura: R$ {faturaValor:F2}\nÚltima Sincronização: {lastSync}", "Status do Hub Paratech", MessageBoxButtons.OK, MessageBoxIcon.Information);
             });
             trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
             trayIcon.ContextMenuStrip.Items.Add("Configurar Token", null, SetupToken);
@@ -74,7 +78,7 @@ namespace HubParatechDesktop
             trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
             trayIcon.ContextMenuStrip.Items.Add("Sair", null, Exit);
 
-            trayIcon.ShowBalloonTip(3000, "Hub Paratech", "Iniciado e monitorando os sistemas.", ToolTipIcon.Info);
+            trayIcon.ShowBalloonTip(3000, "Hub Paratech v2.1.0", "Iniciado e monitorando os sistemas.", ToolTipIcon.Info);
             EnableAutoStart();
 
             // Timer para sincronizar com a nuvem a cada 1 hora (3600000 ms)

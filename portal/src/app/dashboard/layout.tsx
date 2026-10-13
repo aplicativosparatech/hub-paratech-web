@@ -91,9 +91,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
             <Building2 size={22} className="text-white" />
           </div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-800">
-            Hub<span className="text-blue-600">Paratech</span>
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-2xl font-bold tracking-tight text-slate-800">
+              Hub<span className="text-blue-600">Paratech</span>
+            </h2>
+            <span className="text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-md border border-blue-200">
+              v2.1.0
+            </span>
+          </div>
         </div>
         {/* Botão fechar para mobile */}
         <button 
@@ -168,6 +173,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <LogOut size={18} />
           <span>Encerrar Sessão</span>
         </button>
+
+        <div className="mt-3 pt-2.5 border-t border-slate-200/70 flex items-center justify-between text-[11px] text-slate-400 px-1">
+          <span>Portal & Hub</span>
+          <span className="font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">v2.1.0</span>
+        </div>
       </div>
     </>
   )

@@ -11,7 +11,7 @@ namespace HubParatechDesktop
 
         public SetupForm()
         {
-            Text = "Configuração do Hub Paratech";
+            Text = "Configuração do Hub Paratech v2.1.0";
             Size = new Size(400, 200);
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -22,6 +22,8 @@ namespace HubParatechDesktop
             
             var config = ConfigManager.Load();
             txtToken = new TextBox { Location = new Point(20, 60), Width = 340, Text = config.HubToken };
+
+            var lblVersion = new Label { Text = "Versão 2.1.0", Location = new Point(20, 110), ForeColor = Color.Gray, Font = new Font(Control.DefaultFont, FontStyle.Regular), AutoSize = true };
 
             btnSave = new Button { 
                 Text = "Salvar", 
@@ -35,6 +37,7 @@ namespace HubParatechDesktop
 
             Controls.Add(lbl);
             Controls.Add(txtToken);
+            Controls.Add(lblVersion);
             Controls.Add(btnSave);
         }
 

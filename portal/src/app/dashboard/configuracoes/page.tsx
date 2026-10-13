@@ -104,13 +104,18 @@ export default function ConfiguracoesPage() {
     <div className="w-full space-y-6 animate-in fade-in duration-300">
       <header className="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Configurações do Hub</h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-3xl font-bold text-slate-900">Configurações do Hub</h1>
+            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
+              v2.1.0
+            </span>
+          </div>
           <p className="text-slate-500 mt-1">Defina as regras de bloqueio e monitoramento por cliente.</p>
         </div>
         <div className="flex items-center gap-3">
-          <a href="/HubParatech.zip" download className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition flex items-center gap-2">
+          <a href="/HubParatech.zip" download className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition flex items-center gap-2 shadow-sm">
             <Download size={20} />
-            Baixar Hub (.zip)
+            Baixar Hub v2.1.0 (.zip)
           </a>
           <button onClick={() => loadClientes()} className="bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-2">
             <RefreshCw size={20} />
