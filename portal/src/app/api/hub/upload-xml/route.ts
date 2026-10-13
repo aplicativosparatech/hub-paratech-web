@@ -81,7 +81,7 @@ export async function POST(request: Request) {
     // 1. Validar Cliente e configurações
     const { data: cliente } = await supabaseAdmin
       .from('clientes')
-      .select('id, cnpj, razao_social, inscricao_estadual, is_ativo, configuracoes_hub(auto_excluir_divergentes)')
+      .select('id, cnpj, razao_social, inscricao_estadual, is_ativo, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados)')
       .eq('hub_token', token)
       .single()
 
@@ -167,6 +167,15 @@ export async function POST(request: Request) {
 
     // Nota considerada oficialmente autorizada pela SEFAZ
     const isAutorizada = (cStat === '100' || xmlString.includes('Autorizado o uso da NF-e') || xmlString.includes('Autorizado o uso da NFC-e')) && temAssinatura
+
+    // Se o cliente configurou para aceitar APENAS XMLs autorizados com protocolo e assinatura
+    if (hubConfig?.apenas_xmls_autorizados && !isAutorizada) {
+      return NextResponse.json({ 
+        ignored: true, 
+        rejected: true,
+        reason: 'XML descartado: O arquivo não possui protocolo de autorização da SEFAZ (<protNFe>) ou assinatura digital válida. (Opção "Aceitar apenas XMLs autorizados" ativada nas configurações do Portal)' 
+      }, { status: 200 })
+    }
 
     // Cálculo dos Produtos Monofásicos (CST 04 / 06)
     const valorMonofasico = calculateMonofasico(xmlString)

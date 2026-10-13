@@ -16,6 +16,7 @@ export default function ConfiguracoesPortalPage() {
 
   const [formData, setFormData] = useState({
     auto_excluir_divergentes: false,
+    apenas_xmls_autorizados: false,
     exibir_certificados_contabilidade: false,
     exibir_certificados_cliente: false,
     avisar_whatsapp_certificado: true,
@@ -48,7 +49,7 @@ export default function ConfiguracoesPortalPage() {
         setSelectedCliente(roleData.cliente_id)
         const { data: cli } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado)')
+          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado)')
           .eq('id', roleData.cliente_id)
           .single()
         if (cli) {
@@ -56,6 +57,7 @@ export default function ConfiguracoesPortalPage() {
           const config = Array.isArray(cli.configuracoes_hub) ? cli.configuracoes_hub[0] : cli.configuracoes_hub
           setFormData({ 
             auto_excluir_divergentes: Boolean(config?.auto_excluir_divergentes),
+            apenas_xmls_autorizados: Boolean(config?.apenas_xmls_autorizados),
             exibir_certificados_contabilidade: Boolean(config?.exibir_certificados_contabilidade),
             exibir_certificados_cliente: Boolean(config?.exibir_certificados_cliente),
             avisar_whatsapp_certificado: config?.avisar_whatsapp_certificado !== false,
@@ -65,7 +67,7 @@ export default function ConfiguracoesPortalPage() {
       } else if (role === 'contabilidade' && roleData?.contabilidade_id) {
         const { data: clis } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado)')
+          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado)')
           .eq('contabilidade_id', roleData.contabilidade_id)
           .order('razao_social')
         if (clis && clis.length > 0) {
@@ -76,7 +78,7 @@ export default function ConfiguracoesPortalPage() {
         // Admin
         const { data: clis } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado)')
+          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado)')
           .order('razao_social')
         if (clis && clis.length > 0) {
           setClientes(clis)
@@ -117,13 +119,14 @@ export default function ConfiguracoesPortalPage() {
     async function loadConfig() {
       const { data } = await supabase
         .from('configuracoes_hub')
-        .select('auto_excluir_divergentes, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado')
+        .select('auto_excluir_divergentes, apenas_xmls_autorizados, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado')
         .eq('cliente_id', selectedCliente)
         .single()
 
       if (data) {
         setFormData({
           auto_excluir_divergentes: Boolean(data.auto_excluir_divergentes),
+          apenas_xmls_autorizados: Boolean(data.apenas_xmls_autorizados),
           exibir_certificados_contabilidade: Boolean(data.exibir_certificados_contabilidade),
           exibir_certificados_cliente: Boolean(data.exibir_certificados_cliente),
           avisar_whatsapp_certificado: data.avisar_whatsapp_certificado !== false,
@@ -132,6 +135,7 @@ export default function ConfiguracoesPortalPage() {
       } else {
         setFormData({ 
           auto_excluir_divergentes: false,
+          apenas_xmls_autorizados: false,
           exibir_certificados_contabilidade: false,
           exibir_certificados_cliente: false,
           avisar_whatsapp_certificado: true,
@@ -153,6 +157,7 @@ export default function ConfiguracoesPortalPage() {
     const payload: any = {
       cliente_id: selectedCliente,
       auto_excluir_divergentes: formData.auto_excluir_divergentes,
+      apenas_xmls_autorizados: formData.apenas_xmls_autorizados,
       dia_vencimento: 10,
       valor_mensalidade: 0.00,
       updated_at: new Date().toISOString()
@@ -329,6 +334,32 @@ export default function ConfiguracoesPortalPage() {
                 <span className="text-slate-600 text-sm leading-relaxed block mt-2">
                   • <strong>Se marcado:</strong> o sistema <strong>exclui diretamente</strong> o arquivo divergente no recebimento, impedindo que dados incorretos contaminem os relatórios fiscais.<br />
                   • <strong>Se desmarcado:</strong> o arquivo é importado, porém <strong>destacado em vermelho</strong> no painel de notas fiscais com aviso de divergência de titularidade e botão para exclusão manual.
+                </span>
+                <span className="inline-flex items-center gap-1.5 mt-3 text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100/70 text-blue-800">
+                  <CheckCircle2 size={14} /> Ativo para: Super Admin, Contabilidade e Empresa Cliente
+                </span>
+              </label>
+            </div>
+
+            {/* Aceitar apenas XMLs com Protocolo e Assinatura Digital */}
+            <div className="flex items-start gap-3.5 p-5 bg-slate-50 rounded-2xl border border-slate-200 hover:border-slate-300 transition">
+              <input 
+                type="checkbox" 
+                id="apenas_xmls_autorizados"
+                checked={formData.apenas_xmls_autorizados}
+                onChange={e => setFormData({ ...formData, apenas_xmls_autorizados: e.target.checked })}
+                className="mt-1 h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+              />
+              <label htmlFor="apenas_xmls_autorizados" className="cursor-pointer select-none">
+                <span className="font-bold text-slate-900 block text-base mb-1">
+                  Aceitar apenas XMLs com Protocolo de Autorização SEFAZ e Assinatura Digital
+                </span>
+                <span className="text-slate-600 text-sm leading-relaxed block">
+                  Exige que todo XML de venda recebido contenha o protocolo de autorização oficial da SEFAZ (<code className="text-xs bg-slate-200 px-1 py-0.5 rounded">&lt;protNFe&gt;</code> com status 100) e a assinatura digital ICP-Brasil (<code className="text-xs bg-slate-200 px-1 py-0.5 rounded">&lt;Signature&gt;</code>).
+                </span>
+                <span className="text-slate-600 text-sm leading-relaxed block mt-2">
+                  • <strong>Se marcado:</strong> o sistema <strong>recusa e descarta automaticamente</strong> arquivos em rascunho, pré-vendas geradas pelo PDV ou contingências não transmitidas à SEFAZ, garantindo que apenas arquivos com plena validade jurídica entrem na contabilidade.<br />
+                  • <strong>Se desmarcado (Padrão):</strong> o sistema <strong>aceita e importa todos os XMLs</strong> gerados pelo PDV/ERP mesmo sem protocolo ou assinatura, registrando-os para fins de histórico e conferência interna.
                 </span>
                 <span className="inline-flex items-center gap-1.5 mt-3 text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100/70 text-blue-800">
                   <CheckCircle2 size={14} /> Ativo para: Super Admin, Contabilidade e Empresa Cliente
