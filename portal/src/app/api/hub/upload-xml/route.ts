@@ -68,6 +68,56 @@ function calculateMonofasico(xml: string): number {
   return Math.round(totalMonofasico * 100) / 100
 }
 
+const tPagNames: Record<string, string> = {
+  '01': 'Dinheiro',
+  '02': 'Cheque',
+  '03': 'Cartão de Crédito',
+  '04': 'Cartão de Débito',
+  '05': 'Crédito Loja',
+  '10': 'Vale Alimentação',
+  '11': 'Vale Refeição',
+  '12': 'Vale Presente',
+  '13': 'Vale Combustível',
+  '14': 'Duplicata Mercantil',
+  '15': 'Boleto Bancário',
+  '16': 'Depósito Bancário',
+  '17': 'PIX',
+  '18': 'Transferência Bancária',
+  '19': 'Cashback / Fidelidade',
+  '20': 'PIX',
+  '90': 'Sem Pagamento',
+  '99': 'Outros'
+}
+
+function extrairFormasPagamento(xml: string, valorFallback: number): any[] {
+  const pagamentos: any[] = []
+  const detPags = xml.match(/<detPag[^>]*>[\s\S]*?<\/detPag>/g) || []
+
+  if (detPags.length === 0) {
+    const tPagM = xml.match(/<tPag>(\d+)<\/tPag>/)
+    const vPagM = xml.match(/<vPag>([\d.]+)<\/vPag>/)
+    if (tPagM || vPagM) {
+      const cod = tPagM ? tPagM[1].padStart(2, '0') : '99'
+      const valor = vPagM ? parseFloat(vPagM[1]) : Number(valorFallback || 0)
+      pagamentos.push({ codigo: cod, nome: tPagNames[cod] || 'Outros', valor })
+    }
+  } else {
+    for (const dp of detPags) {
+      const tPagM = dp.match(/<tPag>(\d+)<\/tPag>/)
+      const vPagM = dp.match(/<vPag>([\d.]+)<\/vPag>/)
+      const cod = tPagM ? tPagM[1].padStart(2, '0') : '99'
+      const valor = vPagM ? parseFloat(vPagM[1]) : 0
+      pagamentos.push({ codigo: cod, nome: tPagNames[cod] || 'Outros', valor })
+    }
+  }
+
+  if (pagamentos.length === 0 && valorFallback > 0) {
+    pagamentos.push({ codigo: '99', nome: 'Outros', valor: Number(valorFallback) })
+  }
+
+  return pagamentos
+}
+
 export async function POST(request: Request) {
   try {
     const formData = await request.formData()
@@ -293,6 +343,7 @@ export async function POST(request: Request) {
     if (nProt) dbPayload.protocolo = nProt
     dbPayload.is_autorizada = isAutorizada
     dbPayload.valor_monofasico = valorMonofasico
+    dbPayload.formas_pagamento = extrairFormasPagamento(xmlString, dbPayload.valor)
 
     const { error: dbError } = await supabaseAdmin.from(tabela).upsert(dbPayload, { onConflict: 'chave' })
 

@@ -495,15 +495,6 @@ export default function RelatoriosPage() {
     }
   }
 
-  if (loading) {
-    return <div className="p-8 text-slate-500">Carregando módulo fiscal...</div>
-  }
-
-  const consolidado = auditData?.consolidado
-  const quebras = auditData?.quebras_sequencia || []
-  const naoAssinadas = auditData?.nao_assinadas
-  const inutilizadas = auditData?.inutilizadas
-
   // Reset de páginas ao alterar competência ou cliente
   useEffect(() => {
     setPageQuebras(1)
@@ -516,6 +507,11 @@ export default function RelatoriosPage() {
   useEffect(() => {
     setPageCertificados(1)
   }, [selectedCliente, selectedMonth, pageSizeCertificados])
+
+  const consolidado = auditData?.consolidado
+  const quebras = auditData?.quebras_sequencia || []
+  const naoAssinadas = auditData?.nao_assinadas
+  const inutilizadas = auditData?.inutilizadas
 
   // Fatiamento Paginado - Quebras de Sequência
   const quebrasPaginadas = useMemo(() => {
@@ -532,6 +528,10 @@ export default function RelatoriosPage() {
     const start = (pageNaoAssinadas - 1) * pageSizeNaoAssinadas
     return listaNaoAssinadas.slice(start, start + pageSizeNaoAssinadas)
   }, [listaNaoAssinadas, pageNaoAssinadas, pageSizeNaoAssinadas])
+
+  if (loading) {
+    return <div className="p-8 text-slate-500">Carregando módulo fiscal...</div>
+  }
 
   return (
     <div className="w-full space-y-6 animate-in fade-in duration-300">

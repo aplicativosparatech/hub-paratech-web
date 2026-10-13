@@ -5,7 +5,7 @@ import { createClient } from '@/utils/supabase/client'
 import { useSearchParams } from 'next/navigation'
 import { 
   RefreshCw, Trash2, AlertTriangle, Sparkles, Sliders, CheckCircle2, 
-  ShieldAlert, FileText, ArrowRight, Calendar, Filter, Search, RotateCcw, Clock, X 
+  ShieldAlert, FileText, ArrowRight, Calendar, Filter, Search, RotateCcw, Clock, X, Download 
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
@@ -303,6 +303,22 @@ export default function TabelaCorrecao() {
   }
 
   const syncInfo = formatRelativeSync(ultimaSincronizacaoHub)
+
+  // Download Individual de XML
+  const handleDownloadXml = (nota: any) => {
+    try {
+      const url = `/api/notas-fiscais/download-xml?tabela=${nota._tabela}&id=${nota.id}`
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${nota.chave || nota.numero || 'nota_fiscal'}.xml`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      toast.success(`Download do XML ${nota.numero ? 'Nº ' + nota.numero : ''} iniciado!`)
+    } catch (err: any) {
+      toast.error('Erro ao baixar XML: ' + (err.message || 'Falha no download'))
+    }
+  }
 
   // Ação 1: Consultar e Corrigir via SEFAZ
   const handleCorrigirSefaz = async (nota: any) => {
@@ -805,6 +821,15 @@ export default function TabelaCorrecao() {
                         >
                           <Sliders size={14} />
                           Manual
+                        </button>
+
+                        {/* Botão Baixar XML */}
+                        <button
+                          onClick={() => handleDownloadXml(n)}
+                          className="p-1.5 text-blue-600 hover:text-blue-800 transition rounded-lg hover:bg-blue-50"
+                          title="Baixar Arquivo XML"
+                        >
+                          <Download size={16} />
                         </button>
 
                         {/* Botão Excluir */}

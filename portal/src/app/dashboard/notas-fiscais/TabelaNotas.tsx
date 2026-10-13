@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { 
   RefreshCw, X, Trash2, AlertTriangle, ArrowRight, 
-  Calendar, Filter, Search, Clock, RotateCcw, CheckCircle2 
+  Calendar, Filter, Search, Clock, RotateCcw, CheckCircle2, Download 
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Pagination from '@/components/Pagination'
@@ -315,6 +315,55 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
 
   const syncInfo = formatRelativeSync(ultimaSincronizacaoHub)
 
+  // Download Individual de XML
+  const handleDownloadXml = (nota: any) => {
+    try {
+      const url = `/api/notas-fiscais/download-xml?tabela=${tabela}&id=${nota.id}`
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${nota.chave || nota.numero || 'nota_fiscal'}.xml`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      toast.success(`Download do XML ${nota.numero ? 'Nº ' + nota.numero : ''} iniciado!`)
+    } catch (err: any) {
+      toast.error('Erro ao baixar XML: ' + (err.message || 'Falha no download'))
+    }
+  }
+
+  // Consolidação Financeira e Modalidades de Pagamento (PIX, Dinheiro, Cartões, etc.)
+  const resumoFinanceiro = useMemo(() => {
+    let valorTotal = 0
+    const formasMap: Record<string, { total: number; qtd: number }> = {}
+
+    for (const n of notasFiltradas) {
+      const vNota = Number(n.valor || 0)
+      valorTotal += vNota
+
+      if (Array.isArray(n.formas_pagamento) && n.formas_pagamento.length > 0) {
+        for (const fp of n.formas_pagamento) {
+          const nome = fp.nome || 'Outros'
+          const v = Number(fp.valor || 0)
+          if (!formasMap[nome]) formasMap[nome] = { total: 0, qtd: 0 }
+          formasMap[nome].total += v
+          formasMap[nome].qtd += 1
+        }
+      } else {
+        const nome = 'Outros'
+        if (!formasMap[nome]) formasMap[nome] = { total: 0, qtd: 0 }
+        formasMap[nome].total += vNota
+        formasMap[nome].qtd += 1
+      }
+    }
+
+    return {
+      valorTotal,
+      formas: Object.entries(formasMap)
+        .map(([nome, dados]) => ({ nome, ...dados }))
+        .sort((a, b) => b.total - a.total)
+    }
+  }, [notasFiltradas])
+
   return (
     <div className="space-y-4">
       {/* Barra de Filtro de Clientes para Admin e Contabilidade */}
@@ -396,8 +445,62 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
             </div>
           </div>
 
-          <div className="text-xs text-slate-500 text-right sm:self-end">
-            <span className="font-semibold text-slate-700">{notasOficiaisValidas.length}</span> notas oficiais autorizadas
+          <div className="flex flex-col sm:items-end justify-center gap-1.5 text-right sm:self-end">
+            <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
+              <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1 rounded-xl font-bold flex items-center gap-1 shadow-2xs">
+                <span>Total:</span>
+                <strong className="text-emerald-700 text-sm">
+                  R$ {resumoFinanceiro.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </strong>
+              </span>
+
+              <span className="text-slate-500 bg-white border border-slate-200 px-2.5 py-1 rounded-xl font-medium">
+                <strong className="text-slate-800 font-semibold">{notasFiltradas.length}</strong> {notasFiltradas.length === 1 ? 'nota oficial' : 'notas oficiais'}
+              </span>
+            </div>
+
+            {/* Modalidades de Pagamento (PIX, Dinheiro, Cartões, etc.) */}
+            {resumoFinanceiro.formas.length > 0 && (
+              <div className="flex flex-wrap items-center justify-end gap-1.5 text-[11px] mt-0.5">
+                {resumoFinanceiro.formas.map(fp => {
+                  let badgeColor = 'bg-slate-50 text-slate-700 border-slate-200'
+                  let icon = '🏷️'
+                  const nomeLower = fp.nome.toLowerCase()
+                  if (nomeLower.includes('pix')) {
+                    badgeColor = 'bg-teal-50 text-teal-800 border-teal-200'
+                    icon = '⚡'
+                  } else if (nomeLower.includes('dinheiro')) {
+                    badgeColor = 'bg-green-50 text-green-800 border-green-200'
+                    icon = '💵'
+                  } else if (nomeLower.includes('crédito') || nomeLower.includes('credito')) {
+                    badgeColor = 'bg-blue-50 text-blue-800 border-blue-200'
+                    icon = '💳'
+                  } else if (nomeLower.includes('débito') || nomeLower.includes('debito')) {
+                    badgeColor = 'bg-sky-50 text-sky-800 border-sky-200'
+                    icon = '💳'
+                  } else if (nomeLower.includes('boleto')) {
+                    badgeColor = 'bg-amber-50 text-amber-800 border-amber-200'
+                    icon = '📄'
+                  } else if (nomeLower.includes('depósito') || nomeLower.includes('transferência')) {
+                    badgeColor = 'bg-purple-50 text-purple-800 border-purple-200'
+                    icon = '🏦'
+                  }
+
+                  return (
+                    <span 
+                      key={fp.nome} 
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border font-medium ${badgeColor}`}
+                      title={`${fp.nome}: R$ ${fp.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${fp.qtd} notas)`}
+                    >
+                      <span>{icon} {fp.nome}:</span>
+                      <strong className="font-bold">
+                        R$ {fp.total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </strong>
+                    </span>
+                  )
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -426,10 +529,70 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
         </div>
       )}
 
-      {/* Identificação de Empresa para o perfil Cliente */}
+      {/* Identificação de Empresa e Resumo Financeiro para o perfil Cliente */}
       {userRole === 'cliente' && clientes.length > 0 && (
-        <div className="bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-700 font-medium">
-          Empresa Titular: <strong className="text-slate-900">{clientes[0].razao_social}</strong> ({clientes[0].cnpj})
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="text-xs text-slate-700 font-medium">
+            Empresa Titular: <strong className="text-slate-900">{clientes[0].razao_social}</strong> ({clientes[0].cnpj})
+          </div>
+
+          <div className="flex flex-col sm:items-end justify-center gap-1.5 text-right sm:self-end">
+            <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
+              <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1 rounded-xl font-bold flex items-center gap-1 shadow-2xs">
+                <span>Total:</span>
+                <strong className="text-emerald-700 text-sm">
+                  R$ {resumoFinanceiro.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </strong>
+              </span>
+
+              <span className="text-slate-500 bg-white border border-slate-200 px-2.5 py-1 rounded-xl font-medium">
+                <strong className="text-slate-800 font-semibold">{notasFiltradas.length}</strong> {notasFiltradas.length === 1 ? 'nota oficial' : 'notas oficiais'}
+              </span>
+            </div>
+
+            {/* Modalidades de Pagamento (PIX, Dinheiro, Cartões, etc.) */}
+            {resumoFinanceiro.formas.length > 0 && (
+              <div className="flex flex-wrap items-center justify-end gap-1.5 text-[11px] mt-0.5">
+                {resumoFinanceiro.formas.map(fp => {
+                  let badgeColor = 'bg-slate-50 text-slate-700 border-slate-200'
+                  let icon = '🏷️'
+                  const nomeLower = fp.nome.toLowerCase()
+                  if (nomeLower.includes('pix')) {
+                    badgeColor = 'bg-teal-50 text-teal-800 border-teal-200'
+                    icon = '⚡'
+                  } else if (nomeLower.includes('dinheiro')) {
+                    badgeColor = 'bg-green-50 text-green-800 border-green-200'
+                    icon = '💵'
+                  } else if (nomeLower.includes('crédito') || nomeLower.includes('credito')) {
+                    badgeColor = 'bg-blue-50 text-blue-800 border-blue-200'
+                    icon = '💳'
+                  } else if (nomeLower.includes('débito') || nomeLower.includes('debito')) {
+                    badgeColor = 'bg-sky-50 text-sky-800 border-sky-200'
+                    icon = '💳'
+                  } else if (nomeLower.includes('boleto')) {
+                    badgeColor = 'bg-amber-50 text-amber-800 border-amber-200'
+                    icon = '📄'
+                  } else if (nomeLower.includes('depósito') || nomeLower.includes('transferência')) {
+                    badgeColor = 'bg-purple-50 text-purple-800 border-purple-200'
+                    icon = '🏦'
+                  }
+
+                  return (
+                    <span 
+                      key={fp.nome} 
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border font-medium ${badgeColor}`}
+                      title={`${fp.nome}: R$ ${fp.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${fp.qtd} notas)`}
+                    >
+                      <span>{icon} {fp.nome}:</span>
+                      <strong className="font-bold">
+                        R$ {fp.total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </strong>
+                    </span>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -650,13 +813,22 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                     <td className="p-4">{n.data_transmissao ? new Date(n.data_transmissao).toLocaleDateString('pt-BR') : '—'}</td>
                     <td className="p-4 text-center"><AssinaturaChip ok={n.tem_assinatura} /></td>
                     <td className="p-4 text-center">
-                      <button 
-                        onClick={() => setModalDelete({ open: true, tipo: 'individual', id: n.id, numero: n.numero })}
-                        className="p-1.5 rounded-lg text-red-500 hover:bg-red-100 hover:text-red-700 transition" 
-                        title="Excluir XML"
-                      >
-                        <span className="font-bold text-sm">✕</span>
-                      </button>
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => handleDownloadXml(n)}
+                          className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-100 hover:text-blue-800 transition"
+                          title="Baixar Arquivo XML"
+                        >
+                          <Download size={15} />
+                        </button>
+                        <button 
+                          onClick={() => setModalDelete({ open: true, tipo: 'individual', id: n.id, numero: n.numero })}
+                          className="p-1.5 rounded-lg text-red-500 hover:bg-red-100 hover:text-red-700 transition" 
+                          title="Excluir XML"
+                        >
+                          <span className="font-bold text-sm">✕</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )
