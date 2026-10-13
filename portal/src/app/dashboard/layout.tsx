@@ -5,11 +5,12 @@ import { usePathname, useRouter } from 'next/navigation'
 import { 
   LayoutDashboard, Users, Building2, Settings, FileText, 
   LogOut, BarChart3, Receipt, FileDown, PlugZap, UserCircle,
-  Menu, X, Sliders
+  Menu, X, Sliders, ShieldCheck
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
+import { PermissoesMap } from '@/utils/permissoes'
 
 type Role = 'admin' | 'cliente' | 'contabilidade'
 
@@ -18,6 +19,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname()
   const supabase = createClient()
   const [role, setRole] = useState<Role | null>(null)
+  const [permissoesMap, setPermissoesMap] = useState<PermissoesMap>({})
   const [loading, setLoading] = useState(true)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
@@ -42,10 +44,74 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }
 
       setRole(roleData.role as Role)
+
+      // Carregar configurações de permissões de módulos
+      const { data: perms } = await supabase
+        .from('permissoes_modulos')
+        .select('modulo_chave, permitido_cliente, permitido_contabilidade')
+
+      if (perms) {
+        const map: PermissoesMap = {}
+        perms.forEach(p => {
+          map[p.modulo_chave] = {
+            cliente: p.permitido_cliente,
+            contabilidade: p.permitido_contabilidade
+          }
+        })
+        setPermissoesMap(map)
+      }
+
       setLoading(false)
     }
     loadRole()
   }, [])
+
+  const canAccess = (moduloKey: string) => {
+    if (role === 'admin') return true
+    if (!role) return false
+    const perm = permissoesMap[moduloKey]
+    if (!perm) return true
+    return role === 'cliente' ? perm.cliente : perm.contabilidade
+  }
+
+  // Proteção dinâmica de rotas se o módulo estiver desativado pelo Admin
+  useEffect(() => {
+    if (loading || !role || role === 'admin') return
+
+    const rotasProtegidas = [
+      { prefixo: '/dashboard/minhas-faturas', modulo: 'faturas', nome: 'Minhas Faturas' },
+      { prefixo: '/dashboard/faturas', modulo: 'faturas', nome: 'Faturas' },
+      { prefixo: '/dashboard/notas-fiscais', modulo: 'notas_fiscais', nome: 'Notas Fiscais' },
+      { prefixo: '/dashboard/configuracoes-portal', modulo: 'configuracoes_portal', nome: 'Configurações do Portal' },
+      { prefixo: '/dashboard/meus-clientes', modulo: 'contabilidade_meus_clientes', nome: 'Meus Clientes' },
+      { prefixo: '/dashboard/meu-perfil', modulo: 'meu_perfil', nome: 'Meu Perfil' },
+      { prefixo: '/dashboard/permissoes', modulo: '_admin_only', nome: 'Permissões' },
+    ]
+
+    for (const r of rotasProtegidas) {
+      if (pathname === r.prefixo || pathname.startsWith(r.prefixo + '/')) {
+        if (r.modulo === '_admin_only') {
+          toast.error('Acesso restrito ao Administrador.')
+          router.push('/dashboard')
+          return
+        }
+        if (!canAccess(r.modulo)) {
+          toast.error(`O módulo ${r.nome} está desativado para o seu perfil.`)
+          router.push('/dashboard')
+          return
+        }
+      }
+    }
+
+    if (pathname === '/dashboard/relatorios' || pathname.startsWith('/dashboard/relatorios/')) {
+      const temRelatorio = canAccess('relatorios_resumo') || canAccess('relatorios_monofasicos') || canAccess('relatorios_auditoria')
+      if (!temRelatorio) {
+        toast.error('O módulo de Relatórios está desativado para o seu perfil.')
+        router.push('/dashboard')
+        return
+      }
+    }
+  }, [pathname, role, permissoesMap, loading])
 
   // Fecha o menu mobile ao navegar
   useEffect(() => {
@@ -125,6 +191,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 px-4 mt-6">Sistema</div>
             <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
             <NavItem href="/dashboard/integracoes" icon={PlugZap} label="Integrações (APIs)" />
+            <NavItem href="/dashboard/permissoes" icon={ShieldCheck} label="Permissões" />
             <NavItem href="/dashboard/configuracoes-portal" icon={Sliders} label="Configurações do Portal" />
             <NavItem href="/dashboard/configuracoes" icon={Settings} label="Configurações Hub" />
           </>
@@ -134,11 +201,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {role === 'cliente' && (
           <>
             <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 px-4 mt-6">Meu Espaço</div>
-            <NavItem href="/dashboard/minhas-faturas" icon={Receipt} label="Minhas Faturas" />
-            <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Minhas Notas Fiscais" />
-            <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
-            <NavItem href="/dashboard/configuracoes-portal" icon={Sliders} label="Configurações do Portal" />
-            <NavItem href="/dashboard/meu-perfil" icon={UserCircle} label="Meu Perfil" />
+            {canAccess('faturas') && <NavItem href="/dashboard/minhas-faturas" icon={Receipt} label="Minhas Faturas" />}
+            {canAccess('notas_fiscais') && <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Minhas Notas Fiscais" />}
+            {(canAccess('relatorios_resumo') || canAccess('relatorios_monofasicos') || canAccess('relatorios_auditoria')) && (
+              <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
+            )}
+            {canAccess('configuracoes_portal') && <NavItem href="/dashboard/configuracoes-portal" icon={Sliders} label="Configurações do Portal" />}
+            {canAccess('meu_perfil') && <NavItem href="/dashboard/meu-perfil" icon={UserCircle} label="Meu Perfil" />}
           </>
         )}
 
@@ -146,11 +215,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {role === 'contabilidade' && (
           <>
             <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 px-4 mt-6">Escritório</div>
-            <NavItem href="/dashboard/meus-clientes" icon={Users} label="Meus Clientes" />
-            <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Notas Fiscais (XMLs)" />
-            <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
-            <NavItem href="/dashboard/configuracoes-portal" icon={Sliders} label="Configurações do Portal" />
-            <NavItem href="/dashboard/meu-perfil" icon={Building2} label="Perfil do Escritório" />
+            {canAccess('contabilidade_meus_clientes') && <NavItem href="/dashboard/meus-clientes" icon={Users} label="Meus Clientes" />}
+            {canAccess('notas_fiscais') && <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Notas Fiscais (XMLs)" />}
+            {(canAccess('relatorios_resumo') || canAccess('relatorios_monofasicos') || canAccess('relatorios_auditoria')) && (
+              <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
+            )}
+            {canAccess('configuracoes_portal') && <NavItem href="/dashboard/configuracoes-portal" icon={Sliders} label="Configurações do Portal" />}
+            {canAccess('meu_perfil') && <NavItem href="/dashboard/meu-perfil" icon={Building2} label="Perfil do Escritório" />}
           </>
         )}
       </nav>
