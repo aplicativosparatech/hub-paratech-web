@@ -109,10 +109,66 @@ export async function GET(request: Request) {
         }
       }
     } catch (e: any) {
-      console.warn('[Consulta CNPJ] ReceitaWS falhou, tentando BrasilAPI:', e.message);
+      console.warn('[Consulta CNPJ] ReceitaWS falhou, tentando CNPJa:', e.message);
     }
 
-    // 2. TENTATIVA 2: BrasilAPI
+    // 2. TENTATIVA 2: Open CNPJa (Rápido, sem limites agressivos e dados completos)
+    try {
+      const resCnpja = await fetch(`https://open.cnpja.com/office/${rawDoc}`, {
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'HubParatech/2.3'
+        },
+        signal: AbortSignal.timeout(6000)
+      });
+
+      if (resCnpja.ok) {
+        const d = await resCnpja.json();
+        if (d.company && d.company.name) {
+          const primPhone = d.phones?.[0];
+          const telFormatado = primPhone ? `(${primPhone.area}) ${primPhone.number}` : '';
+          const wppLimpo = primPhone ? `55${primPhone.area}${primPhone.number}` : '';
+
+          let autoRegime: 'simples_nacional' | 'simples_nacional_excesso' | 'lucro_presumido' | 'lucro_real' | 'mei' = 'simples_nacional';
+          const optanteMei = Boolean(d.company?.simei?.optant);
+          const optanteSimples = Boolean(d.company?.simples?.optant);
+
+          if (optanteMei) autoRegime = 'mei';
+          else if (optanteSimples) autoRegime = 'simples_nacional';
+          else autoRegime = 'lucro_presumido';
+
+          const resultado: RespostaCnpjPadrao = {
+            sucesso: true,
+            cnpj: rawDoc,
+            cnpj_formatado: formatarCnpjCpf(rawDoc),
+            razao_social: d.company.name || '',
+            nome_fantasia: d.alias || d.company.name || '',
+            email: d.emails?.[0]?.address || '',
+            telefone: telFormatado,
+            whatsapp: wppLimpo,
+            cep: (d.address?.zip || '').replace(/\D/g, ''),
+            logradouro: d.address?.street || '',
+            numero: d.address?.number || '',
+            complemento: d.address?.details || '',
+            bairro: d.address?.district || '',
+            cidade: d.address?.city || '',
+            uf: d.address?.state || '',
+            ramo_atividade: d.mainActivity?.text || '',
+            regime_tributario: autoRegime,
+            optante_simples: optanteSimples,
+            optante_mei: optanteMei,
+            situacao: d.status?.text || 'ATIVA',
+            provedor: 'cnpja'
+          };
+
+          return NextResponse.json(resultado);
+        }
+      }
+    } catch (e: any) {
+      console.warn('[Consulta CNPJ] CNPJa falhou, tentando BrasilAPI:', e.message);
+    }
+
+    // 3. TENTATIVA 3: BrasilAPI
     try {
       const resBrasilApi = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${rawDoc}`, {
         headers: {
