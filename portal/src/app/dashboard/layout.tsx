@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, Building2, Settings, FileText, 
   LogOut, BarChart3, Receipt, FileDown, PlugZap, UserCircle,
   Menu, X, Sliders, ShieldCheck, Sparkles, Database,
-  Maximize2, Minimize2
+  Maximize2, Minimize2, Sun, Moon
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
@@ -27,6 +27,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showSplash, setShowSplash] = useState(true)
   const [splashProgress, setSplashProgress] = useState(0)
+  const [theme, setTheme] = useState<'light' | 'dark'>('light')
+
+  // 0. Tema Claro / Escuro
+  useEffect(() => {
+    const saved = localStorage.getItem('hub_theme')
+    if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      setTheme('dark')
+      document.documentElement.classList.add('dark')
+    } else {
+      setTheme('light')
+      document.documentElement.classList.remove('dark')
+    }
+  }, [])
+
+  const handleSetTheme = (newTheme: 'light' | 'dark') => {
+    setTheme(newTheme)
+    localStorage.setItem('hub_theme', newTheme)
+    if (newTheme === 'dark') {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }
 
   // 1. Splash Screen de 2 segundos com barra de progresso suave
   useEffect(() => {
@@ -228,11 +251,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         href={href} 
         className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
           isActive 
-            ? 'bg-blue-600/10 text-blue-600 font-semibold shadow-sm' 
-            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+            ? 'bg-blue-600/10 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400 font-semibold shadow-xs' 
+            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/70 dark:hover:text-slate-100'
         }`}
       >
-        <Icon size={20} className={isActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-blue-500 transition-colors'} />
+        <Icon size={20} className={isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500 group-hover:text-blue-500 transition-colors'} />
         <span>{label}</span>
       </Link>
     )
@@ -240,21 +263,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const SidebarContent = () => (
     <>
-      <div className="p-5 lg:p-6 pb-4 border-b border-slate-100 flex items-start justify-between">
-        <div className="flex flex-col items-start gap-2.5">
-          {/* Logo Paratech Oficial (Imagem 01) Acima do Nome */}
-          <Link href="/dashboard" className="block transition-transform hover:scale-[1.02]">
+      <div className="p-5 lg:p-6 pb-4 border-b border-slate-100 dark:border-slate-800/80 flex items-start justify-between">
+        <div className="flex flex-col items-start w-full gap-2.5">
+          {/* Logo Paratech Oficial (Imagem 01) - mesma largura da junção HubParatech + versão como na imagem 2 */}
+          <Link href="/dashboard" className="block w-full transition-transform hover:scale-[1.01]">
             <img 
               src="/logo-paratech.webp" 
               alt="Paratech Soluções & Sistemas" 
-              className="h-10 sm:h-11 w-auto object-contain"
+              className="w-full h-auto object-contain block drop-shadow-xs"
             />
           </Link>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-black tracking-tight text-slate-800">
+          <div className="w-full flex items-center justify-between">
+            <h2 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-white">
               Hub<span className="text-blue-600">Paratech</span>
             </h2>
-            <span className="text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-md border border-blue-200">
+            <span className="text-[11px] font-bold uppercase tracking-wider bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2.5 py-0.5 rounded-xl border border-blue-200 dark:border-blue-800">
               {APP_VERSION}
             </span>
           </div>
@@ -262,7 +285,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Botão fechar para mobile */}
         <button 
           onClick={() => setMobileMenuOpen(false)} 
-          className="md:hidden p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg -mt-1 -mr-2"
+          className="md:hidden p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg -mt-1 -mr-2"
         >
           <X size={20} />
         </button>
@@ -357,10 +380,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   )
 
   return (
-    <div className="min-h-screen flex bg-slate-50 font-sans">
+    <div className="min-h-screen flex bg-slate-50 dark:bg-slate-950 font-sans transition-colors duration-200">
       
       {/* 1. Sidebar Desktop (Fixa na esquerda) */}
-      <aside className="hidden md:flex md:w-64 lg:w-72 bg-white border-r border-slate-200 flex-col shadow-sm relative z-10 flex-shrink-0">
+      <aside className="hidden md:flex md:w-64 lg:w-72 bg-white dark:bg-[#0B1120] border-r border-slate-200 dark:border-slate-800 flex-col shadow-xs relative z-10 flex-shrink-0 transition-colors duration-200">
         <SidebarContent />
       </aside>
 
@@ -369,56 +392,87 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="fixed inset-0 z-50 md:hidden flex">
           {/* Backdrop escuro com clique para fechar */}
           <div 
-            className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity" 
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity" 
             onClick={() => setMobileMenuOpen(false)} 
           />
           {/* Menu Drawer Deslizante */}
-          <div className="relative w-72 max-w-[85vw] bg-white h-full flex flex-col shadow-2xl z-10">
+          <div className="relative w-72 max-w-[85vw] bg-white dark:bg-[#0B1120] h-full flex flex-col shadow-2xl z-10 transition-colors duration-200">
             <SidebarContent />
           </div>
         </div>
       )}
 
       {/* 3. Main Content (Totalmente expandido em 100% da tela) */}
-      <main className="flex-1 flex flex-col h-screen overflow-y-auto bg-[#F8FAFC]">
+      <main className="flex-1 flex flex-col h-screen overflow-y-auto bg-[#F8FAFC] dark:bg-[#06090F] transition-colors duration-200">
         {/* Topbar moderna e responsiva */}
-        <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 lg:px-8 sticky top-0 z-20 shadow-sm flex-shrink-0">
+        <header className="h-16 bg-white/80 dark:bg-[#0B1120]/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 sm:px-6 lg:px-8 sticky top-0 z-20 shadow-xs flex-shrink-0 transition-colors duration-200">
           <div className="flex items-center gap-3">
             {/* Botão Hambúrguer Mobile */}
             <button 
               onClick={() => setMobileMenuOpen(true)}
-              className="md:hidden p-2 rounded-lg text-slate-600 hover:bg-slate-100 focus:outline-none"
+              className="md:hidden p-2 rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 focus:outline-none"
               aria-label="Abrir Menu"
             >
               <Menu size={22} />
             </button>
-            <h1 className="text-lg font-bold text-slate-800 capitalize">
+            <h1 className="text-lg font-bold text-slate-800 dark:text-slate-100 capitalize">
               {pathname.split('/').pop()?.replace('-', ' ') || 'Visão Geral'}
             </h1>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Seletor com Opções de Tema Claro e Tema Escuro */}
+            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/80 dark:border-slate-700 text-xs shadow-xs">
+              <button
+                type="button"
+                onClick={() => handleSetTheme('light')}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                  theme === 'light'
+                    ? 'bg-white text-amber-600 shadow-xs'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+                title="Ativar Tema Claro"
+              >
+                <Sun size={14} className={theme === 'light' ? 'text-amber-500 fill-amber-400/30' : ''} />
+                <span className="hidden sm:inline">Tema Claro</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSetTheme('dark')}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                  theme === 'dark'
+                    ? 'bg-slate-900 text-indigo-400 shadow-xs border border-slate-700/80'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+                title="Ativar Tema Escuro"
+              >
+                <Moon size={14} className={theme === 'dark' ? 'text-indigo-400 fill-indigo-400/30' : ''} />
+                <span className="hidden sm:inline">Tema Escuro</span>
+              </button>
+            </div>
+
             {/* Botão Modo Kiosk / Tela Inteira (F11) */}
             <button
               type="button"
               onClick={toggleFullscreen}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition border border-slate-200/80 shadow-xs cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition border border-slate-200/80 dark:border-slate-700 shadow-xs cursor-pointer"
               title={isFullscreen ? "Sair da Tela Cheia (F11)" : "Modo Tela Inteira / Kiosk (F11)"}
             >
               {isFullscreen ? (
                 <>
-                  <Minimize2 size={14} className="text-blue-600" />
+                  <Minimize2 size={14} className="text-blue-600 dark:text-blue-400" />
                   <span className="hidden sm:inline">Sair Tela Cheia</span>
                 </>
               ) : (
                 <>
-                  <Maximize2 size={14} className="text-slate-600" />
+                  <Maximize2 size={14} className="text-slate-600 dark:text-slate-400" />
                   <span className="hidden sm:inline">Tela Inteira</span>
                 </>
               )}
             </button>
 
-            <span className="hidden sm:inline-block px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-600 border border-blue-100 capitalize">
+            <span className="hidden sm:inline-block px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800 capitalize">
               {role}
             </span>
           </div>
@@ -430,14 +484,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* Rodapé Fixo e Discreto */}
-        <footer className="h-9 bg-white/95 backdrop-blur-md border-t border-slate-200/80 fixed bottom-0 left-0 right-0 md:left-64 lg:left-72 z-20 flex items-center justify-between px-4 sm:px-6 text-[11px] text-slate-500 shadow-xs">
+        <footer className="h-9 bg-white/95 dark:bg-[#0B1120]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 fixed bottom-0 left-0 right-0 md:left-64 lg:left-72 z-20 flex items-center justify-between px-4 sm:px-6 text-[11px] text-slate-500 dark:text-slate-400 shadow-xs transition-colors duration-200">
           <div className="flex items-center gap-1.5 truncate">
-            <span>Desenvolvido por <strong className="text-slate-700 font-semibold">Paratech Soluções e Sistemas</strong> -</span>
+            <span>Desenvolvido por <strong className="text-slate-700 dark:text-slate-200 font-semibold">Paratech Soluções e Sistemas</strong> -</span>
             <a 
               href="https://paratechsolucoes.com.br" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="text-blue-600 hover:text-blue-700 hover:underline font-medium transition-colors"
+              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 hover:underline font-medium transition-colors"
             >
               www.paratechsolucoes.com.br
             </a>
@@ -445,13 +499,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="flex items-center gap-1.5 text-right pl-3 truncate">
             <span className="hidden sm:inline text-slate-400">Analista programador Responsável:</span>
             <span className="sm:hidden text-slate-400">Resp:</span>
-            <strong className="text-slate-700 font-semibold">Regis Alexandre</strong>
-            <span className="text-slate-300">•</span>
+            <strong className="text-slate-700 dark:text-slate-200 font-semibold">Regis Alexandre</strong>
+            <span className="text-slate-300 dark:text-slate-600">•</span>
             <a 
               href="https://wa.me/5537920007857?text=Ol%C3%A1%20Regis,%20contato%20atrav%C3%A9s%20do%20HubParatech" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-700 font-bold hover:underline transition-colors"
+              className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 font-bold hover:underline transition-colors"
             >
               <span>37 92000 - 78 57</span>
             </a>
