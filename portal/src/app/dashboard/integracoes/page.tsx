@@ -534,14 +534,14 @@ export default function IntegracoesPage() {
                     <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Modelo</label>
                     <select
-                      value={(gemini.credenciais?.model && !gemini.credenciais.model.includes('2.0')) ? gemini.credenciais.model : 'gemini-1.5-flash'}
+                      value={(gemini.credenciais?.model && !gemini.credenciais.model.includes('2.0') && !gemini.credenciais.model.includes('2.5-') && !gemini.credenciais.model.includes('1.5-')) ? gemini.credenciais.model : 'gemini-3.8-flash'}
                       onChange={e => handleCredencialChange('gemini', 'model', e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                      className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none font-medium"
                     >
-                      <option value="gemini-1.5-flash">Gemini 1.5 Flash (Recomendado - 100% Gratuito e Estável)</option>
-                      <option value="gemini-2.5-flash">Gemini 2.5 Flash (Nova Geração Google)</option>
-                      <option value="gemini-2.5-pro">Gemini 2.5 Pro (Nova Geração Google - Raciocínio)</option>
-                      <option value="gemini-1.5-pro">Gemini 1.5 Pro (Alta Precisão)</option>
+                      <option value="gemini-3.8-flash">Gemini 3.8 Flash (Recomendado Oficial - 100% Gratuito e Estável)</option>
+                      <option value="gemini-flash-latest">Gemini Flash (Versão Dinâmica Mais Recente)</option>
+                      <option value="gemini-flash-lite-latest">Gemini Flash Lite (Ultrarrápido / Maior Velocidade)</option>
+                      <option value="gemini-pro-latest">Gemini Pro (Alta Precisão - Requer Chave com Faturamento)</option>
                     </select>
                   </div>
                 </div>

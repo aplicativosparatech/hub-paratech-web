@@ -91,7 +91,7 @@ export async function POST(req: Request) {
     if (isSucesso && provedor) {
       try {
         const modeloPadraoPorProvedor: Record<string, string> = {
-          gemini: 'gemini-1.5-flash',
+          gemini: 'gemini-3.8-flash',
           groq: 'llama-3.3-70b-versatile',
           openai: 'gpt-4o-mini',
           claude: 'claude-3-5-haiku-20241022',
@@ -99,8 +99,17 @@ export async function POST(req: Request) {
         };
 
         let modeloEscolhido = credenciais?.model;
-        if (!modeloEscolhido || (provedor === 'gemini' && modeloEscolhido.includes('2.0'))) {
-          modeloEscolhido = modeloPadraoPorProvedor[provedor] || 'gemini-1.5-flash';
+        if (
+          !modeloEscolhido ||
+          (provedor === 'gemini' && (
+            modeloEscolhido.includes('2.0') ||
+            modeloEscolhido.includes('2.5-pro') ||
+            modeloEscolhido.includes('1.5-flash') ||
+            modeloEscolhido.includes('1.5-pro') ||
+            modeloEscolhido === 'gemini-2.5-flash'
+          ))
+        ) {
+          modeloEscolhido = modeloPadraoPorProvedor[provedor] || 'gemini-3.8-flash';
         }
 
         const supabase = createAdminClient();

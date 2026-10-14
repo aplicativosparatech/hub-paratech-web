@@ -321,7 +321,8 @@ Não inclua formatação markdown, blocos de código nem explicações fora do a
   const geminiConfig = configsIa.find(c => c.is_ativo && c.provedor === 'gemini' && c.credenciais.api_key);
   if (geminiConfig && geminiConfig.credenciais.api_key) {
     try {
-      const model = geminiConfig.credenciais.model || 'gemini-2.5-flash';
+      const rawModel = geminiConfig.credenciais.model || 'gemini-flash-latest';
+      const model = (rawModel.includes('2.0') || rawModel.includes('2.5') || rawModel.includes('1.5')) ? 'gemini-flash-latest' : rawModel;
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiConfig.credenciais.api_key}`;
 
       const res = await fetch(url, {

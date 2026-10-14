@@ -92,22 +92,27 @@ async function chamarGemini(apiKey: string, model: string, item: ItemAuditoriaIn
       return null;
     }
 
-    // Se o usuário selecionou gemini-2.0-flash (descontinuado pelo Google), migra automaticamente para gemini-1.5-flash
-    let modeloPreferencial = (model || 'gemini-1.5-flash').trim();
-    if (modeloPreferencial.includes('2.0')) {
-      modeloPreferencial = 'gemini-1.5-flash';
+    // Normalização de modelos legados ou descontinuados pelo Google AI Studio
+    let modeloPreferencial = (model || 'gemini-3.8-flash').trim();
+    if (
+      modeloPreferencial.includes('2.0') ||
+      modeloPreferencial.includes('2.5-pro') ||
+      modeloPreferencial.includes('1.5-flash') ||
+      modeloPreferencial.includes('1.5-pro') ||
+      modeloPreferencial === 'gemini-2.5-flash'
+    ) {
+      modeloPreferencial = 'gemini-3.8-flash';
     }
 
-    // Esteira de modelos do Google AI Studio em ordem de compatibilidade e cota
+    // Esteira moderna de modelos oficiais do Google AI Studio em ordem de disponibilidade gratuita
     const modelosParaTentar = [
       modeloPreferencial,
-      'gemini-1.5-flash',
-      'gemini-2.5-flash',
-      'gemini-1.5-pro'
+      'gemini-3.8-flash',
+      'gemini-flash-lite-latest',
+      'gemini-flash-latest'
     ];
     const modelosUnicos = Array.from(new Set(modelosParaTentar));
 
-    let erroModeloPrincipal = '';
     let ultimoErroMsg = '';
 
     for (let i = 0; i < modelosUnicos.length; i++) {
@@ -129,12 +134,11 @@ async function chamarGemini(apiKey: string, model: string, item: ItemAuditoriaIn
         if (!res.ok) {
           const errData = await res.json().catch(() => null);
           const errMsg = errData?.error?.message || `HTTP ${res.status}`;
-          if (i === 0) erroModeloPrincipal = errMsg;
           ultimoErroMsg = errMsg;
           console.warn(`[Gemini Engine] Falha no modelo ${m}: ${errMsg}`);
 
-          // Se a chave for inválida, aborta imediatamente
-          if (errMsg.includes('API key not valid') || errMsg.includes('API_KEY_INVALID') || res.status === 400 && errMsg.includes('API key')) {
+          // Se a chave for comprovadamente inválida em qualquer modelo, aborta
+          if (errMsg.includes('API key not valid') || errMsg.includes('API_KEY_INVALID') || (res.status === 400 && errMsg.includes('API key'))) {
             break;
           }
           continue;
@@ -148,15 +152,13 @@ async function chamarGemini(apiKey: string, model: string, item: ItemAuditoriaIn
         const parsed = JSON.parse(cleanJson);
         return normalizarRespostaIa('gemini', `Google Gemini (${m})`, parsed, item);
       } catch (errM: any) {
-        if (i === 0) erroModeloPrincipal = errM.message;
         ultimoErroMsg = errM.message;
         console.warn(`[Gemini Engine] Erro no modelo ${m}:`, errM.message);
       }
     }
 
-    const erroFinal = erroModeloPrincipal || ultimoErroMsg;
-    if (erroFinal) {
-      (globalThis as any).__lastGeminiError = erroFinal;
+    if (ultimoErroMsg) {
+      (globalThis as any).__lastGeminiError = ultimoErroMsg;
     }
     return null;
   } catch (err: any) {
@@ -498,7 +500,7 @@ export async function auditarItemComMultiIa(
     if (!c.is_ativo) continue;
 
     if (c.provedor === 'gemini' && c.credenciais.api_key) {
-      promessas.push(chamarGemini(c.credenciais.api_key, c.credenciais.model || 'gemini-2.5-flash', item));
+      promessas.push(chamarGemini(c.credenciais.api_key, c.credenciais.model || 'gemini-flash-latest', item));
     } else if (c.provedor === 'groq' && c.credenciais.api_key) {
       promessas.push(chamarGroq(c.credenciais.api_key, c.credenciais.model || 'llama-3.3-70b-versatile', item));
     } else if (c.provedor === 'openai' && c.credenciais.api_key) {
