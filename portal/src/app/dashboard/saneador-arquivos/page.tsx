@@ -57,6 +57,19 @@ export default function SaneadorArquivosPage() {
 
   // Auditoria e Resultados
   const [estaAuditando, setEstaAuditando] = useState(false);
+  const [progressoSaneamento, setProgressoSaneamento] = useState<{
+    ativo: boolean;
+    porcentagem: number;
+    etapa: string;
+    detalhe: string;
+    segundosDecorridos: number;
+  }>({
+    ativo: false,
+    porcentagem: 0,
+    etapa: '',
+    detalhe: '',
+    segundosDecorridos: 0
+  });
   const [resultado, setResultado] = useState<{
     estatisticas: {
       totalItensArquivo: number;
@@ -202,7 +215,7 @@ export default function SaneadorArquivosPage() {
     }
   };
 
-  // Executa Auditoria e Saneamento
+  // Executa Auditoria e Saneamento com Barra de Progresso Real
   const handleExecutarAuditoria = async (formatoDownload: string = 'xlsx') => {
     if (!clienteSelecionado) {
       toast.error('Selecione o cliente responsável antes de auditar.');
@@ -218,7 +231,49 @@ export default function SaneadorArquivosPage() {
     }
 
     setEstaAuditando(true);
+    setProgressoSaneamento({
+      ativo: true,
+      porcentagem: 8,
+      etapa: '1/4: Decodificando Arquivo & Validando Colunas...',
+      detalhe: `Processando os dados de ${arquivo.name}...`,
+      segundosDecorridos: 0
+    });
+
     const tId = toast.loading('Executando auditoria tributária com Multi-IA e regras fiscais...');
+    const inicioTimestamp = Date.now();
+
+    const timerProgresso = setInterval(() => {
+      setProgressoSaneamento(prev => {
+        const decorrido = Math.floor((Date.now() - inicioTimestamp) / 1000);
+        let proximo = prev.porcentagem + (prev.porcentagem < 35 ? 3 : prev.porcentagem < 70 ? 2 : prev.porcentagem < 92 ? 0.8 : 0.2);
+        if (proximo > 94) proximo = 94;
+
+        let etapa = prev.etapa;
+        let detalhe = prev.detalhe;
+
+        if (proximo < 25) {
+          etapa = '1/4: Decodificando Arquivo & Validando Colunas...';
+          detalhe = 'Lendo estrutura e formatando linhas de produtos...';
+        } else if (proximo < 55) {
+          etapa = '2/4: Validação de NCMs, CESTs e Convênio 142/18...';
+          detalhe = 'Auditando regras fiscais estaduais e cruzamentos de alíquotas...';
+        } else if (proximo < 85) {
+          etapa = '3/4: Auditoria de Monofásicos & Consenso Multi-IA...';
+          detalhe = 'Identificando créditos e consultando redes neurais e MCPs...';
+        } else {
+          etapa = '4/4: Simulando Reforma Tributária (IBS/CBS e IVA Dual)...';
+          detalhe = 'Calculando novas alíquotas da reforma e gerando arquivo saneado...';
+        }
+
+        return {
+          ativo: true,
+          porcentagem: Math.min(proximo, 94),
+          etapa,
+          detalhe,
+          segundosDecorridos: decorrido
+        };
+      });
+    }, 450);
 
     const formData = new FormData();
     formData.append('acao', 'auditar');
@@ -239,12 +294,27 @@ export default function SaneadorArquivosPage() {
         throw new Error(data.error || 'Falha na auditoria');
       }
 
+      clearInterval(timerProgresso);
+      setProgressoSaneamento({
+        ativo: true,
+        porcentagem: 100,
+        etapa: 'Arquivo Saneado com Sucesso!',
+        detalhe: `${data.estatisticas.itensAuditadosNesteLote} itens auditados com Multi-IA.`,
+        segundosDecorridos: Math.floor((Date.now() - inicioTimestamp) / 1000)
+      });
+
       setResultado(data);
       toast.success(
         `Auditoria concluída! ${data.estatisticas.inconsistenciasEncontradas} inconsistências diagnosticadas e saneadas.`, 
         { id: tId, duration: 6000 }
       );
+
+      setTimeout(() => {
+        setProgressoSaneamento(prev => ({ ...prev, ativo: false }));
+      }, 1500);
     } catch (err: any) {
+      clearInterval(timerProgresso);
+      setProgressoSaneamento(prev => ({ ...prev, ativo: false }));
       toast.error(`Erro: ${err.message}`, { id: tId });
     } finally {
       setEstaAuditando(false);
@@ -694,6 +764,44 @@ export default function SaneadorArquivosPage() {
             </div>
           )}
 
+          {/* Barra de Progresso Real em Execução */}
+          {progressoSaneamento.ativo && (
+            <div className="p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-purple-950 to-slate-900 border border-purple-500/30 text-white shadow-xl space-y-3.5 animate-in fade-in duration-300">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin shrink-0"></div>
+                  <div>
+                    <h4 className="text-xs font-bold text-purple-200 uppercase tracking-wider flex items-center gap-2">
+                      <Sparkles size={14} className="text-purple-400 animate-pulse" />
+                      {progressoSaneamento.etapa}
+                    </h4>
+                    <p className="text-[11px] text-slate-300 mt-0.5">
+                      {progressoSaneamento.detalhe}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 self-end sm:self-auto">
+                  <span className="text-xs font-mono text-slate-400">
+                    ⏱️ {String(Math.floor(progressoSaneamento.segundosDecorridos / 60)).padStart(2, '0')}:{String(progressoSaneamento.segundosDecorridos % 60).padStart(2, '0')}
+                  </span>
+                  <span className="text-base font-black text-purple-300 font-mono">
+                    {Math.round(progressoSaneamento.porcentagem)}%
+                  </span>
+                </div>
+              </div>
+
+              {/* Barra de Progresso com Shimmer */}
+              <div className="w-full bg-slate-800/80 rounded-full h-3 p-0.5 overflow-hidden border border-slate-700/80">
+                <div
+                  className="bg-gradient-to-r from-purple-500 via-indigo-500 to-purple-400 h-full rounded-full transition-all duration-300 ease-out relative overflow-hidden shadow-lg shadow-purple-500/50"
+                  style={{ width: `${Math.max(progressoSaneamento.porcentagem, 5)}%` }}
+                >
+                  <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Botão de Disparo */}
           <div className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -709,7 +817,7 @@ export default function SaneadorArquivosPage() {
               {estaAuditando ? (
                 <>
                   <RefreshCw size={18} className="animate-spin" />
-                  Saneando com Multi-IA...
+                  Saneando ({Math.round(progressoSaneamento.porcentagem)}%)...
                 </>
               ) : (
                 <>

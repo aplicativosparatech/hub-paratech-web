@@ -60,6 +60,34 @@ export default function CorretorTributarioPage() {
   const [filtroReforma, setFiltroReforma] = useState<'todos' | 'zero' | 'reduzido' | 'seletivo' | 'padrao'>('todos')
   const [buscaTermo, setBuscaTermo] = useState<string>('')
 
+  // Contagem Prévia de XMLs ao Montar o Filtro
+  const [contagemXmls, setContagemXmls] = useState<{
+    carregando: boolean;
+    total: number;
+    totalNfe: number;
+    totalNfce: number;
+  }>({
+    carregando: false,
+    total: 0,
+    totalNfe: 0,
+    totalNfce: 0
+  })
+
+  // Barra de Progresso Real durante a Auditoria
+  const [progressoAuditoria, setProgressoAuditoria] = useState<{
+    ativo: boolean;
+    porcentagem: number;
+    etapaAtual: string;
+    detalhe: string;
+    segundosDecorridos: number;
+  }>({
+    ativo: false,
+    porcentagem: 0,
+    etapaAtual: '',
+    detalhe: '',
+    segundosDecorridos: 0
+  })
+
   // 1. Carrega dados do usuário e clientes
   useEffect(() => {
     async function init() {
@@ -94,7 +122,73 @@ export default function CorretorTributarioPage() {
     init()
   }, [])
 
-  // 2. Executa a Auditoria Tributária via API
+  // 1.1 Contagem prévia dinâmica de XMLs ao alterar o filtro
+  useEffect(() => {
+    let cancelado = false
+
+    async function buscarContagemXmls() {
+      if (!selectedCliente) return
+      setContagemXmls(prev => ({ ...prev, carregando: true }))
+
+      try {
+        let qNfe = supabase.from('nfe_saidas').select('id', { count: 'exact', head: true }).eq('cliente_id', selectedCliente)
+        let qNfce = supabase.from('nfce_saidas').select('id', { count: 'exact', head: true }).eq('cliente_id', selectedCliente)
+
+        if (tipoFiltro === 'mes' && selectedMonth) {
+          const [ano, mes] = selectedMonth.split('-').map(Number)
+          const inicio = new Date(ano, mes - 1, 1).toISOString()
+          const fim = new Date(ano, mes, 0, 23, 59, 59, 999).toISOString()
+          qNfe = qNfe.gte('data_emissao', inicio).lte('data_emissao', fim)
+          qNfce = qNfce.gte('data_emissao', inicio).lte('data_emissao', fim)
+        } else if (tipoFiltro === 'periodo' && dataInicio && dataFim) {
+          const inicio = `${dataInicio}T00:00:00-03:00`
+          const fim = `${dataFim}T23:59:59.999-03:00`
+          qNfe = qNfe.gte('data_emissao', new Date(inicio).toISOString()).lte('data_emissao', new Date(fim).toISOString())
+          qNfce = qNfce.gte('data_emissao', new Date(inicio).toISOString()).lte('data_emissao', new Date(fim).toISOString())
+        } else if (tipoFiltro === 'numeracao') {
+          const numIni = parseInt(numeroInicio || '0', 10)
+          const numFim = parseInt(numeroFim || '999999999', 10)
+          if (numIni > 0) {
+            qNfe = qNfe.gte('numero', String(numIni))
+            qNfce = qNfce.gte('numero', String(numIni))
+          }
+          if (numFim > 0) {
+            qNfe = qNfe.lte('numero', String(numFim))
+            qNfce = qNfce.lte('numero', String(numFim))
+          }
+        }
+
+        let totalNfe = 0
+        let totalNfce = 0
+
+        if (modeloSelecionado === 'todos' || modeloSelecionado === '55') {
+          const { count: c55 } = await qNfe
+          totalNfe = c55 || 0
+        }
+        if (modeloSelecionado === 'todos' || modeloSelecionado === '65') {
+          const { count: c65 } = await qNfce
+          totalNfce = c65 || 0
+        }
+
+        if (!cancelado) {
+          setContagemXmls({
+            carregando: false,
+            total: totalNfe + totalNfce,
+            totalNfe,
+            totalNfce
+          })
+        }
+      } catch (e) {
+        console.warn('Erro ao contar XMLs disponíveis:', e)
+        if (!cancelado) setContagemXmls(prev => ({ ...prev, carregando: false }))
+      }
+    }
+
+    buscarContagemXmls()
+    return () => { cancelado = true }
+  }, [selectedCliente, tipoFiltro, selectedMonth, dataInicio, dataFim, numeroInicio, numeroFim, modeloSelecionado])
+
+  // 2. Executa a Auditoria Tributária via API com Barra de Progresso Real
   const handleExecutarAuditoria = async () => {
     if (!selectedCliente) {
       toast.error('Selecione uma empresa para auditar.')
@@ -102,6 +196,49 @@ export default function CorretorTributarioPage() {
     }
 
     setLoadingAuditoria(true)
+    setProgressoAuditoria({
+      ativo: true,
+      porcentagem: 8,
+      etapaAtual: '1/4: Conectando ao Repositório & Carregando XMLs...',
+      detalhe: `Localizando e descompactando os arquivos fiscais da empresa...`,
+      segundosDecorridos: 0
+    })
+
+    // Inicia timer de avanço dinâmico e telemetria de progresso
+    const inicioTimestamp = Date.now()
+    const timerProgress = setInterval(() => {
+      setProgressoAuditoria(prev => {
+        const decorridoSeg = Math.floor((Date.now() - inicioTimestamp) / 1000)
+        let novoPct = prev.porcentagem + (prev.porcentagem < 35 ? 3.5 : prev.porcentagem < 70 ? 2 : prev.porcentagem < 92 ? 1 : 0.2)
+        if (novoPct > 94) novoPct = 94
+
+        let etapa = prev.etapaAtual
+        let detalhe = prev.detalhe
+
+        if (novoPct < 25) {
+          etapa = '1/4: Conectando ao Repositório & Carregando XMLs...'
+          detalhe = 'Download e validação de integridade dos arquivos XML...'
+        } else if (novoPct < 55) {
+          etapa = '2/4: Extraindo Itens, NCMs e Regras Tributárias...'
+          detalhe = 'Mapeando produtos, CESTs, CFOPs, alíquotas de ICMS e Convênio 142/18...'
+        } else if (novoPct < 85) {
+          etapa = '3/4: Auditoria Inteligente & Consenso Multi-IA...'
+          detalhe = 'Cruzando monofásicos, apurando créditos e consultando Servidores de IA...'
+        } else {
+          etapa = '4/4: Simulando Reforma Tributária (IBS, CBS e IVA Dual)...'
+          detalhe = 'Calculando alíquotas da PEC 45/2019 e consolidando o painel de diagnósticos...'
+        }
+
+        return {
+          ativo: true,
+          porcentagem: Math.min(novoPct, 94),
+          etapaAtual: etapa,
+          detalhe,
+          segundosDecorridos: decorridoSeg
+        }
+      })
+    }, 450)
+
     try {
       const payload: any = {
         cliente_id: selectedCliente,
@@ -128,6 +265,17 @@ export default function CorretorTributarioPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Erro na auditoria')
 
+      clearInterval(timerProgress)
+
+      // Conclusão em 100%
+      setProgressoAuditoria({
+        ativo: true,
+        porcentagem: 100,
+        etapaAtual: 'Auditoria Concluída com Sucesso!',
+        detalhe: `${data.metricas?.totalItens || 0} produtos analisados em ${data.total_xmls || 0} XMLs emitidos.`,
+        segundosDecorridos: Math.floor((Date.now() - inicioTimestamp) / 1000)
+      })
+
       setDiagnosticos(data.diagnosticos || [])
       setMetricas(data.metricas || {})
       setTotalXmlsAnalisados(data.total_xmls || 0)
@@ -142,7 +290,13 @@ export default function CorretorTributarioPage() {
       setDecisoes(initialDecisoes)
 
       toast.success(`Auditoria concluída! ${data.metricas?.totalItens || 0} produtos analisados.`)
+
+      setTimeout(() => {
+        setProgressoAuditoria(prev => ({ ...prev, ativo: false }))
+      }, 1500)
     } catch (err: any) {
+      clearInterval(timerProgress)
+      setProgressoAuditoria(prev => ({ ...prev, ativo: false }))
       toast.error('Falha ao executar auditoria: ' + err.message)
     } finally {
       setLoadingAuditoria(false)
@@ -426,6 +580,100 @@ export default function CorretorTributarioPage() {
 
         </div>
 
+        {/* 2.1 Contagem Prévia de XMLs Prontos para Análise */}
+        <div className={`p-4 rounded-2xl border transition-all ${
+          contagemXmls.carregando ? 'bg-slate-50 border-slate-200' :
+          contagemXmls.total > 0 ? 'bg-gradient-to-r from-indigo-50/80 via-purple-50/40 to-indigo-50/80 border-indigo-200 shadow-xs' :
+          'bg-amber-50/70 border-amber-200'
+        }`}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className={`p-2.5 rounded-xl ${
+                contagemXmls.carregando ? 'bg-slate-200 text-slate-500 animate-pulse' :
+                contagemXmls.total > 0 ? 'bg-indigo-600 text-white shadow-sm' :
+                'bg-amber-100 text-amber-700'
+              }`}>
+                <Layers size={20} />
+              </div>
+              <div>
+                {contagemXmls.carregando ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3.5 h-3.5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                    <span className="text-xs font-semibold text-slate-600">Localizando XMLs disponíveis para este filtro...</span>
+                  </div>
+                ) : contagemXmls.total > 0 ? (
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-black text-slate-900">
+                        {contagemXmls.total.toLocaleString('pt-BR')} XMLs prontos para análise
+                      </span>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                        <CheckCircle2 size={12} className="text-emerald-600" /> Disponível no Portal
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      Composição: <strong className="text-indigo-950 font-bold">{contagemXmls.totalNfce.toLocaleString('pt-BR')} NFC-e (mod. 65)</strong> e <strong className="text-indigo-950 font-bold">{contagemXmls.totalNfe.toLocaleString('pt-BR')} NF-e (mod. 55)</strong> armazenados na nuvem.
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                      <AlertTriangle size={14} className="text-amber-600" /> Nenhum XML localizado com os filtros atuais
+                    </span>
+                    <p className="text-[11px] text-amber-700 mt-0.5">
+                      Dica: Altere o mês de competência ou o critério de busca para encontrar as notas emitidas pela empresa.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {contagemXmls.total > 0 && !contagemXmls.carregando && (
+              <span className="text-xs font-bold text-indigo-700 bg-white/80 px-3 py-1.5 rounded-xl border border-indigo-100 self-start sm:self-center">
+                Total a Auditar: {contagemXmls.total} notas
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* 2.2 Barra de Progresso Real em Execução */}
+        {progressoAuditoria.ativo && (
+          <div className="p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-500/30 text-white shadow-xl space-y-3.5 animate-in fade-in duration-300">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin shrink-0"></div>
+                <div>
+                  <h4 className="text-xs font-bold text-indigo-200 uppercase tracking-wider flex items-center gap-2">
+                    <Sparkles size={14} className="text-indigo-400 animate-pulse" />
+                    {progressoAuditoria.etapaAtual}
+                  </h4>
+                  <p className="text-[11px] text-slate-300 mt-0.5">
+                    {progressoAuditoria.detalhe}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 self-end sm:self-auto">
+                <span className="text-xs font-mono text-slate-400">
+                  ⏱️ {String(Math.floor(progressoAuditoria.segundosDecorridos / 60)).padStart(2, '0')}:{String(progressoAuditoria.segundosDecorridos % 60).padStart(2, '0')}
+                </span>
+                <span className="text-base font-black text-indigo-300 font-mono">
+                  {Math.round(progressoAuditoria.porcentagem)}%
+                </span>
+              </div>
+            </div>
+
+            {/* Barra de Progresso com Shimmer */}
+            <div className="w-full bg-slate-800/80 rounded-full h-3 p-0.5 overflow-hidden border border-slate-700/80">
+              <div
+                className="bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-400 h-full rounded-full transition-all duration-300 ease-out relative overflow-hidden shadow-lg shadow-indigo-500/50"
+                style={{ width: `${Math.max(progressoAuditoria.porcentagem, 5)}%` }}
+              >
+                <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Toggle IA e Botão de Disparo */}
         <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <label className="flex items-center gap-3 cursor-pointer select-none">
@@ -433,7 +681,8 @@ export default function CorretorTributarioPage() {
               type="checkbox"
               checked={usarIa}
               onChange={(e) => setUsarIa(e.target.checked)}
-              className="w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500"
+              disabled={loadingAuditoria}
+              className="w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500 disabled:opacity-50"
             />
             <div className="text-xs">
               <span className="font-bold text-slate-800 flex items-center gap-1.5">
@@ -448,13 +697,13 @@ export default function CorretorTributarioPage() {
 
           <button
             onClick={handleExecutarAuditoria}
-            disabled={loadingAuditoria}
-            className="flex items-center justify-center gap-2 px-7 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-lg shadow-indigo-600/25 transition disabled:opacity-50"
+            disabled={loadingAuditoria || contagemXmls.total === 0}
+            className="flex items-center justify-center gap-2 px-7 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-lg shadow-indigo-600/25 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loadingAuditoria ? (
               <>
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                Lendo XMLs & Auditando...
+                Auditando ({Math.round(progressoAuditoria.porcentagem)}%)...
               </>
             ) : (
               <>

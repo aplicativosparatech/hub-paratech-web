@@ -19,7 +19,10 @@ export default function DashboardPage() {
   const [metrics, setMetrics] = useState({
     clientes: 0,
     contabilidades: 0,
+    totalFaturas: 0,
+    faturasEmDia: 0,
     faturasAtrasadas: 0,
+    pctAtraso: 0,
     nfQuantidade: 0,
     nfValor: 0,
     relatorios: 0,
@@ -112,10 +115,16 @@ export default function DashboardPage() {
 
         // Se for contabilidade ou cliente e a opção de valores fictícios estiver ativa, usa os fictícios!
         if (ficticioLigado && currentRole !== 'admin') {
+          const ficticioAtrasadas = Number(geralConfig?.ficticio_faturas_atrasadas ?? 0)
+          const ficticioTotalFaturas = Math.max(ficticioAtrasadas, 10)
+          const pct = ficticioTotalFaturas > 0 ? (ficticioAtrasadas / ficticioTotalFaturas) * 100 : 0
           setMetrics({
             clientes: Number(geralConfig?.ficticio_clientes ?? 0),
             contabilidades: Number(geralConfig?.ficticio_contabilidades ?? 0),
-            faturasAtrasadas: Number(geralConfig?.ficticio_faturas_atrasadas ?? 0),
+            totalFaturas: ficticioTotalFaturas,
+            faturasEmDia: Math.max(0, ficticioTotalFaturas - ficticioAtrasadas),
+            faturasAtrasadas: ficticioAtrasadas,
+            pctAtraso: pct,
             nfQuantidade: Number(geralConfig?.ficticio_nf_quantidade ?? 0),
             nfValor: Number(geralConfig?.ficticio_nf_valor ?? 0),
             relatorios: Number(geralConfig?.ficticio_relatorios ?? 0),
@@ -128,35 +137,75 @@ export default function DashboardPage() {
         // 3. Caso contrário (se for Admin ou se valores fictícios estiverem desligados): calcula os valores REAIS
         const hojeStr = new Date().toISOString().split('T')[0]
 
+        // Monta consultas de notas fiscais respeitando perfil quando necessário
+        let qNfeSaidas = supabase.from('nfe_saidas').select('valor_total', { count: 'exact' })
+        let qNfceSaidas = supabase.from('nfce_saidas').select('valor_total', { count: 'exact' })
+        let qNfeEntradas = supabase.from('nfe_entradas').select('valor_total', { count: 'exact' })
+        let qFaturas = supabase.from('faturas').select('id, status, data_vencimento')
+
+        if (currentRole === 'cliente' && userRoleData?.cliente_id) {
+          qNfeSaidas = qNfeSaidas.eq('cliente_id', userRoleData.cliente_id)
+          qNfceSaidas = qNfceSaidas.eq('cliente_id', userRoleData.cliente_id)
+          qNfeEntradas = qNfeEntradas.eq('cliente_id', userRoleData.cliente_id)
+          qFaturas = qFaturas.eq('cliente_id', userRoleData.cliente_id)
+        }
+
         const [
           clientesRes, 
           contabRes, 
           faturasRes, 
           nfeRes, 
           nfceRes, 
+          nfeEntradasRes,
           xmlsRes,
           cidadesClientesRes,
           cidadesContabRes
         ] = await Promise.all([
           supabase.from('clientes').select('id', { count: 'exact', head: true }),
           supabase.from('contabilidades').select('id', { count: 'exact', head: true }),
-          supabase.from('faturas').select('id', { count: 'exact', head: true }).eq('status', 'pendente').lt('data_vencimento', hojeStr),
-          supabase.from('nfe_saidas').select('valor_total'),
-          supabase.from('nfce_saidas').select('valor_total'),
+          qFaturas,
+          qNfeSaidas,
+          qNfceSaidas,
+          qNfeEntradas,
           supabase.from('arquivos_xml').select('id', { count: 'exact', head: true }),
           supabase.from('clientes').select('cidade').not('cidade', 'is', null),
           supabase.from('contabilidades').select('cidade').not('cidade', 'is', null)
         ])
 
-        // Soma valores de NF
-        const nfeCount = nfeRes.data?.length || 0
+        // Faturas reais: calculando Total, Em Dia e Atrasadas
+        const listaFaturas = faturasRes.data || []
+        const totalFaturas = listaFaturas.length
+        let faturasAtrasadas = 0
+        let faturasEmDia = 0
+
+        listaFaturas.forEach(f => {
+          const isAtrasada = f.status === 'pendente' && f.data_vencimento && f.data_vencimento < hojeStr
+          if (isAtrasada) {
+            faturasAtrasadas++
+          } else {
+            faturasEmDia++
+          }
+        })
+
+        const pctAtraso = totalFaturas > 0 ? (faturasAtrasadas / totalFaturas) * 100 : 0
+
+        // Soma valores e quantidades de NF (NF-e Saídas + NFC-e Saídas + NF-e Entradas)
+        const nfeCount = nfeRes.count ?? (nfeRes.data?.length || 0)
         const nfeTotal = (nfeRes.data || []).reduce((acc, curr) => acc + (Number(curr.valor_total) || 0), 0)
 
-        const nfceCount = nfceRes.data?.length || 0
+        const nfceCount = nfceRes.count ?? (nfceRes.data?.length || 0)
         const nfceTotal = (nfceRes.data || []).reduce((acc, curr) => acc + (Number(curr.valor_total) || 0), 0)
 
-        const totalNFQuantidade = nfeCount + nfceCount
-        const totalNFValor = nfeTotal + nfceTotal
+        const nfeEntradasCount = nfeEntradasRes.count ?? (nfeEntradasRes.data?.length || 0)
+        const nfeEntradasTotal = (nfeEntradasRes.data || []).reduce((acc, curr) => acc + (Number(curr.valor_total) || 0), 0)
+
+        let totalNFQuantidade = nfeCount + nfceCount + nfeEntradasCount
+        const totalNFValor = nfeTotal + nfceTotal + nfeEntradasTotal
+
+        // Fallback: se a contagem deu 0 mas temos arquivos_xml
+        if (totalNFQuantidade === 0 && (xmlsRes.count || 0) > 0) {
+          totalNFQuantidade = xmlsRes.count || 0
+        }
 
         // Total de Relatórios no sistema (arquivos XML + notas processadas + relatórios)
         const totalRelatorios = (xmlsRes.count || 0) > 0 ? (xmlsRes.count || 0) : (totalNFQuantidade > 0 ? totalNFQuantidade : 5)
@@ -174,7 +223,10 @@ export default function DashboardPage() {
         setMetrics({
           clientes: clientesRes.count || 0,
           contabilidades: contabRes.count || 0,
-          faturasAtrasadas: faturasRes.count || 0,
+          totalFaturas,
+          faturasEmDia,
+          faturasAtrasadas,
+          pctAtraso,
           nfQuantidade: totalNFQuantidade,
           nfValor: totalNFValor,
           relatorios: totalRelatorios,
@@ -191,6 +243,60 @@ export default function DashboardPage() {
     loadDashboard()
   }, [])
 
+  // Determina a cor do card de faturas segundo as regras solicitadas:
+  // - Amarelo quando tiver >= 20% e < 50%
+  // - Laranja quando tiver 50%
+  // - Vermelho quando tiver mais de 50% (> 50%)
+  // - Verde quando < 20% (ou 0)
+  const getFaturasStatus = () => {
+    const { totalFaturas, faturasAtrasadas, pctAtraso } = metrics
+    if (totalFaturas === 0) {
+      return {
+        cor: 'verde',
+        label: 'Tudo em dia (0 pendências)',
+        badgeBg: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        textCor: 'text-emerald-700',
+        iconBg: 'bg-emerald-50 text-emerald-600'
+      }
+    }
+    if (pctAtraso > 50) {
+      return {
+        cor: 'vermelho',
+        label: `${pctAtraso.toFixed(0)}% em atraso (Crítico)`,
+        badgeBg: 'bg-red-50 text-red-700 border-red-200',
+        textCor: 'text-red-600',
+        iconBg: 'bg-red-50 text-red-600'
+      }
+    }
+    if (pctAtraso >= 50) {
+      return {
+        cor: 'laranja',
+        label: `${pctAtraso.toFixed(0)}% em atraso (Alerta)`,
+        badgeBg: 'bg-orange-50 text-orange-700 border-orange-200',
+        textCor: 'text-orange-600',
+        iconBg: 'bg-orange-50 text-orange-600'
+      }
+    }
+    if (pctAtraso >= 20) {
+      return {
+        cor: 'amarelo',
+        label: `${pctAtraso.toFixed(0)}% em atraso (Atenção)`,
+        badgeBg: 'bg-amber-50 text-amber-800 border-amber-200',
+        textCor: 'text-amber-600',
+        iconBg: 'bg-amber-50 text-amber-600'
+      }
+    }
+    return {
+      cor: 'verde',
+      label: faturasAtrasadas > 0 ? `${faturasAtrasadas} em atraso (${pctAtraso.toFixed(0)}%)` : 'Tudo em dia (0% atraso)',
+      badgeBg: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      textCor: 'text-emerald-600',
+      iconBg: 'bg-emerald-50 text-emerald-600'
+    }
+  }
+
+  const faturasStatus = getFaturasStatus()
+
   return (
     <div className="p-6 sm:p-8 space-y-6">
       
@@ -202,20 +308,6 @@ export default function DashboardPage() {
             Painel consolidado de inteligência fiscal e gestão operacional do Hub Paratech.
           </p>
         </div>
-
-        {/* Aviso de Modo Demonstração para o Super Admin */}
-        {userRole === 'admin' && isFicticioAtivo && (
-          <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 text-indigo-800 px-3.5 py-1.5 rounded-xl text-xs font-semibold">
-            <Sparkles size={15} className="text-indigo-600 animate-pulse" />
-            <span>Valores Fictícios ativos para Contabilidades e Clientes</span>
-            <Link 
-              href="/dashboard/configuracoes-portal" 
-              className="underline hover:text-indigo-950 font-bold ml-1 inline-flex items-center gap-0.5"
-            >
-              Configurar <ArrowRight size={12} />
-            </Link>
-          </div>
-        )}
       </header>
 
       {/* Faixa Vermelha de Alerta de Certificado Digital */}
@@ -268,23 +360,49 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* CARD 3: FATURAS ATRASADAS */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-slate-300 transition flex flex-col justify-between">
+        {/* CARD 3: STATUS DAS FATURAS (TODAS, EM DIA E ATRASADAS - REGRAS 20% AMARELO, 50% LARANJA, >50% VERMELHO) */}
+        <div className={`bg-white p-4 sm:p-5 rounded-2xl border transition flex flex-col justify-between shadow-xs ${
+          faturasStatus.cor === 'vermelho' ? 'border-red-300 hover:border-red-400' :
+          faturasStatus.cor === 'laranja' ? 'border-orange-300 hover:border-orange-400' :
+          faturasStatus.cor === 'amarelo' ? 'border-amber-300 hover:border-amber-400' :
+          'border-slate-200 hover:border-slate-300'
+        }`}>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-red-600 uppercase tracking-wider">
-              Faturas Atrasadas
+            <span className={`text-[11px] font-bold uppercase tracking-wider ${faturasStatus.textCor}`}>
+              Faturas & Cobranças
             </span>
-            <div className="p-1.5 bg-red-50 text-red-600 rounded-lg">
-              <AlertTriangle size={16} />
+            <div className={`p-1.5 rounded-lg ${faturasStatus.iconBg}`}>
+              {faturasStatus.cor === 'verde' ? <Receipt size={16} /> : <AlertTriangle size={16} />}
             </div>
           </div>
           <div>
-            <p className="text-2xl sm:text-3xl font-black text-red-600">
-              {loading ? '...' : metrics.faturasAtrasadas.toLocaleString('pt-BR')}
-            </p>
-            <span className="text-[11px] text-red-400 font-medium">
-              {metrics.faturasAtrasadas > 0 ? 'Requer atenção imediata' : 'Tudo em dia'}
-            </span>
+            <div className="flex items-baseline gap-2">
+              <p className={`text-2xl sm:text-3xl font-black ${
+                faturasStatus.cor === 'vermelho' ? 'text-red-600' :
+                faturasStatus.cor === 'laranja' ? 'text-orange-600' :
+                faturasStatus.cor === 'amarelo' ? 'text-amber-600' :
+                'text-slate-800'
+              }`}>
+                {loading ? '...' : metrics.totalFaturas.toLocaleString('pt-BR')}
+              </p>
+              <span className="text-[11px] font-semibold text-slate-400">total</span>
+            </div>
+
+            <div className="flex items-center gap-2 mt-1 text-[11px] font-medium text-slate-600">
+              <span className="text-emerald-600 font-semibold">
+                {metrics.faturasEmDia} em dia
+              </span>
+              <span>•</span>
+              <span className={metrics.faturasAtrasadas > 0 ? faturasStatus.textCor + ' font-bold' : 'text-slate-400'}>
+                {metrics.faturasAtrasadas} atrasadas
+              </span>
+            </div>
+
+            <div className="mt-1.5">
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border inline-block ${faturasStatus.badgeBg}`}>
+                {faturasStatus.label}
+              </span>
+            </div>
           </div>
         </div>
 
