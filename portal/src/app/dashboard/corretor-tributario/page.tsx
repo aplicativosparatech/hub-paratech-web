@@ -433,15 +433,15 @@ export default function CorretorTributarioPage() {
               type="checkbox"
               checked={usarIa}
               onChange={(e) => setUsarIa(e.target.checked)}
-              className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+              className="w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500"
             />
             <div className="text-xs">
               <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                <Sparkles size={14} className="text-indigo-600" />
-                Enriquecer com Inteligência Artificial (Google Gemini)
+                <Sparkles size={14} className="text-purple-600" />
+                Auditoria com Multi-IA & Reforma Tributária (IBS, CBS e IVA Dual)
               </span>
               <p className="text-slate-500 text-[11px]">
-                A IA analisa o nome comercial do produto no varejo para deduzir o NCM e CEST mais precisos.
+                Analisa o produto com as IAs e Servidores MCP ativos em modo consenso e calcula as novas alíquotas de IBS/CBS.
               </p>
             </div>
           </label>

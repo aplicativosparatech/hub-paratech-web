@@ -337,20 +337,40 @@ export default function IntegracoesPage() {
                   </p>
                 </div>
 
-                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/20 flex flex-col items-center justify-center min-w-[200px] text-center">
-                  <span className="text-xs text-purple-200 font-medium mb-1">Modo Consenso</span>
-                  <label className="relative inline-flex items-center cursor-pointer my-2">
-                    <input 
-                      type="checkbox" 
-                      className="sr-only peer" 
-                      checked={iaGeral.credenciais?.modo_consenso !== false} 
-                      onChange={e => handleCredencialChange('ia_geral', 'modo_consenso', e.target.checked as any)} 
-                    />
-                    <div className="w-12 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
-                  </label>
-                  <span className="text-xs font-bold text-emerald-300">
-                    {iaGeral.credenciais?.modo_consenso !== false ? 'ATIVADO (Multi-Votação)' : 'DESATIVADO (1ª Ativa)'}
-                  </span>
+                <div className="flex flex-wrap sm:flex-nowrap gap-3">
+                  {/* Modo Consenso */}
+                  <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/20 flex flex-col items-center justify-center min-w-[170px] text-center">
+                    <span className="text-xs text-purple-200 font-medium mb-1">Modo Consenso</span>
+                    <label className="relative inline-flex items-center cursor-pointer my-1.5">
+                      <input 
+                        type="checkbox" 
+                        className="sr-only peer" 
+                        checked={iaGeral.credenciais?.modo_consenso !== false} 
+                        onChange={e => handleCredencialChange('ia_geral', 'modo_consenso', e.target.checked as any)} 
+                      />
+                      <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
+                    </label>
+                    <span className="text-[11px] font-bold text-emerald-300">
+                      {iaGeral.credenciais?.modo_consenso !== false ? 'Multi-Votação Ativa' : '1ª IA por Prioridade'}
+                    </span>
+                  </div>
+
+                  {/* Análise de XMLs com IA */}
+                  <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/20 flex flex-col items-center justify-center min-w-[170px] text-center">
+                    <span className="text-xs text-purple-200 font-medium mb-1">Auditoria de XMLs</span>
+                    <label className="relative inline-flex items-center cursor-pointer my-1.5">
+                      <input 
+                        type="checkbox" 
+                        className="sr-only peer" 
+                        checked={iaGeral.credenciais?.habilitar_ia_xmls !== false} 
+                        onChange={e => handleCredencialChange('ia_geral', 'habilitar_ia_xmls', e.target.checked as any)} 
+                      />
+                      <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                    </label>
+                    <span className="text-[11px] font-bold text-emerald-300">
+                      {iaGeral.credenciais?.habilitar_ia_xmls !== false ? 'IA Ativa nos XMLs' : 'IA Desativada nos XMLs'}
+                    </span>
+                  </div>
                 </div>
               </div>
 

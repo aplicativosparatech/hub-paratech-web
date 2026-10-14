@@ -52,10 +52,10 @@ export async function POST(req: Request) {
 
       const supabase = createAdminClient();
 
-      // Busca dados do cliente (CRT e UF)
+      // Busca dados do cliente (Regime Tributário e UF)
       const { data: cliente, error: errCli } = await supabase
         .from('clientes')
-        .select('id, nome, crt, regime_tributario, estado')
+        .select('id, razao_social, nome_fantasia, cnpj, regime_tributario, uf')
         .eq('id', clienteId)
         .single();
 
@@ -63,8 +63,8 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Cliente não encontrado no sistema.' }, { status: 404 });
       }
 
-      const crtCliente = cliente.crt ? Number(cliente.crt) : (cliente.regime_tributario === 'simples' ? 1 : 3);
-      const ufCliente = cliente.estado || 'MG';
+      const crtCliente = (cliente.regime_tributario === 'simples' || cliente.regime_tributario === 'simples_nacional') ? 1 : 3;
+      const ufCliente = cliente.uf || 'MG';
 
       // Busca integrações de IA ativas
       const { data: integracoes } = await supabase
@@ -175,7 +175,8 @@ export async function POST(req: Request) {
         success: true,
         cliente: {
           id: cliente.id,
-          nome: cliente.nome,
+          nome: cliente.razao_social || cliente.nome_fantasia || 'Cliente',
+          cnpj: cliente.cnpj,
           crt: crtCliente,
           regime: crtCliente === 1 ? 'Simples Nacional' : 'Regime Normal',
           uf: ufCliente

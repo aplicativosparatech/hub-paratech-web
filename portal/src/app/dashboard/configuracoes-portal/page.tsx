@@ -19,6 +19,7 @@ export default function ConfiguracoesPortalPage() {
     auto_excluir_divergentes: false,
     apenas_xmls_autorizados: false,
     auto_corrigir_assinar_xmls: false,
+    analise_ia_xmls_ativa: true,
     exibir_certificados_contabilidade: false,
     exibir_certificados_cliente: false,
     avisar_whatsapp_certificado: true,
@@ -51,7 +52,7 @@ export default function ConfiguracoesPortalPage() {
         setSelectedCliente(roleData.cliente_id)
         const { data: cli } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado, modo_processamento_xml)')
+          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, analise_ia_xmls_ativa, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado, modo_processamento_xml)')
           .eq('id', roleData.cliente_id)
           .single()
         if (cli) {
@@ -62,6 +63,7 @@ export default function ConfiguracoesPortalPage() {
             auto_excluir_divergentes: Boolean(config?.auto_excluir_divergentes),
             apenas_xmls_autorizados: Boolean(config?.apenas_xmls_autorizados),
             auto_corrigir_assinar_xmls: Boolean(config?.auto_corrigir_assinar_xmls),
+            analise_ia_xmls_ativa: config?.analise_ia_xmls_ativa !== false,
             exibir_certificados_contabilidade: Boolean(config?.exibir_certificados_contabilidade),
             exibir_certificados_cliente: Boolean(config?.exibir_certificados_cliente),
             avisar_whatsapp_certificado: config?.avisar_whatsapp_certificado !== false,
@@ -123,7 +125,7 @@ export default function ConfiguracoesPortalPage() {
     async function loadConfig() {
       const { data } = await supabase
         .from('configuracoes_hub')
-        .select('auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado, modo_processamento_xml')
+        .select('auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, analise_ia_xmls_ativa, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado, modo_processamento_xml')
         .eq('cliente_id', selectedCliente)
         .single()
 
@@ -133,6 +135,7 @@ export default function ConfiguracoesPortalPage() {
           auto_excluir_divergentes: Boolean(data.auto_excluir_divergentes),
           apenas_xmls_autorizados: Boolean(data.apenas_xmls_autorizados),
           auto_corrigir_assinar_xmls: Boolean(data.auto_corrigir_assinar_xmls),
+          analise_ia_xmls_ativa: data.analise_ia_xmls_ativa !== false,
           exibir_certificados_contabilidade: Boolean(data.exibir_certificados_contabilidade),
           exibir_certificados_cliente: Boolean(data.exibir_certificados_cliente),
           avisar_whatsapp_certificado: data.avisar_whatsapp_certificado !== false,
@@ -144,6 +147,7 @@ export default function ConfiguracoesPortalPage() {
           auto_excluir_divergentes: false,
           apenas_xmls_autorizados: false,
           auto_corrigir_assinar_xmls: false,
+          analise_ia_xmls_ativa: true,
           exibir_certificados_contabilidade: false,
           exibir_certificados_cliente: false,
           avisar_whatsapp_certificado: true,
@@ -168,6 +172,7 @@ export default function ConfiguracoesPortalPage() {
       auto_excluir_divergentes: formData.auto_excluir_divergentes,
       apenas_xmls_autorizados: formData.apenas_xmls_autorizados,
       auto_corrigir_assinar_xmls: formData.auto_corrigir_assinar_xmls,
+      analise_ia_xmls_ativa: formData.analise_ia_xmls_ativa,
       dia_vencimento: 10,
       valor_mensalidade: 0.00,
       updated_at: new Date().toISOString()
@@ -478,6 +483,37 @@ export default function ConfiguracoesPortalPage() {
                   • <strong>Se desmarcado:</strong> Os arquivos são importados e direcionados com segurança para a aba exclusiva <strong>Arquivos para Correção</strong>, onde você pode consultar e corrigir com 1 clique ou manualmente quando desejar.
                 </span>
                 <span className="inline-flex items-center gap-1.5 mt-3 text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-800">
+                  <CheckCircle2 size={14} /> Ativo para: Super Admin, Contabilidade e Empresa Cliente
+                </span>
+              </label>
+            </div>
+
+            {/* Análise Tributária com Multi-IA & Reforma Tributária (IBS/CBS) */}
+            <div className="flex items-start gap-3.5 p-5 bg-purple-50/60 rounded-2xl border border-purple-200 hover:border-purple-300 transition">
+              <input 
+                type="checkbox" 
+                id="analise_ia_xmls_ativa"
+                checked={formData.analise_ia_xmls_ativa}
+                onChange={e => setFormData({ ...formData, analise_ia_xmls_ativa: e.target.checked })}
+                className="mt-1 h-5 w-5 rounded border-purple-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+              />
+              <label htmlFor="analise_ia_xmls_ativa" className="cursor-pointer select-none">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-bold text-slate-900 block text-base">
+                    Análise com Multi-IA & Reforma Tributária (IBS, CBS e IVA Dual) nos XMLs
+                  </span>
+                  <span className="text-[10px] uppercase font-bold tracking-wider bg-purple-100 text-purple-800 px-2 py-0.5 rounded-md border border-purple-200 flex items-center gap-1">
+                    <Sparkles size={12} /> Motores IA + LC 214/2024
+                  </span>
+                </div>
+                <span className="text-slate-600 text-sm leading-relaxed block">
+                  Habilita os motores de Inteligência Artificial ativos (Google Gemini, Groq, OpenAI, Claude, Ollama e Servidores MCP) e o cálculo automático das alíquotas do IVA Dual (IBS estadual/municipal + CBS federal) durante a auditoria dos XMLs de vendas (NF-e 55 e NFC-e 65) no Corretor Tributário.
+                </span>
+                <span className="text-slate-600 text-sm leading-relaxed block mt-2">
+                  • <strong>Se marcado (Padrão):</strong> Os itens com inconsistência fiscal nos XMLs são analisados por inteligência artificial em modo consenso para sugerir NCM, CEST, CFOP, CSOSN e alíquotas de IBS/CBS.<br />
+                  • <strong>Se desmarcado:</strong> A auditoria de XMLs executa apenas as checagens normativas locais estáticas do Convênio ICMS 142/2018, sem acionar motores externos de IA.
+                </span>
+                <span className="inline-flex items-center gap-1.5 mt-3 text-xs font-semibold px-2.5 py-1 rounded-full bg-purple-100 text-purple-800">
                   <CheckCircle2 size={14} /> Ativo para: Super Admin, Contabilidade e Empresa Cliente
                 </span>
               </label>

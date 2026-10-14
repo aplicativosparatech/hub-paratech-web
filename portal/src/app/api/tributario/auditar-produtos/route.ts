@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { obterIntervaloMesBrasil } from '@/utils/dateBrasil'
 import { ItemProdutoXml, auditarLoteProdutos } from '@/utils/tributario/auditorEngine'
-import { analisarItensComIA } from '@/utils/tributario/iaAdvisor'
+import { auditarItemComMultiIa, IaProviderConfig } from '@/utils/tributario/multiIaEngine'
 
 function extractTag(xml: string, tag: string): string {
   const match = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`))
@@ -171,32 +171,96 @@ export async function POST(request: Request) {
 
     // 4. Se solicitado enriquecimento com IA para os itens inconsistentes
     if (usar_ia === true) {
-      const itensComProblema = resultado.diagnosticos
-        .filter(d => d.status === 'inconsistente')
-        .map(d => ({
-          cProd: d.item.cProd,
-          xProd: d.item.xProd,
-          ncm: d.item.ncm,
-          cest: d.item.cest
+      // Verifica se a chave do cliente permite análise com IA
+      const { data: configHub } = await supabase
+        .from('configuracoes_hub')
+        .select('analise_ia_xmls_ativa')
+        .eq('cliente_id', cliente_id)
+        .maybeSingle()
+
+      const chaveAtiva = configHub?.analise_ia_xmls_ativa !== false
+
+      if (chaveAtiva) {
+        // Busca Regime Tributário e UF do cliente
+        const { data: cliente } = await supabase
+          .from('clientes')
+          .select('id, razao_social, cnpj, regime_tributario, uf')
+          .eq('id', cliente_id)
+          .single()
+
+        const crtCliente = (cliente?.regime_tributario === 'simples' || cliente?.regime_tributario === 'simples_nacional') ? 1 : 3
+        const ufCliente = cliente?.uf || 'MG'
+
+        // Busca integrações de IA ativas
+        const { data: integracoes } = await supabase
+          .from('integracoes')
+          .select('*')
+          .in('tipo', ['ia', 'mcp', 'ia_config'])
+
+        const configsIa: IaProviderConfig[] = (integracoes || []).map(i => ({
+          provedor: i.provedor,
+          tipo: i.tipo,
+          is_ativo: i.is_ativo,
+          credenciais: i.credenciais || {}
         }))
-        .slice(0, 30) // Envia os primeiros 30 itens para otimizar tempo de resposta
 
-      if (itensComProblema.length > 0) {
-        const respostasIA = await analisarItensComIA(itensComProblema)
-        const mapaIA = new Map(respostasIA.map(r => [r.cProd, r]))
+        const configGeral = configsIa.find(c => c.provedor === 'ia_geral')
+        const modoConsenso = configGeral ? configGeral.credenciais.modo_consenso !== false : true
+        const habilitarIaXmlsGeral = configGeral ? configGeral.credenciais.habilitar_ia_xmls !== false : true
 
-        resultado.diagnosticos.forEach(diag => {
-          const ia = mapaIA.get(diag.item.cProd)
-          if (ia) {
-            if (ia.ncmSugerido && ia.ncmSugerido !== diag.item.ncm) {
-              diag.sugestao.ncmSugerido = ia.ncmSugerido
+        if (habilitarIaXmlsGeral) {
+          const itensComProblema = resultado.diagnosticos
+            .filter(d => d.status === 'inconsistente')
+            .slice(0, 30) // Envia até 30 itens para otimizar tempo de resposta
+
+        for (const diag of itensComProblema) {
+          try {
+            const resIa = await auditarItemComMultiIa(
+              {
+                codigo: diag.item.cProd,
+                descricao: diag.item.xProd,
+                ncmAtual: diag.item.ncm,
+                cestAtual: diag.item.cest,
+                cfopAtual: diag.item.cfop,
+                csosnAtual: diag.item.csosn || diag.item.cstIcms,
+                valor: diag.item.vProd,
+                crt: crtCliente,
+                uf: ufCliente
+              },
+              configsIa,
+              modoConsenso
+            )
+
+            const v = resIa.vencedor
+            if (v.ncmSugerido && v.ncmSugerido !== diag.item.ncm) {
+              diag.sugestao.ncmSugerido = v.ncmSugerido
             }
-            if (ia.cestSugerido) {
-              diag.sugestao.cestSugerido = ia.cestSugerido
+            if (v.cestSugerido) {
+              diag.sugestao.cestSugerido = v.cestSugerido
             }
-            diag.sugestao.motivo = `${diag.sugestao.motivo || ''} [IA]: ${ia.justificativa}`.trim()
+            if (v.cfopSugerido) {
+              diag.sugestao.cfopSugerido = v.cfopSugerido
+            }
+            if (v.csosnSugerido) {
+              diag.sugestao.csosnSugerido = v.csosnSugerido
+            }
+            if (v.cstPisSugerido) {
+              diag.sugestao.cstPisSugerido = v.cstPisSugerido
+            }
+            if (v.cstCofinsSugerido) {
+              diag.sugestao.cstCofinsSugerido = v.cstCofinsSugerido
+            }
+            // Atualiza enquadramento da Reforma Tributária com alíquotas reais de IBS, CBS e IVA Dual
+            diag.reformaTributaria.aliquotaIbsEst = v.ibsAliqEstimada
+            diag.reformaTributaria.aliquotaCbsEst = v.cbsAliqEstimada
+            diag.reformaTributaria.aliquotaIvaDualEst = v.ivaDualTotal
+            diag.reformaTributaria.nomeRegime = v.classificacaoReforma
+            diag.sugestao.motivo = `${v.justificativa} [${v.nomeProvedor} - Certeza: ${v.scoreConfianca}%]`.trim()
+          } catch (e) {
+            console.warn('Erro ao consultar Multi-IA para item:', diag.item.cProd, e)
           }
-        })
+        }
+        }
       }
     }
 

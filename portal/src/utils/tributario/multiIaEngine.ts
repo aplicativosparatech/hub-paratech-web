@@ -12,6 +12,8 @@ export interface IaProviderConfig {
     token?: string;
     nome?: string;
     modo_consenso?: boolean;
+    habilitar_ia_xmls?: boolean;
+    habilitar_reforma_xmls?: boolean;
     temperatura?: number;
   };
 }

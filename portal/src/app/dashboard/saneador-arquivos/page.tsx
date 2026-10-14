@@ -29,11 +29,12 @@ import { ArquivoInspecionado, MapeamentoColunas, ItemSaneadoRetorno } from '@/ut
 
 interface ClienteOption {
   id: string;
-  nome: string;
-  cpf_cnpj: string;
-  crt: number | string;
-  regime_tributario: string;
-  estado: string;
+  razao_social: string;
+  nome_fantasia?: string;
+  cnpj: string;
+  regime_tributario?: string;
+  uf?: string;
+  cidade?: string;
 }
 
 export default function SaneadorArquivosPage() {
@@ -42,6 +43,8 @@ export default function SaneadorArquivosPage() {
   // Estados principais
   const [clientes, setClientes] = useState<ClienteOption[]>([]);
   const [clienteSelecionado, setClienteSelecionado] = useState<ClienteOption | null>(null);
+  const [carregandoClientes, setCarregandoClientes] = useState(true);
+  const [buscaCliente, setBuscaCliente] = useState('');
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   
@@ -75,19 +78,57 @@ export default function SaneadorArquivosPage() {
   const [buscaTexto, setBuscaTexto] = useState('');
   const [itemModal, setItemModal] = useState<ItemSaneadoRetorno | null>(null);
 
-  // Carrega clientes do banco
+  // Carrega clientes do banco respeitando o perfil (admin, contabilidade ou cliente)
   useEffect(() => {
     async function carregarClientes() {
-      const { data, error } = await supabase
-        .from('clientes')
-        .select('id, nome, cpf_cnpj, crt, regime_tributario, estado')
-        .order('nome');
-
-      if (!error && data) {
-        setClientes(data);
-        if (data.length > 0) {
-          setClienteSelecionado(data[0]);
+      setCarregandoClientes(true);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          setCarregandoClientes(false);
+          return;
         }
+
+        const { data: roleData } = await supabase
+          .from('user_roles')
+          .select('*')
+          .eq('user_id', user.id)
+          .single();
+
+        const role = (roleData?.role as string) || 'admin';
+
+        let clisData: ClienteOption[] = [];
+        if (role === 'cliente' && roleData?.cliente_id) {
+          const { data: cli } = await supabase
+            .from('clientes')
+            .select('id, razao_social, nome_fantasia, cnpj, regime_tributario, uf, cidade')
+            .eq('id', roleData.cliente_id)
+            .single();
+          if (cli) clisData = [cli];
+        } else if (role === 'contabilidade' && roleData?.contabilidade_id) {
+          const { data: clis } = await supabase
+            .from('clientes')
+            .select('id, razao_social, nome_fantasia, cnpj, regime_tributario, uf, cidade')
+            .eq('contabilidade_id', roleData.contabilidade_id)
+            .order('razao_social');
+          if (clis) clisData = clis;
+        } else {
+          const { data: clis } = await supabase
+            .from('clientes')
+            .select('id, razao_social, nome_fantasia, cnpj, regime_tributario, uf, cidade')
+            .order('razao_social');
+          if (clis) clisData = clis;
+        }
+
+        setClientes(clisData);
+        if (clisData.length > 0) {
+          setClienteSelecionado(clisData[0]);
+        }
+      } catch (err: any) {
+        console.error('Falha ao carregar clientes:', err);
+        toast.error('Erro ao buscar lista de clientes.');
+      } finally {
+        setCarregandoClientes(false);
       }
     }
     carregarClientes();
@@ -226,6 +267,17 @@ export default function SaneadorArquivosPage() {
   // Colunas disponíveis da tabela atual para seleção nos selects
   const colunasDisponiveis = inspecao?.colunasPorTabela[tabelaEscolhida] || [];
 
+  // Filtragem dos clientes por busca textual (Razão Social, Nome Fantasia ou CNPJ)
+  const clientesFiltrados = clientes.filter(c => {
+    if (!buscaCliente.trim()) return true;
+    const termo = buscaCliente.toLowerCase().trim();
+    const razao = (c.razao_social || '').toLowerCase();
+    const fantasia = (c.nome_fantasia || '').toLowerCase();
+    const cnpj = (c.cnpj || '').replace(/\D/g, '');
+    const termoNum = termo.replace(/\D/g, '');
+    return razao.includes(termo) || fantasia.includes(termo) || (termoNum.length >= 2 && cnpj.includes(termoNum));
+  });
+
   // Filtragem dos itens exibidos
   const itensFiltrados = (resultado?.itens || []).filter(item => {
     // Filtro por tab
@@ -285,20 +337,57 @@ export default function SaneadorArquivosPage() {
               O CRT e a UF determinam se os produtos usarão CSOSN ou CST e quais alíquotas se aplicam.
             </p>
 
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Selecionar Cliente</label>
+            {/* Campo de Busca Rápida de Clientes */}
+            <div className="mb-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                <input
+                  type="text"
+                  placeholder="Filtrar por nome ou CNPJ..."
+                  value={buscaCliente}
+                  onChange={e => setBuscaCliente(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-purple-500 focus:outline-none transition-all placeholder:text-slate-400"
+                />
+                {buscaCliente && (
+                  <button
+                    type="button"
+                    onClick={() => setBuscaCliente('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                    title="Limpar filtro"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700">Selecionar Empresa</label>
+              <span className="text-[11px] font-medium text-slate-500">
+                {carregandoClientes ? 'Carregando...' : `${clientesFiltrados.length} empresa(s)`}
+              </span>
+            </div>
+
             <select
               value={clienteSelecionado?.id || ''}
               onChange={e => {
                 const found = clientes.find(c => c.id === e.target.value);
                 setClienteSelecionado(found || null);
               }}
-              className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none mb-4"
+              disabled={carregandoClientes || clientesFiltrados.length === 0}
+              className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none mb-4 disabled:opacity-50 font-medium text-slate-800"
             >
-              {clientes.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.nome} ({c.cpf_cnpj})
-                </option>
-              ))}
+              {carregandoClientes ? (
+                <option value="">Carregando empresas cadastradas...</option>
+              ) : clientesFiltrados.length === 0 ? (
+                <option value="">Nenhuma empresa encontrada</option>
+              ) : (
+                clientesFiltrados.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.razao_social || c.nome_fantasia || 'Sem Razão Social'} {c.cnpj ? `(${c.cnpj})` : ''}
+                  </option>
+                ))
+              )}
             </select>
           </div>
 
@@ -307,16 +396,20 @@ export default function SaneadorArquivosPage() {
               <div className="flex justify-between items-center">
                 <span className="text-slate-500">Regime Tributário:</span>
                 <span className="font-bold text-purple-700 bg-purple-100/70 px-2 py-0.5 rounded-md">
-                  {clienteSelecionado.crt == 1 || clienteSelecionado.regime_tributario === 'simples' ? 'Simples Nacional (CRT 1)' : 'Regime Normal (CRT 3)'}
+                  {(clienteSelecionado.regime_tributario === 'simples' || clienteSelecionado.regime_tributario === 'simples_nacional')
+                    ? 'Simples Nacional (CRT 1)'
+                    : 'Regime Normal (CRT 3)'}
                 </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-500">Estado / UF:</span>
-                <span className="font-bold text-slate-800">{clienteSelecionado.estado || 'MG'} (Minas Gerais)</span>
+                <span className="font-bold text-slate-800">
+                  {clienteSelecionado.uf || 'MG'} (Minas Gerais) {clienteSelecionado.cidade ? `• ${clienteSelecionado.cidade}` : ''}
+                </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-slate-500">Documento:</span>
-                <span className="font-mono text-slate-700">{clienteSelecionado.cpf_cnpj}</span>
+                <span className="text-slate-500">CNPJ:</span>
+                <span className="font-mono text-slate-700">{clienteSelecionado.cnpj || 'Não informado'}</span>
               </div>
             </div>
           )}
