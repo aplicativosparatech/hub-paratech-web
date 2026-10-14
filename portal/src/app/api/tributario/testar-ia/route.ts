@@ -11,12 +11,34 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Provedor não informado' }, { status: 400 });
     }
 
+    // Normalização e blindagem de credenciais por provedor
+    const credsLimpa: any = { ...(credenciais || {}) };
+
+    if (provedor === 'gemini') {
+      const mod = String(credsLimpa.model || '').trim();
+      if (!mod || mod.includes('2.5-pro') || mod.includes('2.0') || mod.includes('1.5-flash') || mod.includes('1.5-pro') || mod === 'gemini-2.5-flash') {
+        credsLimpa.model = 'gemini-3.8-flash';
+      }
+    } else if (provedor === 'mcp_fiscal_brasil') {
+      if (!credsLimpa.endpoint || credsLimpa.endpoint.includes('localhost:8000')) {
+        credsLimpa.endpoint = 'https://mcp-fiscal-brasil-2cmv.onrender.com';
+      }
+    } else if (provedor === 'fiscal_ai') {
+      if (!credsLimpa.endpoint) {
+        credsLimpa.endpoint = 'https://api.fiscal.ai/v1';
+      }
+    } else if (provedor === 'ollama') {
+      if (!credsLimpa.endpoint) {
+        credsLimpa.endpoint = 'http://localhost:11434';
+      }
+    }
+
     // Cria configuração temporária para testar
     const configTeste: IaProviderConfig = {
       provedor,
       tipo: provedor.startsWith('mcp') ? 'mcp' : 'ia',
       is_ativo: true,
-      credenciais: credenciais || {}
+      credenciais: credsLimpa
     };
 
     const inicio = Date.now();
@@ -49,7 +71,7 @@ export async function POST(req: Request) {
         if (lastErr.includes('API key not valid') || lastErr.includes('API_KEY_INVALID') || lastErr.includes('401') || (lastErr.includes('400') && lastErr.includes('API key'))) {
           mensagemRetorno = 'Chave da API do Google Gemini inválida. Verifique se copiou a chave completa no Google AI Studio (geralmente começa com AIzaSy...).';
         } else if (lastErr.includes('RESOURCE_EXHAUSTED') || lastErr.includes('quota') || lastErr.includes('capacity') || lastErr.includes('429')) {
-          mensagemRetorno = 'Cota esgotada no Google AI Studio. Tente selecionar o modelo "Gemini 1.5 Flash" que possui cotas gratuitas maiores (15 RPM).';
+          mensagemRetorno = 'Cota esgotada no Google AI Studio para este modelo. Selecione "Gemini 3.8 Flash" que possui cotas gratuitas mais altas.';
         } else if (lastErr) {
           mensagemRetorno = `Google API: ${lastErr}`;
         }
@@ -80,6 +102,12 @@ export async function POST(req: Request) {
         } else if (lastErr) {
           mensagemRetorno = `Anthropic Claude: ${lastErr}`;
         }
+      } else if (provedor === 'ollama') {
+        mensagemRetorno = `Servidor Ollama local não detectado em ${credsLimpa.endpoint}. Baixe o instalador oficial em https://ollama.com/download e execute 'ollama run llama3' no terminal.`;
+      } else if (provedor === 'mcp_fiscal_brasil') {
+        mensagemRetorno = `Não foi possível conectar ao MCP Fiscal Brasil em ${credsLimpa.endpoint}. O servidor no Render pode estar iniciando (aguarde 30s) ou verifique o endpoint.`;
+      } else if (provedor === 'fiscal_ai') {
+        mensagemRetorno = `Servidor Fiscal.ai em ${credsLimpa.endpoint} não respondeu. Crie sua conta ou verifique a chave em https://docs.fiscal.ai.`;
       }
 
       if (!mensagemRetorno) {

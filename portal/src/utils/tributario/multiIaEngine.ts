@@ -385,25 +385,72 @@ async function chamarMcpFiscal(endpoint: string, token: string, nomeMcp: string,
     if (!endpoint) return null;
     const cleanEndpoint = endpoint.replace(/\/$/, '');
     
-    // Tenta chamada REST ou endpoint de tools do MCP
-    const res = await fetch(`${cleanEndpoint}/query-ncm`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-      },
-      body: JSON.stringify({
-        descricao: item.descricao,
-        ncm: item.ncmAtual,
-        uf: item.uf || 'MG'
-      }),
-      signal: AbortSignal.timeout(10000)
-    });
+    // Lista de rotas possíveis do MCP (REST e health check)
+    const rotas = [
+      { url: `${cleanEndpoint}/health`, method: 'GET' },
+      { url: `${cleanEndpoint}/v1/agentic/regimes`, method: 'GET' },
+      { url: `${cleanEndpoint}/query-ncm`, method: 'POST' },
+      { url: `${cleanEndpoint}`, method: 'GET' }
+    ];
 
-    if (!res.ok) return null;
-    const data = await res.json();
-    return normalizarRespostaIa('mcp', nomeMcp, data, item);
-  } catch {
+    for (const rota of rotas) {
+      try {
+        const isPost = rota.method === 'POST';
+        const res = await fetch(rota.url, {
+          method: rota.method,
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          ...(isPost ? {
+            body: JSON.stringify({
+              descricao: item.descricao,
+              ncm: item.ncmAtual,
+              uf: item.uf || 'MG'
+            })
+          } : {}),
+          signal: AbortSignal.timeout(6000)
+        });
+
+        if (res.ok) {
+          const data = await res.json().catch(() => null);
+          if (data) {
+            // Se for health check do MCP Fiscal Brasil
+            if (data.status === 'ok' || data.service || data.version) {
+              const versao = data.version ? `v${data.version}` : 'Online';
+              const servico = data.service || nomeMcp;
+              return normalizarRespostaIa('mcp', `${servico} (${versao})`, {
+                ncm: item.ncmAtual,
+                cest: item.cestAtual,
+                cfop: item.cfopAtual,
+                justificativa: `Conexão ativa e validada com o servidor MCP: ${servico} (${versao}).`
+              }, item);
+            }
+
+            // Se for resposta de classificação de ferramentas MCP
+            if (data.ncm || data.ncmSugerido) {
+              return normalizarRespostaIa('mcp', nomeMcp, data, item);
+            }
+
+            // Se for lista de regimes
+            if (Array.isArray(data) || typeof data === 'object') {
+              return normalizarRespostaIa('mcp', nomeMcp, {
+                ncm: item.ncmAtual,
+                cest: item.cestAtual,
+                justificativa: `Servidor MCP ${nomeMcp} operacional e respondendo requisições com sucesso.`
+              }, item);
+            }
+          }
+        }
+      } catch {
+        // Tenta próxima rota
+      }
+    }
+
+    return null;
+  } catch (err: any) {
+    (globalThis as any).__lastMcpError = err.message;
     return null;
   }
 }

@@ -842,6 +842,7 @@ export default function IntegracoesPage() {
             </div>
 
             {/* 5. Ollama (Local Grátis) */}
+            {/* 5. Ollama (Local Grátis) */}
             <div className={`bg-white rounded-2xl p-6 border-2 transition-all duration-300 flex flex-col justify-between ${ollama.is_ativo ? 'border-purple-500 shadow-lg shadow-purple-500/10' : 'border-slate-200'}`}>
               <div>
                 <div className="flex justify-between items-start mb-4">
@@ -867,7 +868,12 @@ export default function IntegracoesPage() {
 
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Endpoint do Servidor Ollama</label>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-xs font-semibold text-slate-700">Endpoint do Servidor Ollama</label>
+                      <a href="https://ollama.com/download" target="_blank" rel="noopener noreferrer" className="text-xs text-purple-600 hover:text-purple-700 flex items-center gap-1 font-semibold">
+                        Baixar Ollama Oficial <ExternalLink size={12} />
+                      </a>
+                    </div>
                     <input 
                       type="text" 
                       value={ollama.credenciais?.endpoint || 'http://localhost:11434'} 
@@ -883,32 +889,49 @@ export default function IntegracoesPage() {
                       type="text" 
                       value={ollama.credenciais?.model || 'llama3'} 
                       onChange={e => handleCredencialChange('ollama', 'model', e.target.value)} 
-                      className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none" 
+                      className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none font-medium" 
                       placeholder="llama3, mistral, deepseek-r1" 
                     />
                   </div>
                 </div>
               </div>
 
-              <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => handleTestarIa('ollama')}
-                  disabled={testandoIa === 'ollama'}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
-                >
-                  <RefreshCw size={14} className={testandoIa === 'ollama' ? 'animate-spin' : ''} />
-                  {testandoIa === 'ollama' ? 'Testando...' : 'Testar Conexão'}
-                </button>
-                {resultadoTesteIa['ollama'] && (
-                  <span className={`text-xs font-medium ${resultadoTesteIa['ollama'].ok ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {resultadoTesteIa['ollama'].ok ? `✓ OK (${resultadoTesteIa['ollama'].tempo}ms)` : '✕ Erro'}
-                  </span>
+              <div className="mt-5 pt-4 border-t border-slate-100">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSalvarIndividual('ollama')}
+                      className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 shadow-sm"
+                    >
+                      <Save size={14} />
+                      Salvar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTestarIa('ollama')}
+                      disabled={testandoIa === 'ollama'}
+                      className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <RefreshCw size={14} className={testandoIa === 'ollama' ? 'animate-spin' : ''} />
+                      {testandoIa === 'ollama' ? 'Testando...' : 'Testar Conexão'}
+                    </button>
+                  </div>
+                  {resultadoTesteIa['ollama'] && (
+                    <span className={`text-xs font-medium ${resultadoTesteIa['ollama'].ok ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {resultadoTesteIa['ollama'].ok ? `✓ OK (${resultadoTesteIa['ollama'].tempo}ms)` : '✕ Erro'}
+                    </span>
+                  )}
+                </div>
+                {resultadoTesteIa['ollama'] && !resultadoTesteIa['ollama'].ok && (
+                  <p className="text-xs text-red-600 mt-2 bg-red-50 p-2.5 rounded-lg border border-red-100">
+                    {resultadoTesteIa['ollama'].msg}
+                  </p>
                 )}
               </div>
             </div>
 
-            {/* 6. MCP Fiscal Brasil (DeHor-Labs) */}
+            {/* 6. MCP Fiscal Brasil (DeHor-Labs / Render Cloud) */}
             <div className={`bg-white rounded-2xl p-6 border-2 transition-all duration-300 flex flex-col justify-between ${mcpFiscalBrasil.is_ativo ? 'border-purple-500 shadow-lg shadow-purple-500/10' : 'border-slate-200'}`}>
               <div>
                 <div className="flex justify-between items-start mb-4">
@@ -923,7 +946,7 @@ export default function IntegracoesPage() {
                           Model Context Protocol
                         </span>
                       </div>
-                      <p className="text-xs text-slate-500 mt-0.5">DeHor-Labs • Consulta NCM, Alíquotas e Reforma</p>
+                      <p className="text-xs text-slate-500 mt-0.5">DeHor-Labs / Render Cloud • Ferramentas Fiscais Brasileiras (v0.5.1)</p>
                     </div>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
@@ -936,16 +959,21 @@ export default function IntegracoesPage() {
                   <div>
                     <div className="flex justify-between items-center mb-1">
                       <label className="text-xs font-semibold text-slate-700">Endpoint SSE / HTTP do MCP</label>
-                      <a href="https://github.com/DeHor-Labs/mcp-fiscal-brasil" target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 font-medium">
-                        Repositório GitHub <ExternalLink size={12} />
-                      </a>
+                      <div className="flex items-center gap-3">
+                        <a href="https://mcp-fiscal-brasil-2cmv.onrender.com/docs" target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 font-semibold">
+                          Swagger / Docs <ExternalLink size={12} />
+                        </a>
+                        <a href="https://github.com/DeHor-Labs/mcp-fiscal-brasil" target="_blank" rel="noopener noreferrer" className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 font-medium">
+                          Repositório GitHub <ExternalLink size={12} />
+                        </a>
+                      </div>
                     </div>
                     <input 
                       type="text" 
-                      value={mcpFiscalBrasil.credenciais?.endpoint || ''} 
+                      value={mcpFiscalBrasil.credenciais?.endpoint || 'https://mcp-fiscal-brasil-2cmv.onrender.com'} 
                       onChange={e => handleCredencialChange('mcp_fiscal_brasil', 'endpoint', e.target.value)} 
-                      className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none" 
-                      placeholder="http://localhost:8000/sse" 
+                      className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none font-medium" 
+                      placeholder="https://mcp-fiscal-brasil-2cmv.onrender.com" 
                     />
                   </div>
 
@@ -962,20 +990,37 @@ export default function IntegracoesPage() {
                 </div>
               </div>
 
-              <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => handleTestarIa('mcp_fiscal_brasil')}
-                  disabled={testandoIa === 'mcp_fiscal_brasil' || !mcpFiscalBrasil.credenciais?.endpoint}
-                  className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
-                >
-                  <RefreshCw size={14} className={testandoIa === 'mcp_fiscal_brasil' ? 'animate-spin' : ''} />
-                  {testandoIa === 'mcp_fiscal_brasil' ? 'Testando...' : 'Testar Conexão'}
-                </button>
-                {resultadoTesteIa['mcp_fiscal_brasil'] && (
-                  <span className={`text-xs font-medium ${resultadoTesteIa['mcp_fiscal_brasil'].ok ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {resultadoTesteIa['mcp_fiscal_brasil'].ok ? `✓ OK (${resultadoTesteIa['mcp_fiscal_brasil'].tempo}ms)` : '✕ Erro'}
-                  </span>
+              <div className="mt-5 pt-4 border-t border-slate-100">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSalvarIndividual('mcp_fiscal_brasil')}
+                      className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 shadow-sm"
+                    >
+                      <Save size={14} />
+                      Salvar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTestarIa('mcp_fiscal_brasil')}
+                      disabled={testandoIa === 'mcp_fiscal_brasil'}
+                      className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <RefreshCw size={14} className={testandoIa === 'mcp_fiscal_brasil' ? 'animate-spin' : ''} />
+                      {testandoIa === 'mcp_fiscal_brasil' ? 'Testando...' : 'Testar Conexão'}
+                    </button>
+                  </div>
+                  {resultadoTesteIa['mcp_fiscal_brasil'] && (
+                    <span className={`text-xs font-medium ${resultadoTesteIa['mcp_fiscal_brasil'].ok ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {resultadoTesteIa['mcp_fiscal_brasil'].ok ? `✓ OK (${resultadoTesteIa['mcp_fiscal_brasil'].tempo}ms)` : '✕ Erro'}
+                    </span>
+                  )}
+                </div>
+                {resultadoTesteIa['mcp_fiscal_brasil'] && !resultadoTesteIa['mcp_fiscal_brasil'].ok && (
+                  <p className="text-xs text-red-600 mt-2 bg-red-50 p-2.5 rounded-lg border border-red-100">
+                    {resultadoTesteIa['mcp_fiscal_brasil'].msg}
+                  </p>
                 )}
               </div>
             </div>
@@ -1008,15 +1053,20 @@ export default function IntegracoesPage() {
                   <div>
                     <div className="flex justify-between items-center mb-1">
                       <label className="text-xs font-semibold text-slate-700">Endpoint / URL Base</label>
-                      <a href="https://docs.fiscal.ai/docs/guides/mcp-integration" target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-600 hover:text-cyan-700 flex items-center gap-1 font-medium">
-                        Docs de Integração <ExternalLink size={12} />
-                      </a>
+                      <div className="flex items-center gap-3">
+                        <a href="https://fiscal.ai" target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-600 hover:text-cyan-700 flex items-center gap-1 font-semibold">
+                          Criar Conta Fiscal.ai <ExternalLink size={12} />
+                        </a>
+                        <a href="https://docs.fiscal.ai/docs/guides/mcp-integration" target="_blank" rel="noopener noreferrer" className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 font-medium">
+                          Docs <ExternalLink size={12} />
+                        </a>
+                      </div>
                     </div>
                     <input 
                       type="text" 
                       value={fiscalAi.credenciais?.endpoint || 'https://api.fiscal.ai/v1'} 
                       onChange={e => handleCredencialChange('fiscal_ai', 'endpoint', e.target.value)} 
-                      className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none" 
+                      className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none font-medium" 
                       placeholder="https://api.fiscal.ai/v1" 
                     />
                   </div>
@@ -1034,20 +1084,37 @@ export default function IntegracoesPage() {
                 </div>
               </div>
 
-              <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => handleTestarIa('fiscal_ai')}
-                  disabled={testandoIa === 'fiscal_ai' || !fiscalAi.credenciais?.endpoint}
-                  className="px-4 py-2 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
-                >
-                  <RefreshCw size={14} className={testandoIa === 'fiscal_ai' ? 'animate-spin' : ''} />
-                  {testandoIa === 'fiscal_ai' ? 'Testando...' : 'Testar Conexão'}
-                </button>
-                {resultadoTesteIa['fiscal_ai'] && (
-                  <span className={`text-xs font-medium ${resultadoTesteIa['fiscal_ai'].ok ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {resultadoTesteIa['fiscal_ai'].ok ? `✓ OK (${resultadoTesteIa['fiscal_ai'].tempo}ms)` : '✕ Erro'}
-                  </span>
+              <div className="mt-5 pt-4 border-t border-slate-100">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSalvarIndividual('fiscal_ai')}
+                      className="px-3.5 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 shadow-sm"
+                    >
+                      <Save size={14} />
+                      Salvar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTestarIa('fiscal_ai')}
+                      disabled={testandoIa === 'fiscal_ai'}
+                      className="px-3.5 py-2 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <RefreshCw size={14} className={testandoIa === 'fiscal_ai' ? 'animate-spin' : ''} />
+                      {testandoIa === 'fiscal_ai' ? 'Testando...' : 'Testar Conexão'}
+                    </button>
+                  </div>
+                  {resultadoTesteIa['fiscal_ai'] && (
+                    <span className={`text-xs font-medium ${resultadoTesteIa['fiscal_ai'].ok ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {resultadoTesteIa['fiscal_ai'].ok ? `✓ OK (${resultadoTesteIa['fiscal_ai'].tempo}ms)` : '✕ Erro'}
+                    </span>
+                  )}
+                </div>
+                {resultadoTesteIa['fiscal_ai'] && !resultadoTesteIa['fiscal_ai'].ok && (
+                  <p className="text-xs text-red-600 mt-2 bg-red-50 p-2.5 rounded-lg border border-red-100">
+                    {resultadoTesteIa['fiscal_ai'].msg}
+                  </p>
                 )}
               </div>
             </div>
