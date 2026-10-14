@@ -14,6 +14,7 @@ import toast from 'react-hot-toast'
 import { PermissoesMap } from '@/utils/permissoes'
 import { APP_VERSION } from '@/utils/version'
 import TabHeaderBanner from '@/components/TabHeaderBanner'
+import SefazStatusBadge from '@/components/SefazStatusBadge'
 
 type Role = 'admin' | 'cliente' | 'contabilidade'
 
@@ -256,6 +257,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <span className="text-[11px] font-bold uppercase tracking-wider bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2.5 py-0.5 rounded-xl border border-blue-200 dark:border-blue-800">
               {APP_VERSION}
             </span>
+          </div>
+
+          {/* Status do Servidor SEFAZ em tempo real (Clicável para maiores detalhes) */}
+          <div className="w-full mt-1">
+            <SefazStatusBadge />
           </div>
         </div>
         {/* Botão fechar para mobile */}
