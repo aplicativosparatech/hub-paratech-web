@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { RefreshCw, Download } from 'lucide-react'
+import { APP_VERSION } from '@/utils/version'
 
 export default function ConfiguracoesPage() {
   const supabase = createClient()
@@ -107,7 +108,7 @@ export default function ConfiguracoesPage() {
           <div className="flex items-center gap-2.5">
             <h1 className="text-3xl font-bold text-slate-900">Configurações do Hub</h1>
             <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
-              v2.1.0
+              {APP_VERSION}
             </span>
           </div>
           <p className="text-slate-500 mt-1">Defina as regras de bloqueio e monitoramento por cliente.</p>
@@ -115,7 +116,7 @@ export default function ConfiguracoesPage() {
         <div className="flex items-center gap-3">
           <a href="/HubParatech.zip" download className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition flex items-center gap-2 shadow-sm">
             <Download size={20} />
-            Baixar Hub v2.1.0 (.zip)
+            Baixar Hub {APP_VERSION} (.zip)
           </a>
           <button onClick={() => loadClientes()} className="bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-2">
             <RefreshCw size={20} />

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { Sliders, ShieldAlert, CheckCircle2, Building2, Save, RefreshCw, KeyRound, BellRing, LayoutDashboard, Sparkles, MapPin, FileCheck2, DollarSign, Cpu } from 'lucide-react'
+import { APP_VERSION } from '@/utils/version'
 
 export default function ConfiguracoesPortalPage() {
   const supabase = createClient()
@@ -235,7 +236,7 @@ export default function ConfiguracoesPortalPage() {
             Configurações do Portal
           </h1>
           <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
-            v2.1.0
+            {APP_VERSION}
           </span>
         </div>
         <p className="text-slate-500 text-sm mt-1">

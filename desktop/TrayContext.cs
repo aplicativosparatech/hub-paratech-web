@@ -59,28 +59,44 @@ namespace HubParatechDesktop
                 Icon = new Icon("icon.ico"),
                 ContextMenuStrip = new ContextMenuStrip(),
                 Visible = true,
-                Text = "Hub Paratech v2.1.0 - Monitorando"
+                Text = "Hub Paratech v2.3.0 - Monitorando"
             };
 
-            var itemVersao = new ToolStripMenuItem("Hub Paratech v2.1.0") { Enabled = false, Font = new Font(Control.DefaultFont, FontStyle.Bold) };
+            var itemVersao = new ToolStripMenuItem("Hub Paratech v2.3.0") { Enabled = false, Font = new Font(Control.DefaultFont, FontStyle.Bold) };
             trayIcon.ContextMenuStrip.Items.Add(itemVersao);
             trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
 
             trayIcon.ContextMenuStrip.Items.Add("Ver Status Interno", null, (s, e) => {
-                string procs = string.Join(", ", targetProcesses);
-                MessageBox.Show($"Hub Paratech Desktop v2.1.0\n\nBloqueado: {isBlocked}\nProcessos Alvo: {procs}\nFatura: R$ {faturaValor:F2}\nÚltima Sincronização: {lastSync}", "Status do Hub Paratech", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                string procs = targetProcesses.Count > 0 ? string.Join(", ", targetProcesses) : "Nenhum processo restrito";
+                string syncTxt = lastSync > DateTime.MinValue ? lastSync.ToString("dd/MM/yyyy HH:mm:ss") : "Pendente";
+                string msg = $"Status Operacional do Hub Paratech:\n\n" +
+                             $"• Situação do Sistema: {(isBlocked ? "BLOQUEADO" : "LIBERADO / REGULAR")}\n" +
+                             $"• Processos Alvo: {procs}\n" +
+                             $"• Modo de Operação: {currentModoProcessamento.ToUpper()}\n" +
+                             $"• Monitores XML Ativos: {activeMonitors.Count}\n" +
+                             $"• Fatura Pendente: R$ {faturaValor:F2}\n" +
+                             $"• Empresa: {(string.IsNullOrEmpty(clienteNome) ? "Cliente Paratech" : clienteNome)}\n" +
+                             $"• Última Sincronização: {syncTxt}";
+                ParatechDialog.ShowInfo(msg, "Status do Hub Paratech");
             });
-            trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
-            trayIcon.ContextMenuStrip.Items.Add("Configurar Token", null, SetupToken);
+
             trayIcon.ContextMenuStrip.Items.Add("Sincronizar Agora", null, async (s, e) => {
                 await SyncWithServer();
                 foreach (var m in activeMonitors) m.TriggerScan();
-                MessageBox.Show("Sincronização forçada concluída!", "Sincronizar", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                ParatechDialog.ShowSuccess("Sincronização com o Portal Paratech concluída com sucesso!\nTodos os diretórios de notas foram verificados.", "Sincronização Concluída");
             });
+
+            trayIcon.ContextMenuStrip.Items.Add("Configurar Token", null, SetupToken);
+            trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
+
+            trayIcon.ContextMenuStrip.Items.Add("Sobre o Hub Paratech...", null, (s, e) => {
+                new AboutForm(ConfigManager.Load().HubToken, lastSync, currentModoProcessamento).ShowDialog();
+            });
+
             trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
             trayIcon.ContextMenuStrip.Items.Add("Sair", null, Exit);
 
-            trayIcon.ShowBalloonTip(3000, "Hub Paratech v2.1.0", "Iniciado e monitorando os sistemas.", ToolTipIcon.Info);
+            trayIcon.ShowBalloonTip(3000, "Hub Paratech v2.3.0", "Iniciado e monitorando os sistemas.", ToolTipIcon.Info);
             EnableAutoStart();
 
             // Timer para sincronizar com a nuvem a cada 1 hora (3600000 ms)
@@ -259,23 +275,16 @@ namespace HubParatechDesktop
 
         private void Exit(object? sender, EventArgs e)
         {
-            var passForm = new Form() { Width = 300, Height = 150, Text = "Senha de Saída", StartPosition = FormStartPosition.CenterScreen, FormBorderStyle = FormBorderStyle.FixedDialog, TopMost = true };
-            var lbl = new Label() { Text = "Senha de administrador:", Location = new Point(20, 10), AutoSize = true };
-            var txtPass = new TextBox() { Location = new Point(20, 30), Width = 240, PasswordChar = '*' };
-            var btnOk = new Button() { Text = "Validar", Location = new Point(100, 70), DialogResult = DialogResult.OK };
-            passForm.Controls.Add(lbl); passForm.Controls.Add(txtPass); passForm.Controls.Add(btnOk);
-            
-            if (passForm.ShowDialog() == DialogResult.OK)
+            bool authorized = ParatechDialog.PromptPassword(
+                "Digite a senha de administrador para encerrar o Hub Paratech:",
+                "Encerrar Hub Paratech",
+                pwd => pwd == offlineSecret || pwd == "Paratech9951##"
+            );
+
+            if (authorized)
             {
-                if (txtPass.Text == offlineSecret || txtPass.Text == "Paratech9951##") // Usa o secret dinâmico ou a senha mestre
-                {
-                    trayIcon.Visible = false;
-                    Application.Exit();
-                }
-                else
-                {
-                    MessageBox.Show("Senha incorreta!", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
+                trayIcon.Visible = false;
+                Application.Exit();
             }
         }
         
