@@ -1,4 +1,5 @@
 import forge from 'node-forge'
+import { limparDocumento, formatarCnpjCpf } from './cnpjAlfanumerico'
 
 export interface CertificadoDados {
   titular: string
@@ -66,14 +67,8 @@ export function parsePfxBuffer(buffer: Buffer, senha: string): CertificadoDados 
   if (commonName.includes(':')) {
     const parts = commonName.split(':')
     titular = parts[0].trim()
-    const rawDoc = parts[parts.length - 1].trim().replace(/\D/g, '')
-    if (rawDoc.length === 14) {
-      documento = rawDoc.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
-    } else if (rawDoc.length === 11) {
-      documento = rawDoc.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4')
-    } else {
-      documento = rawDoc
-    }
+    const rawDoc = limparDocumento(parts[parts.length - 1].trim())
+    documento = formatarCnpjCpf(rawDoc) || rawDoc
   }
 
   // Validade

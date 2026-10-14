@@ -5,6 +5,7 @@ import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { Sliders, ShieldAlert, CheckCircle2, Building2, Save, RefreshCw, KeyRound, BellRing, LayoutDashboard, Sparkles, MapPin, FileCheck2, DollarSign, Cpu } from 'lucide-react'
 import { APP_VERSION } from '@/utils/version'
+import { limparDocumento } from '@/utils/cnpjAlfanumerico'
 
 export default function ConfiguracoesPortalPage() {
   const supabase = createClient()
@@ -279,9 +280,9 @@ export default function ConfiguracoesPortalPage() {
                   .filter(c => {
                     if (!clientSearchTerm) return true
                     const term = clientSearchTerm.toLowerCase().trim()
-                    const cleanTerm = term.replace(/\D/g, '')
+                    const cleanTerm = limparDocumento(term)
                     const doc = (c.cnpj || '').toLowerCase()
-                    const cleanDoc = doc.replace(/\D/g, '')
+                    const cleanDoc = limparDocumento(doc)
                     return (
                       (c.razao_social && c.razao_social.toLowerCase().includes(term)) ||
                       (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(term)) ||

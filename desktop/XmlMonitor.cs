@@ -171,25 +171,25 @@ namespace HubParatechDesktop
             {
                 string xml = System.Text.Encoding.UTF8.GetString(fileBytes);
 
-                // 1. Chave de Acesso (44 dígitos)
-                var matchChave = Regex.Match(xml, @"<(?:chNFe|chCTe|chMDFe)[^>]*>(\d{44})<");
+                // 1. Chave de Acesso (44 caracteres - suporta CNPJ alfanumérico IN RFB 2.229/2024)
+                var matchChave = Regex.Match(xml, @"<(?:chNFe|chCTe|chMDFe)[^>]*>([A-Za-z0-9]{44})<");
                 if (matchChave.Success)
                 {
-                    dados.Chave = matchChave.Groups[1].Value;
+                    dados.Chave = matchChave.Groups[1].Value.ToUpper();
                 }
                 else
                 {
-                    var matchId = Regex.Match(xml, @"Id\s*=\s*[""'](?:NFe|NFCe|CTe|MDFe)?(\d{44})[""']", RegexOptions.IgnoreCase);
+                    var matchId = Regex.Match(xml, @"Id\s*=\s*[""'](?:NFe|NFCe|CTe|MDFe)?([A-Za-z0-9]{44})[""']", RegexOptions.IgnoreCase);
                     if (matchId.Success)
                     {
-                        dados.Chave = matchId.Groups[1].Value;
+                        dados.Chave = matchId.Groups[1].Value.ToUpper();
                     }
                     else
                     {
-                        var matchFile = Regex.Match(fileName, @"(\d{44})");
+                        var matchFile = Regex.Match(fileName, @"([A-Za-z0-9]{44})");
                         if (matchFile.Success)
                         {
-                            dados.Chave = matchFile.Groups[1].Value;
+                            dados.Chave = matchFile.Groups[1].Value.ToUpper();
                         }
                     }
                 }

@@ -71,15 +71,17 @@ export function formatarHoraBrasil(dateStr?: string | null): string {
   }
 }
 
+import { limparChaveAcesso } from './cnpjAlfanumerico'
+
 /**
  * Extrai o mês de competência no formato YYYY-MM
  * Prioriza a chave da SEFAZ (dígitos 2 a 5 são AAMM), ou o timezone de Brasília.
  * Exemplo: para uma nota emitida em 30/09/2026 às 22:58, retorna "2026-09".
  */
 export function extrairCompetenciaBrasil(dateStr?: string | null, chave?: string | null): string {
-  // 1. A chave de 44 dígitos da SEFAZ é a verdade fiscal absoluta
-  if (chave && chave.replace(/\D/g, '').length === 44) {
-    const cleanChave = chave.replace(/\D/g, '')
+  // 1. A chave de 44 caracteres da SEFAZ é a verdade fiscal absoluta (suporta CNPJ alfanumérico)
+  const cleanChave = limparChaveAcesso(chave)
+  if (cleanChave.length === 44) {
     const aa = cleanChave.substring(2, 4)
     const mm = cleanChave.substring(4, 6)
     return `20${aa}-${mm}`

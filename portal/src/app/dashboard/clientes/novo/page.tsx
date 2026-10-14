@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ArrowLeft, UserPlus, Save, Search, Eye, EyeOff, ShieldCheck, FileKey, FileCode, Upload } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
+import { limparDocumento, formatarCnpjCpf, validarCnpj, validarCpf, isCnpjAlfanumerico } from '@/utils/cnpjAlfanumerico'
 
 export default function NovoClientePage() {
   const router = useRouter()
@@ -92,13 +93,17 @@ export default function NovoClientePage() {
     fetchContas()
   }, [])
 
-  // Busca de CNPJ via BrasilAPI ou formatação de CPF
+  // Busca de CNPJ via BrasilAPI ou validação de CNPJ Alfanumérico / CPF
   const handleConsultarCnpj = async () => {
-    const rawDoc = formData.cnpj.replace(/\D/g, '')
+    const rawDoc = limparDocumento(formData.cnpj)
 
     if (rawDoc.length === 11) {
       // É CPF (Pessoa Física / Produtor Rural)
-      const cpfFormatado = rawDoc.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4')
+      if (!validarCpf(rawDoc)) {
+        toast.error('CPF inválido. Verifique os números digitados.')
+        return
+      }
+      const cpfFormatado = formatarCnpjCpf(rawDoc)
       setFormData(prev => ({
         ...prev,
         cnpj: cpfFormatado,
@@ -109,19 +114,36 @@ export default function NovoClientePage() {
     }
 
     if (rawDoc.length !== 14) {
-      toast.error('Informe um CNPJ válido com 14 dígitos ou CPF com 11 dígitos.')
+      toast.error('Informe um CNPJ válido com 14 caracteres ou CPF com 11 dígitos.')
+      return
+    }
+
+    // Validação matemática oficial da RFB (Módulo 11 com suporte a alfanumérico)
+    if (!validarCnpj(rawDoc)) {
+      toast.error('CNPJ inválido de acordo com as regras de dígito verificador da Receita Federal.')
+      return
+    }
+
+    const cnpjFormatado = formatarCnpjCpf(rawDoc)
+
+    // Se for CNPJ Alfanumérico (IN RFB 2.229/2024)
+    if (isCnpjAlfanumerico(rawDoc)) {
+      setFormData(prev => ({
+        ...prev,
+        cnpj: cnpjFormatado
+      }))
+      toast.success('CNPJ Alfanumérico validado com sucesso (IN RFB nº 2.229/2024)! Complete os dados cadastrais.')
       return
     }
 
     setSearchingCnpj(true)
-    const toastId = toast.loading('Consultando dados do CNPJ...')
+    const toastId = toast.loading('Consultando dados do CNPJ na Receita Federal...')
     try {
       const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${rawDoc}`)
       if (!res.ok) throw new Error('Não foi possível obter dados para este CNPJ.')
       const data = await res.json()
 
       const tel = data.ddd_telefone_1 ? `55${data.ddd_telefone_1.replace(/\D/g, '')}` : formData.whatsapp
-      const cnpjFormatado = rawDoc.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
 
       let autoRegime = 'simples_nacional'
       if (data.opcao_pelo_mei) {
@@ -147,7 +169,8 @@ export default function NovoClientePage() {
 
       toast.success('Dados preenchidos com sucesso!', { id: toastId })
     } catch (err: any) {
-      toast.error(err.message || 'Erro ao consultar CNPJ', { id: toastId })
+      setFormData(prev => ({ ...prev, cnpj: cnpjFormatado }))
+      toast.error(err.message || 'Erro ao consultar CNPJ. Preencha os campos manualmente.', { id: toastId })
     } finally {
       setSearchingCnpj(false)
     }
@@ -186,12 +209,7 @@ export default function NovoClientePage() {
           throw new Error('Não foi possível identificar a tag <emit> com os dados da empresa neste XML.')
         }
 
-        let formattedDoc = doc
-        if (doc.length === 14) {
-          formattedDoc = doc.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
-        } else if (doc.length === 11) {
-          formattedDoc = doc.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4')
-        }
+        const formattedDoc = formatarCnpjCpf(doc) || doc
 
         let autoRegime = formData.regime_tributario
         if (crt === '1') autoRegime = 'simples_nacional'

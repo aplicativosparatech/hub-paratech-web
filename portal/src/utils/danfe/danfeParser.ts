@@ -1,4 +1,5 @@
 import QRCode from 'qrcode';
+import { limparChaveAcesso } from '../cnpjAlfanumerico';
 
 export interface DanfeItem {
   nItem: number;
@@ -137,12 +138,12 @@ const FORMAS_PAGAMENTO_MAP: Record<string, string> = {
   '99': 'Outros'
 };
 
-// Gerador de Código de Barras Code 128C SVG para a Chave de Acesso (44 dígitos)
-export function gerarBarcode128CSvg(chaveNumerica: string): string {
-  // Padrão Code 128 com par de dígitos numéricos
-  const chave = chaveNumerica.replace(/\D/g, '').padEnd(44, '0').substring(0, 44);
+// Gerador de Código de Barras Code 128 SVG para a Chave de Acesso (44 caracteres - numérico ou alfanumérico)
+export function gerarBarcode128CSvg(chaveInput: string): string {
+  // Limpa caracteres especiais mantendo caracteres alfanuméricos
+  const chave = limparChaveAcesso(chaveInput).padEnd(44, '0').substring(0, 44);
   
-  // Tabela simplificada de barras Code 128
+  // Tabela simplificada de barras Code 128 (padrão ISO/IEC 15417)
   const CODE128_PATTERNS = [
     "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
     "221312", "231212", "112232", "122132", "122231", "113222", "123122", "123221", "223211", "221132",
@@ -157,14 +158,28 @@ export function gerarBarcode128CSvg(chaveNumerica: string): string {
     "114131", "311141", "411131", "211412", "211214", "211232", "2331112"
   ];
 
-  // Início Code C (105)
-  let checkSum = 105;
-  const seq: number[] = [105];
+  const ehPuroNumerico = /^\d{44}$/.test(chave);
+  let checkSum = 0;
+  const seq: number[] = [];
 
-  for (let i = 0; i < chave.length; i += 2) {
-    const pair = parseInt(chave.substr(i, 2), 10);
-    seq.push(pair);
-    checkSum += pair * (seq.length - 1);
+  if (ehPuroNumerico) {
+    // Início Code C (105) para pares de dígitos numéricos
+    checkSum = 105;
+    seq.push(105);
+    for (let i = 0; i < chave.length; i += 2) {
+      const pair = parseInt(chave.substr(i, 2), 10);
+      seq.push(pair);
+      checkSum += pair * (seq.length - 1);
+    }
+  } else {
+    // Início Code B (104) para chaves contendo caracteres alfanuméricos (IN RFB 2.229/2024)
+    checkSum = 104;
+    seq.push(104);
+    for (let i = 0; i < chave.length; i++) {
+      const code = chave.charCodeAt(i) - 32;
+      seq.push(code);
+      checkSum += code * (seq.length - 1);
+    }
   }
 
   const checkDigit = checkSum % 103;
@@ -203,6 +218,7 @@ export async function parseXmlParaDanfe(xmlString: string, logoUrl?: string): Pr
   if (!chave) {
     chave = extractTag(cleanXml, 'chNFe');
   }
+  chave = limparChaveAcesso(chave);
 
   // Modelo (posições 20 e 21 da chave ou tag <mod>)
   let modelo: '55' | '65' = '55';

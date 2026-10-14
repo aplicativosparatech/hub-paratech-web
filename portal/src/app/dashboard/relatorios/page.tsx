@@ -15,6 +15,7 @@ import {
   EmpresaDados 
 } from '@/utils/relatorioExporter'
 import Pagination from '@/components/Pagination'
+import { limparDocumento, formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
 
 export default function RelatoriosPage() {
   const supabase = createClient()
@@ -616,10 +617,10 @@ export default function RelatoriosPage() {
                   setClientSearchTerm(term)
                   if (term.trim()) {
                     const t = term.toLowerCase().trim()
-                    const ct = t.replace(/\D/g, '')
+                    const ct = limparDocumento(t)
                     const match = clientes.find(c => {
                       const doc = (c.cnpj || '').toLowerCase()
-                      const cleanDoc = doc.replace(/\D/g, '')
+                      const cleanDoc = limparDocumento(doc)
                       return (
                         (c.razao_social && c.razao_social.toLowerCase().includes(t)) ||
                         (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(t)) ||
@@ -645,9 +646,9 @@ export default function RelatoriosPage() {
                   .filter(c => {
                     if (!clientSearchTerm) return true
                     const term = clientSearchTerm.toLowerCase().trim()
-                    const cleanTerm = term.replace(/\D/g, '')
+                    const cleanTerm = limparDocumento(term)
                     const doc = (c.cnpj || '').toLowerCase()
-                    const cleanDoc = doc.replace(/\D/g, '')
+                    const cleanDoc = limparDocumento(doc)
                     return (
                       (c.razao_social && c.razao_social.toLowerCase().includes(term)) ||
                       (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(term)) ||
@@ -657,7 +658,7 @@ export default function RelatoriosPage() {
                   })
                   .map(c => (
                     <option key={c.id} value={c.id}>
-                      {c.razao_social} {c.nome_fantasia ? `(${c.nome_fantasia})` : ''} {c.cnpj ? `— ${c.cnpj}` : ''}
+                      {c.razao_social} {c.nome_fantasia ? `(${c.nome_fantasia})` : ''} {c.cnpj ? `— ${formatarCnpjCpf(c.cnpj)}` : ''}
                     </option>
                   ))}
               </select>

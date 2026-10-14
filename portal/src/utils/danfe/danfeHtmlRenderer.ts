@@ -1,4 +1,5 @@
 import { DanfeData } from './danfeParser';
+import { formatarCnpjCpf, limparChaveAcesso } from '../cnpjAlfanumerico';
 
 function formatMoney(val: number): string {
   return val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -6,15 +7,13 @@ function formatMoney(val: number): string {
 
 function formatCnpjCpf(doc?: string): string {
   if (!doc) return '-';
-  const c = doc.replace(/\D/g, '');
-  if (c.length === 14) return c.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
-  if (c.length === 11) return c.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
-  return doc;
+  return formatarCnpjCpf(doc) || '-';
 }
 
 function formatChave(chave: string): string {
-  if (!chave || chave.length !== 44) return chave || '-';
-  return chave.replace(/(\d{4})/g, '$1 ').trim();
+  const clean = limparChaveAcesso(chave);
+  if (!clean || clean.length !== 44) return chave || '-';
+  return clean.replace(/([A-Z0-9]{4})/g, '$1 ').trim();
 }
 
 function formatDate(iso?: string): string {

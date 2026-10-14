@@ -18,6 +18,7 @@ import {
   extrairCompetenciaBrasil, 
   extrairDataIsoBrasil 
 } from '@/utils/dateBrasil'
+import { limparDocumento, formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
 
 export default function TabelaCorrecao() {
   const supabase = createClient()
@@ -135,12 +136,12 @@ export default function TabelaCorrecao() {
     const [resNfce, resNfe] = await Promise.all([queryNfce, queryNfe])
 
     const currentCli = clientes.find(c => c.id === selectedCliente) || (userRole === 'cliente' ? clientes[0] : null)
-    const cleanCurrentCnpj = (currentCli?.cnpj || '').replace(/\D/g, '')
+    const cleanCurrentCnpj = limparDocumento(currentCli?.cnpj)
 
     const pendentesNfce = (resNfce.data || [])
       .filter((n: any) => {
         const cleanChaveCnpj = n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : ''
-        const emit = (n.cnpj_emitente || cleanChaveCnpj || '').replace(/\D/g, '')
+        const emit = limparDocumento(n.cnpj_emitente || cleanChaveCnpj)
         const isDivergente = Boolean(cleanCurrentCnpj) && Boolean(emit) && cleanCurrentCnpj !== emit
         return n.is_autorizada === false || !n.tem_assinatura || n.cnpj_divergente || isDivergente
       })
@@ -149,7 +150,7 @@ export default function TabelaCorrecao() {
     const pendentesNfe = (resNfe.data || [])
       .filter((n: any) => {
         const cleanChaveCnpj = n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : ''
-        const emit = (n.cnpj_emitente || cleanChaveCnpj || '').replace(/\D/g, '')
+        const emit = limparDocumento(n.cnpj_emitente || cleanChaveCnpj)
         const isDivergente = Boolean(cleanCurrentCnpj) && Boolean(emit) && cleanCurrentCnpj !== emit
         return n.is_autorizada === false || !n.tem_assinatura || n.cnpj_divergente || isDivergente
       })
@@ -447,10 +448,10 @@ export default function TabelaCorrecao() {
                     setClientSearchTerm(term)
                     if (term.trim()) {
                       const t = term.toLowerCase().trim()
-                      const ct = t.replace(/\D/g, '')
+                      const ct = limparDocumento(t)
                       const match = clientes.find(c => {
                         const doc = (c.cnpj || '').toLowerCase()
-                        const cleanDoc = doc.replace(/\D/g, '')
+                        const cleanDoc = limparDocumento(doc)
                         return (
                           (c.razao_social && c.razao_social.toLowerCase().includes(t)) ||
                           (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(t)) ||
@@ -488,9 +489,9 @@ export default function TabelaCorrecao() {
                   .filter(c => {
                     if (!clientSearchTerm) return true
                     const term = clientSearchTerm.toLowerCase().trim()
-                    const cleanTerm = term.replace(/\D/g, '')
+                    const cleanTerm = limparDocumento(term)
                     const doc = (c.cnpj || '').toLowerCase()
-                    const cleanDoc = doc.replace(/\D/g, '')
+                    const cleanDoc = limparDocumento(doc)
                     return (
                       (c.razao_social && c.razao_social.toLowerCase().includes(term)) ||
                       (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(term)) ||
@@ -500,7 +501,7 @@ export default function TabelaCorrecao() {
                   })
                   .map(c => (
                     <option key={c.id} value={c.id}>
-                      {c.razao_social} {c.nome_fantasia ? `(${c.nome_fantasia})` : ''}
+                      {c.razao_social} {c.nome_fantasia ? `(${c.nome_fantasia})` : ''} {c.cnpj ? `— ${formatarCnpjCpf(c.cnpj)}` : ''}
                     </option>
                   ))}
               </select>

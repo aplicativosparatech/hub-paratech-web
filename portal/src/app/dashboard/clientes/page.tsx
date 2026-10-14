@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Plus, Pencil, Trash2, X, Copy, RefreshCw, Search } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
+import { limparDocumento, formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
 
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<any[]>([])
@@ -79,9 +80,9 @@ export default function ClientesPage() {
           {clientes.filter(c => {
             if (!searchTerm) return true
             const term = searchTerm.toLowerCase().trim()
-            const cleanTerm = term.replace(/\D/g, '')
+            const cleanTerm = limparDocumento(term)
             const doc = (c.cnpj || '').toLowerCase()
-            const cleanDoc = doc.replace(/\D/g, '')
+            const cleanDoc = limparDocumento(doc)
             return (
               (c.razao_social && c.razao_social.toLowerCase().includes(term)) ||
               (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(term)) ||
@@ -118,9 +119,9 @@ export default function ClientesPage() {
                 .filter(c => {
                   if (!searchTerm) return true
                   const term = searchTerm.toLowerCase().trim()
-                  const cleanTerm = term.replace(/\D/g, '')
+                  const cleanTerm = limparDocumento(term)
                   const doc = (c.cnpj || '').toLowerCase()
-                  const cleanDoc = doc.replace(/\D/g, '')
+                  const cleanDoc = limparDocumento(doc)
                   return (
                     (c.razao_social && c.razao_social.toLowerCase().includes(term)) ||
                     (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(term)) ||
@@ -142,7 +143,7 @@ export default function ClientesPage() {
                   }
                 }
 
-                const getRegimeBadge = (regime?: string) => {
+                const getRegimeBadge = (regime: string) => {
                   switch (regime) {
                     case 'simples_nacional':
                       return <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800 whitespace-nowrap">Simples Nacional</span>
@@ -180,7 +181,7 @@ export default function ClientesPage() {
                       )}
                     </td>
                     <td className="p-4 text-slate-600 text-xs">
-                      <div className="font-mono font-medium text-slate-800">{c.cnpj}</div>
+                      <div className="font-mono font-medium text-slate-800">{formatarCnpjCpf(c.cnpj) || c.cnpj}</div>
                       {c.nome_contato && <div className="text-slate-400 mt-0.5">{c.nome_contato}</div>}
                     </td>
                     <td className="p-4">{getRegimeBadge(c.regime_tributario)}</td>

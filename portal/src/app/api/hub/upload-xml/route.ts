@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { consultarSefazProtocolo, gerarProcNFeFinal } from '@/utils/sefazXmlService'
+import { limparDocumento, limparChaveAcesso, validarChaveAcessoNfe } from '@/utils/cnpjAlfanumerico'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -13,29 +14,30 @@ function extractTag(xml: string, tag: string): string | null {
 }
 
 function extractChave(xml: string, fileName?: string): string | null {
-  // 1. Tag direta <chNFe>, <chCTe>, <chMDFe>
+  // 1. Tag direta <chNFe>, <chCTe>, <chMDFe> (suporta CNPJ alfanumérico)
   const tagChave = extractTag(xml, 'chNFe') || extractTag(xml, 'chCTe') || extractTag(xml, 'chMDFe')
-  if (tagChave && tagChave.replace(/\D/g, '').length === 44) {
-    return tagChave.replace(/\D/g, '')
+  if (tagChave) {
+    const clean = limparChaveAcesso(tagChave)
+    if (clean.length === 44) return clean
   }
 
   // 2. Atributo Id="NFe..." ou Id="NFCe..." em <infNFe>, <infCte>, etc.
-  const idMatch = xml.match(/Id\s*=\s*["'](?:NFe|NFCe|CTe|MDFe)?(\d{44})["']/i)
+  const idMatch = xml.match(/Id\s*=\s*["'](?:NFe|NFCe|CTe|MDFe)?([A-Za-z0-9]{44})["']/i)
   if (idMatch && idMatch[1]) {
-    return idMatch[1]
+    return idMatch[1].toUpperCase()
   }
 
-  // 3. Qualquer atributo Id contendo 44 dígitos numéricos
-  const anyIdMatch = xml.match(/Id\s*=\s*["'][^"']*?(\d{44})[^"']*?["']/i)
+  // 3. Qualquer atributo Id contendo 44 caracteres alfanuméricos
+  const anyIdMatch = xml.match(/Id\s*=\s*["'][^"']*?([A-Za-z0-9]{44})[^"']*?["']/i)
   if (anyIdMatch && anyIdMatch[1]) {
-    return anyIdMatch[1]
+    return anyIdMatch[1].toUpperCase()
   }
 
-  // 4. Do próprio nome do arquivo se contiver a chave de 44 dígitos
+  // 4. Do próprio nome do arquivo se contiver a chave de 44 caracteres
   if (fileName) {
-    const fileMatch = fileName.match(/(\d{44})/)
+    const fileMatch = fileName.match(/([A-Za-z0-9]{44})/)
     if (fileMatch && fileMatch[1]) {
-      return fileMatch[1]
+      return fileMatch[1].toUpperCase()
     }
   }
 
@@ -154,9 +156,9 @@ export async function POST(request: Request) {
     const xNomeEmitente = extractTag(emitXml, 'xNome')
     const ieEmitente = extractTag(emitXml, 'IE')
 
-    // Limpar caracteres não-numéricos para comparação precisa
-    const cleanClienteDoc = (cliente.cnpj || '').replace(/\D/g, '')
-    const cleanEmitDoc = (cnpjEmitente || '').replace(/\D/g, '')
+    // Limpeza de caracteres especiais preservando caracteres alfanuméricos de CNPJs novos (IN RFB 2.229/2024)
+    const cleanClienteDoc = limparDocumento(cliente.cnpj)
+    const cleanEmitDoc = limparDocumento(cnpjEmitente)
     const cleanClienteIE = (cliente.inscricao_estadual || '').replace(/\D/g, '')
     const cleanEmitIE = (ieEmitente || '').replace(/\D/g, '')
 

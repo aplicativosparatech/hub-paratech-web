@@ -18,6 +18,7 @@ import {
   extrairCompetenciaBrasil, 
   extrairDataIsoBrasil 
 } from '@/utils/dateBrasil'
+import { limparDocumento, formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
 
 function AssinaturaChip({ ok }: { ok: boolean }) {
   return ok
@@ -119,10 +120,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
 
   function formatDoc(doc?: string | null) {
     if (!doc) return '—'
-    const clean = doc.replace(/\D/g, '')
-    if (clean.length === 14) return clean.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
-    if (clean.length === 11) return clean.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4')
-    return doc
+    return formatarCnpjCpf(doc) || doc
   }
 
   const [modalDelete, setModalDelete] = useState<{
@@ -164,7 +162,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
   }
 
   const currentCli = clientes.find(c => c.id === selectedCliente) || (userRole === 'cliente' ? clientes[0] : null)
-  const cleanCurrentCnpj = (currentCli?.cnpj || '').replace(/\D/g, '')
+  const cleanCurrentCnpj = limparDocumento(currentCli?.cnpj)
 
   // Separação solicitada pelo usuário:
   // Se a nota tiver erro/pendência (não autorizada pela SEFAZ, sem assinatura, divergente),
@@ -174,7 +172,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     if (!n.tem_assinatura) return true
     if (n.cnpj_divergente) return true
     const cleanChaveCnpj = n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : ''
-    const emit = (n.cnpj_emitente || cleanChaveCnpj || '').replace(/\D/g, '')
+    const emit = limparDocumento(n.cnpj_emitente || cleanChaveCnpj)
     return Boolean(cleanCurrentCnpj) && Boolean(emit) && cleanCurrentCnpj !== emit
   })
 
@@ -375,10 +373,10 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                       setClientSearchTerm(term)
                       if (term.trim()) {
                         const t = term.toLowerCase().trim()
-                        const ct = t.replace(/\D/g, '')
+                        const ct = limparDocumento(t)
                         const match = clientes.find(c => {
                           const doc = (c.cnpj || '').toLowerCase()
-                          const cleanDoc = doc.replace(/\D/g, '')
+                          const cleanDoc = limparDocumento(doc)
                           return (
                             (c.razao_social && c.razao_social.toLowerCase().includes(t)) ||
                             (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(t)) ||
@@ -420,9 +418,9 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                   .filter(c => {
                     if (!clientSearchTerm) return true
                     const term = clientSearchTerm.toLowerCase().trim()
-                    const cleanTerm = term.replace(/\D/g, '')
+                    const cleanTerm = limparDocumento(term)
                     const doc = (c.cnpj || '').toLowerCase()
-                    const cleanDoc = doc.replace(/\D/g, '')
+                    const cleanDoc = limparDocumento(doc)
                     return (
                       (c.razao_social && c.razao_social.toLowerCase().includes(term)) ||
                       (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(term)) ||
@@ -432,7 +430,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                   })
                   .map(c => (
                     <option key={c.id} value={c.id}>
-                      {c.razao_social} {c.nome_fantasia ? `(${c.nome_fantasia})` : ''} {c.cnpj ? `— ${c.cnpj}` : ''}
+                      {c.razao_social} {c.nome_fantasia ? `(${c.nome_fantasia})` : ''} {c.cnpj ? `— ${formatarCnpjCpf(c.cnpj)}` : ''}
                     </option>
                   ))}
               </select>
@@ -774,7 +772,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
               ) : notasPaginadas.map(n => {
                 const cleanChaveCnpj = n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : ''
                 const emitenteDoc = n.cnpj_emitente || cleanChaveCnpj
-                const cleanEmit = (emitenteDoc || '').replace(/\D/g, '')
+                const cleanEmit = limparDocumento(emitenteDoc)
                 const isDivergente = Boolean(n.cnpj_divergente) || (Boolean(cleanCurrentCnpj) && Boolean(cleanEmit) && cleanCurrentCnpj !== cleanEmit)
 
                 return (

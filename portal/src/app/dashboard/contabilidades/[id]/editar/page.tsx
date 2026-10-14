@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ArrowLeft, Building2, Save, Search, Eye, EyeOff, UserCheck, MapPin } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
+import { limparDocumento, formatarCnpjCpf, validarCnpj, isCnpjAlfanumerico } from '@/utils/cnpjAlfanumerico'
 
 export default function EditarContabilidadePage() {
   const router = useRouter()
@@ -72,11 +73,27 @@ export default function EditarContabilidadePage() {
     loadData()
   }, [params.id])
 
-  // Consulta automática de CNPJ
+  // Consulta automática de CNPJ (com suporte a CNPJ Alfanumérico)
   const handleConsultarCnpj = async () => {
-    const rawCnpj = formData.cnpj.replace(/\D/g, '')
+    const rawCnpj = limparDocumento(formData.cnpj)
     if (rawCnpj.length !== 14) {
-      toast.error('Informe um CNPJ válido com 14 dígitos.')
+      toast.error('Informe um CNPJ válido com 14 caracteres.')
+      return
+    }
+
+    if (!validarCnpj(rawCnpj)) {
+      toast.error('CNPJ inválido de acordo com as regras de dígito verificador da Receita Federal.')
+      return
+    }
+
+    const cnpjFormatado = formatarCnpjCpf(rawCnpj)
+
+    if (isCnpjAlfanumerico(rawCnpj)) {
+      setFormData(prev => ({
+        ...prev,
+        cnpj: cnpjFormatado
+      }))
+      toast.success('CNPJ Alfanumérico validado com sucesso (IN RFB nº 2.229/2024)! Complete os dados cadastrais.')
       return
     }
 
@@ -92,6 +109,7 @@ export default function EditarContabilidadePage() {
 
       setFormData(prev => ({
         ...prev,
+        cnpj: cnpjFormatado,
         razao_social: data.razao_social || prev.razao_social,
         nome_fantasia: data.nome_fantasia || data.razao_social || prev.nome_fantasia,
         email_contato: data.email || prev.email_contato,
@@ -108,7 +126,8 @@ export default function EditarContabilidadePage() {
 
       toast.success('Dados preenchidos com sucesso!', { id: toastId })
     } catch (err: any) {
-      toast.error(err.message || 'Erro ao consultar CNPJ', { id: toastId })
+      setFormData(prev => ({ ...prev, cnpj: cnpjFormatado }))
+      toast.error(err.message || 'Erro ao consultar CNPJ. Preencha os campos manualmente.', { id: toastId })
     } finally {
       setSearchingCnpj(false)
     }

@@ -26,6 +26,7 @@ import {
 import toast from 'react-hot-toast';
 import { createClient } from '@/utils/supabase/client';
 import { ArquivoInspecionado, MapeamentoColunas, ItemSaneadoRetorno } from '@/utils/tributario/fileParsers';
+import { limparDocumento } from '@/utils/cnpjAlfanumerico';
 
 interface ClienteOption {
   id: string;
@@ -273,9 +274,9 @@ export default function SaneadorArquivosPage() {
     const termo = buscaCliente.toLowerCase().trim();
     const razao = (c.razao_social || '').toLowerCase();
     const fantasia = (c.nome_fantasia || '').toLowerCase();
-    const cnpj = (c.cnpj || '').replace(/\D/g, '');
-    const termoNum = termo.replace(/\D/g, '');
-    return razao.includes(termo) || fantasia.includes(termo) || (termoNum.length >= 2 && cnpj.includes(termoNum));
+    const cnpj = limparDocumento(c.cnpj).toLowerCase();
+    const termoClean = limparDocumento(termo).toLowerCase();
+    return razao.includes(termo) || fantasia.includes(termo) || (termoClean.length >= 2 && cnpj.includes(termoClean));
   });
 
   // Filtragem dos itens exibidos
