@@ -305,7 +305,7 @@ export default function AparenciaPage() {
               Pré-visualização do Cabeçalho Ilustrado:
             </span>
             <span className="text-[11px] font-mono text-slate-400">
-              Proporção ultra-widescreen (1024x75)
+              Proporção ultra-widescreen (1280x98)
             </span>
           </div>
 
@@ -314,10 +314,10 @@ export default function AparenciaPage() {
               <img
                 src="/banners/contabilidades.webp"
                 alt="Banner de Exemplo - Contabilidade"
-                className="w-full h-[75px] object-cover object-center block"
+                className="w-full h-[98px] object-cover object-center block"
               />
             ) : (
-              <div className="h-[75px] flex items-center justify-center bg-slate-100 dark:bg-slate-900 text-slate-400 text-xs italic">
+              <div className="h-[98px] flex items-center justify-center bg-slate-100 dark:bg-slate-900 text-slate-400 text-xs italic">
                 Cabeçalho com imagem desativado — O sistema operará em layout minimalista.
               </div>
             )}

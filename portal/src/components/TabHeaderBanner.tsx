@@ -61,7 +61,7 @@ export default function TabHeaderBanner() {
   }
 
   return (
-    <div className="w-full h-[60px] sm:h-[75px] bg-[#021332] overflow-hidden relative select-none flex-shrink-0 border-b border-blue-950/40 shadow-xs z-30 transition-all duration-300">
+    <div className="w-full h-[80px] sm:h-[98px] bg-[#020b18] overflow-hidden relative select-none flex-shrink-0 border-b border-blue-950/50 shadow-md z-30 transition-all duration-300">
       <img
         src={bannerUrl}
         alt="Banner Temático da Aba"
