@@ -26,8 +26,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [loading, setLoading] = useState(true)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [showSplash, setShowSplash] = useState(true)
-  const [splashProgress, setSplashProgress] = useState(0)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
 
   // 0. Tema Claro / Escuro
@@ -51,27 +49,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       document.documentElement.classList.remove('dark')
     }
   }
-
-  // 1. Splash Screen de 2 segundos com barra de progresso suave
-  useEffect(() => {
-    const startTime = Date.now()
-    const duration = 2000
-
-    const interval = setInterval(() => {
-      const elapsed = Date.now() - startTime
-      const progress = Math.min(100, Math.round((elapsed / duration) * 100))
-      setSplashProgress(progress)
-
-      if (elapsed >= duration) {
-        clearInterval(interval)
-        setTimeout(() => {
-          setShowSplash(false)
-        }, 150)
-      }
-    }, 25)
-
-    return () => clearInterval(interval)
-  }, [])
 
   // 2. Listener e Controle de Tela Inteira (Modo Kiosk F11)
   const toggleFullscreen = () => {
@@ -232,45 +209,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     router.push('/login')
   }
 
-  if (showSplash || loading) {
+  if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-white relative overflow-hidden select-none">
-        {/* Glow de fundo */}
-        <div className="absolute w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div className="relative z-10 flex flex-col items-center max-w-sm w-full px-6 space-y-6 text-center animate-in fade-in duration-300">
-          <img 
-            src="/logo-paratech.webp" 
-            alt="Paratech Soluções & Sistemas" 
-            className="h-16 sm:h-20 w-auto object-contain drop-shadow-2xl animate-pulse"
-          />
-          
-          <div className="space-y-1">
-            <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
-              Hub<span className="text-blue-500">Paratech</span>
-            </h2>
-            <p className="text-xs text-slate-400">
-              Ecossistema Fiscal & Inteligência Tributária
-            </p>
-          </div>
-          
-          {/* Barra de Progresso Animada */}
-          <div className="w-full bg-slate-900 rounded-full h-2.5 p-0.5 border border-slate-800 overflow-hidden shadow-inner">
-            <div 
-              className="bg-gradient-to-r from-blue-500 via-indigo-500 to-cyan-400 h-full rounded-full transition-all duration-75 ease-out shadow-sm"
-              style={{ width: `${splashProgress}%` }}
-            />
-          </div>
-
-          <div className="flex items-center justify-between w-full text-[11px] text-slate-400 font-mono">
-            <span>Carregando ecossistema fiscal...</span>
-            <span className="font-bold text-blue-400">{splashProgress}%</span>
-          </div>
-        </div>
-
-        <div className="absolute bottom-6 text-[11px] text-slate-500 font-medium">
-          Paratech Soluções & Sistemas • {APP_VERSION}
-        </div>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 text-white gap-3 select-none">
+        <div className="w-10 h-10 border-3 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        <span className="text-xs text-slate-400 font-medium">Carregando painel...</span>
       </div>
     )
   }

@@ -1,9 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-
 import { APP_VERSION } from '@/utils/version'
 
 export default function LoginPage() {
@@ -12,8 +11,39 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   
+  // Splash Screen apenas no primeiro carregamento antes da tela de login
+  const [showSplash, setShowSplash] = useState(true)
+  const [splashProgress, setSplashProgress] = useState(0)
+
   const router = useRouter()
   const supabase = createClient()
+
+  useEffect(() => {
+    // Se o splash já foi exibido nesta sessão, libera a tela de login imediatamente
+    if (typeof window !== 'undefined' && sessionStorage.getItem('hub_splash_shown') === 'true') {
+      setShowSplash(false)
+      return
+    }
+
+    const duration = 2000
+    const startTime = Date.now()
+
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - startTime
+      const progress = Math.min(100, Math.round((elapsed / duration) * 100))
+      setSplashProgress(progress)
+
+      if (elapsed >= duration) {
+        clearInterval(interval)
+        sessionStorage.setItem('hub_splash_shown', 'true')
+        setTimeout(() => {
+          setShowSplash(false)
+        }, 150)
+      }
+    }, 25)
+
+    return () => clearInterval(interval)
+  }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -36,8 +66,53 @@ export default function LoginPage() {
     router.refresh()
   }
 
+  // 1. TELA DE SPLASH (Executada apenas antes do login, 1 vez por sessão)
+  if (showSplash) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-white relative overflow-hidden select-none">
+        {/* Glow de fundo */}
+        <div className="absolute w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div className="relative z-10 flex flex-col items-center max-w-sm w-full px-6 space-y-6 text-center animate-in fade-in duration-300">
+          <img 
+            src="/logo-paratech.webp" 
+            alt="Paratech Soluções & Sistemas" 
+            className="h-16 sm:h-20 w-auto object-contain drop-shadow-2xl animate-pulse"
+          />
+          
+          <div className="space-y-1">
+            <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+              Hub<span className="text-blue-500">Paratech</span>
+            </h2>
+            <p className="text-xs text-slate-400">
+              Ecossistema Fiscal & Inteligência Tributária
+            </p>
+          </div>
+          
+          {/* Barra de Progresso Animada */}
+          <div className="w-full bg-slate-900 rounded-full h-2.5 p-0.5 border border-slate-800 overflow-hidden shadow-inner">
+            <div 
+              className="bg-gradient-to-r from-blue-500 via-indigo-500 to-cyan-400 h-full rounded-full transition-all duration-75 ease-out shadow-sm"
+              style={{ width: `${splashProgress}%` }}
+            />
+          </div>
+
+          <div className="flex items-center justify-between w-full text-[11px] text-slate-400 font-mono">
+            <span>Carregando ecossistema fiscal...</span>
+            <span className="font-bold text-blue-400">{splashProgress}%</span>
+          </div>
+        </div>
+
+        <div className="absolute bottom-6 text-[11px] text-slate-500 font-medium">
+          Paratech Soluções & Sistemas • {APP_VERSION}
+        </div>
+      </div>
+    )
+  }
+
+  // 2. TELA DE LOGIN (Aparece suavemente após o splash)
   return (
-    <main className="min-h-screen flex flex-col justify-between bg-slate-900 p-4 relative overflow-hidden">
+    <main className="min-h-screen flex flex-col justify-between bg-slate-900 p-4 relative overflow-hidden animate-in fade-in duration-500">
       {/* Glow de fundo */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none"></div>
 
