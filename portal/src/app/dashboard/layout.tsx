@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { 
   LayoutDashboard, Users, Building2, Settings, FileText, 
   LogOut, BarChart3, Receipt, FileDown, PlugZap, UserCircle,
-  Menu, X, Sliders, ShieldCheck
+  Menu, X, Sliders, ShieldCheck, Sparkles
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
@@ -83,6 +83,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { prefixo: '/dashboard/faturas', modulo: 'faturas', nome: 'Faturas' },
       { prefixo: '/dashboard/notas-fiscais', modulo: 'notas_fiscais', nome: 'Notas Fiscais' },
       { prefixo: '/dashboard/configuracoes-portal', modulo: 'configuracoes_portal', nome: 'Configurações do Portal' },
+      { prefixo: '/dashboard/corretor-tributario', modulo: 'corretor_tributario', nome: 'Corretor Tributário' },
       { prefixo: '/dashboard/meus-clientes', modulo: 'contabilidade_meus_clientes', nome: 'Meus Clientes' },
       { prefixo: '/dashboard/meu-perfil', modulo: 'meu_perfil', nome: 'Meu Perfil' },
       { prefixo: '/dashboard/permissoes', modulo: '_admin_only', nome: 'Permissões' },
@@ -190,6 +191,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             
             <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 px-4 mt-6">Sistema</div>
             <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
+            <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Corretor Tributário" />
             <NavItem href="/dashboard/integracoes" icon={PlugZap} label="Integrações (APIs)" />
             <NavItem href="/dashboard/permissoes" icon={ShieldCheck} label="Permissões" />
             <NavItem href="/dashboard/configuracoes-portal" icon={Sliders} label="Configurações do Portal" />
@@ -206,6 +208,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {(canAccess('relatorios_resumo') || canAccess('relatorios_monofasicos') || canAccess('relatorios_auditoria')) && (
               <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
             )}
+            {canAccess('corretor_tributario') && <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Corretor Tributário" />}
             {canAccess('configuracoes_portal') && <NavItem href="/dashboard/configuracoes-portal" icon={Sliders} label="Configurações do Portal" />}
             {canAccess('meu_perfil') && <NavItem href="/dashboard/meu-perfil" icon={UserCircle} label="Meu Perfil" />}
           </>
@@ -220,6 +223,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {(canAccess('relatorios_resumo') || canAccess('relatorios_monofasicos') || canAccess('relatorios_auditoria')) && (
               <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
             )}
+            {canAccess('corretor_tributario') && <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Corretor Tributário" />}
             {canAccess('configuracoes_portal') && <NavItem href="/dashboard/configuracoes-portal" icon={Sliders} label="Configurações do Portal" />}
             {canAccess('meu_perfil') && <NavItem href="/dashboard/meu-perfil" icon={Building2} label="Perfil do Escritório" />}
           </>
