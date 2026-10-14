@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Trash2, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Users, Building2 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 
@@ -14,9 +14,56 @@ export default function ContabilidadesPage() {
   const supabase = createClient()
 
   async function fetchContabilidades() {
-    const { data } = await supabase.from('contabilidades').select('*').order('created_at', { ascending: false })
-    if (data) setContabilidades(data)
-    setLoading(false)
+    try {
+      // 1. Busca contabilidades com join em clientes
+      const { data: contabsData, error: errContabs } = await supabase
+        .from('contabilidades')
+        .select('*, clientes ( count )')
+        .order('created_at', { ascending: false })
+
+      // 2. Busca direta para garantir a contagem exata independente de RLS
+      const { data: clientesData } = await supabase
+        .from('clientes')
+        .select('id, contabilidade_id')
+
+      const countsMap: Record<string, number> = {}
+      if (clientesData) {
+        clientesData.forEach((cli: any) => {
+          if (cli.contabilidade_id) {
+            countsMap[cli.contabilidade_id] = (countsMap[cli.contabilidade_id] || 0) + 1
+          }
+        })
+      }
+
+      if (contabsData) {
+        const lista = contabsData.map((c: any) => {
+          const countFromJoin = c.clientes?.[0]?.count ?? 0
+          const countFromMap = countsMap[c.id] ?? 0
+          return {
+            ...c,
+            total_clientes: Math.max(countFromJoin, countFromMap)
+          }
+        })
+        setContabilidades(lista)
+      } else {
+        const { data: contabsSimples } = await supabase
+          .from('contabilidades')
+          .select('*')
+          .order('created_at', { ascending: false })
+
+        if (contabsSimples) {
+          const lista = contabsSimples.map((c: any) => ({
+            ...c,
+            total_clientes: countsMap[c.id] ?? 0
+          }))
+          setContabilidades(lista)
+        }
+      }
+    } catch (err: any) {
+      console.error('Erro ao buscar contabilidades e clientes:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { fetchContabilidades() }, [])
@@ -39,7 +86,7 @@ export default function ContabilidadesPage() {
       <header className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Contabilidades</h1>
-          <p className="text-slate-500 mt-1">Escritórios contábeis vinculados aos clientes.</p>
+          <p className="text-slate-500 mt-1">Escritórios contábeis vinculados aos clientes do portal.</p>
         </div>
         
         <Link href="/dashboard/contabilidades/nova" className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition flex items-center gap-2">
@@ -54,6 +101,7 @@ export default function ContabilidadesPage() {
             <tr className="bg-slate-50 border-b border-slate-200">
               <th className="p-4 font-semibold text-slate-600 text-sm">Logo</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">Escritório / Fantasia</th>
+              <th className="p-4 font-semibold text-slate-600 text-sm text-center">Clientes Atribuídos</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">CNPJ</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">Contato / WhatsApp</th>
               <th className="p-4 font-semibold text-slate-600 text-sm">Contador / CRC</th>
@@ -63,9 +111,9 @@ export default function ContabilidadesPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} className="p-8 text-center text-slate-500">Carregando...</td></tr>
+              <tr><td colSpan={8} className="p-8 text-center text-slate-500">Carregando contabilidades e contagem de clientes...</td></tr>
             ) : contabilidades.length === 0 ? (
-              <tr><td colSpan={7} className="p-8 text-center text-slate-500">Nenhuma contabilidade cadastrada ainda.</td></tr>
+              <tr><td colSpan={8} className="p-8 text-center text-slate-500">Nenhuma contabilidade cadastrada ainda.</td></tr>
             ) : (
               contabilidades.map(c => (
                 <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
@@ -79,9 +127,39 @@ export default function ContabilidadesPage() {
                     )}
                   </td>
                   <td className="p-4 text-slate-800">
-                    <div className="font-bold text-slate-900">{c.razao_social}</div>
-                    <div className="text-xs text-slate-500">{c.nome_fantasia || '—'}</div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-slate-900">{c.razao_social}</span>
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                        (c.total_clientes || 0) > 0
+                          ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                          : 'bg-slate-100 text-slate-500 border border-slate-200'
+                      }`}>
+                        <Users size={11} />
+                        {c.total_clientes || 0} {c.total_clientes === 1 ? 'cliente' : 'clientes'}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-500 mt-0.5">{c.nome_fantasia || '—'}</div>
                   </td>
+
+                  {/* Coluna de Clientes Atribuídos com Badge em Destaque */}
+                  <td className="p-4 text-center">
+                    <Link
+                      href={`/dashboard/clientes?busca=${encodeURIComponent(c.razao_social)}`}
+                      className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition border ${
+                        (c.total_clientes || 0) > 0
+                          ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 shadow-xs'
+                          : 'bg-slate-50 hover:bg-slate-100 text-slate-500 border-slate-200'
+                      }`}
+                      title={`Ver clientes atendidos por ${c.razao_social}`}
+                    >
+                      <Users size={14} className={c.total_clientes > 0 ? 'text-blue-600' : 'text-slate-400'} />
+                      <span>{c.total_clientes || 0}</span>
+                      <span className="text-[10px] font-semibold text-slate-400">
+                        {c.total_clientes === 1 ? 'cliente' : 'clientes'}
+                      </span>
+                    </Link>
+                  </td>
+
                   <td className="p-4 text-slate-700 font-mono text-xs">{c.cnpj || '—'}</td>
                   <td className="p-4 text-slate-600 text-xs">
                     <div>{c.whatsapp || c.telefone || '—'}</div>

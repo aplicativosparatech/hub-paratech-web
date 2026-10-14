@@ -24,7 +24,14 @@ export default function ClientesPage() {
     setLoading(false)
   }
 
-  useEffect(() => { fetchClientes() }, [])
+  useEffect(() => { 
+    fetchClientes()
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const b = params.get('busca')
+      if (b) setSearchTerm(decodeURIComponent(b))
+    } catch {}
+  }, [])
 
   const handleDelete = async () => {
     setDeleting(true)
@@ -70,7 +77,7 @@ export default function ClientesPage() {
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input
             type="text"
-            placeholder="Buscar por Razão Social, CNPJ ou CPF..."
+            placeholder="Buscar por Razão Social, CNPJ, CPF ou Contabilidade..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
@@ -86,6 +93,7 @@ export default function ClientesPage() {
             return (
               (c.razao_social && c.razao_social.toLowerCase().includes(term)) ||
               (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(term)) ||
+              (c.contabilidades?.razao_social && c.contabilidades.razao_social.toLowerCase().includes(term)) ||
               doc.includes(term) ||
               (cleanTerm && cleanDoc.includes(cleanTerm))
             )
@@ -125,6 +133,7 @@ export default function ClientesPage() {
                   return (
                     (c.razao_social && c.razao_social.toLowerCase().includes(term)) ||
                     (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(term)) ||
+                    (c.contabilidades?.razao_social && c.contabilidades.razao_social.toLowerCase().includes(term)) ||
                     doc.includes(term) ||
                     (cleanTerm && cleanDoc.includes(cleanTerm))
                   )
