@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { FileDown, FileUp, Receipt } from 'lucide-react'
+import { NotasFiscaisFilterProvider } from './NotasFiscaisFilterContext'
 
 export default function NotasFiscaisLayout({
   children,
@@ -14,11 +15,12 @@ export default function NotasFiscaisLayout({
   const isActive = (path: string) => pathname.includes(path)
 
   return (
-    <div className="p-8 h-full flex flex-col">
-      <header className="mb-6">
-        <h1 className="text-3xl font-bold text-slate-900">Portal de Notas Fiscais</h1>
-        <p className="text-slate-500 mt-1">Gerenciamento e download de XMLs armazenados pelos Hubs.</p>
-      </header>
+    <NotasFiscaisFilterProvider>
+      <div className="p-8 h-full flex flex-col">
+        <header className="mb-6">
+          <h1 className="text-3xl font-bold text-slate-900">Portal de Notas Fiscais</h1>
+          <p className="text-slate-500 mt-1">Gerenciamento e download de XMLs armazenados pelos Hubs.</p>
+        </header>
 
       {/* Navegação Principal: Entradas e Saídas */}
       <div className="flex border-b border-slate-200 mb-6">
@@ -68,5 +70,6 @@ export default function NotasFiscaisLayout({
         {children}
       </div>
     </div>
+    </NotasFiscaisFilterProvider>
   )
 }

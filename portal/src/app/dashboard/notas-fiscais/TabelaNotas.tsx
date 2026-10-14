@@ -7,10 +7,11 @@ import Link from 'next/link'
 import { 
   RefreshCw, X, Trash2, AlertTriangle, ArrowRight, 
   Calendar, Filter, Search, Clock, RotateCcw, CheckCircle2, Download,
-  Printer, ExternalLink, Copy, Check, FileText, Globe
+  Printer, ExternalLink, Copy, Check, FileText, Globe, Sparkles
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Pagination from '@/components/Pagination'
+import { useNotasFiscaisFilters } from './NotasFiscaisFilterContext'
 import { 
   formatarDataBrasil, 
   formatarHoraBrasil, 
@@ -26,83 +27,39 @@ function AssinaturaChip({ ok }: { ok: boolean }) {
 
 function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
   const supabase = createClient()
-  const searchParams = useSearchParams()
-  const clienteIdParam = searchParams.get('cliente_id')
+  const {
+    userRole,
+    clientes,
+    loadingClientes,
+    selectedCliente,
+    setSelectedCliente,
+    clientSearchTerm,
+    setClientSearchTerm,
+    filtroMes,
+    setFiltroMes,
+    dataInicio,
+    setDataInicio,
+    dataFim,
+    setDataFim,
+    buscaNumero,
+    setBuscaNumero,
+    buscaGeral,
+    setBuscaGeral,
+    pageSize,
+    setPageSize,
+    temFiltroAtivo,
+    limparFiltros,
+  } = useNotasFiscaisFilters()
+
   const [notas, setNotas] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Controle de Papel e Filtro de Cliente
-  const [userRole, setUserRole] = useState<'admin' | 'contabilidade' | 'cliente'>('admin')
-  const [clientes, setClientes] = useState<any[]>([])
-  const [selectedCliente, setSelectedCliente] = useState<string>(clienteIdParam || '')
-  const [clientSearchTerm, setClientSearchTerm] = useState('')
-
-  // Filtros Avançados solicitados pelo usuário
-  const [filtroMes, setFiltroMes] = useState<string>('') // 'YYYY-MM' ou vazio
-  const [dataInicio, setDataInicio] = useState<string>('') // 'YYYY-MM-DD'
-  const [dataFim, setDataFim] = useState<string>('') // 'YYYY-MM-DD'
-  const [buscaNumero, setBuscaNumero] = useState<string>('')
-  const [buscaGeral, setBuscaGeral] = useState<string>('')
-
-  // Paginação com registros por página configuráveis
+  // Paginação local da tabela
   const [currentPage, setCurrentPage] = useState<number>(1)
-  const [pageSize, setPageSize] = useState<number>(25)
 
   // Horário da Última Sincronização do Hub e Última Consulta
   const [ultimaSincronizacaoHub, setUltimaSincronizacaoHub] = useState<string | null>(null)
   const [ultimaConsultaHora, setUltimaConsultaHora] = useState<string>('')
-
-  // Carrega Clientes disponíveis de acordo com o perfil
-  useEffect(() => {
-    async function loadUserAndClients() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      const { data: roleData } = await supabase
-        .from('user_roles')
-        .select('role, cliente_id, contabilidade_id')
-        .eq('user_id', user.id)
-        .single()
-
-      const role = (roleData?.role as any) || 'admin'
-      setUserRole(role)
-
-      if (role === 'cliente' && roleData?.cliente_id) {
-        setSelectedCliente(roleData.cliente_id)
-        const { data: cli } = await supabase
-          .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj')
-          .eq('id', roleData.cliente_id)
-          .single()
-        if (cli) setClientes([cli])
-      } else if (role === 'contabilidade' && roleData?.contabilidade_id) {
-        const { data: clis } = await supabase
-          .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj')
-          .eq('contabilidade_id', roleData.contabilidade_id)
-          .order('razao_social')
-        if (clis) {
-          setClientes(clis)
-          if (!clienteIdParam && clis.length > 0) {
-            setSelectedCliente(clis[0].id)
-          }
-        }
-      } else {
-        // Admin: busca todos os clientes
-        const { data: clis } = await supabase
-          .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj')
-          .order('razao_social')
-        if (clis) {
-          setClientes(clis)
-          if (!clienteIdParam && clis.length > 0) {
-            setSelectedCliente('') // vazio = Todos os clientes ou pode escolher um específico
-          }
-        }
-      }
-    }
-    loadUserAndClients()
-  }, [])
 
   // Carrega o horário em que o Hub sincronizou pela última vez
   async function loadUltimaSincronizacao() {
@@ -130,28 +87,15 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     setUltimaConsultaHora(agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
     loadUltimaSincronizacao()
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    const { data: roleData } = await supabase
-      .from('user_roles')
-      .select('role, cliente_id, contabilidade_id')
-      .eq('user_id', user.id)
-      .single()
-
     let query = supabase.from(tabela).select('*').order('data_emissao', { ascending: false })
 
-    if (roleData?.role === 'cliente') {
-      query = query.eq('cliente_id', roleData.cliente_id)
-    } else if (roleData?.role === 'contabilidade') {
+    if (userRole === 'cliente') {
+      if (selectedCliente) query = query.eq('cliente_id', selectedCliente)
+    } else if (userRole === 'contabilidade') {
       if (selectedCliente) {
         query = query.eq('cliente_id', selectedCliente)
       } else {
-        const { data: clis } = await supabase
-          .from('clientes')
-          .select('id')
-          .eq('contabilidade_id', roleData.contabilidade_id)
-        const ids = clis?.map((c: any) => c.id) || []
+        const ids = clientes?.map((c: any) => c.id) || []
         if (ids.length === 0) { setNotas([]); setLoading(false); return }
         query = query.in('cliente_id', ids)
       }
@@ -167,7 +111,11 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [tabela, selectedCliente])
+  useEffect(() => {
+    if (!loadingClientes) {
+      load()
+    }
+  }, [tabela, selectedCliente, loadingClientes])
 
   function formatDoc(doc?: string | null) {
     if (!doc) return '—'
@@ -314,16 +262,6 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     return notasFiltradas.slice(start, start + pageSize)
   }, [notasFiltradas, currentPage, pageSize])
 
-  const temFiltroAtivo = Boolean(filtroMes || dataInicio || dataFim || buscaNumero || buscaGeral)
-
-  const limparFiltros = () => {
-    setFiltroMes('')
-    setDataInicio('')
-    setDataFim('')
-    setBuscaNumero('')
-    setBuscaGeral('')
-  }
-
   const syncInfo = formatRelativeSync(ultimaSincronizacaoHub)
 
   // Download Individual de XML
@@ -407,43 +345,67 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                 {userRole === 'admin' ? '🔍 Localizar Cliente (Admin)' : '🏢 Empresa Selecionada'}
               </span>
               {userRole === 'admin' && (
-                <span className="text-[11px] text-blue-600 font-medium">
-                  {selectedCliente ? 'Filtrado por empresa' : 'Exibindo todas as empresas'}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-blue-600 font-medium">
+                    {selectedCliente ? 'Filtrado por empresa' : 'Exibindo todas as empresas'}
+                  </span>
+                  {selectedCliente && (
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedCliente(''); setClientSearchTerm(''); }}
+                      className="text-[11px] text-slate-400 hover:text-rose-600 font-semibold flex items-center gap-0.5 transition"
+                      title="Exibir todas as empresas"
+                    >
+                      <X size={12} /> Limpar
+                    </button>
+                  )}
+                </div>
               )}
             </div>
 
             <div className="flex flex-col sm:flex-row gap-2">
               {userRole === 'admin' && (
-                <input
-                  type="text"
-                  placeholder="Buscar por nome, CNPJ ou CPF..."
-                  value={clientSearchTerm}
-                  onChange={e => {
-                    const term = e.target.value
-                    setClientSearchTerm(term)
-                    if (term.trim()) {
-                      const t = term.toLowerCase().trim()
-                      const ct = t.replace(/\D/g, '')
-                      const match = clientes.find(c => {
-                        const doc = (c.cnpj || '').toLowerCase()
-                        const cleanDoc = doc.replace(/\D/g, '')
-                        return (
-                          (c.razao_social && c.razao_social.toLowerCase().includes(t)) ||
-                          (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(t)) ||
-                          doc.includes(t) ||
-                          (ct && cleanDoc.includes(ct))
-                        )
-                      })
-                      if (match && match.id !== selectedCliente) {
-                        setSelectedCliente(match.id)
+                <div className="relative w-full sm:w-1/2">
+                  <input
+                    type="text"
+                    placeholder="Buscar por nome, CNPJ ou CPF..."
+                    value={clientSearchTerm}
+                    onChange={e => {
+                      const term = e.target.value
+                      setClientSearchTerm(term)
+                      if (term.trim()) {
+                        const t = term.toLowerCase().trim()
+                        const ct = t.replace(/\D/g, '')
+                        const match = clientes.find(c => {
+                          const doc = (c.cnpj || '').toLowerCase()
+                          const cleanDoc = doc.replace(/\D/g, '')
+                          return (
+                            (c.razao_social && c.razao_social.toLowerCase().includes(t)) ||
+                            (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(t)) ||
+                            doc.includes(t) ||
+                            (ct && cleanDoc.includes(ct))
+                          )
+                        })
+                        if (match && match.id !== selectedCliente) {
+                          setSelectedCliente(match.id)
+                        }
+                      } else {
+                        setSelectedCliente('')
                       }
-                    } else {
-                      setSelectedCliente('')
-                    }
-                  }}
-                  className="w-full sm:w-1/2 bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                    }}
+                    className="w-full bg-white border border-slate-200 px-3 py-1.5 pr-7 rounded-lg text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                  />
+                  {clientSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => { setClientSearchTerm(''); setSelectedCliente(''); }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                      title="Limpar busca"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
               )}
 
               <select
@@ -670,10 +632,16 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
       {/* PAINEL DE FILTROS AVANÇADOS: MÊS, DATA, NÚMERO E BUSCA */}
       <div className="bg-slate-50/90 p-3.5 rounded-2xl border border-slate-200 space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-            <Filter size={14} className="text-blue-600" />
-            Filtros de Notas Fiscais
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+              <Filter size={14} className="text-blue-600" />
+              Filtros de Notas Fiscais
+            </span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
+              <Sparkles size={11} className="text-blue-500" />
+              Filtros Globais Compartilhados
+            </span>
+          </div>
 
           {temFiltroAtivo && (
             <button
