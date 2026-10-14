@@ -2,14 +2,16 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Trash2, X, Users, Building2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Users, Building2, Upload } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
+import ImportadorLoteModal from '@/components/ImportadorLoteModal'
 
 export default function ContabilidadesPage() {
   const [contabilidades, setContabilidades] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [deleteModal, setDeleteModal] = useState<{ open: boolean; id: string; nome: string }>({ open: false, id: '', nome: '' })
+  const [importModalOpen, setImportModalOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const supabase = createClient()
 
@@ -89,10 +91,21 @@ export default function ContabilidadesPage() {
           <p className="text-slate-500 mt-1">Escritórios contábeis vinculados aos clientes do portal.</p>
         </div>
         
-        <Link href="/dashboard/contabilidades/nova" className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition flex items-center gap-2">
-          <Plus size={20} />
-          Nova Contabilidade
-        </Link>
+        <div className="flex items-center gap-3">
+          <button 
+            type="button"
+            onClick={() => setImportModalOpen(true)}
+            className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg font-medium transition flex items-center gap-2 border border-slate-300"
+            title="Importar arquivo CSV, TXT, JSON, XLS ou XLSX de CNPJs ou contabilidades"
+          >
+            <Upload size={18} />
+            <span>Importar Arquivo / CNPJs</span>
+          </button>
+          <Link href="/dashboard/contabilidades/nova" className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition flex items-center gap-2">
+            <Plus size={20} />
+            Nova Contabilidade
+          </Link>
+        </div>
       </header>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -212,6 +225,13 @@ export default function ContabilidadesPage() {
           </div>
         </div>
       )}
+      {/* Modal de Importação em Lote */}
+      <ImportadorLoteModal
+        isOpen={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        onSuccess={() => fetchContabilidades()}
+        tipo="contabilidade"
+      />
     </div>
   )
 }

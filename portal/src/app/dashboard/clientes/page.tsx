@@ -2,16 +2,19 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Trash2, X, Copy, RefreshCw, Search } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Copy, RefreshCw, Search, Upload } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { limparDocumento, formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
+import ImportadorLoteModal from '@/components/ImportadorLoteModal'
 
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<any[]>([])
+  const [contabilidades, setContabilidades] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [deleteModal, setDeleteModal] = useState<{ open: boolean; id: string; nome: string }>({ open: false, id: '', nome: '' })
+  const [importModalOpen, setImportModalOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const supabase = createClient()
 
@@ -21,6 +24,13 @@ export default function ClientesPage() {
       .select('*, contabilidades ( razao_social )')
       .order('created_at', { ascending: false })
     if (data) setClientes(data)
+
+    const { data: contabs } = await supabase
+      .from('contabilidades')
+      .select('id, razao_social')
+      .order('razao_social')
+    if (contabs) setContabilidades(contabs)
+
     setLoading(false)
   }
 
@@ -59,13 +69,22 @@ export default function ClientesPage() {
           <p className="text-slate-500 mt-1">Gerencie os clientes e os tokens de acesso ao Hub.</p>
         </div>
         
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
+          <button 
+            type="button"
+            onClick={() => setImportModalOpen(true)}
+            className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg font-medium transition flex items-center gap-2 border border-slate-300"
+            title="Importar de arquivo CSV, TXT, JSON, XLS ou XLSX e buscar CNPJs automaticamente"
+          >
+            <Upload size={18} />
+            <span>Importar Arquivo / CNPJs</span>
+          </button>
           <button onClick={() => { setLoading(true); fetchClientes() }} className="bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-2">
-            <RefreshCw size={20} />
+            <RefreshCw size={18} />
             Atualizar
           </button>
           <Link href="/dashboard/clientes/novo" className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition flex items-center gap-2">
-            <Plus size={20} />
+            <Plus size={18} />
             Novo Cliente
           </Link>
         </div>
@@ -263,6 +282,14 @@ export default function ClientesPage() {
           </div>
         </div>
       )}
+      {/* Modal de Importação em Lote de Clientes */}
+      <ImportadorLoteModal
+        isOpen={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        onSuccess={() => fetchClientes()}
+        tipo="cliente"
+        contabilidadesDisponiveis={contabilidades}
+      />
     </div>
   )
 }
