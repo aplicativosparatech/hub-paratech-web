@@ -6,7 +6,8 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { 
   RefreshCw, X, Trash2, AlertTriangle, ArrowRight, 
-  Calendar, Filter, Search, Clock, RotateCcw, CheckCircle2, Download 
+  Calendar, Filter, Search, Clock, RotateCcw, CheckCircle2, Download,
+  Printer, ExternalLink, Copy, Check, FileText, Globe
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Pagination from '@/components/Pagination'
@@ -185,6 +186,13 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
   }>({ open: false, tipo: 'individual' })
   const [deleting, setDeleting] = useState(false)
 
+  // Estado do Modal de Consulta do Documento no Portal SPED MG / SEFAZ Nacional
+  const [modalConsulta, setModalConsulta] = useState<{
+    open: boolean
+    nota: any | null
+    chaveCopiada: boolean
+  }>({ open: false, nota: null, chaveCopiada: false })
+
   const confirmDeleteAction = async () => {
     setDeleting(true)
     try {
@@ -332,6 +340,27 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     } catch (err: any) {
       toast.error('Erro ao baixar XML: ' + (err.message || 'Falha no download'))
     }
+  }
+
+  // Geração de DANFE (NF-e Modelo 55) ou DANFE-NFCe (Modelo 65) com Logomarca do Cliente
+  const handleGerarDanfe = (nota: any) => {
+    try {
+      const url = `/api/notas-fiscais/danfe?tabela=${tabela}&id=${nota.id}`
+      window.open(url, '_blank')
+      toast.success(`Gerando DANFE ${nota.numero ? 'Nº ' + nota.numero : ''}...`)
+    } catch (err: any) {
+      toast.error('Erro ao gerar DANFE: ' + err.message)
+    }
+  }
+
+  // Abertura do Modal de Consulta do Documento nos Portais Oficiais da SEFAZ
+  const handleAbrirConsulta = (nota: any) => {
+    if (nota.chave) {
+      navigator.clipboard.writeText(nota.chave).then(() => {
+        toast.success('Chave de acesso copiada para a área de transferência!')
+      }).catch(() => {})
+    }
+    setModalConsulta({ open: true, nota, chaveCopiada: true })
   }
 
   // Consolidação Financeira e Modalidades de Pagamento (PIX, Dinheiro, Cartões, etc.)
@@ -831,6 +860,25 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                     <td className="p-4 text-center"><AssinaturaChip ok={n.tem_assinatura} /></td>
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center gap-1">
+                        {/* 1. Botão Gerar DANFE / DANFE-NFCe */}
+                        <button
+                          onClick={() => handleGerarDanfe(n)}
+                          className="p-1.5 rounded-lg text-purple-600 hover:bg-purple-100 hover:text-purple-800 transition"
+                          title={tabela === 'nfce_saidas' ? 'Gerar DANFE-NFCe (com logotipo da empresa)' : 'Gerar DANFE NF-e (com logotipo da empresa)'}
+                        >
+                          <Printer size={15} />
+                        </button>
+
+                        {/* 2. Botão Consultar Documento (Portal SPED MG / SEFAZ Nacional) */}
+                        <button
+                          onClick={() => handleAbrirConsulta(n)}
+                          className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100 hover:text-emerald-800 transition"
+                          title="Consultar Documento no Portal SPED MG / Portal Nacional SEFAZ"
+                        >
+                          <Search size={15} />
+                        </button>
+
+                        {/* 3. Botão Baixar XML */}
                         <button
                           onClick={() => handleDownloadXml(n)}
                           className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-100 hover:text-blue-800 transition"
@@ -838,6 +886,8 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                         >
                           <Download size={15} />
                         </button>
+
+                        {/* 4. Botão Excluir */}
                         <button 
                           onClick={() => setModalDelete({ open: true, tipo: 'individual', id: n.id, numero: n.numero })}
                           className="p-1.5 rounded-lg text-red-500 hover:bg-red-100 hover:text-red-700 transition" 
@@ -917,6 +967,176 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
               >
                 <Trash2 size={16} />
                 {deleting ? 'Excluindo...' : (modalDelete.tipo === 'em_lote' ? 'Sim, Excluir Todas' : 'Sim, Excluir Nota')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Oficial de Consulta do Documento nos Portais da SEFAZ */}
+      {modalConsulta.open && modalConsulta.nota && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl border border-slate-200">
+            <div className="flex items-start justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-200 shrink-0">
+                  <Search size={22} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">
+                    Consultar Documento Fiscal na SEFAZ
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Nota Fiscal Nº {modalConsulta.nota.numero || 'S/N'} • Modelo {tabela === 'nfce_saidas' ? '65 (NFC-e)' : '55 (NF-e)'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalConsulta({ open: false, nota: null, chaveCopiada: false })}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Chave de Acesso com Cópia Rápida */}
+            <div className="my-5 p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
+                <span>Chave de Acesso (44 dígitos):</span>
+                <span className="text-emerald-600 font-bold flex items-center gap-1">
+                  <CheckCircle2 size={13} /> Chave Copiada!
+                </span>
+              </div>
+              <div className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-2">
+                <span className="font-mono text-xs font-bold text-slate-800 break-all select-all">
+                  {modalConsulta.nota.chave || 'Chave não informada'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (modalConsulta.nota?.chave) {
+                      navigator.clipboard.writeText(modalConsulta.nota.chave)
+                      toast.success('Chave de acesso copiada!')
+                    }
+                  }}
+                  className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition shrink-0"
+                  title="Copiar Chave de Acesso"
+                >
+                  <Copy size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Opções de Portais Oficiais */}
+            <div className="space-y-3 mb-6">
+              <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                Selecione o Portal de Consulta Desejado:
+              </div>
+
+              {/* Portal SPED MG (NFC-e / MG) */}
+              <a
+                href={
+                  tabela === 'nfce_saidas'
+                    ? 'https://portalsped.fazenda.mg.gov.br/portalnfce/sistema/consultaarg.xhtml'
+                    : 'https://dfe-portal.svrs.rs.gov.br/dfe/nfe'
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => {
+                  if (modalConsulta.nota?.chave) {
+                    navigator.clipboard.writeText(modalConsulta.nota.chave)
+                  }
+                }}
+                className="p-4 rounded-2xl border-2 border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 transition flex items-center justify-between group cursor-pointer block text-left"
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs">
+                    MG
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-emerald-950 group-hover:text-emerald-700 flex items-center gap-1.5">
+                      <span>Portal SPED Fazenda MG</span>
+                      <ExternalLink size={14} className="text-emerald-600" />
+                    </div>
+                    <p className="text-xs text-emerald-800/80 mt-0.5">
+                      {tabela === 'nfce_saidas' 
+                        ? 'portalsped.fazenda.mg.gov.br/portalnfce (Consulta NFC-e)' 
+                        : 'Portal Estadual de Documentos Fiscais de Minas Gerais'}
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-xl shrink-0">
+                  Abrir Portal ↗
+                </span>
+              </a>
+
+              {/* Portal Nacional da NF-e (Receita Federal) */}
+              <a
+                href="https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?tipoConsulta=resumo&tipoConteudo=7PhJ+gAVw2g="
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => {
+                  if (modalConsulta.nota?.chave) {
+                    navigator.clipboard.writeText(modalConsulta.nota.chave)
+                  }
+                }}
+                className="p-4 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 transition flex items-center justify-between group cursor-pointer block text-left"
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs">
+                    BR
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-slate-800 group-hover:text-blue-600 flex items-center gap-1.5">
+                      <span>Portal Nacional da NF-e (Receita Federal)</span>
+                      <ExternalLink size={14} className="text-slate-400 group-hover:text-blue-600" />
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      nfe.fazenda.gov.br (Consulta Completa Nacional de Autenticidade)
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xs font-bold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-xl shrink-0">
+                  Abrir Portal ↗
+                </span>
+              </a>
+
+              {/* Atalho para Gerar DANFE com Logomarca */}
+              <button
+                type="button"
+                onClick={() => {
+                  handleGerarDanfe(modalConsulta.nota)
+                  setModalConsulta({ open: false, nota: null, chaveCopiada: false })
+                }}
+                className="w-full p-4 rounded-2xl border border-purple-200 bg-purple-50/50 hover:bg-purple-50 transition flex items-center justify-between group cursor-pointer text-left"
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <Printer size={20} />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-purple-950 group-hover:text-purple-700 flex items-center gap-1.5">
+                      <span>Visualizar / Imprimir DANFE</span>
+                    </div>
+                    <p className="text-xs text-purple-800/80 mt-0.5">
+                      Gerar documento auxiliar oficial com o logotipo da empresa cadastrada
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xs font-bold text-purple-700 bg-purple-100 px-3 py-1.5 rounded-xl shrink-0">
+                  Gerar DANFE
+                </span>
+              </button>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setModalConsulta({ open: false, nota: null, chaveCopiada: false })}
+                className="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-semibold text-xs hover:bg-slate-800 transition"
+              >
+                Fechar
               </button>
             </div>
           </div>

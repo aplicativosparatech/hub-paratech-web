@@ -5,7 +5,8 @@ import { createClient } from '@/utils/supabase/client'
 import { useSearchParams } from 'next/navigation'
 import { 
   RefreshCw, Trash2, AlertTriangle, Sparkles, Sliders, CheckCircle2, 
-  ShieldAlert, FileText, ArrowRight, Calendar, Filter, Search, RotateCcw, Clock, X, Download 
+  ShieldAlert, FileText, ArrowRight, Calendar, Filter, Search, RotateCcw, Clock, X, Download,
+  Printer, ExternalLink 
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
@@ -829,6 +830,19 @@ export default function TabelaCorrecao() {
                         >
                           <Sliders size={14} />
                           Manual
+                        </button>
+
+                        {/* Botão Gerar DANFE / DANFE-NFCe */}
+                        <button
+                          onClick={() => {
+                            const url = `/api/notas-fiscais/danfe?tabela=${n._tabela}&id=${n.id}`
+                            window.open(url, '_blank')
+                            toast.success(`Gerando DANFE ${n.numero ? 'Nº ' + n.numero : ''}...`)
+                          }}
+                          className="p-1.5 text-purple-600 hover:text-purple-800 transition rounded-lg hover:bg-purple-50"
+                          title="Gerar DANFE (com logotipo da empresa)"
+                        >
+                          <Printer size={16} />
                         </button>
 
                         {/* Botão Baixar XML */}
