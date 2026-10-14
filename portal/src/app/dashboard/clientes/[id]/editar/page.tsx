@@ -3,11 +3,17 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Save, Building2, Search, Eye, EyeOff, ShieldCheck, FileKey, Calendar, FileCode, Upload } from 'lucide-react'
+import { ArrowLeft, Save, Building2, Search, Eye, EyeOff, ShieldCheck, FileKey, Calendar, FileCode, Upload, MapPin } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import CertificadoAlertaBanner from '@/components/CertificadoAlertaBanner'
 import { limparDocumento, formatarCnpjCpf, validarCnpj, validarCpf, isCnpjAlfanumerico } from '@/utils/cnpjAlfanumerico'
+
+const ERP_PADRAO = [
+  'Gdoor', 'Gdoor Pro', 'GdoorSlim', 'SysPDV', 'Hiper', 'Bling', 
+  'Tiny ERP', 'Totvs Protheus', 'Linx', 'Sankhya', 'Alterdata', 
+  'ContaAzul', 'Omie', 'Digisat', 'Cwork', 'VR Software', 'Zanthus', 'Clipp Fácil'
+]
 
 export default function EditarClientePage() {
   const router = useRouter()
@@ -17,9 +23,11 @@ export default function EditarClientePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [searchingCnpj, setSearchingCnpj] = useState(false)
+  const [searchingCep, setSearchingCep] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showCertPassword, setShowCertPassword] = useState(false)
   const [contabilidades, setContabilidades] = useState<any[]>([])
+  const [sistemasSugeridos, setSistemasSugeridos] = useState<string[]>(ERP_PADRAO)
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [currentLogo, setCurrentLogo] = useState('')
   const [certFile, setCertFile] = useState<File | null>(null)
@@ -44,6 +52,11 @@ export default function EditarClientePage() {
     certificado_validade: '',
     login_email: '',
     login_senha: '',
+    cep: '',
+    logradouro: '',
+    numero: '',
+    complemento: '',
+    bairro: '',
     cidade: '',
     uf: '',
     regime_tributario: 'simples_nacional',
@@ -56,10 +69,11 @@ export default function EditarClientePage() {
 
   useEffect(() => {
     async function loadData() {
-      const [clienteRes, contabRes, hubRes] = await Promise.all([
+      const [clienteRes, contabRes, hubRes, sistemasRes] = await Promise.all([
         supabase.from('clientes').select('*').eq('id', params.id).single(),
         supabase.from('contabilidades').select('id, razao_social'),
-        supabase.from('configuracoes_hub').select('*').eq('cliente_id', params.id).maybeSingle()
+        supabase.from('configuracoes_hub').select('*').eq('cliente_id', params.id).maybeSingle(),
+        supabase.from('clientes').select('nome_sistema_utilizado').not('nome_sistema_utilizado', 'is', null)
       ])
       if (clienteRes.data) {
         const d = clienteRes.data
@@ -77,6 +91,11 @@ export default function EditarClientePage() {
           certificado_url: d.certificado_url || '',
           certificado_senha: d.certificado_senha || '',
           certificado_validade: d.certificado_validade ? d.certificado_validade.split('T')[0] : '',
+          cep: d.cep || '',
+          logradouro: d.logradouro || '',
+          numero: d.numero || '',
+          complemento: d.complemento || '',
+          bairro: d.bairro || '',
           cidade: d.cidade || '',
           uf: d.uf || '',
           regime_tributario: d.regime_tributario || 'simples_nacional',
@@ -92,6 +111,13 @@ export default function EditarClientePage() {
       }
       if (contabRes.data) setContabilidades(contabRes.data)
       if (hubRes.data) setHubConfig(hubRes.data)
+      if (sistemasRes.data) {
+        const salvos = sistemasRes.data
+          .map((c: any) => c.nome_sistema_utilizado?.trim())
+          .filter((s: any): s is string => Boolean(s && s.length > 0))
+        const unicos = Array.from(new Set([...salvos, ...ERP_PADRAO]))
+        setSistemasSugeridos(unicos)
+      }
       setLoading(false)
     }
     loadData()
@@ -134,7 +160,38 @@ export default function EditarClientePage() {
     }
   }
 
-  // Busca de CNPJ via BrasilAPI ou validação de CNPJ Alfanumérico / CPF
+  // Busca rápida de endereço pelo CEP (ViaCEP)
+  const handleConsultarCep = async () => {
+    const rawCep = (formData.cep || '').replace(/\D/g, '')
+    if (rawCep.length !== 8) {
+      toast.error('Informe um CEP válido com 8 dígitos.')
+      return
+    }
+    setSearchingCep(true)
+    const toastId = toast.loading('Consultando CEP nos Correios...')
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${rawCep}/json/`)
+      const data = await res.json()
+      if (data.erro) {
+        throw new Error('CEP não encontrado na base pública dos Correios.')
+      }
+      setFormData(prev => ({
+        ...prev,
+        logradouro: data.logradouro || prev.logradouro,
+        bairro: data.bairro || prev.bairro,
+        cidade: data.localidade || prev.cidade,
+        uf: data.uf || prev.uf,
+        complemento: data.complemento || prev.complemento
+      }))
+      toast.success('Endereço preenchido com sucesso!', { id: toastId })
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao consultar CEP.', { id: toastId })
+    } finally {
+      setSearchingCep(false)
+    }
+  }
+
+  // Busca de CNPJ via Open CNPJa / ReceitaWS com Inscrição Estadual e Endereço Completo
   const handleConsultarCnpj = async () => {
     const rawDoc = limparDocumento(formData.cnpj)
 
@@ -178,7 +235,7 @@ export default function EditarClientePage() {
     }
 
     setSearchingCnpj(true)
-    const toastId = toast.loading('Consultando dados do CNPJ na Receita Federal...')
+    const toastId = toast.loading('Consultando dados da empresa e Inscrição Estadual...')
     try {
       const res = await fetch(`/api/consulta-cnpj?cnpj=${encodeURIComponent(rawDoc)}`)
       const data = await res.json()
@@ -190,20 +247,26 @@ export default function EditarClientePage() {
       setFormData(prev => ({
         ...prev,
         cnpj: data.cnpj_formatado || cnpjFormatado,
+        inscricao_estadual: data.inscricao_estadual || prev.inscricao_estadual,
         razao_social: data.razao_social || prev.razao_social,
         nome_fantasia: data.nome_fantasia || data.razao_social || prev.nome_fantasia,
         whatsapp: prev.whatsapp || data.whatsapp || '',
         email_fiscal: prev.email_fiscal || data.email || '',
         ramo_atividade: prev.ramo_atividade || data.ramo_atividade || '',
-        cidade: prev.cidade || data.cidade || '',
-        uf: prev.uf || data.uf || '',
+        cep: data.cep || prev.cep || '',
+        logradouro: data.logradouro || prev.logradouro || '',
+        numero: data.numero || prev.numero || '',
+        complemento: data.complemento || prev.complemento || '',
+        bairro: data.bairro || prev.bairro || '',
+        cidade: data.cidade || prev.cidade || '',
+        uf: data.uf || prev.uf || '',
         regime_tributario: data.regime_tributario || prev.regime_tributario || 'simples_nacional'
       }))
 
       if (data.aviso) {
         toast.success(data.aviso, { id: toastId, duration: 6000 })
       } else {
-        toast.success(`Dados preenchidos com sucesso via ${data.provedor?.toUpperCase() || 'Receita Federal'}!`, { id: toastId })
+        toast.success(`Dados preenchidos via ${data.provedor?.toUpperCase() || 'Receita Federal'} com IE: ${data.inscricao_estadual || 'Não encontrada'}!`, { id: toastId })
       }
     } catch (err: any) {
       setFormData(prev => ({ ...prev, cnpj: cnpjFormatado }))
@@ -238,9 +301,17 @@ export default function EditarClientePage() {
         const xNome = extractTag(emitXml, 'xNome')
         const xFant = extractTag(emitXml, 'xFant')
         const ie = extractTag(emitXml, 'IE')
-        const xMun = extractTag(emitXml, 'xMun')
-        const uf = extractTag(emitXml, 'UF')
         const crt = extractTag(emitXml, 'CRT')
+
+        const enderEmitMatch = emitXml.match(/<enderEmit[^>]*>([\s\S]*?)<\/enderEmit>/)
+        const enderXml = enderEmitMatch ? enderEmitMatch[1] : ''
+        const xLgr = extractTag(enderXml, 'xLgr')
+        const nro = extractTag(enderXml, 'nro')
+        const xCpl = extractTag(enderXml, 'xCpl')
+        const xBairro = extractTag(enderXml, 'xBairro')
+        const xMun = extractTag(enderXml, 'xMun')
+        const uf = extractTag(enderXml, 'UF')
+        const cepXml = extractTag(enderXml, 'CEP')
 
         if (!doc && !xNome) {
           throw new Error('Não foi possível identificar a tag <emit> com os dados da empresa neste XML.')
@@ -260,6 +331,11 @@ export default function EditarClientePage() {
           razao_social: xNome || prev.razao_social,
           nome_fantasia: xFant || xNome || prev.nome_fantasia,
           inscricao_estadual: ie || prev.inscricao_estadual,
+          cep: cepXml || prev.cep,
+          logradouro: xLgr || prev.logradouro,
+          numero: nro || prev.numero,
+          complemento: xCpl || prev.complemento,
+          bairro: xBairro || prev.bairro,
           cidade: xMun || prev.cidade,
           uf: uf || prev.uf,
           regime_tributario: autoRegime || prev.regime_tributario
@@ -489,8 +565,40 @@ export default function EditarClientePage() {
 
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Nome do Sistema Monitorado (ERP/PDV)</label>
-                <input required type="text" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                  value={formData.nome_sistema_utilizado} onChange={e => setFormData({...formData, nome_sistema_utilizado: e.target.value})} />
+                <div className="relative">
+                  <input 
+                    required 
+                    type="text" 
+                    list="lista-sistemas-editar"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-medium"
+                    placeholder="Digite ou selecione: Gdoor, SysPDV..."
+                    value={formData.nome_sistema_utilizado} 
+                    onChange={e => setFormData({...formData, nome_sistema_utilizado: e.target.value})} 
+                  />
+                  <datalist id="lista-sistemas-editar">
+                    {sistemasSugeridos.map(sis => (
+                      <option key={sis} value={sis} />
+                    ))}
+                  </datalist>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                  <span className="text-[11px] text-slate-400 mr-1">Sugestões:</span>
+                  {sistemasSugeridos.slice(0, 6).map(sis => (
+                    <button
+                      key={sis}
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, nome_sistema_utilizado: sis }))}
+                      className={`text-[11px] px-2 py-0.5 rounded-md border transition ${
+                        formData.nome_sistema_utilizado === sis
+                          ? 'bg-blue-100 text-blue-700 border-blue-300 font-semibold shadow-xs'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      {sis}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">Novos sistemas gravados são sugeridos automaticamente nas próximas telas.</p>
               </div>
 
               <div>
@@ -572,6 +680,125 @@ export default function EditarClientePage() {
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Alterar Logomarca</label>
                 <input type="file" accept="image/*" className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 text-sm"
                   onChange={e => { if (e.target.files && e.target.files.length > 0) setLogoFile(e.target.files[0]) }} />
+              </div>
+            </div>
+          </div>
+
+          {/* Endereço & Localização da Empresa */}
+          <div className="pt-4 border-t border-slate-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 mb-4 border-b border-slate-100 gap-2">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <MapPin className="text-blue-600" size={20} />
+                Endereço & Localização da Empresa
+              </h3>
+              <span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full font-medium">
+                Preenchido automaticamente pelo CNPJ ou pelo CEP (ViaCEP)
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* CEP */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">CEP</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    placeholder="00000-000"
+                    maxLength={9}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-mono"
+                    value={formData.cep} 
+                    onChange={e => setFormData({...formData, cep: e.target.value})} 
+                    onBlur={() => {
+                      const raw = (formData.cep || '').replace(/\D/g, '')
+                      if (raw.length === 8 && !formData.logradouro) {
+                        handleConsultarCep()
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleConsultarCep}
+                    disabled={searchingCep}
+                    title="Buscar endereço pelo CEP no ViaCEP"
+                    className="px-3.5 py-2.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl font-semibold flex items-center justify-center transition border border-blue-200 disabled:opacity-50"
+                  >
+                    <Search size={18} className={searchingCep ? 'animate-spin' : ''} />
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">Busca automática nos Correios</p>
+              </div>
+
+              {/* Logradouro / Rua */}
+              <div className="lg:col-span-2">
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Logradouro / Rua / Avenida</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Av. Afonso Pena"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  value={formData.logradouro} 
+                  onChange={e => setFormData({...formData, logradouro: e.target.value})} 
+                />
+              </div>
+
+              {/* Número */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Número</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: 1500 ou S/N"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  value={formData.numero} 
+                  onChange={e => setFormData({...formData, numero: e.target.value})} 
+                />
+              </div>
+
+              {/* Complemento */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Complemento</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Sala 201, Bloco B"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  value={formData.complemento} 
+                  onChange={e => setFormData({...formData, complemento: e.target.value})} 
+                />
+              </div>
+
+              {/* Bairro */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Bairro</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Centro"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  value={formData.bairro} 
+                  onChange={e => setFormData({...formData, bairro: e.target.value})} 
+                />
+              </div>
+
+              {/* Cidade */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Cidade</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Belo Horizonte"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  value={formData.cidade} 
+                  onChange={e => setFormData({...formData, cidade: e.target.value})} 
+                />
+              </div>
+
+              {/* UF / Estado */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">UF (Estado)</label>
+                <input 
+                  type="text" 
+                  maxLength={2}
+                  placeholder="Ex: MG"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 uppercase font-semibold"
+                  value={formData.uf} 
+                  onChange={e => setFormData({...formData, uf: e.target.value.toUpperCase()})} 
+                />
               </div>
             </div>
           </div>

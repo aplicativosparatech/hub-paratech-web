@@ -5,6 +5,7 @@ export interface RespostaCnpjPadrao {
   sucesso: boolean;
   cnpj: string;
   cnpj_formatado: string;
+  inscricao_estadual: string;
   razao_social: string;
   nome_fantasia: string;
   email: string;
@@ -23,6 +24,25 @@ export interface RespostaCnpjPadrao {
   optante_mei: boolean;
   situacao: string;
   provedor: string;
+}
+
+// Busca rápida da Inscrição Estadual nas SEFAZs / Sintegra via Open CNPJa
+async function extrairInscricaoEstadual(cnpj: string): Promise<string> {
+  try {
+    const res = await fetch(`https://open.cnpja.com/office/${cnpj}`, {
+      headers: { 'Accept': 'application/json', 'User-Agent': 'HubParatech/2.4' },
+      signal: AbortSignal.timeout(4000)
+    });
+    if (res.ok) {
+      const d = await res.json();
+      const habilitada = d.registrations?.find((r: any) => r.enabled);
+      const reg = habilitada || d.registrations?.[0];
+      if (reg?.number) return String(reg.number).trim();
+    }
+  } catch {
+    // Silencioso
+  }
+  return '';
 }
 
 export async function GET(request: Request) {
@@ -47,77 +67,12 @@ export async function GET(request: Request) {
     // Se for CNPJ Alfanumérico (IN RFB 2.229/2024), a base pública governamental ainda está em fase de virada
     const isAlfanum = isCnpjAlfanumerico(rawDoc);
 
-    // 1. TENTATIVA 1: ReceitaWS (Alta estabilidade e sem restrições de WAF para servidores)
-    try {
-      const resReceitaWs = await fetch(`https://receitaws.com.br/v1/cnpj/${rawDoc}`, {
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'HubParatech/2.3 (https://hub-paratech-web.vercel.app)'
-        },
-        signal: AbortSignal.timeout(6000)
-      });
-
-      if (resReceitaWs.ok) {
-        const d = await resReceitaWs.json();
-        if (d.status === 'OK' && d.nome) {
-          // Extrair telefones e whatsapp
-          let telLimpo = '';
-          let dddTel = '';
-          if (d.telefone) {
-            const telPartes = d.telefone.split('/');
-            const primTel = telPartes[0]?.trim() || '';
-            const matchNums = primTel.replace(/\D/g, '');
-            if (matchNums.length >= 10) {
-              telLimpo = primTel;
-              dddTel = `55${matchNums}`;
-            }
-          }
-
-          let autoRegime: 'simples_nacional' | 'simples_nacional_excesso' | 'lucro_presumido' | 'lucro_real' | 'mei' = 'simples_nacional';
-          const optanteMei = Boolean(d.simei?.optante);
-          const optanteSimples = Boolean(d.simples?.optante);
-
-          if (optanteMei) autoRegime = 'mei';
-          else if (optanteSimples) autoRegime = 'simples_nacional';
-          else autoRegime = 'lucro_presumido';
-
-          const resultado: RespostaCnpjPadrao = {
-            sucesso: true,
-            cnpj: rawDoc,
-            cnpj_formatado: formatarCnpjCpf(rawDoc),
-            razao_social: d.nome || '',
-            nome_fantasia: d.fantasia || d.nome || '',
-            email: d.email || '',
-            telefone: telLimpo || d.telefone || '',
-            whatsapp: dddTel,
-            cep: (d.cep || '').replace(/\D/g, ''),
-            logradouro: d.logradouro || '',
-            numero: d.numero || '',
-            complemento: d.complemento || '',
-            bairro: d.bairro || '',
-            cidade: d.municipio || '',
-            uf: d.uf || '',
-            ramo_atividade: d.atividade_principal?.[0]?.text || '',
-            regime_tributario: autoRegime,
-            optante_simples: optanteSimples,
-            optante_mei: optanteMei,
-            situacao: d.situacao || 'ATIVA',
-            provedor: 'receitaws'
-          };
-
-          return NextResponse.json(resultado);
-        }
-      }
-    } catch (e: any) {
-      console.warn('[Consulta CNPJ] ReceitaWS falhou, tentando CNPJa:', e.message);
-    }
-
-    // 2. TENTATIVA 2: Open CNPJa (Rápido, sem limites agressivos e dados completos)
+    // 1. TENTATIVA 1: Open CNPJa (Traz Inscrição Estadual oficial das SEFAZs, endereço completo e dados societários)
     try {
       const resCnpja = await fetch(`https://open.cnpja.com/office/${rawDoc}`, {
         headers: {
           'Accept': 'application/json',
-          'User-Agent': 'HubParatech/2.3'
+          'User-Agent': 'HubParatech/2.4'
         },
         signal: AbortSignal.timeout(6000)
       });
@@ -137,10 +92,16 @@ export async function GET(request: Request) {
           else if (optanteSimples) autoRegime = 'simples_nacional';
           else autoRegime = 'lucro_presumido';
 
+          // Extração oficial da Inscrição Estadual (SEFAZ)
+          const habilitada = d.registrations?.find((r: any) => r.enabled);
+          const primReg = habilitada || d.registrations?.[0];
+          const ie = primReg?.number ? String(primReg.number).trim() : '';
+
           const resultado: RespostaCnpjPadrao = {
             sucesso: true,
             cnpj: rawDoc,
             cnpj_formatado: formatarCnpjCpf(rawDoc),
+            inscricao_estadual: ie,
             razao_social: d.company.name || '',
             nome_fantasia: d.alias || d.company.name || '',
             email: d.emails?.[0]?.address || '',
@@ -165,7 +126,74 @@ export async function GET(request: Request) {
         }
       }
     } catch (e: any) {
-      console.warn('[Consulta CNPJ] CNPJa falhou, tentando BrasilAPI:', e.message);
+      console.warn('[Consulta CNPJ] CNPJa falhou, tentando ReceitaWS:', e.message);
+    }
+
+    // 2. TENTATIVA 2: ReceitaWS (Alta estabilidade com busca paralela de IE)
+    try {
+      const resReceitaWs = await fetch(`https://receitaws.com.br/v1/cnpj/${rawDoc}`, {
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'HubParatech/2.4 (https://hub-paratech-web.vercel.app)'
+        },
+        signal: AbortSignal.timeout(6000)
+      });
+
+      if (resReceitaWs.ok) {
+        const d = await resReceitaWs.json();
+        if (d.status === 'OK' && d.nome) {
+          let telLimpo = '';
+          let dddTel = '';
+          if (d.telefone) {
+            const telPartes = d.telefone.split('/');
+            const primTel = telPartes[0]?.trim() || '';
+            const matchNums = primTel.replace(/\D/g, '');
+            if (matchNums.length >= 10) {
+              telLimpo = primTel;
+              dddTel = `55${matchNums}`;
+            }
+          }
+
+          let autoRegime: 'simples_nacional' | 'simples_nacional_excesso' | 'lucro_presumido' | 'lucro_real' | 'mei' = 'simples_nacional';
+          const optanteMei = Boolean(d.simei?.optante);
+          const optanteSimples = Boolean(d.simples?.optante);
+
+          if (optanteMei) autoRegime = 'mei';
+          else if (optanteSimples) autoRegime = 'simples_nacional';
+          else autoRegime = 'lucro_presumido';
+
+          const ie = await extrairInscricaoEstadual(rawDoc);
+
+          const resultado: RespostaCnpjPadrao = {
+            sucesso: true,
+            cnpj: rawDoc,
+            cnpj_formatado: formatarCnpjCpf(rawDoc),
+            inscricao_estadual: ie,
+            razao_social: d.nome || '',
+            nome_fantasia: d.fantasia || d.nome || '',
+            email: d.email || '',
+            telefone: telLimpo || d.telefone || '',
+            whatsapp: dddTel,
+            cep: (d.cep || '').replace(/\D/g, ''),
+            logradouro: d.logradouro || '',
+            numero: d.numero || '',
+            complemento: d.complemento || '',
+            bairro: d.bairro || '',
+            cidade: d.municipio || '',
+            uf: d.uf || '',
+            ramo_atividade: d.atividade_principal?.[0]?.text || '',
+            regime_tributario: autoRegime,
+            optante_simples: optanteSimples,
+            optante_mei: optanteMei,
+            situacao: d.situacao || 'ATIVA',
+            provedor: 'receitaws'
+          };
+
+          return NextResponse.json(resultado);
+        }
+      }
+    } catch (e: any) {
+      console.warn('[Consulta CNPJ] ReceitaWS falhou, tentando BrasilAPI:', e.message);
     }
 
     // 3. TENTATIVA 3: BrasilAPI
@@ -188,10 +216,13 @@ export async function GET(request: Request) {
         else if (d.opcao_pelo_simples) autoRegime = 'simples_nacional';
         else if (d.opcao_pelo_simples === false) autoRegime = 'lucro_presumido';
 
+        const ie = await extrairInscricaoEstadual(rawDoc);
+
         const resultado: RespostaCnpjPadrao = {
           sucesso: true,
           cnpj: rawDoc,
           cnpj_formatado: formatarCnpjCpf(rawDoc),
+          inscricao_estadual: ie,
           razao_social: d.razao_social || '',
           nome_fantasia: d.nome_fantasia || d.razao_social || '',
           email: d.email || '',
@@ -218,7 +249,7 @@ export async function GET(request: Request) {
       console.warn('[Consulta CNPJ] BrasilAPI falhou, tentando MinhaReceita:', e.message);
     }
 
-    // 3. TENTATIVA 3: MinhaReceita
+    // 4. TENTATIVA 4: MinhaReceita
     try {
       const resMinhaReceita = await fetch(`https://minhareceita.org/${rawDoc}`, {
         headers: { 'Accept': 'application/json' },
@@ -234,10 +265,13 @@ export async function GET(request: Request) {
         else if (d.opcao_pelo_simples) autoRegime = 'simples_nacional';
         else autoRegime = 'lucro_presumido';
 
+        const ie = await extrairInscricaoEstadual(rawDoc);
+
         const resultado: RespostaCnpjPadrao = {
           sucesso: true,
           cnpj: rawDoc,
           cnpj_formatado: formatarCnpjCpf(rawDoc),
+          inscricao_estadual: ie,
           razao_social: d.razao_social || '',
           nome_fantasia: d.nome_fantasia || d.razao_social || '',
           email: d.email || '',
@@ -270,6 +304,7 @@ export async function GET(request: Request) {
         sucesso: true,
         cnpj: rawDoc,
         cnpj_formatado: formatarCnpjCpf(rawDoc),
+        inscricao_estadual: '',
         razao_social: '',
         nome_fantasia: '',
         email: '',
