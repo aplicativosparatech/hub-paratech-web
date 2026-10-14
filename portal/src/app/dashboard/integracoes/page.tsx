@@ -127,18 +127,48 @@ export default function IntegracoesPage() {
     }
   }
 
+  const handleSalvarIndividual = async (provedor: string) => {
+    const item = getIntegracao(provedor)
+    const tId = toast.loading(`Salvando ${item.credenciais?.nome || provedor.toUpperCase()}...`)
+    try {
+      const cleanCreds = { ...item.credenciais }
+      if (cleanCreds.api_key) cleanCreds.api_key = String(cleanCreds.api_key).trim()
+
+      const { error } = await supabase.from('integracoes').upsert({
+        provedor,
+        tipo: provedor.startsWith('mcp') ? 'mcp' : 'ia',
+        is_ativo: true,
+        credenciais: cleanCreds
+      }, { onConflict: 'provedor' })
+
+      if (error) throw error
+
+      // Atualiza o estado local
+      setIntegracoes(prev => prev.map(i => i.provedor === provedor ? { ...i, is_ativo: true, credenciais: cleanCreds } : i))
+      toast.success(`${item.credenciais?.nome || provedor.toUpperCase()} salvo com sucesso!`, { id: tId })
+    } catch (err: any) {
+      toast.error('Erro ao salvar: ' + err.message, { id: tId })
+    }
+  }
+
   const handleSave = async () => {
     const loadingToast = toast.loading('Salvando configurações...')
     try {
       for (const i of integracoes) {
-        await supabase.from('integracoes').update({
+        const cleanCreds = { ...i.credenciais }
+        if (cleanCreds.api_key) cleanCreds.api_key = String(cleanCreds.api_key).trim()
+
+        await supabase.from('integracoes').upsert({
+          id: i.id || undefined,
+          provedor: i.provedor,
+          tipo: i.tipo,
           is_ativo: i.is_ativo,
-          credenciais: i.credenciais
-        }).eq('id', i.id)
+          credenciais: cleanCreds
+        }, { onConflict: 'provedor' })
       }
       toast.success('Configurações salvas com sucesso!', { id: loadingToast })
-    } catch (error) {
-      toast.error('Erro ao salvar!', { id: loadingToast })
+    } catch (error: any) {
+      toast.error('Erro ao salvar: ' + error.message, { id: loadingToast })
     }
   }
 
@@ -448,28 +478,40 @@ export default function IntegracoesPage() {
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Modelo</label>
                     <select
-                      value={gemini.credenciais?.model || 'gemini-2.5-flash'}
+                      value={gemini.credenciais?.model || 'gemini-1.5-flash'}
                       onChange={e => handleCredencialChange('gemini', 'model', e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none"
                     >
-                      <option value="gemini-2.5-flash">Gemini 2.5 Flash (Recomendado - Grátis e Mais Rápido)</option>
-                      <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-                      <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                      <option value="gemini-1.5-flash">Gemini 1.5 Flash (Recomendado - 100% Gratuito e Alta Cota)</option>
+                      <option value="gemini-2.0-flash">Gemini 2.0 Flash (Nova Geração Google)</option>
+                      <option value="gemini-1.5-pro">Gemini 1.5 Pro (Maior Raciocínio - Cota restrita a 2 RPM)</option>
                     </select>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => handleTestarIa('gemini')}
-                  disabled={testandoIa === 'gemini' || !gemini.credenciais?.api_key}
-                  className="px-4 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
-                >
-                  <RefreshCw size={14} className={testandoIa === 'gemini' ? 'animate-spin' : ''} />
-                  {testandoIa === 'gemini' ? 'Testando...' : 'Testar Conexão'}
-                </button>
+              <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSalvarIndividual('gemini')}
+                    disabled={!gemini.credenciais?.api_key}
+                    className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
+                    title="Salvar esta chave agora no banco"
+                  >
+                    <Save size={13} />
+                    <span>Salvar</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTestarIa('gemini')}
+                    disabled={testandoIa === 'gemini' || !gemini.credenciais?.api_key}
+                    className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <RefreshCw size={13} className={testandoIa === 'gemini' ? 'animate-spin' : ''} />
+                    <span>{testandoIa === 'gemini' ? 'Testando...' : 'Testar Conexão'}</span>
+                  </button>
+                </div>
                 {resultadoTesteIa['gemini'] && (
                   <span className={`text-xs font-medium ${resultadoTesteIa['gemini'].ok ? 'text-emerald-600' : 'text-red-600'}`}>
                     {resultadoTesteIa['gemini'].ok ? `✓ OK (${resultadoTesteIa['gemini'].tempo}ms)` : '✕ Erro'}

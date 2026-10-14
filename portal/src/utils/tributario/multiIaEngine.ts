@@ -86,27 +86,65 @@ Não inclua formatação markdown, blocos de código ou texto fora do JSON.`;
 // 1. Google Gemini (Grátis via Google AI Studio)
 async function chamarGemini(apiKey: string, model: string, item: ItemAuditoriaInput): Promise<RespostaIaItem | null> {
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-2.5-flash'}:generateContent?key=${apiKey}`;
-    const prompt = `${buildSystemPrompt(item.crt, item.uf)}\n\nITEM PARA ANÁLISE:\nDescrição: "${item.descricao}"\nNCM Informado no Arquivo: "${item.ncmAtual || 'Não informado'}"\nCEST Atual: "${item.cestAtual || 'Vazio'}"\nCFOP Atual: "${item.cfopAtual || 'Vazio'}"\nCSOSN/CST Atual: "${item.csosnAtual || 'Vazio'}"\nValor Unitário: R$ ${item.valor || 0}`;
+    const cleanKey = (apiKey || '').trim();
+    if (!cleanKey) {
+      (globalThis as any).__lastGeminiError = 'Chave de API não informada.';
+      return null;
+    }
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.1, responseMimeType: 'application/json' }
-      }),
-      signal: AbortSignal.timeout(12000)
-    });
+    // Se o usuário selecionou gemini-1.5-pro, tenta ele primeiro.
+    // Se esgotar a cota ou falhar, tenta gemini-1.5-flash e gemini-2.0-flash como fallback transparente.
+    const modelosParaTentar = [
+      model || 'gemini-1.5-flash',
+      'gemini-1.5-flash',
+      'gemini-2.0-flash',
+      'gemini-1.5-pro'
+    ];
+    const modelosUnicos = Array.from(new Set(modelosParaTentar));
 
-    if (!res.ok) return null;
-    const data = await res.json();
-    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!rawText) return null;
+    let ultimoErroMsg = '';
 
-    const parsed = JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim());
-    return normalizarRespostaIa('gemini', 'Google Gemini', parsed, item);
-  } catch {
+    for (const m of modelosUnicos) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${cleanKey}`;
+        const prompt = `${buildSystemPrompt(item.crt, item.uf)}\n\nITEM PARA ANÁLISE:\nDescrição: "${item.descricao}"\nNCM Informado no Arquivo: "${item.ncmAtual || 'Não informado'}"\nCEST Atual: "${item.cestAtual || 'Vazio'}"\nCFOP Atual: "${item.cfopAtual || 'Vazio'}"\nCSOSN/CST Atual: "${item.csosnAtual || 'Vazio'}"\nValor Unitário: R$ ${item.valor || 0}`;
+
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.1, responseMimeType: 'application/json' }
+          }),
+          signal: AbortSignal.timeout(12000)
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => null);
+          ultimoErroMsg = errData?.error?.message || `HTTP ${res.status}`;
+          console.warn(`[Gemini Engine] Falha no modelo ${m}: ${ultimoErroMsg}`);
+          continue; // Tenta o próximo modelo
+        }
+
+        const data = await res.json();
+        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!rawText) continue;
+
+        const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(cleanJson);
+        return normalizarRespostaIa('gemini', `Google Gemini (${m})`, parsed, item);
+      } catch (errM: any) {
+        ultimoErroMsg = errM.message;
+        console.warn(`[Gemini Engine] Erro no modelo ${m}:`, errM.message);
+      }
+    }
+
+    if (ultimoErroMsg) {
+      (globalThis as any).__lastGeminiError = ultimoErroMsg;
+    }
+    return null;
+  } catch (err: any) {
+    (globalThis as any).__lastGeminiError = err.message;
     return null;
   }
 }
