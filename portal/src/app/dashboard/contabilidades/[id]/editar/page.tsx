@@ -100,31 +100,35 @@ export default function EditarContabilidadePage() {
     setSearchingCnpj(true)
     const toastId = toast.loading('Consultando escritório contábil na Receita Federal...')
     try {
-      const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${rawCnpj}`)
-      if (!res.ok) throw new Error('Não foi possível obter dados para este CNPJ.')
+      const res = await fetch(`/api/consulta-cnpj?cnpj=${encodeURIComponent(rawCnpj)}`)
       const data = await res.json()
 
-      const tel = data.ddd_telefone_1 ? `(${data.ddd_telefone_1.substring(0, 2)}) ${data.ddd_telefone_1.substring(2)}` : ''
-      const wpp = data.ddd_telefone_1 ? `55${data.ddd_telefone_1.replace(/\D/g, '')}` : ''
+      if (!res.ok) {
+        throw new Error(data.error || 'Não foi possível obter dados para este CNPJ.')
+      }
 
       setFormData(prev => ({
         ...prev,
-        cnpj: cnpjFormatado,
+        cnpj: data.cnpj_formatado || cnpjFormatado,
         razao_social: data.razao_social || prev.razao_social,
         nome_fantasia: data.nome_fantasia || data.razao_social || prev.nome_fantasia,
         email_contato: data.email || prev.email_contato,
-        telefone: tel || prev.telefone,
-        whatsapp: wpp || prev.whatsapp,
-        cep: data.cep ? data.cep.replace(/\D/g, '') : prev.cep,
+        telefone: data.telefone || prev.telefone,
+        whatsapp: data.whatsapp || prev.whatsapp,
+        cep: data.cep || prev.cep,
         logradouro: data.logradouro || prev.logradouro,
         numero: data.numero || prev.numero,
         complemento: data.complemento || prev.complemento,
         bairro: data.bairro || prev.bairro,
-        cidade: data.municipio || prev.cidade,
+        cidade: data.cidade || prev.cidade,
         uf: data.uf || prev.uf
       }))
 
-      toast.success('Dados preenchidos com sucesso!', { id: toastId })
+      if (data.aviso) {
+        toast.success(data.aviso, { id: toastId, duration: 6000 })
+      } else {
+        toast.success(`Dados preenchidos com sucesso via ${data.provedor?.toUpperCase() || 'Receita Federal'}!`, { id: toastId })
+      }
     } catch (err: any) {
       setFormData(prev => ({ ...prev, cnpj: cnpjFormatado }))
       toast.error(err.message || 'Erro ao consultar CNPJ. Preencha os campos manualmente.', { id: toastId })
@@ -243,7 +247,7 @@ export default function EditarContabilidadePage() {
                     type="button"
                     onClick={handleConsultarCnpj}
                     disabled={searchingCnpj}
-                    title="Buscar dados do CNPJ na Receita Federal via BrasilAPI"
+                    title="Buscar dados cadastrais do CNPJ na Receita Federal (ReceitaWS / BrasilAPI / RFB)"
                     className="px-3.5 py-2.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl font-semibold flex items-center justify-center transition border border-blue-200 disabled:opacity-50"
                   >
                     <Search size={18} className={searchingCnpj ? 'animate-spin' : ''} />

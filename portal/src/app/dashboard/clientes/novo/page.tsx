@@ -139,35 +139,31 @@ export default function NovoClientePage() {
     setSearchingCnpj(true)
     const toastId = toast.loading('Consultando dados do CNPJ na Receita Federal...')
     try {
-      const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${rawDoc}`)
-      if (!res.ok) throw new Error('Não foi possível obter dados para este CNPJ.')
+      const res = await fetch(`/api/consulta-cnpj?cnpj=${encodeURIComponent(rawDoc)}`)
       const data = await res.json()
 
-      const tel = data.ddd_telefone_1 ? `55${data.ddd_telefone_1.replace(/\D/g, '')}` : formData.whatsapp
-
-      let autoRegime = 'simples_nacional'
-      if (data.opcao_pelo_mei) {
-        autoRegime = 'mei'
-      } else if (data.opcao_pelo_simples) {
-        autoRegime = 'simples_nacional'
-      } else if (data.opcao_pelo_simples === false) {
-        autoRegime = 'lucro_presumido'
+      if (!res.ok) {
+        throw new Error(data.error || 'Não foi possível obter dados para este CNPJ.')
       }
 
       setFormData(prev => ({
         ...prev,
-        cnpj: cnpjFormatado,
+        cnpj: data.cnpj_formatado || cnpjFormatado,
         razao_social: data.razao_social || prev.razao_social,
         nome_fantasia: data.nome_fantasia || data.razao_social || prev.nome_fantasia,
-        whatsapp: prev.whatsapp || tel,
+        whatsapp: prev.whatsapp || data.whatsapp || '',
         email_fiscal: prev.email_fiscal || data.email || '',
-        ramo_atividade: prev.ramo_atividade || data.cnae_fiscal_descricao || '',
-        cidade: prev.cidade || data.municipio || '',
+        ramo_atividade: prev.ramo_atividade || data.ramo_atividade || '',
+        cidade: prev.cidade || data.cidade || '',
         uf: prev.uf || data.uf || '',
-        regime_tributario: autoRegime
+        regime_tributario: data.regime_tributario || prev.regime_tributario || 'simples_nacional'
       }))
 
-      toast.success('Dados preenchidos com sucesso!', { id: toastId })
+      if (data.aviso) {
+        toast.success(data.aviso, { id: toastId, duration: 6000 })
+      } else {
+        toast.success(`Dados preenchidos com sucesso via ${data.provedor?.toUpperCase() || 'Receita Federal'}!`, { id: toastId })
+      }
     } catch (err: any) {
       setFormData(prev => ({ ...prev, cnpj: cnpjFormatado }))
       toast.error(err.message || 'Erro ao consultar CNPJ. Preencha os campos manualmente.', { id: toastId })
