@@ -6,13 +6,14 @@ import {
   LayoutDashboard, Users, Building2, Settings, FileText, 
   LogOut, BarChart3, Receipt, FileDown, PlugZap, UserCircle,
   Menu, X, Sliders, ShieldCheck, Sparkles, Database,
-  Maximize2, Minimize2, Sun, Moon
+  Maximize2, Minimize2, Sun, Moon, Palette
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { PermissoesMap } from '@/utils/permissoes'
 import { APP_VERSION } from '@/utils/version'
+import TabHeaderBanner from '@/components/TabHeaderBanner'
 
 type Role = 'admin' | 'cliente' | 'contabilidade'
 
@@ -95,6 +96,36 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => document.removeEventListener('fullscreenchange', handleFsChange)
   }, [])
 
+  // 3. Controle de Tela Cheia Automática no Movimento do Mouse (se configurado em Aparência)
+  useEffect(() => {
+    const autoFs = localStorage.getItem('hub_display_mode') === 'fullscreen'
+    if (!autoFs) return
+
+    let triggered = false
+    const handleFirstUserAction = () => {
+      if (triggered) return
+      triggered = true
+
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {})
+      }
+
+      window.removeEventListener('mousemove', handleFirstUserAction)
+      window.removeEventListener('pointerdown', handleFirstUserAction)
+      window.removeEventListener('keydown', handleFirstUserAction)
+    }
+
+    window.addEventListener('mousemove', handleFirstUserAction, { passive: true })
+    window.addEventListener('pointerdown', handleFirstUserAction, { passive: true })
+    window.addEventListener('keydown', handleFirstUserAction, { passive: true })
+
+    return () => {
+      window.removeEventListener('mousemove', handleFirstUserAction)
+      window.removeEventListener('pointerdown', handleFirstUserAction)
+      window.removeEventListener('keydown', handleFirstUserAction)
+    }
+  }, [pathname])
+
   useEffect(() => {
     async function loadRole() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -162,6 +193,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { prefixo: '/dashboard/saneador-arquivos', modulo: 'saneador_arquivos', nome: 'Saneador de Arquivos' },
       { prefixo: '/dashboard/meus-clientes', modulo: 'contabilidade_meus_clientes', nome: 'Meus Clientes' },
       { prefixo: '/dashboard/meu-perfil', modulo: 'meu_perfil', nome: 'Meu Perfil' },
+      { prefixo: '/dashboard/aparencia', modulo: 'aparencia', nome: 'Personalização & Aparência' },
       { prefixo: '/dashboard/permissoes', modulo: '_admin_only', nome: 'Permissões' },
     ]
 
@@ -310,6 +342,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <NavItem href="/dashboard/saneador-arquivos" icon={Database} label="Saneador de Arquivos" />
             <NavItem href="/dashboard/integracoes" icon={PlugZap} label="Integrações (APIs)" />
             <NavItem href="/dashboard/permissoes" icon={ShieldCheck} label="Permissões" />
+            <NavItem href="/dashboard/aparencia" icon={Palette} label="Aparência" />
             <NavItem href="/dashboard/configuracoes-portal" icon={Sliders} label="Configurações do Portal" />
             <NavItem href="/dashboard/configuracoes" icon={Settings} label="Configurações Hub" />
           </>
@@ -326,6 +359,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             )}
             {canAccess('corretor_tributario') && <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Corretor Tributário" />}
             {canAccess('saneador_arquivos') && <NavItem href="/dashboard/saneador-arquivos" icon={Database} label="Saneador de Arquivos" />}
+            {canAccess('aparencia') && <NavItem href="/dashboard/aparencia" icon={Palette} label="Aparência" />}
             {canAccess('configuracoes_portal') && <NavItem href="/dashboard/configuracoes-portal" icon={Sliders} label="Configurações do Portal" />}
             {canAccess('configuracoes_hub') && <NavItem href="/dashboard/configuracoes" icon={Settings} label="Configurações Hub" />}
             {canAccess('integracoes') && <NavItem href="/dashboard/integracoes" icon={PlugZap} label="Integrações (APIs)" />}
@@ -344,6 +378,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             )}
             {canAccess('corretor_tributario') && <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Corretor Tributário" />}
             {canAccess('saneador_arquivos') && <NavItem href="/dashboard/saneador-arquivos" icon={Database} label="Saneador de Arquivos" />}
+            {canAccess('aparencia') && <NavItem href="/dashboard/aparencia" icon={Palette} label="Aparência" />}
             {canAccess('configuracoes_portal') && <NavItem href="/dashboard/configuracoes-portal" icon={Sliders} label="Configurações do Portal" />}
             {canAccess('configuracoes_hub') && <NavItem href="/dashboard/configuracoes" icon={Settings} label="Configurações Hub" />}
             {canAccess('integracoes') && <NavItem href="/dashboard/integracoes" icon={PlugZap} label="Integrações (APIs)" />}
@@ -380,30 +415,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   )
 
   return (
-    <div className="min-h-screen flex bg-slate-50 dark:bg-slate-950 font-sans transition-colors duration-200">
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 font-sans transition-colors duration-200">
       
-      {/* 1. Sidebar Desktop (Fixa na esquerda) */}
-      <aside className="hidden md:flex md:w-64 lg:w-72 bg-white dark:bg-[#0B1120] border-r border-slate-200 dark:border-slate-800 flex-col shadow-xs relative z-10 flex-shrink-0 transition-colors duration-200">
-        <SidebarContent />
-      </aside>
+      {/* 0. Banner Ilustrado Panorâmico no Topo (100% de largura) */}
+      <TabHeaderBanner />
 
-      {/* 2. Sidebar Mobile (Drawer com Overlay) */}
-      {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 md:hidden flex">
-          {/* Backdrop escuro com clique para fechar */}
-          <div 
-            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity" 
-            onClick={() => setMobileMenuOpen(false)} 
-          />
-          {/* Menu Drawer Deslizante */}
-          <div className="relative w-72 max-w-[85vw] bg-white dark:bg-[#0B1120] h-full flex flex-col shadow-2xl z-10 transition-colors duration-200">
-            <SidebarContent />
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* 1. Sidebar Desktop (Fixa na esquerda) */}
+        <aside className="hidden md:flex md:w-64 lg:w-72 bg-white dark:bg-[#0B1120] border-r border-slate-200 dark:border-slate-800 flex-col shadow-xs relative z-10 flex-shrink-0 transition-colors duration-200">
+          <SidebarContent />
+        </aside>
+
+        {/* 2. Sidebar Mobile (Drawer com Overlay) */}
+        {mobileMenuOpen && (
+          <div className="fixed inset-0 z-50 md:hidden flex">
+            {/* Backdrop escuro com clique para fechar */}
+            <div 
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity" 
+              onClick={() => setMobileMenuOpen(false)} 
+            />
+            {/* Menu Drawer Deslizante */}
+            <div className="relative w-72 max-w-[85vw] bg-white dark:bg-[#0B1120] h-full flex flex-col shadow-2xl z-10 transition-colors duration-200">
+              <SidebarContent />
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* 3. Main Content (Totalmente expandido em 100% da tela) */}
-      <main className="flex-1 flex flex-col h-screen overflow-y-auto bg-[#F8FAFC] dark:bg-[#06090F] transition-colors duration-200">
+        {/* 3. Main Content (Totalmente expandido em 100% da tela) */}
+        <main className="flex-1 flex flex-col h-full overflow-y-auto bg-[#F8FAFC] dark:bg-[#06090F] transition-colors duration-200">
         {/* Topbar moderna e responsiva */}
         <header className="h-16 bg-white/80 dark:bg-[#0B1120]/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 sm:px-6 lg:px-8 sticky top-0 z-20 shadow-xs flex-shrink-0 transition-colors duration-200">
           <div className="flex items-center gap-3">
@@ -512,6 +551,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </footer>
       </main>
+      </div>
     </div>
   )
 }

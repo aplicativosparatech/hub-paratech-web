@@ -233,6 +233,18 @@ const modulos = [
     permitido_cliente: true,
     permitido_contabilidade: true,
     permitido_admin: true
+  },
+  {
+    modulo_chave: 'aparencia',
+    nome: 'Personalização & Aparência do Portal',
+    descricao: 'Configurar tema padrão (claro/escuro), modo tela cheia automática e exibição de cabeçalhos ilustrados.',
+    categoria: 'Configurações & Painéis',
+    rota: '/dashboard/aparencia',
+    icone: 'Palette',
+    ordem: 20,
+    permitido_cliente: true,
+    permitido_contabilidade: true,
+    permitido_admin: true
   }
 ];
 
