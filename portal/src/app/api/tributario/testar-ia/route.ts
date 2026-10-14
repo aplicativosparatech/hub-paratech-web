@@ -46,12 +46,10 @@ export async function POST(req: Request) {
       let lastErr = '';
       if (provedor === 'gemini') {
         lastErr = (globalThis as any).__lastGeminiError || '';
-        if (lastErr.includes('API key not valid') || lastErr.includes('API_KEY_INVALID') || lastErr.includes('401')) {
+        if (lastErr.includes('API key not valid') || lastErr.includes('API_KEY_INVALID') || lastErr.includes('401') || (lastErr.includes('400') && lastErr.includes('API key'))) {
           mensagemRetorno = 'Chave da API do Google Gemini inválida. Verifique se copiou a chave completa no Google AI Studio (geralmente começa com AIzaSy...).';
         } else if (lastErr.includes('RESOURCE_EXHAUSTED') || lastErr.includes('quota') || lastErr.includes('capacity') || lastErr.includes('429')) {
-          mensagemRetorno = 'Cota esgotada no Google AI Studio. Dica: selecione o modelo "Gemini 2.5 Flash" ou "Gemini 1.5 Flash" que tem limites gratuitos muito maiores!';
-        } else if (lastErr.includes('no longer available') || lastErr.includes('not found') || lastErr.includes('404')) {
-          mensagemRetorno = 'O modelo anterior do Gemini foi descontinuado pelo Google. O sistema já o atualizou para o novo modelo oficial "Gemini 2.5 Flash".';
+          mensagemRetorno = 'Cota esgotada no Google AI Studio. Tente selecionar o modelo "Gemini 1.5 Flash" que possui cotas gratuitas maiores (15 RPM).';
         } else if (lastErr) {
           mensagemRetorno = `Google API: ${lastErr}`;
         }
@@ -93,7 +91,7 @@ export async function POST(req: Request) {
     if (isSucesso && provedor) {
       try {
         const modeloPadraoPorProvedor: Record<string, string> = {
-          gemini: 'gemini-2.5-flash',
+          gemini: 'gemini-1.5-flash',
           groq: 'llama-3.3-70b-versatile',
           openai: 'gpt-4o-mini',
           claude: 'claude-3-5-haiku-20241022',
@@ -102,20 +100,41 @@ export async function POST(req: Request) {
 
         let modeloEscolhido = credenciais?.model;
         if (!modeloEscolhido || (provedor === 'gemini' && modeloEscolhido.includes('2.0'))) {
-          modeloEscolhido = modeloPadraoPorProvedor[provedor] || 'gemini-2.5-flash';
+          modeloEscolhido = modeloPadraoPorProvedor[provedor] || 'gemini-1.5-flash';
         }
 
         const supabase = createAdminClient();
-        await supabase.from('integracoes').upsert({
-          provedor,
-          tipo: provedor.startsWith('mcp') ? 'mcp' : 'ia',
-          is_ativo: true,
-          credenciais: {
-            ...credenciais,
-            api_key: (credenciais?.api_key || '').trim(),
-            model: modeloEscolhido
-          }
-        }, { onConflict: 'provedor' });
+        const { data: existing } = await supabase
+          .from('integracoes')
+          .select('id')
+          .eq('provedor', provedor)
+          .maybeSingle();
+
+        const credsToSave = {
+          ...credenciais,
+          api_key: (credenciais?.api_key || '').trim(),
+          model: modeloEscolhido
+        };
+
+        if (existing?.id) {
+          await supabase
+            .from('integracoes')
+            .update({
+              is_ativo: true,
+              credenciais: credsToSave,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existing.id);
+        } else {
+          await supabase
+            .from('integracoes')
+            .insert({
+              provedor,
+              tipo: provedor.startsWith('mcp') ? 'mcp' : 'ia',
+              is_ativo: true,
+              credenciais: credsToSave
+            });
+        }
       } catch (saveErr) {
         console.warn('Aviso: Falha ao auto-salvar integração no teste:', saveErr);
       }

@@ -92,18 +92,17 @@ async function chamarGemini(apiKey: string, model: string, item: ItemAuditoriaIn
       return null;
     }
 
-    // Se o usuário selecionou gemini-2.0-flash (descontinuado pelo Google), migra automaticamente para gemini-2.5-flash
-    let modeloPreferencial = (model || 'gemini-2.5-flash').trim();
+    // Se o usuário selecionou gemini-2.0-flash (descontinuado pelo Google), migra automaticamente para gemini-1.5-flash
+    let modeloPreferencial = (model || 'gemini-1.5-flash').trim();
     if (modeloPreferencial.includes('2.0')) {
-      modeloPreferencial = 'gemini-2.5-flash';
+      modeloPreferencial = 'gemini-1.5-flash';
     }
 
-    // Esteira de modelos do Google AI Studio em ordem de prioridade e cota
+    // Esteira de modelos do Google AI Studio em ordem de compatibilidade e cota
     const modelosParaTentar = [
       modeloPreferencial,
-      'gemini-2.5-flash',
       'gemini-1.5-flash',
-      'gemini-2.5-pro',
+      'gemini-2.5-flash',
       'gemini-1.5-pro'
     ];
     const modelosUnicos = Array.from(new Set(modelosParaTentar));

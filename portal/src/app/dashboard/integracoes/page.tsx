@@ -134,14 +134,38 @@ export default function IntegracoesPage() {
       const cleanCreds = { ...item.credenciais }
       if (cleanCreds.api_key) cleanCreds.api_key = String(cleanCreds.api_key).trim()
 
-      const { error } = await supabase.from('integracoes').upsert({
-        provedor,
-        tipo: provedor.startsWith('mcp') ? 'mcp' : 'ia',
-        is_ativo: true,
-        credenciais: cleanCreds
-      }, { onConflict: 'provedor' })
+      // Localiza registro existente pelo provedor para evitar dependência de constraint UNIQUE
+      const { data: existing } = await supabase
+        .from('integracoes')
+        .select('id')
+        .eq('provedor', provedor)
+        .maybeSingle()
 
-      if (error) throw error
+      const itemId = (item as any)?.id
+      if (existing?.id || itemId) {
+        const targetId = existing?.id || itemId
+        const { error } = await supabase
+          .from('integracoes')
+          .update({
+            is_ativo: true,
+            credenciais: cleanCreds,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', targetId)
+
+        if (error) throw error
+      } else {
+        const { error } = await supabase
+          .from('integracoes')
+          .insert({
+            provedor,
+            tipo: provedor.startsWith('mcp') ? 'mcp' : 'ia',
+            is_ativo: true,
+            credenciais: cleanCreds
+          })
+
+        if (error) throw error
+      }
 
       // Atualiza o estado local
       setIntegracoes(prev => prev.map(i => i.provedor === provedor ? { ...i, is_ativo: true, credenciais: cleanCreds } : i))
@@ -158,13 +182,45 @@ export default function IntegracoesPage() {
         const cleanCreds = { ...i.credenciais }
         if (cleanCreds.api_key) cleanCreds.api_key = String(cleanCreds.api_key).trim()
 
-        await supabase.from('integracoes').upsert({
-          id: i.id || undefined,
-          provedor: i.provedor,
-          tipo: i.tipo,
-          is_ativo: i.is_ativo,
-          credenciais: cleanCreds
-        }, { onConflict: 'provedor' })
+        if (i.id) {
+          const { error } = await supabase
+            .from('integracoes')
+            .update({
+              is_ativo: i.is_ativo,
+              credenciais: cleanCreds,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', i.id)
+          if (error) throw error
+        } else {
+          const { data: existing } = await supabase
+            .from('integracoes')
+            .select('id')
+            .eq('provedor', i.provedor)
+            .maybeSingle()
+
+          if (existing?.id) {
+            const { error } = await supabase
+              .from('integracoes')
+              .update({
+                is_ativo: i.is_ativo,
+                credenciais: cleanCreds,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', existing.id)
+            if (error) throw error
+          } else {
+            const { error } = await supabase
+              .from('integracoes')
+              .insert({
+                provedor: i.provedor,
+                tipo: i.tipo,
+                is_ativo: i.is_ativo,
+                credenciais: cleanCreds
+              })
+            if (error) throw error
+          }
+        }
       }
       toast.success('Configurações salvas com sucesso!', { id: loadingToast })
     } catch (error: any) {
@@ -478,13 +534,13 @@ export default function IntegracoesPage() {
                     <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Modelo</label>
                     <select
-                      value={(gemini.credenciais?.model && !gemini.credenciais.model.includes('2.0')) ? gemini.credenciais.model : 'gemini-2.5-flash'}
+                      value={(gemini.credenciais?.model && !gemini.credenciais.model.includes('2.0')) ? gemini.credenciais.model : 'gemini-1.5-flash'}
                       onChange={e => handleCredencialChange('gemini', 'model', e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none"
                     >
-                      <option value="gemini-2.5-flash">Gemini 2.5 Flash (Recomendado - Grátis e Mais Rápido)</option>
-                      <option value="gemini-1.5-flash">Gemini 1.5 Flash (Estável e Gratuito - 15 RPM)</option>
-                      <option value="gemini-2.5-pro">Gemini 2.5 Pro (Nova Geração Google)</option>
+                      <option value="gemini-1.5-flash">Gemini 1.5 Flash (Recomendado - 100% Gratuito e Estável)</option>
+                      <option value="gemini-2.5-flash">Gemini 2.5 Flash (Nova Geração Google)</option>
+                      <option value="gemini-2.5-pro">Gemini 2.5 Pro (Nova Geração Google - Raciocínio)</option>
                       <option value="gemini-1.5-pro">Gemini 1.5 Pro (Alta Precisão)</option>
                     </select>
                   </div>
