@@ -475,47 +475,55 @@ export default function IntegracoesPage() {
                     />
                   </div>
 
-                  <div>
+                    <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Modelo</label>
                     <select
-                      value={gemini.credenciais?.model || 'gemini-1.5-flash'}
+                      value={(gemini.credenciais?.model && !gemini.credenciais.model.includes('2.0')) ? gemini.credenciais.model : 'gemini-2.5-flash'}
                       onChange={e => handleCredencialChange('gemini', 'model', e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none"
                     >
-                      <option value="gemini-1.5-flash">Gemini 1.5 Flash (Recomendado - 100% Gratuito e Alta Cota)</option>
-                      <option value="gemini-2.0-flash">Gemini 2.0 Flash (Nova Geração Google)</option>
-                      <option value="gemini-1.5-pro">Gemini 1.5 Pro (Maior Raciocínio - Cota restrita a 2 RPM)</option>
+                      <option value="gemini-2.5-flash">Gemini 2.5 Flash (Recomendado - Grátis e Mais Rápido)</option>
+                      <option value="gemini-1.5-flash">Gemini 1.5 Flash (Estável e Gratuito - 15 RPM)</option>
+                      <option value="gemini-2.5-pro">Gemini 2.5 Pro (Nova Geração Google)</option>
+                      <option value="gemini-1.5-pro">Gemini 1.5 Pro (Alta Precisão)</option>
                     </select>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleSalvarIndividual('gemini')}
-                    disabled={!gemini.credenciais?.api_key}
-                    className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
-                    title="Salvar esta chave agora no banco"
-                  >
-                    <Save size={13} />
-                    <span>Salvar</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleTestarIa('gemini')}
-                    disabled={testandoIa === 'gemini' || !gemini.credenciais?.api_key}
-                    className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50"
-                  >
-                    <RefreshCw size={13} className={testandoIa === 'gemini' ? 'animate-spin' : ''} />
-                    <span>{testandoIa === 'gemini' ? 'Testando...' : 'Testar Conexão'}</span>
-                  </button>
+              <div className="mt-5 pt-4 border-t border-slate-100">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSalvarIndividual('gemini')}
+                      disabled={!gemini.credenciais?.api_key}
+                      className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
+                      title="Salvar esta chave agora no banco"
+                    >
+                      <Save size={13} />
+                      <span>Salvar</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTestarIa('gemini')}
+                      disabled={testandoIa === 'gemini' || !gemini.credenciais?.api_key}
+                      className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <RefreshCw size={13} className={testandoIa === 'gemini' ? 'animate-spin' : ''} />
+                      <span>{testandoIa === 'gemini' ? 'Testando...' : 'Testar Conexão'}</span>
+                    </button>
+                  </div>
+                  {resultadoTesteIa['gemini'] && (
+                    <span className={`text-xs font-bold ${resultadoTesteIa['gemini'].ok ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {resultadoTesteIa['gemini'].ok ? `✓ OK (${resultadoTesteIa['gemini'].tempo}ms)` : '✕ Erro'}
+                    </span>
+                  )}
                 </div>
                 {resultadoTesteIa['gemini'] && (
-                  <span className={`text-xs font-medium ${resultadoTesteIa['gemini'].ok ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {resultadoTesteIa['gemini'].ok ? `✓ OK (${resultadoTesteIa['gemini'].tempo}ms)` : '✕ Erro'}
-                  </span>
+                  <div className={`mt-3 p-2.5 rounded-lg text-xs leading-relaxed ${resultadoTesteIa['gemini'].ok ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                    {resultadoTesteIa['gemini'].msg}
+                  </div>
                 )}
               </div>
             </div>
@@ -575,20 +583,39 @@ export default function IntegracoesPage() {
                 </div>
               </div>
 
-              <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => handleTestarIa('groq')}
-                  disabled={testandoIa === 'groq' || !groq.credenciais?.api_key}
-                  className="px-4 py-2 bg-orange-50 hover:bg-orange-100 text-orange-700 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
-                >
-                  <RefreshCw size={14} className={testandoIa === 'groq' ? 'animate-spin' : ''} />
-                  {testandoIa === 'groq' ? 'Testando...' : 'Testar Conexão'}
-                </button>
+              <div className="mt-5 pt-4 border-t border-slate-100">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSalvarIndividual('groq')}
+                      disabled={!groq.credenciais?.api_key}
+                      className="px-3.5 py-2 bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
+                      title="Salvar esta chave agora no banco"
+                    >
+                      <Save size={13} />
+                      <span>Salvar</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTestarIa('groq')}
+                      disabled={testandoIa === 'groq' || !groq.credenciais?.api_key}
+                      className="px-3.5 py-2 bg-orange-50 hover:bg-orange-100 text-orange-700 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <RefreshCw size={13} className={testandoIa === 'groq' ? 'animate-spin' : ''} />
+                      <span>{testandoIa === 'groq' ? 'Testando...' : 'Testar Conexão'}</span>
+                    </button>
+                  </div>
+                  {resultadoTesteIa['groq'] && (
+                    <span className={`text-xs font-bold ${resultadoTesteIa['groq'].ok ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {resultadoTesteIa['groq'].ok ? `✓ OK (${resultadoTesteIa['groq'].tempo}ms)` : '✕ Erro'}
+                    </span>
+                  )}
+                </div>
                 {resultadoTesteIa['groq'] && (
-                  <span className={`text-xs font-medium ${resultadoTesteIa['groq'].ok ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {resultadoTesteIa['groq'].ok ? `✓ OK (${resultadoTesteIa['groq'].tempo}ms)` : '✕ Erro'}
-                  </span>
+                  <div className={`mt-3 p-2.5 rounded-lg text-xs leading-relaxed ${resultadoTesteIa['groq'].ok ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                    {resultadoTesteIa['groq'].msg}
+                  </div>
                 )}
               </div>
             </div>
@@ -638,20 +665,39 @@ export default function IntegracoesPage() {
                 </div>
               </div>
 
-              <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => handleTestarIa('openai')}
-                  disabled={testandoIa === 'openai' || !openai.credenciais?.api_key}
-                  className="px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
-                >
-                  <RefreshCw size={14} className={testandoIa === 'openai' ? 'animate-spin' : ''} />
-                  {testandoIa === 'openai' ? 'Testando...' : 'Testar Conexão'}
-                </button>
+              <div className="mt-5 pt-4 border-t border-slate-100">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSalvarIndividual('openai')}
+                      disabled={!openai.credenciais?.api_key}
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
+                      title="Salvar esta chave agora no banco"
+                    >
+                      <Save size={13} />
+                      <span>Salvar</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTestarIa('openai')}
+                      disabled={testandoIa === 'openai' || !openai.credenciais?.api_key}
+                      className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <RefreshCw size={13} className={testandoIa === 'openai' ? 'animate-spin' : ''} />
+                      <span>{testandoIa === 'openai' ? 'Testando...' : 'Testar Conexão'}</span>
+                    </button>
+                  </div>
+                  {resultadoTesteIa['openai'] && (
+                    <span className={`text-xs font-bold ${resultadoTesteIa['openai'].ok ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {resultadoTesteIa['openai'].ok ? `✓ OK (${resultadoTesteIa['openai'].tempo}ms)` : '✕ Erro'}
+                    </span>
+                  )}
+                </div>
                 {resultadoTesteIa['openai'] && (
-                  <span className={`text-xs font-medium ${resultadoTesteIa['openai'].ok ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {resultadoTesteIa['openai'].ok ? `✓ OK (${resultadoTesteIa['openai'].tempo}ms)` : '✕ Erro'}
-                  </span>
+                  <div className={`mt-3 p-2.5 rounded-lg text-xs leading-relaxed ${resultadoTesteIa['openai'].ok ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                    {resultadoTesteIa['openai'].msg}
+                  </div>
                 )}
               </div>
             </div>
@@ -701,20 +747,39 @@ export default function IntegracoesPage() {
                 </div>
               </div>
 
-              <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => handleTestarIa('claude')}
-                  disabled={testandoIa === 'claude' || !claude.credenciais?.api_key}
-                  className="px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
-                >
-                  <RefreshCw size={14} className={testandoIa === 'claude' ? 'animate-spin' : ''} />
-                  {testandoIa === 'claude' ? 'Testando...' : 'Testar Conexão'}
-                </button>
+              <div className="mt-5 pt-4 border-t border-slate-100">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSalvarIndividual('claude')}
+                      disabled={!claude.credenciais?.api_key}
+                      className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
+                      title="Salvar esta chave agora no banco"
+                    >
+                      <Save size={13} />
+                      <span>Salvar</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTestarIa('claude')}
+                      disabled={testandoIa === 'claude' || !claude.credenciais?.api_key}
+                      className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+                    >
+                      <RefreshCw size={13} className={testandoIa === 'claude' ? 'animate-spin' : ''} />
+                      <span>{testandoIa === 'claude' ? 'Testando...' : 'Testar Conexão'}</span>
+                    </button>
+                  </div>
+                  {resultadoTesteIa['claude'] && (
+                    <span className={`text-xs font-bold ${resultadoTesteIa['claude'].ok ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {resultadoTesteIa['claude'].ok ? `✓ OK (${resultadoTesteIa['claude'].tempo}ms)` : '✕ Erro'}
+                    </span>
+                  )}
+                </div>
                 {resultadoTesteIa['claude'] && (
-                  <span className={`text-xs font-medium ${resultadoTesteIa['claude'].ok ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {resultadoTesteIa['claude'].ok ? `✓ OK (${resultadoTesteIa['claude'].tempo}ms)` : '✕ Erro'}
-                  </span>
+                  <div className={`mt-3 p-2.5 rounded-lg text-xs leading-relaxed ${resultadoTesteIa['claude'].ok ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                    {resultadoTesteIa['claude'].msg}
+                  </div>
                 )}
               </div>
             </div>

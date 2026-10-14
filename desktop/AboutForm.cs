@@ -59,7 +59,7 @@ namespace HubParatechDesktop
             // Versão Oficial
             var lblVersion = new Label
             {
-                Text = "Versão v2.3.7 • Build Oficial Outubro/2026",
+                Text = "Versão v2.3.8 • Build Oficial Outubro/2026",
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(14, 116, 144), // cyan-700
                 TextAlign = ContentAlignment.MiddleCenter,

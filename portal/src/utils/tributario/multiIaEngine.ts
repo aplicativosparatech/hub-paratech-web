@@ -88,16 +88,22 @@ async function chamarGemini(apiKey: string, model: string, item: ItemAuditoriaIn
   try {
     const cleanKey = (apiKey || '').trim();
     if (!cleanKey) {
-      (globalThis as any).__lastGeminiError = 'Chave de API não informada.';
+      (globalThis as any).__lastGeminiError = 'Chave de API do Google Gemini não informada.';
       return null;
     }
 
-    // Se o usuário selecionou gemini-1.5-pro, tenta ele primeiro.
-    // Se esgotar a cota ou falhar, tenta gemini-1.5-flash e gemini-2.0-flash como fallback transparente.
+    // Se o usuário selecionou gemini-2.0-flash (descontinuado pelo Google), migra automaticamente para gemini-2.5-flash
+    let modeloPreferencial = (model || 'gemini-2.5-flash').trim();
+    if (modeloPreferencial.includes('2.0')) {
+      modeloPreferencial = 'gemini-2.5-flash';
+    }
+
+    // Esteira de modelos do Google AI Studio em ordem de prioridade e cota
     const modelosParaTentar = [
-      model || 'gemini-1.5-flash',
+      modeloPreferencial,
+      'gemini-2.5-flash',
       'gemini-1.5-flash',
-      'gemini-2.0-flash',
+      'gemini-2.5-pro',
       'gemini-1.5-pro'
     ];
     const modelosUnicos = Array.from(new Set(modelosParaTentar));
@@ -123,7 +129,8 @@ async function chamarGemini(apiKey: string, model: string, item: ItemAuditoriaIn
           const errData = await res.json().catch(() => null);
           ultimoErroMsg = errData?.error?.message || `HTTP ${res.status}`;
           console.warn(`[Gemini Engine] Falha no modelo ${m}: ${ultimoErroMsg}`);
-          continue; // Tenta o próximo modelo
+          // Se o erro for de modelo indisponível/descontinuado ou cota esgotada, tenta o próximo modelo
+          continue;
         }
 
         const data = await res.json();
@@ -152,36 +159,71 @@ async function chamarGemini(apiKey: string, model: string, item: ItemAuditoriaIn
 // 2. Groq Cloud - Llama 3.3 (Grátis via Groq API)
 async function chamarGroq(apiKey: string, model: string, item: ItemAuditoriaInput): Promise<RespostaIaItem | null> {
   try {
+    const cleanKey = (apiKey || '').trim();
+    if (!cleanKey) {
+      (globalThis as any).__lastGroqError = 'Chave de API do Groq Cloud não informada.';
+      return null;
+    }
+
+    const modelosGroq = [
+      (model || 'llama-3.3-70b-versatile').trim(),
+      'llama-3.3-70b-versatile',
+      'llama-3.1-8b-instant'
+    ];
+    const modelosUnicos = Array.from(new Set(modelosGroq));
+
     const url = 'https://api.groq.com/openai/v1/chat/completions';
     const systemPrompt = buildSystemPrompt(item.crt, item.uf);
     const userPrompt = `ITEM PARA ANÁLISE:\nDescrição: "${item.descricao}"\nNCM Informado: "${item.ncmAtual || ''}"\nCEST Atual: "${item.cestAtual || ''}"\nCFOP Atual: "${item.cfopAtual || ''}"\nCSOSN/CST Atual: "${item.csosnAtual || ''}"\nValor: R$ ${item.valor || 0}`;
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: model || 'llama-3.3-70b-versatile',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.1,
-        response_format: { type: 'json_object' }
-      }),
-      signal: AbortSignal.timeout(12000)
-    });
+    let ultimoErroMsg = '';
 
-    if (!res.ok) return null;
-    const data = await res.json();
-    const rawText = data.choices?.[0]?.message?.content;
-    if (!rawText) return null;
+    for (const m of modelosUnicos) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${cleanKey}`
+          },
+          body: JSON.stringify({
+            model: m,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.1,
+            response_format: { type: 'json_object' }
+          }),
+          signal: AbortSignal.timeout(12000)
+        });
 
-    const parsed = JSON.parse(rawText);
-    return normalizarRespostaIa('groq', 'Groq (Llama 3.3)', parsed, item);
-  } catch {
+        if (!res.ok) {
+          const errData = await res.json().catch(() => null);
+          ultimoErroMsg = errData?.error?.message || `HTTP ${res.status}`;
+          console.warn(`[Groq Engine] Falha no modelo ${m}: ${ultimoErroMsg}`);
+          continue;
+        }
+
+        const data = await res.json();
+        const rawText = data.choices?.[0]?.message?.content;
+        if (!rawText) continue;
+
+        const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(cleanJson);
+        return normalizarRespostaIa('groq', `Groq (${m})`, parsed, item);
+      } catch (errM: any) {
+        ultimoErroMsg = errM.message;
+        console.warn(`[Groq Engine] Erro no modelo ${m}:`, errM.message);
+      }
+    }
+
+    if (ultimoErroMsg) {
+      (globalThis as any).__lastGroqError = ultimoErroMsg;
+    }
+    return null;
+  } catch (err: any) {
+    (globalThis as any).__lastGroqError = err.message;
     return null;
   }
 }
@@ -189,6 +231,12 @@ async function chamarGroq(apiKey: string, model: string, item: ItemAuditoriaInpu
 // 3. OpenAI (GPT-4o / GPT-4o-mini)
 async function chamarOpenAi(apiKey: string, model: string, item: ItemAuditoriaInput): Promise<RespostaIaItem | null> {
   try {
+    const cleanKey = (apiKey || '').trim();
+    if (!cleanKey) {
+      (globalThis as any).__lastOpenAiError = 'Chave de API da OpenAI não informada.';
+      return null;
+    }
+
     const url = 'https://api.openai.com/v1/chat/completions';
     const systemPrompt = buildSystemPrompt(item.crt, item.uf);
     const userPrompt = `ITEM PARA ANÁLISE:\nDescrição: "${item.descricao}"\nNCM: "${item.ncmAtual || ''}"\nCEST: "${item.cestAtual || ''}"\nCFOP: "${item.cfopAtual || ''}"\nCSOSN/CST: "${item.csosnAtual || ''}"\nValor: R$ ${item.valor || 0}`;
@@ -197,7 +245,7 @@ async function chamarOpenAi(apiKey: string, model: string, item: ItemAuditoriaIn
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+        'Authorization': `Bearer ${cleanKey}`
       },
       body: JSON.stringify({
         model: model || 'gpt-4o-mini',
@@ -211,14 +259,19 @@ async function chamarOpenAi(apiKey: string, model: string, item: ItemAuditoriaIn
       signal: AbortSignal.timeout(12000)
     });
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const errData = await res.json().catch(() => null);
+      (globalThis as any).__lastOpenAiError = errData?.error?.message || `HTTP ${res.status}`;
+      return null;
+    }
     const data = await res.json();
     const rawText = data.choices?.[0]?.message?.content;
     if (!rawText) return null;
 
     const parsed = JSON.parse(rawText);
     return normalizarRespostaIa('openai', 'OpenAI ChatGPT', parsed, item);
-  } catch {
+  } catch (err: any) {
+    (globalThis as any).__lastOpenAiError = err.message;
     return null;
   }
 }
@@ -226,6 +279,12 @@ async function chamarOpenAi(apiKey: string, model: string, item: ItemAuditoriaIn
 // 4. Anthropic Claude (Claude 3.5 Sonnet / Haiku)
 async function chamarClaude(apiKey: string, model: string, item: ItemAuditoriaInput): Promise<RespostaIaItem | null> {
   try {
+    const cleanKey = (apiKey || '').trim();
+    if (!cleanKey) {
+      (globalThis as any).__lastClaudeError = 'Chave de API da Anthropic Claude não informada.';
+      return null;
+    }
+
     const url = 'https://api.anthropic.com/v1/messages';
     const systemPrompt = buildSystemPrompt(item.crt, item.uf);
     const userPrompt = `ITEM PARA ANÁLISE:\nDescrição: "${item.descricao}"\nNCM: "${item.ncmAtual || ''}"\nCEST: "${item.cestAtual || ''}"\nCFOP: "${item.cfopAtual || ''}"\nCSOSN/CST: "${item.csosnAtual || ''}"\nValor: R$ ${item.valor || 0}\n\nResponda APENAS o JSON.`;
@@ -234,11 +293,11 @@ async function chamarClaude(apiKey: string, model: string, item: ItemAuditoriaIn
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
+        'x-api-key': cleanKey,
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: model || 'claude-3-5-sonnet-20241022',
+        model: model || 'claude-3-5-haiku-20241022',
         max_tokens: 1024,
         temperature: 0.1,
         system: systemPrompt,
@@ -247,7 +306,11 @@ async function chamarClaude(apiKey: string, model: string, item: ItemAuditoriaIn
       signal: AbortSignal.timeout(12000)
     });
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const errData = await res.json().catch(() => null);
+      (globalThis as any).__lastClaudeError = errData?.error?.message || `HTTP ${res.status}`;
+      return null;
+    }
     const data = await res.json();
     const rawText = data.content?.[0]?.text;
     if (!rawText) return null;

@@ -43,23 +43,66 @@ export async function POST(req: Request) {
     let mensagemRetorno = isSucesso ? `Conectado com sucesso em ${duracaoMs}ms via ${resp.nomeProvedor}!` : '';
 
     if (!isSucesso) {
-      const lastErr = (globalThis as any).__lastGeminiError;
-      if (lastErr) {
-        if (lastErr.includes('API key not valid') || lastErr.includes('API_KEY_INVALID')) {
+      let lastErr = '';
+      if (provedor === 'gemini') {
+        lastErr = (globalThis as any).__lastGeminiError || '';
+        if (lastErr.includes('API key not valid') || lastErr.includes('API_KEY_INVALID') || lastErr.includes('401')) {
           mensagemRetorno = 'Chave da API do Google Gemini inválida. Verifique se copiou a chave completa no Google AI Studio (geralmente começa com AIzaSy...).';
-        } else if (lastErr.includes('RESOURCE_EXHAUSTED') || lastErr.includes('quota') || lastErr.includes('capacity')) {
-          mensagemRetorno = 'Cota do modelo Gemini Pro esgotada no Google AI Studio. Dica: selecione o modelo "Gemini 1.5 Flash" ou "Gemini 2.0 Flash" que tem limites muito maiores e 100% gratuitos!';
-        } else {
+        } else if (lastErr.includes('RESOURCE_EXHAUSTED') || lastErr.includes('quota') || lastErr.includes('capacity') || lastErr.includes('429')) {
+          mensagemRetorno = 'Cota esgotada no Google AI Studio. Dica: selecione o modelo "Gemini 2.5 Flash" ou "Gemini 1.5 Flash" que tem limites gratuitos muito maiores!';
+        } else if (lastErr.includes('no longer available') || lastErr.includes('not found') || lastErr.includes('404')) {
+          mensagemRetorno = 'O modelo anterior do Gemini foi descontinuado pelo Google. O sistema já o atualizou para o novo modelo oficial "Gemini 2.5 Flash".';
+        } else if (lastErr) {
           mensagemRetorno = `Google API: ${lastErr}`;
         }
-      } else {
-        mensagemRetorno = 'Não foi possível obter resposta desta IA. Verifique a chave ou endpoint.';
+      } else if (provedor === 'groq') {
+        lastErr = (globalThis as any).__lastGroqError || '';
+        if (lastErr.includes('Invalid API Key') || lastErr.includes('invalid_api_key') || lastErr.includes('401')) {
+          mensagemRetorno = 'Chave de API do Groq inválida. Obtenha sua chave gratuita em console.groq.com/keys (começa com gsk_...).';
+        } else if (lastErr.includes('rate_limit') || lastErr.includes('429') || lastErr.includes('Tokens per minute') || lastErr.includes('TPM')) {
+          mensagemRetorno = 'Limite de requisições por minuto atingido no Groq Cloud. Alterne para o modelo "Llama 3.1 8B Instant" ou aguarde alguns segundos.';
+        } else if (lastErr) {
+          mensagemRetorno = `Groq API: ${lastErr}`;
+        }
+      } else if (provedor === 'openai') {
+        lastErr = (globalThis as any).__lastOpenAiError || '';
+        if (lastErr.includes('Incorrect API key') || lastErr.includes('401')) {
+          mensagemRetorno = 'Chave da API da OpenAI inválida (sk-...).';
+        } else if (lastErr.includes('insufficient_quota') || lastErr.includes('quota')) {
+          mensagemRetorno = 'Sua conta da OpenAI está sem créditos de API.';
+        } else if (lastErr) {
+          mensagemRetorno = `OpenAI API: ${lastErr}`;
+        }
+      } else if (provedor === 'claude') {
+        lastErr = (globalThis as any).__lastClaudeError || '';
+        if (lastErr.includes('401') || lastErr.includes('invalid x-api-key')) {
+          mensagemRetorno = 'Chave da API da Anthropic Claude inválida.';
+        } else if (lastErr) {
+          mensagemRetorno = `Anthropic Claude: ${lastErr}`;
+        }
+      }
+
+      if (!mensagemRetorno) {
+        mensagemRetorno = lastErr ? `Erro: ${lastErr}` : 'Não foi possível obter resposta desta IA. Verifique a chave ou endpoint.';
       }
     }
 
-    // Se o teste foi um sucesso, já salva a configuração no Supabase automaticamente!
+    // Se o teste foi um sucesso, já salva a configuração no Supabase automaticamente com o modelo adequado!
     if (isSucesso && provedor) {
       try {
+        const modeloPadraoPorProvedor: Record<string, string> = {
+          gemini: 'gemini-2.5-flash',
+          groq: 'llama-3.3-70b-versatile',
+          openai: 'gpt-4o-mini',
+          claude: 'claude-3-5-haiku-20241022',
+          ollama: 'llama3'
+        };
+
+        let modeloEscolhido = credenciais?.model;
+        if (!modeloEscolhido || (provedor === 'gemini' && modeloEscolhido.includes('2.0'))) {
+          modeloEscolhido = modeloPadraoPorProvedor[provedor] || 'gemini-2.5-flash';
+        }
+
         const supabase = createAdminClient();
         await supabase.from('integracoes').upsert({
           provedor,
@@ -68,7 +111,7 @@ export async function POST(req: Request) {
           credenciais: {
             ...credenciais,
             api_key: (credenciais?.api_key || '').trim(),
-            model: credenciais?.model || 'gemini-1.5-flash'
+            model: modeloEscolhido
           }
         }, { onConflict: 'provedor' });
       } catch (saveErr) {
