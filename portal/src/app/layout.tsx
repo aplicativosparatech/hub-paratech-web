@@ -13,8 +13,16 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Paratech Fiscal Hub",
-  description: "Sistema de Gestão Fiscal e Automação de Arquivos XML - Paratech Sistemas",
+  title: "Hub Paratech - Gestão Fiscal & Tributária Inteligente",
+  description: "Sistema de Gestão Fiscal, Reforma Tributária (IBS/CBS) e Automação de Arquivos XML - Paratech Soluções e Sistemas",
+  icons: {
+    icon: [
+      { url: '/favicon.png', type: 'image/png' },
+      { url: '/favicon.ico' }
+    ],
+    shortcut: '/favicon.png',
+    apple: '/favicon.png',
+  }
 };
 
 import { Toaster } from 'react-hot-toast';
@@ -22,7 +30,7 @@ import { Toaster } from 'react-hot-toast';
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
-      lang="en"
+      lang="pt-BR"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">

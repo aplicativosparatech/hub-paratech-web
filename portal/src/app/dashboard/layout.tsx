@@ -5,12 +5,14 @@ import { usePathname, useRouter } from 'next/navigation'
 import { 
   LayoutDashboard, Users, Building2, Settings, FileText, 
   LogOut, BarChart3, Receipt, FileDown, PlugZap, UserCircle,
-  Menu, X, Sliders, ShieldCheck, Sparkles, Database
+  Menu, X, Sliders, ShieldCheck, Sparkles, Database,
+  Maximize2, Minimize2
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { PermissoesMap } from '@/utils/permissoes'
+import { APP_VERSION } from '@/utils/version'
 
 type Role = 'admin' | 'cliente' | 'contabilidade'
 
@@ -22,6 +24,53 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [permissoesMap, setPermissoesMap] = useState<PermissoesMap>({})
   const [loading, setLoading] = useState(true)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [showSplash, setShowSplash] = useState(true)
+  const [splashProgress, setSplashProgress] = useState(0)
+
+  // 1. Splash Screen de 2 segundos com barra de progresso suave
+  useEffect(() => {
+    const startTime = Date.now()
+    const duration = 2000
+
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - startTime
+      const progress = Math.min(100, Math.round((elapsed / duration) * 100))
+      setSplashProgress(progress)
+
+      if (elapsed >= duration) {
+        clearInterval(interval)
+        setTimeout(() => {
+          setShowSplash(false)
+        }, 150)
+      }
+    }, 25)
+
+    return () => clearInterval(interval)
+  }, [])
+
+  // 2. Listener e Controle de Tela Inteira (Modo Kiosk F11)
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.error('Erro ao ativar tela inteira:', err)
+      })
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(err => {
+          console.error('Erro ao sair de tela cheia:', err)
+        })
+      }
+    }
+  }
+
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+    document.addEventListener('fullscreenchange', handleFsChange)
+    return () => document.removeEventListener('fullscreenchange', handleFsChange)
+  }, [])
 
   useEffect(() => {
     async function loadRole() {
@@ -128,11 +177,45 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     router.push('/login')
   }
 
-  if (loading) {
+  if (showSplash || loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50/50">
-        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <div className="text-slate-500 font-medium">Carregando painel...</div>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-white relative overflow-hidden select-none">
+        {/* Glow de fundo */}
+        <div className="absolute w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div className="relative z-10 flex flex-col items-center max-w-sm w-full px-6 space-y-6 text-center animate-in fade-in duration-300">
+          <img 
+            src="/logo-paratech.webp" 
+            alt="Paratech Soluções & Sistemas" 
+            className="h-16 sm:h-20 w-auto object-contain drop-shadow-2xl animate-pulse"
+          />
+          
+          <div className="space-y-1">
+            <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+              Hub<span className="text-blue-500">Paratech</span>
+            </h2>
+            <p className="text-xs text-slate-400">
+              Ecossistema Fiscal & Inteligência Tributária
+            </p>
+          </div>
+          
+          {/* Barra de Progresso Animada */}
+          <div className="w-full bg-slate-900 rounded-full h-2.5 p-0.5 border border-slate-800 overflow-hidden shadow-inner">
+            <div 
+              className="bg-gradient-to-r from-blue-500 via-indigo-500 to-cyan-400 h-full rounded-full transition-all duration-75 ease-out shadow-sm"
+              style={{ width: `${splashProgress}%` }}
+            />
+          </div>
+
+          <div className="flex items-center justify-between w-full text-[11px] text-slate-400 font-mono">
+            <span>Carregando ecossistema fiscal...</span>
+            <span className="font-bold text-blue-400">{splashProgress}%</span>
+          </div>
+        </div>
+
+        <div className="absolute bottom-6 text-[11px] text-slate-500 font-medium">
+          Paratech Soluções & Sistemas • {APP_VERSION}
+        </div>
       </div>
     )
   }
@@ -157,26 +240,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const SidebarContent = () => (
     <>
-      <div className="p-6 lg:p-8 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
-            <Building2 size={22} className="text-white" />
-          </div>
+      <div className="p-5 lg:p-6 pb-4 border-b border-slate-100 flex items-start justify-between">
+        <div className="flex flex-col items-start gap-2.5">
+          {/* Logo Paratech Oficial (Imagem 01) Acima do Nome */}
+          <Link href="/dashboard" className="block transition-transform hover:scale-[1.02]">
+            <img 
+              src="/logo-paratech.webp" 
+              alt="Paratech Soluções & Sistemas" 
+              className="h-10 sm:h-11 w-auto object-contain"
+            />
+          </Link>
           <div className="flex items-center gap-2">
-            <h2 className="text-2xl font-bold tracking-tight text-slate-800">
+            <h2 className="text-xl font-black tracking-tight text-slate-800">
               Hub<span className="text-blue-600">Paratech</span>
             </h2>
-            <span className="text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-md border border-blue-200">
-              v2.1.0
+            <span className="text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-md border border-blue-200">
+              {APP_VERSION}
             </span>
           </div>
         </div>
         {/* Botão fechar para mobile */}
         <button 
           onClick={() => setMobileMenuOpen(false)} 
-          className="md:hidden p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg"
+          className="md:hidden p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg -mt-1 -mr-2"
         >
-          <X size={22} />
+          <X size={20} />
         </button>
       </div>
       
@@ -262,7 +350,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         <div className="mt-3 pt-2.5 border-t border-slate-200/70 flex items-center justify-between text-[11px] text-slate-400 px-1">
           <span>Portal & Hub</span>
-          <span className="font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">v2.1.0</span>
+          <span className="font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">{APP_VERSION}</span>
         </div>
       </div>
     </>
@@ -309,17 +397,66 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </h1>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
+            {/* Botão Modo Kiosk / Tela Inteira (F11) */}
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition border border-slate-200/80 shadow-xs cursor-pointer"
+              title={isFullscreen ? "Sair da Tela Cheia (F11)" : "Modo Tela Inteira / Kiosk (F11)"}
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize2 size={14} className="text-blue-600" />
+                  <span className="hidden sm:inline">Sair Tela Cheia</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 size={14} className="text-slate-600" />
+                  <span className="hidden sm:inline">Tela Inteira</span>
+                </>
+              )}
+            </button>
+
             <span className="hidden sm:inline-block px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-600 border border-blue-100 capitalize">
               {role}
             </span>
           </div>
         </header>
         
-        {/* Área de conteúdo EXPANDIDA (Sem max-w-7xl que encurtava as tabelas) */}
-        <div className="p-4 sm:p-6 lg:p-8 w-full flex-1">
+        {/* Área de conteúdo EXPANDIDA com padding inferior para o rodapé fixo */}
+        <div className="p-4 sm:p-6 lg:p-8 w-full flex-1 pb-16">
           {children}
         </div>
+
+        {/* Rodapé Fixo e Discreto */}
+        <footer className="h-9 bg-white/95 backdrop-blur-md border-t border-slate-200/80 fixed bottom-0 left-0 right-0 md:left-64 lg:left-72 z-20 flex items-center justify-between px-4 sm:px-6 text-[11px] text-slate-500 shadow-xs">
+          <div className="flex items-center gap-1.5 truncate">
+            <span>Desenvolvido por <strong className="text-slate-700 font-semibold">Paratech Soluções e Sistemas</strong> -</span>
+            <a 
+              href="https://paratechsolucoes.com.br" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-700 hover:underline font-medium transition-colors"
+            >
+              www.paratechsolucoes.com.br
+            </a>
+          </div>
+          <div className="flex items-center gap-1.5 text-right pl-3 truncate">
+            <span className="hidden sm:inline text-slate-400">Analista programador Responsável:</span>
+            <span className="sm:hidden text-slate-400">Resp:</span>
+            <strong className="text-slate-700 font-semibold">Regis Alexandre</strong>
+            <span className="text-slate-300">•</span>
+            <a 
+              href="https://wa.me/5537920007857?text=Ol%C3%A1%20Regis,%20contato%20atrav%C3%A9s%20do%20HubParatech" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-700 font-bold hover:underline transition-colors"
+            >
+              <span>37 92000 - 78 57</span>
+            </a>
+          </div>
+        </footer>
       </main>
     </div>
   )
