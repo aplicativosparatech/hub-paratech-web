@@ -9,6 +9,27 @@ import {
 import toast from 'react-hot-toast'
 import { ServicoSefazStatus, SefazStatusGeralResponse } from '@/app/api/sefaz/status/route'
 
+export const ESTADOS_POR_AUTORIZADOR: Record<string, { nome: string; ufs: string[]; descricao?: string }> = {
+  'AM': { nome: 'Amazonas', ufs: ['AM'] },
+  'BA': { nome: 'Bahia', ufs: ['BA'] },
+  'GO': { nome: 'Goiás', ufs: ['GO'] },
+  'MG': { nome: 'Minas Gerais', ufs: ['MG'] },
+  'MS': { nome: 'Mato Grosso do Sul', ufs: ['MS'] },
+  'MT': { nome: 'Mato Grosso', ufs: ['MT'] },
+  'PE': { nome: 'Pernambuco', ufs: ['PE'] },
+  'PR': { nome: 'Paraná', ufs: ['PR'] },
+  'RS': { nome: 'Rio Grande do Sul', ufs: ['RS'] },
+  'SP': { nome: 'São Paulo', ufs: ['SP'] },
+  'SVAN': { nome: 'SEFAZ Virtual AN', ufs: ['MA', 'PA', 'PI'], descricao: 'Atende MA, PA e PI' },
+  'SVRS': { 
+    nome: 'SEFAZ Virtual RS', 
+    ufs: ['AC', 'AL', 'AP', 'DF', 'ES', 'PB', 'RJ', 'RN', 'RO', 'RR', 'SC', 'SE', 'TO'], 
+    descricao: 'Atende RJ, ES, SC, DF, AL, PB, RN, SE, TO, AC, AP, RO, RR' 
+  },
+  'SVC-AN': { nome: 'Contingência SVC-AN', ufs: ['AC', 'AL', 'AP', 'DF', 'ES', 'MG', 'PB', 'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO'], descricao: 'Servidor Virtual de Contingência Nacional' },
+  'SVC-RS': { nome: 'Contingência SVC-RS', ufs: ['AM', 'BA', 'GO', 'MA', 'MS', 'MT', 'PA', 'PE', 'PI', 'PR'], descricao: 'Servidor Virtual de Contingência RS' }
+}
+
 export default function SefazStatusBadge() {
   const [statusData, setStatusData] = useState<SefazStatusGeralResponse | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
@@ -110,10 +131,16 @@ export default function SefazStatusBadge() {
 
   const cfg = getStatusColorConfig()
 
-  // Filtragem dos autorizadores no modal
+  // Filtragem dos autorizadores no modal (suporta buscar por qualquer estado, ex: RJ, SC, ES, MG)
   const autorizadoresFiltrados = (statusData?.autorizadores || []).filter(item => {
-    const matchUf = item.autorizador.toLowerCase().includes(filtroUf.toLowerCase())
-    if (!matchUf) return false
+    const q = filtroUf.toLowerCase().trim()
+    if (q) {
+      const info = ESTADOS_POR_AUTORIZADOR[item.autorizador]
+      const matchAut = item.autorizador.toLowerCase().includes(q)
+      const matchNome = info?.nome.toLowerCase().includes(q)
+      const matchUfs = info?.ufs.some(u => u.toLowerCase() === q || u.toLowerCase().includes(q))
+      if (!matchAut && !matchNome && !matchUfs) return false
+    }
 
     if (abaFiltro === 'instaveis') {
       const temAmarela = Object.values(item).includes('amarela')
@@ -122,7 +149,7 @@ export default function SefazStatusBadge() {
     }
 
     if (abaFiltro === 'principais') {
-      const principais = ['MG', 'SP', 'RS', 'PR', 'RJ', 'SVRS', 'SVAN', 'SVC-AN', 'SVC-RS']
+      const principais = ['MG', 'SP', 'RS', 'PR', 'SVRS', 'SVAN', 'SVC-AN', 'SVC-RS']
       return principais.includes(item.autorizador)
     }
 
@@ -291,12 +318,34 @@ export default function SefazStatusBadge() {
             </div>
 
             {/* Tabela de Serviços por Autorizador */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 space-y-4">
+              
+              {/* Banner Dinâmico de Diagnóstico dos Estados */}
+              {statusData && (statusData.totalInstaveis > 0 || statusData.totalFalhas > 0) ? (
+                <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 flex items-start gap-3 text-xs text-amber-900 dark:text-amber-200">
+                  <AlertTriangle size={18} className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="font-bold">Atenção Fiscal:</strong> Há {statusData.totalInstaveis} serviço(s) com lentidão / instabilidade e {statusData.totalFalhas} inoperante(s).
+                    <div className="text-[11px] text-amber-800 dark:text-amber-300 mt-1">
+                      <strong>Estados / Autorizadores com alerta:</strong> {statusData.autorizadores
+                        .filter(a => [a.autorizacao, a.retornoAutorizacao, a.statusServico, a.consultaProtocolo, a.recepcaoEvento].some(v => v === 'amarela' || v === 'vermelha'))
+                        .map(a => `${a.autorizador} (${ESTADOS_POR_AUTORIZADOR[a.autorizador]?.nome || a.autorizador})`)
+                        .join(', ')}.
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 flex items-center gap-2.5 text-xs text-emerald-800 dark:text-emerald-300">
+                  <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                  <span><strong>Todos os 27 estados e o DF</strong> estão operando com 100% de estabilidade e servidores verdes na SEFAZ neste momento.</span>
+                </div>
+              )}
+
               <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-50 dark:bg-slate-900 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
                     <tr>
-                      <th className="px-4 py-2.5">Autorizador</th>
+                      <th className="px-4 py-2.5">Autorizador / Estados</th>
                       <th className="px-2 py-2.5 text-center" title="Autorização de NF-e e NFC-e">Autorização</th>
                       <th className="px-2 py-2.5 text-center" title="Retorno de Lote">Retorno</th>
                       <th className="px-2 py-2.5 text-center" title="Consulta Protocolo">Protocolo</th>
@@ -315,6 +364,7 @@ export default function SefazStatusBadge() {
                     ) : (
                       autorizadoresFiltrados.map((aut) => {
                         const isSvc = aut.autorizador.startsWith('SVC')
+                        const info = ESTADOS_POR_AUTORIZADOR[aut.autorizador]
                         return (
                           <tr 
                             key={aut.autorizador} 
@@ -322,15 +372,26 @@ export default function SefazStatusBadge() {
                               isSvc ? 'bg-blue-50/20 dark:bg-blue-950/20 font-bold' : ''
                             }`}
                           >
-                            <td className="px-4 py-2.5 flex items-center gap-2">
-                              <span className="font-mono font-bold text-slate-800 dark:text-slate-100">
-                                {aut.autorizador}
-                              </span>
-                              {isSvc && (
-                                <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300">
-                                  Contingência
+                            <td className="px-4 py-2.5">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
+                                  {aut.autorizador}
                                 </span>
-                              )}
+                                {isSvc && (
+                                  <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300">
+                                    Contingência
+                                  </span>
+                                )}
+                              </div>
+                              {info?.descricao ? (
+                                <div className="text-[10px] text-blue-600 dark:text-blue-400 font-medium truncate max-w-[280px]" title={info.descricao}>
+                                  {info.descricao}
+                                </div>
+                              ) : info?.nome && !isSvc ? (
+                                <div className="text-[10px] text-slate-400">
+                                  {info.nome}
+                                </div>
+                              ) : null}
                             </td>
                             <td className="px-2 py-2.5 text-center">{renderItemStatusIcon(aut.autorizacao)}</td>
                             <td className="px-2 py-2.5 text-center">{renderItemStatusIcon(aut.retornoAutorizacao)}</td>
