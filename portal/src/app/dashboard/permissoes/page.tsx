@@ -8,7 +8,8 @@ import {
   Coins, AlertTriangle, Receipt, Sliders, Users, 
   UserCircle, CheckCircle2, XCircle, Save, RotateCcw, 
   Search, Filter, Lock, Unlock, Info, Check, 
-  HelpCircle, Eye, EyeOff
+  HelpCircle, Eye, EyeOff, Sparkles, Database, Settings, 
+  PlugZap, Wrench
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ModuloPermissao } from '@/utils/permissoes'
@@ -24,7 +25,12 @@ const ICONES_MAP: Record<string, any> = {
   Sliders,
   Users,
   UserCircle,
-  ShieldCheck
+  ShieldCheck,
+  Sparkles,
+  Database,
+  Settings,
+  PlugZap,
+  Wrench
 }
 
 export default function PermissoesPage() {
