@@ -12,6 +12,7 @@ const BANNER_MAP: Record<string, string> = {
   '/dashboard/notas-fiscais': '/banners/notas-fiscais.webp',
   '/dashboard/corretor-tributario': '/banners/corretor-tributario.webp',
   '/dashboard/saneador-arquivos': '/banners/saneador-arquivos.webp',
+  '/dashboard/sugestor-tributario': '/banners/sugestor-tributario.webp',
   '/dashboard/relatorios': '/banners/relatorios.webp',
   '/dashboard/integracoes': '/banners/integracoes.webp',
   '/dashboard/permissoes': '/banners/permissoes.webp',

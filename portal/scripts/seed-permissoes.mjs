@@ -245,6 +245,66 @@ const modulos = [
     permitido_cliente: true,
     permitido_contabilidade: true,
     permitido_admin: true
+  },
+  {
+    modulo_chave: 'sugestor_tributario',
+    nome: 'Sugestor Tributário & OCR Fiscal',
+    descricao: 'Acesso à aba de apoio fiscal com sugestão inteligente de NCM, CFOP, CSOSN/CST, PIS/COFINS, IBS/CBS e OCR.',
+    categoria: 'Inteligência Tributária & Auditoria',
+    rota: '/dashboard/sugestor-tributario',
+    icone: 'ScanText',
+    ordem: 21,
+    permitido_cliente: true,
+    permitido_contabilidade: true,
+    permitido_admin: true
+  },
+  {
+    modulo_chave: 'sugestor_consulta_unitario',
+    nome: 'Sugestor: Consulta Unitária por Digitação',
+    descricao: 'Permite digitar o nome de um produto individual e buscar o enquadramento tributário completo e automático.',
+    categoria: 'Inteligência Tributária & Auditoria',
+    rota: null,
+    icone: 'Search',
+    ordem: 22,
+    permitido_cliente: true,
+    permitido_contabilidade: true,
+    permitido_admin: true
+  },
+  {
+    modulo_chave: 'sugestor_importar_arquivos',
+    nome: 'Sugestor: Importar Planilhas & Arquivos TXT',
+    descricao: 'Permite enviar listas de produtos em massa (.xlsx, .xls, .csv, .txt) para classificação tributária em lote.',
+    categoria: 'Inteligência Tributária & Auditoria',
+    rota: null,
+    icone: 'Database',
+    ordem: 23,
+    permitido_cliente: true,
+    permitido_contabilidade: true,
+    permitido_admin: true
+  },
+  {
+    modulo_chave: 'sugestor_ocr_foto',
+    nome: 'Sugestor: Leitura de Produtos por Foto (OCR / Visão IA)',
+    descricao: 'Permite enviar fotos de etiquetas, gôndolas ou notas para extração automática dos produtos via OCR com IA.',
+    categoria: 'Inteligência Tributária & Auditoria',
+    rota: null,
+    icone: 'ScanText',
+    ordem: 24,
+    permitido_cliente: true,
+    permitido_contabilidade: true,
+    permitido_admin: true
+  },
+  {
+    modulo_chave: 'sugestor_exportar_tabela',
+    nome: 'Sugestor: Download da Tabela Totalmente Tributada',
+    descricao: 'Permite baixar os resultados da tributação em Excel (.xlsx), CSV, TXT formatado ou JSON para ERPs.',
+    categoria: 'Inteligência Tributária & Auditoria',
+    rota: null,
+    icone: 'Download',
+    ordem: 25,
+    permitido_cliente: true,
+    permitido_contabilidade: true,
+    permitido_admin: true
   }
 ];
 

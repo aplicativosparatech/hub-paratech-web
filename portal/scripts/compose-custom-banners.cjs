@@ -55,6 +55,14 @@ const bannerConfigs = [
     icon2: '<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2"/><path d="M8 17h2"/><path d="M14 13h2"/><path d="M14 17h2"/>'
   },
   {
+    slug: 'sugestor-tributario',
+    aiFilePattern: 'sugestor_tributario_banner',
+    title: 'SUGESTOR TRIBUTÁRIO',
+    motto: 'CLASSIFICAÇÃO FISCAL • OCR DE PRODUTOS • NCM & REFORMA',
+    icon1: '<path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>',
+    icon2: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>'
+  },
+  {
     slug: 'faturas',
     aiFilePattern: 'faturas_banner',
     title: 'FATURAMENTO & RECORRÊNCIA',
