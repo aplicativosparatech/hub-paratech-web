@@ -572,12 +572,13 @@ export default function IntegracoesPage() {
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Modelo</label>
                     <select
-                      value={groq.credenciais?.model || 'llama-3.3-70b-versatile'}
+                      value={(groq.credenciais?.model && groq.credenciais.model !== 'llama-3.1-8b-instant' && !groq.credenciais.model.includes('8b')) ? groq.credenciais.model : 'llama-3.3-70b-versatile'}
                       onChange={e => handleCredencialChange('groq', 'model', e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none"
                     >
-                      <option value="llama-3.3-70b-versatile">Llama 3.3 70B Versatile (Recomendado - Mais Inteligente)</option>
-                      <option value="llama-3.1-8b-instant">Llama 3.1 8B Instant (Ultra Veloz)</option>
+                      <option value="llama-3.3-70b-versatile">Llama 3.3 70B Versatile (Recomendado - 100% Gratuito)</option>
+                      <option value="openai/gpt-oss-120b">OpenAI GPT-OSS 120B (Raciocínio Avançado)</option>
+                      <option value="openai/gpt-oss-20b">OpenAI GPT-OSS 20B (Ultra Rápido - 1.000 tps)</option>
                     </select>
                   </div>
                 </div>

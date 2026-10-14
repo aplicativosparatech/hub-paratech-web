@@ -108,9 +108,11 @@ async function chamarGemini(apiKey: string, model: string, item: ItemAuditoriaIn
     ];
     const modelosUnicos = Array.from(new Set(modelosParaTentar));
 
+    let erroModeloPrincipal = '';
     let ultimoErroMsg = '';
 
-    for (const m of modelosUnicos) {
+    for (let i = 0; i < modelosUnicos.length; i++) {
+      const m = modelosUnicos[i];
       try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${cleanKey}`;
         const prompt = `${buildSystemPrompt(item.crt, item.uf)}\n\nITEM PARA ANÁLISE:\nDescrição: "${item.descricao}"\nNCM Informado no Arquivo: "${item.ncmAtual || 'Não informado'}"\nCEST Atual: "${item.cestAtual || 'Vazio'}"\nCFOP Atual: "${item.cfopAtual || 'Vazio'}"\nCSOSN/CST Atual: "${item.csosnAtual || 'Vazio'}"\nValor Unitário: R$ ${item.valor || 0}`;
@@ -127,9 +129,15 @@ async function chamarGemini(apiKey: string, model: string, item: ItemAuditoriaIn
 
         if (!res.ok) {
           const errData = await res.json().catch(() => null);
-          ultimoErroMsg = errData?.error?.message || `HTTP ${res.status}`;
-          console.warn(`[Gemini Engine] Falha no modelo ${m}: ${ultimoErroMsg}`);
-          // Se o erro for de modelo indisponível/descontinuado ou cota esgotada, tenta o próximo modelo
+          const errMsg = errData?.error?.message || `HTTP ${res.status}`;
+          if (i === 0) erroModeloPrincipal = errMsg;
+          ultimoErroMsg = errMsg;
+          console.warn(`[Gemini Engine] Falha no modelo ${m}: ${errMsg}`);
+
+          // Se a chave for inválida, aborta imediatamente
+          if (errMsg.includes('API key not valid') || errMsg.includes('API_KEY_INVALID') || res.status === 400 && errMsg.includes('API key')) {
+            break;
+          }
           continue;
         }
 
@@ -141,13 +149,15 @@ async function chamarGemini(apiKey: string, model: string, item: ItemAuditoriaIn
         const parsed = JSON.parse(cleanJson);
         return normalizarRespostaIa('gemini', `Google Gemini (${m})`, parsed, item);
       } catch (errM: any) {
+        if (i === 0) erroModeloPrincipal = errM.message;
         ultimoErroMsg = errM.message;
         console.warn(`[Gemini Engine] Erro no modelo ${m}:`, errM.message);
       }
     }
 
-    if (ultimoErroMsg) {
-      (globalThis as any).__lastGeminiError = ultimoErroMsg;
+    const erroFinal = erroModeloPrincipal || ultimoErroMsg;
+    if (erroFinal) {
+      (globalThis as any).__lastGeminiError = erroFinal;
     }
     return null;
   } catch (err: any) {
@@ -165,10 +175,16 @@ async function chamarGroq(apiKey: string, model: string, item: ItemAuditoriaInpu
       return null;
     }
 
+    let modeloEscolhido = (model || 'llama-3.3-70b-versatile').trim();
+    // Migra modelos legados ou sem suporte
+    if (modeloEscolhido === 'llama-3.1-8b-instant' || modeloEscolhido.includes('8b') || modeloEscolhido.includes('8192')) {
+      modeloEscolhido = 'llama-3.3-70b-versatile';
+    }
+
     const modelosGroq = [
-      (model || 'llama-3.3-70b-versatile').trim(),
+      modeloEscolhido,
       'llama-3.3-70b-versatile',
-      'llama-3.1-8b-instant'
+      'openai/gpt-oss-120b'
     ];
     const modelosUnicos = Array.from(new Set(modelosGroq));
 
@@ -176,9 +192,11 @@ async function chamarGroq(apiKey: string, model: string, item: ItemAuditoriaInpu
     const systemPrompt = buildSystemPrompt(item.crt, item.uf);
     const userPrompt = `ITEM PARA ANÁLISE:\nDescrição: "${item.descricao}"\nNCM Informado: "${item.ncmAtual || ''}"\nCEST Atual: "${item.cestAtual || ''}"\nCFOP Atual: "${item.cfopAtual || ''}"\nCSOSN/CST Atual: "${item.csosnAtual || ''}"\nValor: R$ ${item.valor || 0}`;
 
+    let erroModeloPrincipal = '';
     let ultimoErroMsg = '';
 
-    for (const m of modelosUnicos) {
+    for (let i = 0; i < modelosUnicos.length; i++) {
+      const m = modelosUnicos[i];
       try {
         const res = await fetch(url, {
           method: 'POST',
@@ -200,8 +218,15 @@ async function chamarGroq(apiKey: string, model: string, item: ItemAuditoriaInpu
 
         if (!res.ok) {
           const errData = await res.json().catch(() => null);
-          ultimoErroMsg = errData?.error?.message || `HTTP ${res.status}`;
-          console.warn(`[Groq Engine] Falha no modelo ${m}: ${ultimoErroMsg}`);
+          const errMsg = errData?.error?.message || `HTTP ${res.status}`;
+          if (i === 0) erroModeloPrincipal = errMsg;
+          ultimoErroMsg = errMsg;
+          console.warn(`[Groq Engine] Falha no modelo ${m}: ${errMsg}`);
+
+          // Se a chave for inválida ou não autorizada, interrompe imediatamente sem tentar outro modelo
+          if (res.status === 401 || errMsg.toLowerCase().includes('invalid api key')) {
+            break;
+          }
           continue;
         }
 
@@ -213,13 +238,16 @@ async function chamarGroq(apiKey: string, model: string, item: ItemAuditoriaInpu
         const parsed = JSON.parse(cleanJson);
         return normalizarRespostaIa('groq', `Groq (${m})`, parsed, item);
       } catch (errM: any) {
+        if (i === 0) erroModeloPrincipal = errM.message;
         ultimoErroMsg = errM.message;
         console.warn(`[Groq Engine] Erro no modelo ${m}:`, errM.message);
       }
     }
 
-    if (ultimoErroMsg) {
-      (globalThis as any).__lastGroqError = ultimoErroMsg;
+    // Prioriza sempre o erro do modelo principal que o usuário escolheu
+    const erroFinal = erroModeloPrincipal || ultimoErroMsg;
+    if (erroFinal) {
+      (globalThis as any).__lastGroqError = erroFinal;
     }
     return null;
   } catch (err: any) {

@@ -60,7 +60,9 @@ export async function POST(req: Request) {
         if (lastErr.includes('Invalid API Key') || lastErr.includes('invalid_api_key') || lastErr.includes('401')) {
           mensagemRetorno = 'Chave de API do Groq inválida. Obtenha sua chave gratuita em console.groq.com/keys (começa com gsk_...).';
         } else if (lastErr.includes('rate_limit') || lastErr.includes('429') || lastErr.includes('Tokens per minute') || lastErr.includes('TPM')) {
-          mensagemRetorno = 'Limite de requisições por minuto atingido no Groq Cloud. Alterne para o modelo "Llama 3.1 8B Instant" ou aguarde alguns segundos.';
+          mensagemRetorno = 'Limite de requisições por minuto atingido no Groq Cloud. Aguarde alguns segundos e clique em Testar Conexão novamente.';
+        } else if (lastErr.includes('does not exist') || lastErr.includes('access to it')) {
+          mensagemRetorno = 'O modelo solicitado não está habilitado na sua conta Groq. O sistema já selecionou o modelo oficial "Llama 3.3 70B Versatile".';
         } else if (lastErr) {
           mensagemRetorno = `Groq API: ${lastErr}`;
         }
