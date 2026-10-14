@@ -9,7 +9,7 @@ import {
   UserCircle, CheckCircle2, XCircle, Save, RotateCcw, 
   Search, Filter, Lock, Unlock, Info, Check, 
   HelpCircle, Eye, EyeOff, Sparkles, Database, Settings, 
-  PlugZap, Wrench
+  PlugZap, Wrench, ChevronDown, ChevronUp
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ModuloPermissao } from '@/utils/permissoes'
@@ -44,6 +44,31 @@ export default function PermissoesPage() {
   const [modulosOriginais, setModulosOriginais] = useState<ModuloPermissao[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>('todos')
+  const [openCategorias, setOpenCategorias] = useState<Record<string, boolean>>({})
+
+  // Controle de sanfona (accordion)
+  const isCategoriaOpen = (categoria: string) => {
+    return openCategorias[categoria] !== false
+  }
+
+  const toggleCategoria = (categoria: string) => {
+    setOpenCategorias(prev => ({
+      ...prev,
+      [categoria]: !isCategoriaOpen(categoria)
+    }))
+  }
+
+  const expandirTodas = () => {
+    const map: Record<string, boolean> = {}
+    categorias.forEach(c => { map[c] = true })
+    setOpenCategorias(map)
+  }
+
+  const recolherTodas = () => {
+    const map: Record<string, boolean> = {}
+    categorias.forEach(c => { map[c] = false })
+    setOpenCategorias(map)
+  }
 
   // 1. Verificar permissão de Admin e carregar dados
   useEffect(() => {
@@ -388,32 +413,52 @@ export default function PermissoesPage() {
           </div>
         </div>
 
-        {/* Ações em Massa */}
-        <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <span className="text-slate-500 font-medium">Ações rápidas em massa:</span>
+        {/* Ações em Massa e Controle de Sanfona */}
+        <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-500 dark:text-slate-400 font-medium">Sanfona:</span>
+            <button
+              type="button"
+              onClick={expandirTodas}
+              className="px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold border border-slate-200 dark:border-slate-700 transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <ChevronDown size={13} />
+              Expandir Todas
+            </button>
+            <button
+              type="button"
+              onClick={recolherTodas}
+              className="px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold border border-slate-200 dark:border-slate-700 transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <ChevronUp size={13} />
+              Recolher Todas
+            </button>
+          </div>
+
           <div className="flex flex-wrap items-center gap-2">
+            <span className="text-slate-500 dark:text-slate-400 font-medium hidden sm:inline">Ações em massa:</span>
             <button
               onClick={() => setAllPerfil('cliente', true)}
-              className="px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-semibold border border-emerald-200 transition"
+              className="px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-semibold border border-emerald-200 transition cursor-pointer"
             >
               + Liberar Todos p/ Clientes
             </button>
             <button
               onClick={() => setAllPerfil('cliente', false)}
-              className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 font-semibold border border-slate-200 transition"
+              className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 font-semibold border border-slate-200 transition cursor-pointer"
             >
               - Bloquear Todos p/ Clientes
             </button>
-            <span className="text-slate-300">|</span>
+            <span className="text-slate-300 dark:text-slate-700">|</span>
             <button
               onClick={() => setAllPerfil('contabilidade', true)}
-              className="px-2.5 py-1 rounded-md bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold border border-indigo-200 transition"
+              className="px-2.5 py-1 rounded-md bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold border border-indigo-200 transition cursor-pointer"
             >
               + Liberar Todos p/ Contabilidades
             </button>
             <button
               onClick={() => setAllPerfil('contabilidade', false)}
-              className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 font-semibold border border-slate-200 transition"
+              className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 font-semibold border border-slate-200 transition cursor-pointer"
             >
               - Bloquear Todos p/ Contabilidades
             </button>
@@ -430,139 +475,171 @@ export default function PermissoesPage() {
             <p className="text-xs text-slate-400 mt-1">Tente ajustar o termo de pesquisa ou os filtros de categoria.</p>
           </div>
         ) : (
-          Object.entries(modulosPorCategoria).map(([categoria, listaModulos]) => (
-            <div key={categoria} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              
-              {/* Header da Categoria */}
-              <div className="bg-slate-50/80 px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-sm">
-                    {listaModulos.length}
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-800 text-base">{categoria}</h3>
-                    <p className="text-xs text-slate-500">
-                      {listaModulos.length} {listaModulos.length === 1 ? 'funcionalidade configurável' : 'funcionalidades configuráveis'}
-                    </p>
-                  </div>
-                </div>
+          Object.entries(modulosPorCategoria).map(([categoria, listaModulos]) => {
+            const isOpen = isCategoriaOpen(categoria)
 
-                <div className="hidden sm:flex items-center gap-8 text-xs font-bold text-slate-400 uppercase tracking-wider pr-4">
-                  <span className="w-32 text-center text-emerald-700">Clientes</span>
-                  <span className="w-32 text-center text-indigo-700">Contabilidades</span>
-                  <span className="w-24 text-center text-amber-700">Admin</span>
-                </div>
-              </div>
-
-              {/* Linhas de Módulos */}
-              <div className="divide-y divide-slate-100">
-                {listaModulos.map((modulo) => {
-                  const IconComponent = ICONES_MAP[modulo.icone || ''] || FileDown
-
-                  return (
-                    <div 
-                      key={modulo.id} 
-                      className="p-5 sm:px-6 hover:bg-slate-50/50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-                    >
-                      {/* Info do Módulo */}
-                      <div className="flex items-start gap-4 flex-1 min-w-0">
-                        <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center flex-shrink-0 mt-0.5 border border-slate-200/60">
-                          <IconComponent size={20} className="text-indigo-600" />
-                        </div>
-                        
-                        <div className="space-y-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-bold text-slate-800 text-sm sm:text-base">
-                              {modulo.nome}
-                            </span>
-                            {modulo.rota ? (
-                              <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
-                                {modulo.rota}
-                              </span>
-                            ) : (
-                              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200">
-                                Ação / Recurso Interno
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-slate-500 leading-relaxed max-w-3xl">
-                            {modulo.descricao}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Controles de Permissão (Toggles) */}
-                      <div className="flex items-center justify-between sm:justify-end gap-4 sm:gap-8 pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-                        
-                        {/* Toggle Cliente */}
-                        <div className="flex flex-col items-center sm:w-32">
-                          <span className="sm:hidden text-[11px] font-semibold text-slate-500 mb-1">Clientes</span>
-                          <button
-                            type="button"
-                            onClick={() => togglePermissao(modulo.id, 'cliente')}
-                            className={`w-full max-w-[120px] py-1.5 px-3 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 border shadow-sm ${
-                              modulo.permitido_cliente
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
-                                : 'bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200'
-                            }`}
-                          >
-                            {modulo.permitido_cliente ? (
-                              <>
-                                <CheckCircle2 size={14} className="text-emerald-600" />
-                                Liberado
-                              </>
-                            ) : (
-                              <>
-                                <XCircle size={14} className="text-slate-400" />
-                                Oculto
-                              </>
-                            )}
-                          </button>
-                        </div>
-
-                        {/* Toggle Contabilidade */}
-                        <div className="flex flex-col items-center sm:w-32">
-                          <span className="sm:hidden text-[11px] font-semibold text-slate-500 mb-1">Contabilidade</span>
-                          <button
-                            type="button"
-                            onClick={() => togglePermissao(modulo.id, 'contabilidade')}
-                            className={`w-full max-w-[120px] py-1.5 px-3 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 border shadow-sm ${
-                              modulo.permitido_contabilidade
-                                ? 'bg-indigo-50 text-indigo-700 border-indigo-300 hover:bg-indigo-100'
-                                : 'bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200'
-                            }`}
-                          >
-                            {modulo.permitido_contabilidade ? (
-                              <>
-                                <CheckCircle2 size={14} className="text-indigo-600" />
-                                Liberado
-                              </>
-                            ) : (
-                              <>
-                                <XCircle size={14} className="text-slate-400" />
-                                Oculto
-                              </>
-                            )}
-                          </button>
-                        </div>
-
-                        {/* Badge Admin (Fixo) */}
-                        <div className="flex flex-col items-center sm:w-24">
-                          <span className="sm:hidden text-[11px] font-semibold text-slate-500 mb-1">Admin</span>
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold shadow-sm">
-                            <ShieldCheck size={13} />
-                            Total
-                          </span>
-                        </div>
-
-                      </div>
+            return (
+              <div 
+                key={categoria} 
+                className="bg-white dark:bg-[#0B1120] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden transition-all duration-200"
+              >
+                
+                {/* Header da Categoria com Efeito Sanfona (Destaque Escuro + Letras Claras) */}
+                <div 
+                  onClick={() => toggleCategoria(categoria)}
+                  className={`bg-slate-900 hover:bg-slate-800 dark:bg-[#0F172A] dark:hover:bg-slate-800/90 px-6 py-4.5 flex items-center justify-between cursor-pointer select-none transition-colors group ${
+                    isOpen ? 'border-b border-slate-800' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-3.5">
+                    {/* Badge Contador */}
+                    <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 flex items-center justify-center font-extrabold text-sm shadow-xs group-hover:scale-105 transition-transform">
+                      {listaModulos.length}
                     </div>
-                  )
-                })}
-              </div>
+                    <div>
+                      <h3 className="font-bold text-white text-base sm:text-lg flex items-center gap-2 tracking-tight">
+                        {categoria}
+                      </h3>
+                      <p className="text-xs text-slate-400 font-normal">
+                        {listaModulos.length} {listaModulos.length === 1 ? 'funcionalidade configurável' : 'funcionalidades configuráveis'}
+                      </p>
+                    </div>
+                  </div>
 
-            </div>
-          ))
+                  <div className="flex items-center gap-4 sm:gap-8">
+                    <div className="hidden sm:flex items-center gap-8 text-xs font-bold uppercase tracking-wider pr-2">
+                      <span className="w-32 text-center text-emerald-400">Clientes</span>
+                      <span className="w-32 text-center text-indigo-300">Contabilidades</span>
+                      <span className="w-24 text-center text-amber-400">Admin</span>
+                    </div>
+
+                    {/* Botão/Ícone Indicador do Efeito Sanfona */}
+                    <div className="w-8 h-8 rounded-lg bg-slate-800 group-hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-all shadow-xs border border-slate-700/60">
+                      <ChevronDown 
+                        size={18} 
+                        className={`transition-transform duration-300 ${isOpen ? 'rotate-180 text-white' : 'text-slate-400'}`} 
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Conteúdo Expansível (Efeito Sanfona) */}
+                <div 
+                  className={`transition-all duration-300 ease-in-out overflow-hidden ${
+                    isOpen ? 'max-h-[3000px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'
+                  }`}
+                >
+                  {/* Linhas de Módulos */}
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                    {listaModulos.map((modulo) => {
+                      const IconComponent = ICONES_MAP[modulo.icone || ''] || FileDown
+
+                      return (
+                        <div 
+                          key={modulo.id} 
+                          className="p-5 sm:px-6 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                        >
+                          {/* Info do Módulo */}
+                          <div className="flex items-start gap-4 flex-1 min-w-0">
+                            <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center flex-shrink-0 mt-0.5 border border-slate-200/60 dark:border-slate-700">
+                              <IconComponent size={20} className="text-indigo-600 dark:text-indigo-400" />
+                            </div>
+                            
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-bold text-slate-800 dark:text-slate-100 text-sm sm:text-base">
+                                  {modulo.nome}
+                                </span>
+                                {modulo.rota ? (
+                                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                    {modulo.rota}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                                    Ação / Recurso Interno
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-3xl">
+                                {modulo.descricao}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Controles de Permissão (Toggles) */}
+                          <div className="flex items-center justify-between sm:justify-end gap-4 sm:gap-8 pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800">
+                            
+                            {/* Toggle Cliente */}
+                            <div className="flex flex-col items-center sm:w-32">
+                              <span className="sm:hidden text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">Clientes</span>
+                              <button
+                                type="button"
+                                onClick={() => togglePermissao(modulo.id, 'cliente')}
+                                className={`w-full max-w-[120px] py-1.5 px-3 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 border shadow-sm cursor-pointer ${
+                                  modulo.permitido_cliente
+                                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/60'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                }`}
+                              >
+                                {modulo.permitido_cliente ? (
+                                  <>
+                                    <CheckCircle2 size={14} className="text-emerald-600 dark:text-emerald-400" />
+                                    Liberado
+                                  </>
+                                ) : (
+                                  <>
+                                    <XCircle size={14} className="text-slate-400 dark:text-slate-500" />
+                                    Oculto
+                                  </>
+                                )}
+                              </button>
+                            </div>
+
+                            {/* Toggle Contabilidade */}
+                            <div className="flex flex-col items-center sm:w-32">
+                              <span className="sm:hidden text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">Contabilidade</span>
+                              <button
+                                type="button"
+                                onClick={() => togglePermissao(modulo.id, 'contabilidade')}
+                                className={`w-full max-w-[120px] py-1.5 px-3 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 border shadow-sm cursor-pointer ${
+                                  modulo.permitido_contabilidade
+                                    ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700 hover:bg-indigo-100 dark:hover:bg-indigo-900/60'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                }`}
+                              >
+                                {modulo.permitido_contabilidade ? (
+                                  <>
+                                    <CheckCircle2 size={14} className="text-indigo-600 dark:text-indigo-400" />
+                                    Liberado
+                                  </>
+                                ) : (
+                                  <>
+                                    <XCircle size={14} className="text-slate-400 dark:text-slate-500" />
+                                    Oculto
+                                  </>
+                                )}
+                              </button>
+                            </div>
+
+                            {/* Badge Admin (Fixo) */}
+                            <div className="flex flex-col items-center sm:w-24">
+                              <span className="sm:hidden text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">Admin</span>
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 text-xs font-bold shadow-sm">
+                                <ShieldCheck size={13} />
+                                Total
+                              </span>
+                            </div>
+
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+              </div>
+            )
+          })
         )}
       </div>
 
