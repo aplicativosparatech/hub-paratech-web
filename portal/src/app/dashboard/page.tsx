@@ -5,10 +5,11 @@ import { createClient } from '@/utils/supabase/client'
 import { 
   Users, Building2, AlertTriangle, Receipt, BarChart3, MapPin, 
   Sparkles, ShieldCheck, ArrowRight, Calendar, Filter, Clock, 
-  CheckCircle2, RotateCcw, Layers
+  CheckCircle2, RotateCcw, Layers, Package, FileArchive, Download
 } from 'lucide-react'
 import Link from 'next/link'
 import CertificadoAlertaBanner from '@/components/CertificadoAlertaBanner'
+import FechamentoFiscalModal from '@/components/FechamentoFiscalModal'
 
 type TipoPeriodoDashboard = 'tudo' | 'mes_atual' | 'mes_anterior' | 'personalizado'
 
@@ -26,6 +27,12 @@ export default function DashboardPage() {
   const [dataFimPersonalizada, setDataFimPersonalizada] = useState('')
   const [primeiroXmlData, setPrimeiroXmlData] = useState<string | null>(null)
   const [ultimoXmlData, setUltimoXmlData] = useState<string | null>(null)
+
+  // Filtros de Cliente e Mês de Competência para Fechamento Fiscal
+  const [listaClientes, setListaClientes] = useState<Array<{ id: string; razao_social: string; nome_fantasia?: string; cnpj: string }>>([])
+  const [selectedClienteId, setSelectedClienteId] = useState<string>('')
+  const [mesCompetencia, setMesCompetencia] = useState<string>('2026-09')
+  const [isFechamentoModalOpen, setIsFechamentoModalOpen] = useState(false)
 
   const [metrics, setMetrics] = useState({
     clientes: 0,
@@ -168,6 +175,14 @@ export default function DashboardPage() {
           qFaturas = qFaturas.eq('cliente_id', userRoleData.cliente_id)
         }
 
+        // Consulta lista de Clientes para o Seletor de Fechamento Fiscal
+        let qClientesLista = supabase.from('clientes').select('id, razao_social, nome_fantasia, cnpj', { count: 'exact' }).order('razao_social', { ascending: true })
+        if (currentRole === 'cliente' && userRoleData?.cliente_id) {
+          qClientesLista = qClientesLista.eq('id', userRoleData.cliente_id)
+        } else if (currentRole === 'contabilidade' && userRoleData?.contabilidade_id) {
+          qClientesLista = qClientesLista.eq('contabilidade_id', userRoleData.contabilidade_id)
+        }
+
         const [
           clientesRes, 
           contabRes, 
@@ -176,13 +191,24 @@ export default function DashboardPage() {
           cidadesClientesRes,
           cidadesContabRes
         ] = await Promise.all([
-          supabase.from('clientes').select('id', { count: 'exact', head: true }),
+          qClientesLista,
           supabase.from('contabilidades').select('id', { count: 'exact', head: true }),
           qFaturas,
           supabase.from('arquivos_xml').select('id', { count: 'exact', head: true }),
           supabase.from('clientes').select('cidade').not('cidade', 'is', null),
           supabase.from('contabilidades').select('cidade').not('cidade', 'is', null)
         ])
+
+        // Popula clientes para o Seletor de Fechamento Fiscal
+        const clisData = (clientesRes.data || []) as any[]
+        setListaClientes(clisData)
+        if (clisData.length > 0) {
+          setSelectedClienteId(prev => {
+            if (prev && clisData.some(c => c.id === prev)) return prev
+            const cliComNotas = clisData.find(c => c.id === '0ae0938c-0124-453e-81d6-0e9d82f87f86')
+            return cliComNotas ? cliComNotas.id : clisData[0].id
+          })
+        }
 
         // Faturas reais: calculando Total, Em Dia e Atrasadas
         const listaFaturas = faturasRes.data || []
@@ -352,6 +378,28 @@ export default function DashboardPage() {
 
   const faturasStatus = getFaturasStatus()
 
+  // Opções de Mês de Competência
+  const mesesOpcoes = [
+    { valor: '2026-10', label: 'Outubro / 2026 (Competência Atual)' },
+    { valor: '2026-09', label: 'Setembro / 2026 (Base com 582 XMLs)' },
+    { valor: '2026-08', label: 'Agosto / 2026' },
+    { valor: '2026-07', label: 'Julho / 2026' },
+    { valor: '2026-06', label: 'Junho / 2026' },
+    { valor: '2026-05', label: 'Maio / 2026' },
+    { valor: '2026-04', label: 'Abril / 2026' },
+    { valor: '2026-03', label: 'Março / 2026' },
+    { valor: '2026-02', label: 'Fevereiro / 2026' },
+    { valor: '2026-01', label: 'Janeiro / 2026' },
+    { valor: '2025-12', label: 'Dezembro / 2025' },
+    { valor: '2025-11', label: 'Novembro / 2025' }
+  ]
+
+  const clienteSelecionadoObj = listaClientes.find(c => c.id === selectedClienteId)
+  const clienteNomeExibicao = clienteSelecionadoObj
+    ? (clienteSelecionadoObj.nome_fantasia || clienteSelecionadoObj.razao_social)
+    : 'Selecione um Cliente'
+  const mesCompetenciaLabel = mesesOpcoes.find(m => m.valor === mesCompetencia)?.label || mesCompetencia
+
   return (
     <div className="p-6 sm:p-8 space-y-6">
       
@@ -364,6 +412,104 @@ export default function DashboardPage() {
           </p>
         </div>
       </header>
+
+      {/* PAINEL DE FECHAMENTO FISCAL MENSAL COM FILTROS DE CLIENTE & COMPETÊNCIA */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 sm:p-5 rounded-2xl border border-indigo-900/50 shadow-md flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        
+        {/* Identificação do Fechamento */}
+        <div className="flex items-center gap-3.5">
+          <div className="p-3 bg-indigo-500/20 border border-indigo-400/30 rounded-2xl text-indigo-400 shrink-0">
+            <Package size={22} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-white tracking-tight">
+                Fechamento Fiscal Mensal
+              </span>
+              <span className="text-[10px] font-extrabold uppercase bg-indigo-500/30 text-indigo-200 px-2.5 py-0.5 rounded-full border border-indigo-400/20">
+                Pacote ZIP de XMLs & Relatórios
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mt-0.5">
+              Empacotamento automático sem pastas vazias, relatórios oficiais e apuração de monofásicos.
+            </p>
+          </div>
+        </div>
+
+        {/* Filtros e Botão Fechamento */}
+        <div className="flex flex-wrap items-center gap-3">
+          
+          {/* 1. FILTRO DE CLIENTE (Dropdown para Admin/Contabilidade, Tag fixa para Cliente) */}
+          {userRole === 'cliente' ? (
+            <div className="flex items-center gap-2 bg-slate-800/80 border border-slate-700/80 px-3.5 py-2 rounded-xl text-xs">
+              <Building2 size={15} className="text-indigo-400 shrink-0" />
+              <div>
+                <span className="text-[9px] text-slate-400 block font-bold uppercase leading-none">Minha Empresa</span>
+                <span className="text-white font-semibold text-xs leading-tight block truncate max-w-[200px]">
+                  {clienteNomeExibicao}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 bg-slate-800/90 border border-slate-700 rounded-xl px-3 py-1.5 shadow-inner">
+              <Building2 size={15} className="text-indigo-400 shrink-0" />
+              <div className="flex flex-col">
+                <label className="text-[9px] uppercase font-bold text-slate-400">Cliente / Empresa</label>
+                <select
+                  value={selectedClienteId}
+                  onChange={(e) => setSelectedClienteId(e.target.value)}
+                  className="bg-transparent text-xs text-white font-bold focus:outline-none cursor-pointer max-w-[220px] truncate"
+                >
+                  {listaClientes.map(c => (
+                    <option key={c.id} value={c.id} className="bg-slate-900 text-white">
+                      {c.nome_fantasia || c.razao_social} {c.cnpj ? `(${c.cnpj})` : ''}
+                    </option>
+                  ))}
+                  {listaClientes.length === 0 && (
+                    <option value="" className="bg-slate-900 text-white">Nenhum cliente disponível</option>
+                  )}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* 2. FILTRO MÊS COMPETÊNCIA */}
+          <div className="flex items-center gap-2 bg-slate-800/90 border border-slate-700 rounded-xl px-3 py-1.5 shadow-inner">
+            <Calendar size={15} className="text-indigo-400 shrink-0" />
+            <div className="flex flex-col">
+              <label className="text-[9px] uppercase font-bold text-slate-400">Mês Competência</label>
+              <select
+                value={mesCompetencia}
+                onChange={(e) => setMesCompetencia(e.target.value)}
+                className="bg-transparent text-xs text-white font-bold focus:outline-none cursor-pointer"
+              >
+                {mesesOpcoes.map(m => (
+                  <option key={m.valor} value={m.valor} className="bg-slate-900 text-white">
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* 3. BOTÃO FECHAMENTO FISCAL (SURGE QUANDO MÊS ESTÁ ESCOLHIDO) */}
+          {mesCompetencia && selectedClienteId && (
+            <button
+              type="button"
+              onClick={() => setIsFechamentoModalOpen(true)}
+              className="px-4 py-2.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-600 hover:from-emerald-600 hover:to-indigo-700 text-white rounded-xl text-xs font-black shadow-lg hover:shadow-emerald-500/20 transition-all flex items-center gap-2 transform active:scale-95 animate-in fade-in zoom-in-95 duration-200"
+            >
+              <Package size={16} className="text-emerald-100" />
+              <span>Fechamento Fiscal</span>
+              <span className="bg-white/20 px-2 py-0.5 rounded-full text-[10px] font-mono">
+                {mesCompetencia}
+              </span>
+            </button>
+          )}
+
+        </div>
+
+      </div>
 
       {/* Barra de Filtro de Período para Volume de XMLs e Notas */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -650,6 +796,16 @@ export default function DashboardPage() {
           </Link>
         </div>
       </div>
+
+      {/* Modal de Fechamento Fiscal Mensal (Empacotador ZIP & Relatórios) */}
+      <FechamentoFiscalModal
+        isOpen={isFechamentoModalOpen}
+        onClose={() => setIsFechamentoModalOpen(false)}
+        clienteId={selectedClienteId}
+        clienteNome={clienteNomeExibicao}
+        mesCompetencia={mesCompetencia}
+        anoMesFormatado={mesCompetenciaLabel}
+      />
 
     </div>
   )
