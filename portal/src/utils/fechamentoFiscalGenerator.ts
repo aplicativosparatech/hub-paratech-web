@@ -247,6 +247,206 @@ export interface ArquivoGerado {
   modalidade: string // 'NFE_Entradas' | 'NFSE_Entradas' | 'NFE_Saidas' | 'NFSE_Saidas' | 'NFCE_Saidas' | 'Relatorios'
 }
 
+// ============================================================================
+// MOTOR DE LAYOUT PDF FISCAL DE ALTO PADRÃO EXECUTIVO (HUB PARATECH)
+// ============================================================================
+export interface ConfigPdfFiscal {
+  titulo: string
+  subtitulo?: string
+  empresa: DadosEmpresaFechamento
+  competencia: string
+  totalItens: number
+  valorTotal: number
+  valorMonofasicos?: number
+  colunas: string[]
+  linhas: (string | number)[][]
+  colunasAlinhadasDireita?: number[]
+  orientacao?: 'landscape' | 'portrait'
+}
+
+export function gerarDocumentoPdfFiscal(cfg: ConfigPdfFiscal): Uint8Array {
+  const orientacao = cfg.orientacao || 'landscape'
+  const doc = new jsPDF({ orientation: orientacao, unit: 'mm', format: 'a4' })
+  const isLandscape = orientacao === 'landscape'
+  const pageWidth = isLandscape ? 297 : 210
+  const pageHeight = isLandscape ? 210 : 297
+  const margem = 14
+  const contentWidth = pageWidth - (margem * 2)
+
+  // 1. Banner Superior Executivo Escuro (Slate-900 / High-Tech Corporativo)
+  doc.setFillColor(15, 23, 42) // Slate 900
+  doc.roundedRect(margem, 9, contentWidth, 17, 2, 2, 'F')
+
+  // Título e identificação fiscal
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10.5)
+  doc.setTextColor(255, 255, 255)
+  doc.text(cfg.titulo.toUpperCase(), margem + 5, 15.5)
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(7.5)
+  doc.setTextColor(203, 213, 225) // Slate 300
+  const compLabel = cfg.competencia ? `Competência: ${cfg.competencia}` : ''
+  const cnpjClean = cfg.empresa.cnpj || '—'
+  const cidadeUf = cfg.empresa.cidade ? ` • ${cfg.empresa.cidade}/${cfg.empresa.uf || ''}` : ''
+  doc.text(
+    `${cfg.empresa.razao_social || 'Empresa'}  |  CNPJ: ${cnpjClean}${cidadeUf}  |  ${compLabel}`,
+    margem + 5,
+    21.5
+  )
+
+  // Identificação do sistema à direita
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(8)
+  doc.setTextColor(129, 140, 248) // Indigo 400
+  doc.text('HUB PARATECH', margem + contentWidth - 5, 15.5, { align: 'right' })
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(6.5)
+  doc.setTextColor(148, 163, 184)
+  doc.text('Inteligência Contábil & Fiscal', margem + contentWidth - 5, 21.5, { align: 'right' })
+
+  // 2. Quadro de Resumo Executivo (NO INÍCIO - Exatamente como solicitado pelo usuário!)
+  // Cards: TOTAL DE ITENS, VALOR TOTAL MOVIMENTADO, TOTAL PRODUTOS MONOFÁSICOS
+  const cardY = 29
+  const cardHeight = 13.5
+  const numCards = 3
+  const cardGap = 3
+  const cardWidth = (contentWidth - ((numCards - 1) * cardGap)) / numCards
+
+  // Card 1: TOTAL DE DOCUMENTOS / ITENS
+  doc.setFillColor(248, 250, 252) // Slate 50
+  doc.setDrawColor(226, 232, 240) // Slate 200
+  doc.setLineWidth(0.25)
+  doc.roundedRect(margem, cardY, cardWidth, cardHeight, 1.5, 1.5, 'FD')
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(6.5)
+  doc.setTextColor(100, 116, 139) // Slate 500
+  doc.text('TOTAL DE DOCUMENTOS / ITENS', margem + 3.5, cardY + 4.5)
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.setTextColor(15, 23, 42)
+  doc.text(`${cfg.totalItens} ${cfg.totalItens === 1 ? 'registro' : 'registros'}`, margem + 3.5, cardY + 10.5)
+
+  // Card 2: VALOR TOTAL MOVIMENTADO
+  const card2X = margem + cardWidth + cardGap
+  doc.setFillColor(248, 250, 252)
+  doc.roundedRect(card2X, cardY, cardWidth, cardHeight, 1.5, 1.5, 'FD')
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(6.5)
+  doc.setTextColor(100, 116, 139)
+  doc.text('VALOR TOTAL MOVIMENTADO', card2X + 3.5, cardY + 4.5)
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.setTextColor(16, 115, 60) // Verde escuro
+  doc.text(`R$ ${formatMoney(cfg.valorTotal)}`, card2X + 3.5, cardY + 10.5)
+
+  // Card 3: PRODUTOS MONOFÁSICOS (PIS/COFINS)
+  const card3X = card2X + cardWidth + cardGap
+  doc.setFillColor(248, 250, 252)
+  doc.roundedRect(card3X, cardY, cardWidth, cardHeight, 1.5, 1.5, 'FD')
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(6.5)
+  doc.setTextColor(100, 116, 139)
+  doc.text('TOTAL PRODUTOS MONOFÁSICOS', card3X + 3.5, cardY + 4.5)
+
+  doc.setFont('helvetica', 'bold')
+  const valMono = cfg.valorMonofasicos !== undefined ? cfg.valorMonofasicos : 0
+  if (valMono > 0) {
+    doc.setTextColor(180, 83, 9)
+  } else {
+    doc.setTextColor(71, 85, 105)
+  }
+  doc.text(`R$ ${formatMoney(valMono)}`, card3X + 3.5, cardY + 10.5)
+
+  // 3. Tabela de Dados (autoTable)
+  let bodyData = cfg.linhas
+  if (bodyData.length === 0) {
+    const emptyRow = new Array(cfg.colunas.length).fill('')
+    emptyRow[0] = 'Nenhum documento registrado para esta modalidade nesta competência (Sem Movimento no Período).'
+    bodyData = [emptyRow]
+  }
+
+  const columnStylesConfig: any = {}
+  if (cfg.colunasAlinhadasDireita) {
+    cfg.colunasAlinhadasDireita.forEach(idx => {
+      columnStylesConfig[idx] = { halign: 'right' }
+    })
+  }
+
+  // Linha de rodapé consolidada: EXIBIDA EXCLUSIVAMENTE NA ÚLTIMA PÁGINA (showFoot: 'lastPage')
+  // Nunca mais repete o valor total em todas as páginas!
+  const footRow = new Array(cfg.colunas.length).fill('')
+  let valorColIdx = cfg.colunas.findIndex(c => c.toLowerCase().includes('valor') || c.toLowerCase().includes('total'))
+  if (valorColIdx < 0) valorColIdx = cfg.colunas.length - 2
+  if (valorColIdx > 0) {
+    footRow[valorColIdx - 1] = 'TOTAL FINAL:'
+    footRow[valorColIdx] = `R$ ${formatMoney(cfg.valorTotal)}`
+  } else {
+    footRow[0] = 'TOTAL FINAL:'
+    footRow[footRow.length - 1] = `R$ ${formatMoney(cfg.valorTotal)}`
+  }
+
+  autoTable(doc, {
+    startY: 46,
+    margin: { left: margem, right: margem, bottom: 12 },
+    head: [cfg.colunas],
+    body: bodyData,
+    foot: [footRow],
+    showFoot: 'lastPage', // REGRA DE OURO: Total APENAS na última página!
+    styles: {
+      fontSize: 7.2,
+      cellPadding: 1.8,
+      textColor: [30, 41, 59],
+      lineColor: [226, 232, 240],
+      lineWidth: 0.1,
+      font: 'helvetica'
+    },
+    headStyles: {
+      fillColor: [15, 23, 42],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 7.5,
+      halign: 'left'
+    },
+    footStyles: {
+      fillColor: [241, 245, 249],
+      textColor: [15, 23, 42],
+      fontStyle: 'bold',
+      fontSize: 7.8
+    },
+    alternateRowStyles: {
+      fillColor: [248, 250, 252]
+    },
+    columnStyles: columnStylesConfig
+  })
+
+  // 4. Numeração e Rodapé Limpo em todas as páginas
+  const totalPages = doc.getNumberOfPages()
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(6.8)
+    doc.setTextColor(148, 163, 184)
+    doc.setDrawColor(226, 232, 240)
+    doc.line(margem, pageHeight - 7, margem + contentWidth, pageHeight - 7)
+    
+    doc.text(
+      `HUB PARATECH • Relatório Fiscal Oficial para Escrituração Contábil • Gerado em ${new Date().toLocaleDateString('pt-BR')}`,
+      margem,
+      pageHeight - 3.5
+    )
+    doc.text(`Página ${i} de ${totalPages}`, margem + contentWidth, pageHeight - 3.5, { align: 'right' })
+  }
+
+  return new Uint8Array(doc.output('arraybuffer'))
+}
+
 // GERAÇÃO DE RELATÓRIO 1: Resumo de Documentos Fiscais Recebidos (Compras NF-e)
 // Colunas: Número da nota, Data da nota, Data na entrada, Fornecedor, Cidade/Estado, Valor, Chave da nota, Total Geral
 export function gerarRelatorioNfeCompras(
@@ -264,9 +464,10 @@ export function gerarRelatorioNfeCompras(
 
   // CSV
   if (formatos.includes('csv')) {
-    let csv = '\uFEFF' // BOM UTF-8
+    let csv = '\uFEFF'
+    csv += `RELATÓRIO FISCAL;${titulo}\r\n`
     csv += `EMPRESA;${empresa.razao_social};CNPJ;${empresa.cnpj};COMPETENCIA;${competencia}\r\n`
-    csv += `TITULO;${titulo}\r\n\r\n`
+    csv += `TOTAL DE ITENS;${lista.length};VALOR TOTAL;${totalGeral.toFixed(2).replace('.', ',')}\r\n\r\n`
     csv += 'NUMERO;DATA DA NOTA;DATA ENTRADA;FORNECEDOR;CIDADE/UF;VALOR (R$);CHAVE DA NOTA\r\n'
     lista.forEach(d => {
       csv += `${d.numero || '—'};${formatDate(d.data_emissao)};${formatDate(d.data_entrada || d.data_emissao)};"${(d.contato_nome || '—').replace(/"/g, '""')}";${d.cidade || '—'}/${d.uf || '—'};${(d.valor || 0).toFixed(2).replace('.', ',')};${d.chave || '—'}\r\n`
@@ -287,8 +488,11 @@ export function gerarRelatorioNfeCompras(
       empresa,
       competencia,
       gerado_em: new Date().toISOString(),
-      quantidade_documentos: lista.length,
-      valor_total_geral: totalGeral,
+      resumo_executivo: {
+        total_documentos: lista.length,
+        valor_total: totalGeral,
+        total_monofasicos: 0
+      },
       documentos: lista.map(d => ({
         numero: d.numero,
         data_nota: d.data_emissao,
@@ -312,8 +516,11 @@ export function gerarRelatorioNfeCompras(
   if (formatos.includes('xlsx')) {
     const wb = XLSX.utils.book_new()
     const rows = [
+      ['RELATÓRIO FISCAL:', titulo],
       ['EMPRESA:', empresa.razao_social, 'CNPJ:', empresa.cnpj, 'COMPETÊNCIA:', competencia],
-      [titulo],
+      [],
+      ['RESUMO EXECUTIVO:'],
+      ['TOTAL DE DOCUMENTOS:', lista.length, 'VALOR TOTAL APURADO (R$):', totalGeral, 'MONOFÁSICOS (R$):', 0],
       [],
       ['Número da Nota', 'Data da Nota', 'Data Entrada', 'Fornecedor', 'Cidade / UF', 'Valor (R$)', 'Chave da Nota'],
       ...lista.map(d => [
@@ -338,39 +545,35 @@ export function gerarRelatorioNfeCompras(
     })
   }
 
-  // PDF
+  // PDF PROFISSIONAL COM RESUMO NO INÍCIO E TOTAL APENAS NO FINAL
   if (formatos.includes('pdf')) {
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-    doc.setFontSize(14)
-    doc.text(titulo, 14, 15)
-    doc.setFontSize(9)
-    doc.text(`Empresa: ${empresa.razao_social} | CNPJ: ${empresa.cnpj} | Competência: ${competencia}`, 14, 21)
-
-    const tableBody = lista.map(d => [
+    const colunas = ['Número', 'Data Nota', 'Data Entrada', 'Fornecedor', 'Cidade/UF', 'Valor', 'Chave de Acesso']
+    const linhas = lista.map(d => [
       d.numero || '—',
       formatDate(d.data_emissao),
       formatDate(d.data_entrada || d.data_emissao),
-      (d.contato_nome || '—').slice(0, 35),
+      (d.contato_nome || '—').slice(0, 36),
       `${d.cidade || '—'}/${d.uf || '—'}`,
       `R$ ${formatMoney(d.valor)}`,
-      (d.chave || '—').slice(0, 30) + '...'
+      (d.chave || '—').slice(0, 30) + (d.chave && d.chave.length > 30 ? '...' : '')
     ])
 
-    autoTable(doc, {
-      startY: 25,
-      head: [['Número', 'Data Nota', 'Data Entrada', 'Fornecedor', 'Cidade/UF', 'Valor', 'Chave de Acesso']],
-      body: tableBody,
-      foot: [['', '', '', 'TOTAL GERAL:', '', `R$ ${formatMoney(totalGeral)}`, '']],
-      styles: { fontSize: 7.5, cellPadding: 2 },
-      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold' },
-      footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: [248, 250, 252] }
+    const pdfBuffer = gerarDocumentoPdfFiscal({
+      titulo,
+      empresa,
+      competencia,
+      totalItens: lista.length,
+      valorTotal: totalGeral,
+      valorMonofasicos: 0,
+      colunas,
+      linhas,
+      colunasAlinhadasDireita: [5],
+      orientacao: 'landscape'
     })
 
-    const pdfBuf = doc.output('arraybuffer')
     resultados.push({
       nomeArquivo: `${baseName}.pdf`,
-      buffer: new Uint8Array(pdfBuf),
+      buffer: pdfBuffer,
       tipo: 'pdf',
       modalidade: 'NFE_Entradas'
     })
@@ -397,8 +600,9 @@ export function gerarRelatorioNfseEntrada(
   // CSV
   if (formatos.includes('csv')) {
     let csv = '\uFEFF'
+    csv += `RELATÓRIO FISCAL;${titulo}\r\n`
     csv += `EMPRESA;${empresa.razao_social};CNPJ;${empresa.cnpj};COMPETENCIA;${competencia}\r\n`
-    csv += `TITULO;${titulo}\r\n\r\n`
+    csv += `TOTAL DE ITENS;${lista.length};VALOR TOTAL;${totalGeral.toFixed(2).replace('.', ',')}\r\n\r\n`
     csv += 'NUMERO;DATA DA NOTA;DATA ENTRADA;PRESTADOR;CIDADE/UF;VALOR (R$);CHAVE/CODIGO\r\n'
     lista.forEach(d => {
       csv += `${d.numero || '—'};${formatDate(d.data_emissao)};${formatDate(d.data_entrada || d.data_emissao)};"${(d.contato_nome || '—').replace(/"/g, '""')}";${d.cidade || '—'}/${d.uf || '—'};${(d.valor || 0).toFixed(2).replace('.', ',')};${d.chave || '—'}\r\n`
@@ -419,8 +623,11 @@ export function gerarRelatorioNfseEntrada(
       empresa,
       competencia,
       gerado_em: new Date().toISOString(),
-      quantidade_documentos: lista.length,
-      valor_total_geral: totalGeral,
+      resumo_executivo: {
+        total_documentos: lista.length,
+        valor_total: totalGeral,
+        total_monofasicos: 0
+      },
       documentos: lista.map(d => ({
         numero: d.numero,
         data_nota: d.data_emissao,
@@ -444,8 +651,11 @@ export function gerarRelatorioNfseEntrada(
   if (formatos.includes('xlsx')) {
     const wb = XLSX.utils.book_new()
     const rows = [
+      ['RELATÓRIO FISCAL:', titulo],
       ['EMPRESA:', empresa.razao_social, 'CNPJ:', empresa.cnpj, 'COMPETÊNCIA:', competencia],
-      [titulo],
+      [],
+      ['RESUMO EXECUTIVO:'],
+      ['TOTAL DE DOCUMENTOS:', lista.length, 'VALOR TOTAL APURADO (R$):', totalGeral, 'MONOFÁSICOS (R$):', 0],
       [],
       ['Número da Nota', 'Data da Nota', 'Data Entrada', 'Prestador', 'Cidade / UF', 'Valor (R$)', 'Chave / Código'],
       ...lista.map(d => [
@@ -470,38 +680,35 @@ export function gerarRelatorioNfseEntrada(
     })
   }
 
-  // PDF
+  // PDF PROFISSIONAL COM RESUMO NO INÍCIO E TOTAL APENAS NO FINAL
   if (formatos.includes('pdf')) {
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-    doc.setFontSize(14)
-    doc.text(titulo, 14, 15)
-    doc.setFontSize(9)
-    doc.text(`Empresa: ${empresa.razao_social} | CNPJ: ${empresa.cnpj} | Competência: ${competencia}`, 14, 21)
-
-    const tableBody = lista.map(d => [
+    const colunas = ['Número', 'Data Nota', 'Data Entrada', 'Prestador', 'Cidade/UF', 'Valor', 'Chave/Código']
+    const linhas = lista.map(d => [
       d.numero || '—',
       formatDate(d.data_emissao),
       formatDate(d.data_entrada || d.data_emissao),
-      (d.contato_nome || '—').slice(0, 35),
+      (d.contato_nome || '—').slice(0, 36),
       `${d.cidade || '—'}/${d.uf || '—'}`,
       `R$ ${formatMoney(d.valor)}`,
-      d.chave || '—'
+      (d.chave || '—').slice(0, 30) + (d.chave && d.chave.length > 30 ? '...' : '')
     ])
 
-    autoTable(doc, {
-      startY: 25,
-      head: [['Número', 'Data Nota', 'Data Entrada', 'Prestador', 'Cidade/UF', 'Valor', 'Chave/Código']],
-      body: tableBody,
-      foot: [['', '', '', 'TOTAL GERAL:', '', `R$ ${formatMoney(totalGeral)}`, '']],
-      styles: { fontSize: 8, cellPadding: 2 },
-      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold' },
-      footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' }
+    const pdfBuffer = gerarDocumentoPdfFiscal({
+      titulo,
+      empresa,
+      competencia,
+      totalItens: lista.length,
+      valorTotal: totalGeral,
+      valorMonofasicos: 0,
+      colunas,
+      linhas,
+      colunasAlinhadasDireita: [5],
+      orientacao: 'landscape'
     })
 
-    const pdfBuf = doc.output('arraybuffer')
     resultados.push({
       nomeArquivo: `${baseName}.pdf`,
-      buffer: new Uint8Array(pdfBuf),
+      buffer: pdfBuffer,
       tipo: 'pdf',
       modalidade: 'NFSE_Entradas'
     })
@@ -528,8 +735,9 @@ export function gerarRelatorioNfeSaidas(
   // CSV
   if (formatos.includes('csv')) {
     let csv = '\uFEFF'
+    csv += `RELATÓRIO FISCAL;${titulo}\r\n`
     csv += `EMPRESA;${empresa.razao_social};CNPJ;${empresa.cnpj};COMPETENCIA;${competencia}\r\n`
-    csv += `TITULO;${titulo}\r\n\r\n`
+    csv += `TOTAL DE ITENS;${lista.length};VALOR TOTAL;${totalGeral.toFixed(2).replace('.', ',')}\r\n\r\n`
     csv += 'NUMERO;DATA/HORA;CLIENTE;VALOR (R$);CHAVE DA NOTA\r\n'
     lista.forEach(d => {
       csv += `${d.numero || '—'};${formatDateTime(d.data_emissao)};"${(d.contato_nome || '—').replace(/"/g, '""')}";${(d.valor || 0).toFixed(2).replace('.', ',')};${d.chave || '—'}\r\n`
@@ -550,8 +758,11 @@ export function gerarRelatorioNfeSaidas(
       empresa,
       competencia,
       gerado_em: new Date().toISOString(),
-      quantidade_documentos: lista.length,
-      valor_total_geral: totalGeral,
+      resumo_executivo: {
+        total_documentos: lista.length,
+        valor_total: totalGeral,
+        total_monofasicos: 0
+      },
       documentos: lista.map(d => ({
         numero: d.numero,
         data_hora: d.data_emissao,
@@ -572,18 +783,22 @@ export function gerarRelatorioNfeSaidas(
   if (formatos.includes('xlsx')) {
     const wb = XLSX.utils.book_new()
     const rows = [
+      ['RELATÓRIO FISCAL:', titulo],
       ['EMPRESA:', empresa.razao_social, 'CNPJ:', empresa.cnpj, 'COMPETÊNCIA:', competencia],
-      [titulo],
       [],
-      ['Número', 'Data / Hora', 'Cliente / Destinatário', 'Valor (R$)', 'Chave de Acesso'],
+      ['RESUMO EXECUTIVO:'],
+      ['TOTAL DE DOCUMENTOS:', lista.length, 'VALOR TOTAL APURADO (R$):', totalGeral, 'MONOFÁSICOS (R$):', 0],
+      [],
+      ['Número', 'Data / Hora', 'Cliente / Destinatário', 'Cidade / UF', 'Valor (R$)', 'Chave de Acesso'],
       ...lista.map(d => [
         d.numero || '—',
         formatDateTime(d.data_emissao),
         d.contato_nome || '—',
+        `${d.cidade || '—'} / ${d.uf || '—'}`,
         d.valor || 0,
         d.chave || '—'
       ]),
-      ['', '', 'TOTAL GERAL:', totalGeral, '']
+      ['', '', '', 'TOTAL GERAL:', totalGeral, '']
     ]
     const ws = XLSX.utils.aoa_to_sheet(rows)
     XLSX.utils.book_append_sheet(wb, ws, 'Vendas_NFe')
@@ -596,36 +811,34 @@ export function gerarRelatorioNfeSaidas(
     })
   }
 
-  // PDF
+  // PDF PROFISSIONAL COM RESUMO NO INÍCIO E TOTAL APENAS NO FINAL
   if (formatos.includes('pdf')) {
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-    doc.setFontSize(14)
-    doc.text(titulo, 14, 15)
-    doc.setFontSize(9)
-    doc.text(`Empresa: ${empresa.razao_social} | CNPJ: ${empresa.cnpj} | Competência: ${competencia}`, 14, 21)
-
-    const tableBody = lista.map(d => [
+    const colunas = ['Número', 'Data/Hora', 'Cliente / Destinatário', 'Cidade/UF', 'Valor', 'Chave de Acesso']
+    const linhas = lista.map(d => [
       d.numero || '—',
       formatDateTime(d.data_emissao),
-      (d.contato_nome || '—').slice(0, 40),
+      (d.contato_nome || '—').slice(0, 36),
+      `${d.cidade || '—'}/${d.uf || '—'}`,
       `R$ ${formatMoney(d.valor)}`,
-      (d.chave || '—').slice(0, 32) + '...'
+      (d.chave || '—').slice(0, 30) + (d.chave && d.chave.length > 30 ? '...' : '')
     ])
 
-    autoTable(doc, {
-      startY: 25,
-      head: [['Número', 'Data/Hora', 'Cliente', 'Valor', 'Chave de Acesso']],
-      body: tableBody,
-      foot: [['', '', 'TOTAL GERAL:', `R$ ${formatMoney(totalGeral)}`, '']],
-      styles: { fontSize: 8, cellPadding: 2 },
-      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold' },
-      footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' }
+    const pdfBuffer = gerarDocumentoPdfFiscal({
+      titulo,
+      empresa,
+      competencia,
+      totalItens: lista.length,
+      valorTotal: totalGeral,
+      valorMonofasicos: 0,
+      colunas,
+      linhas,
+      colunasAlinhadasDireita: [4],
+      orientacao: 'landscape'
     })
 
-    const pdfBuf = doc.output('arraybuffer')
     resultados.push({
       nomeArquivo: `${baseName}.pdf`,
-      buffer: new Uint8Array(pdfBuf),
+      buffer: pdfBuffer,
       tipo: 'pdf',
       modalidade: 'NFE_Saidas'
     })
@@ -652,8 +865,9 @@ export function gerarRelatorioNfseSaidas(
   // CSV
   if (formatos.includes('csv')) {
     let csv = '\uFEFF'
+    csv += `RELATÓRIO FISCAL;${titulo}\r\n`
     csv += `EMPRESA;${empresa.razao_social};CNPJ;${empresa.cnpj};COMPETENCIA;${competencia}\r\n`
-    csv += `TITULO;${titulo}\r\n\r\n`
+    csv += `TOTAL DE ITENS;${lista.length};VALOR TOTAL;${totalGeral.toFixed(2).replace('.', ',')}\r\n\r\n`
     csv += 'NUMERO;DATA/HORA;TOMADOR/CLIENTE;VALOR (R$);CHAVE/CODIGO\r\n'
     lista.forEach(d => {
       csv += `${d.numero || '—'};${formatDateTime(d.data_emissao)};"${(d.contato_nome || '—').replace(/"/g, '""')}";${(d.valor || 0).toFixed(2).replace('.', ',')};${d.chave || '—'}\r\n`
@@ -674,8 +888,11 @@ export function gerarRelatorioNfseSaidas(
       empresa,
       competencia,
       gerado_em: new Date().toISOString(),
-      quantidade_documentos: lista.length,
-      valor_total_geral: totalGeral,
+      resumo_executivo: {
+        total_documentos: lista.length,
+        valor_total: totalGeral,
+        total_monofasicos: 0
+      },
       documentos: lista.map(d => ({
         numero: d.numero,
         data_hora: d.data_emissao,
@@ -696,8 +913,11 @@ export function gerarRelatorioNfseSaidas(
   if (formatos.includes('xlsx')) {
     const wb = XLSX.utils.book_new()
     const rows = [
+      ['RELATÓRIO FISCAL:', titulo],
       ['EMPRESA:', empresa.razao_social, 'CNPJ:', empresa.cnpj, 'COMPETÊNCIA:', competencia],
-      [titulo],
+      [],
+      ['RESUMO EXECUTIVO:'],
+      ['TOTAL DE DOCUMENTOS:', lista.length, 'VALOR TOTAL APURADO (R$):', totalGeral, 'MONOFÁSICOS (R$):', 0],
       [],
       ['Número', 'Data / Hora', 'Tomador / Cliente', 'Valor (R$)', 'Chave / Código'],
       ...lista.map(d => [
@@ -720,36 +940,33 @@ export function gerarRelatorioNfseSaidas(
     })
   }
 
-  // PDF
+  // PDF PROFISSIONAL COM RESUMO NO INÍCIO E TOTAL APENAS NO FINAL
   if (formatos.includes('pdf')) {
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-    doc.setFontSize(14)
-    doc.text(titulo, 14, 15)
-    doc.setFontSize(9)
-    doc.text(`Empresa: ${empresa.razao_social} | CNPJ: ${empresa.cnpj} | Competência: ${competencia}`, 14, 21)
-
-    const tableBody = lista.map(d => [
+    const colunas = ['Número', 'Data/Hora', 'Cliente / Tomador', 'Valor', 'Chave/Código']
+    const linhas = lista.map(d => [
       d.numero || '—',
       formatDateTime(d.data_emissao),
-      (d.contato_nome || '—').slice(0, 40),
+      (d.contato_nome || '—').slice(0, 42),
       `R$ ${formatMoney(d.valor)}`,
       d.chave || '—'
     ])
 
-    autoTable(doc, {
-      startY: 25,
-      head: [['Número', 'Data/Hora', 'Cliente / Tomador', 'Valor', 'Chave/Código']],
-      body: tableBody,
-      foot: [['', '', 'TOTAL GERAL:', `R$ ${formatMoney(totalGeral)}`, '']],
-      styles: { fontSize: 8, cellPadding: 2 },
-      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold' },
-      footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' }
+    const pdfBuffer = gerarDocumentoPdfFiscal({
+      titulo,
+      empresa,
+      competencia,
+      totalItens: lista.length,
+      valorTotal: totalGeral,
+      valorMonofasicos: 0,
+      colunas,
+      linhas,
+      colunasAlinhadasDireita: [3],
+      orientacao: 'landscape'
     })
 
-    const pdfBuf = doc.output('arraybuffer')
     resultados.push({
       nomeArquivo: `${baseName}.pdf`,
-      buffer: new Uint8Array(pdfBuf),
+      buffer: pdfBuffer,
       tipo: 'pdf',
       modalidade: 'NFSE_Saidas'
     })
@@ -776,8 +993,9 @@ export function gerarRelatorioNfceSaidas(
   // CSV
   if (formatos.includes('csv')) {
     let csv = '\uFEFF'
+    csv += `RELATÓRIO FISCAL;${titulo}\r\n`
     csv += `EMPRESA;${empresa.razao_social};CNPJ;${empresa.cnpj};COMPETENCIA;${competencia}\r\n`
-    csv += `TITULO;${titulo}\r\n\r\n`
+    csv += `TOTAL DE ITENS;${lista.length};VALOR TOTAL;${totalGeral.toFixed(2).replace('.', ',')}\r\n\r\n`
     csv += 'NUMERO;DATA/HORA;CONSUMIDOR;VALOR (R$);CHAVE DA NOTA\r\n'
     lista.forEach(d => {
       csv += `${d.numero || '—'};${formatDateTime(d.data_emissao)};"${(d.contato_nome || 'Consumidor Final').replace(/"/g, '""')}";${(d.valor || 0).toFixed(2).replace('.', ',')};${d.chave || '—'}\r\n`
@@ -798,8 +1016,11 @@ export function gerarRelatorioNfceSaidas(
       empresa,
       competencia,
       gerado_em: new Date().toISOString(),
-      quantidade_documentos: lista.length,
-      valor_total_geral: totalGeral,
+      resumo_executivo: {
+        total_documentos: lista.length,
+        valor_total: totalGeral,
+        total_monofasicos: 0
+      },
       documentos: lista.map(d => ({
         numero: d.numero,
         data_hora: d.data_emissao,
@@ -820,8 +1041,11 @@ export function gerarRelatorioNfceSaidas(
   if (formatos.includes('xlsx')) {
     const wb = XLSX.utils.book_new()
     const rows = [
+      ['RELATÓRIO FISCAL:', titulo],
       ['EMPRESA:', empresa.razao_social, 'CNPJ:', empresa.cnpj, 'COMPETÊNCIA:', competencia],
-      [titulo],
+      [],
+      ['RESUMO EXECUTIVO:'],
+      ['TOTAL DE DOCUMENTOS:', lista.length, 'VALOR TOTAL APURADO (R$):', totalGeral, 'MONOFÁSICOS (R$):', 0],
       [],
       ['Número', 'Data / Hora', 'Consumidor / Destinatário', 'Valor (R$)', 'Chave de Acesso'],
       ...lista.map(d => [
@@ -831,7 +1055,7 @@ export function gerarRelatorioNfceSaidas(
         d.valor || 0,
         d.chave || '—'
       ]),
-      ['', '', 'TOTAL GERAL:', totalGeral, '']
+      ['', '', '', 'TOTAL GERAL:', totalGeral, '']
     ]
     const ws = XLSX.utils.aoa_to_sheet(rows)
     XLSX.utils.book_append_sheet(wb, ws, 'Vendas_NFCe')
@@ -844,36 +1068,33 @@ export function gerarRelatorioNfceSaidas(
     })
   }
 
-  // PDF
+  // PDF PROFISSIONAL COM RESUMO NO INÍCIO E TOTAL APENAS NO FINAL
   if (formatos.includes('pdf')) {
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-    doc.setFontSize(14)
-    doc.text(titulo, 14, 15)
-    doc.setFontSize(9)
-    doc.text(`Empresa: ${empresa.razao_social} | CNPJ: ${empresa.cnpj} | Competência: ${competencia}`, 14, 21)
-
-    const tableBody = lista.map(d => [
+    const colunas = ['Número', 'Data/Hora', 'Consumidor', 'Valor', 'Chave de Acesso']
+    const linhas = lista.map(d => [
       d.numero || '—',
       formatDateTime(d.data_emissao),
-      (d.contato_nome || 'Consumidor Final').slice(0, 35),
+      (d.contato_nome || 'Consumidor Final').slice(0, 36),
       `R$ ${formatMoney(d.valor)}`,
-      (d.chave || '—').slice(0, 32) + '...'
+      (d.chave || '—').slice(0, 30) + (d.chave && d.chave.length > 30 ? '...' : '')
     ])
 
-    autoTable(doc, {
-      startY: 25,
-      head: [['Número', 'Data/Hora', 'Consumidor', 'Valor', 'Chave de Acesso']],
-      body: tableBody,
-      foot: [['', '', 'TOTAL GERAL:', `R$ ${formatMoney(totalGeral)}`, '']],
-      styles: { fontSize: 8, cellPadding: 2 },
-      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold' },
-      footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' }
+    const pdfBuffer = gerarDocumentoPdfFiscal({
+      titulo,
+      empresa,
+      competencia,
+      totalItens: lista.length,
+      valorTotal: totalGeral,
+      valorMonofasicos: 0,
+      colunas,
+      linhas,
+      colunasAlinhadasDireita: [3],
+      orientacao: 'landscape'
     })
 
-    const pdfBuf = doc.output('arraybuffer')
     resultados.push({
       nomeArquivo: `${baseName}.pdf`,
-      buffer: new Uint8Array(pdfBuf),
+      buffer: pdfBuffer,
       tipo: 'pdf',
       modalidade: 'NFCE_Saidas'
     })
@@ -912,12 +1133,14 @@ export function gerarRelatorioMonofasicos(
     const lista = ordenarItens(itensFiltrados, ordenacao)
     const totalQtd = lista.reduce((acc, it) => acc + (it.quantidade || 0), 0)
     const totalGeral = lista.reduce((acc, it) => acc + (it.valor_total || 0), 0)
+    const totalMonofasicos = lista.filter(it => it.is_monofasico).reduce((acc, it) => acc + (it.valor_total || 0), 0)
 
     // CSV
     if (formatos.includes('csv')) {
       let csv = '\uFEFF'
+      csv += `RELATÓRIO FISCAL;${titulo}\r\n`
       csv += `EMPRESA;${empresa.razao_social};CNPJ;${empresa.cnpj};COMPETENCIA;${competencia}\r\n`
-      csv += `TITULO;${titulo}\r\n\r\n`
+      csv += `ESCOPO;${escopo};TIPO;${tipoVisualizacao};TOTAL ITENS;${lista.length};TOTAL GERAL;${totalGeral.toFixed(2).replace('.', ',')};TOTAL MONOFÁSICOS;${totalMonofasicos.toFixed(2).replace('.', ',')}\r\n\r\n`
       csv += 'NUMERO;DATA/HORA;PRODUTO;NCM;PIS/COFINS CST;QUANTIDADE;TOTAL (R$);STATUS\r\n'
       lista.forEach(it => {
         csv += `${it.numero_nota || '—'};${formatDateTime(it.data_hora)};"${it.produto_nome.replace(/"/g, '""')}";${formatarNcm(it.ncm)};${it.cst_pis_cofins};${it.quantidade.toFixed(2).replace('.', ',')};${it.valor_total.toFixed(2).replace('.', ',')};${it.is_monofasico ? 'Monofásico' : 'Tributado'}\r\n`
@@ -940,9 +1163,12 @@ export function gerarRelatorioMonofasicos(
         tipo: 'detalhado',
         escopo,
         gerado_em: new Date().toISOString(),
-        quantidade_itens: lista.length,
-        soma_quantidades: totalQtd,
-        valor_total_geral: totalGeral,
+        resumo_executivo: {
+          total_itens: lista.length,
+          soma_quantidades: totalQtd,
+          valor_total_geral: totalGeral,
+          valor_total_monofasicos: totalMonofasicos
+        },
         itens: lista
       }, null, 2)
       resultados.push({
@@ -957,8 +1183,11 @@ export function gerarRelatorioMonofasicos(
     if (formatos.includes('xlsx')) {
       const wb = XLSX.utils.book_new()
       const rows = [
+        ['RELATÓRIO FISCAL:', titulo],
         ['EMPRESA:', empresa.razao_social, 'CNPJ:', empresa.cnpj, 'COMPETÊNCIA:', competencia],
-        [titulo],
+        [],
+        ['RESUMO EXECUTIVO:'],
+        ['TOTAL DE ITENS:', lista.length, 'SOMA QUANTIDADES:', totalQtd, 'VALOR TOTAL APURADO (R$):', totalGeral, 'TOTAL MONOFÁSICOS (R$):', totalMonofasicos],
         [],
         ['Número da Nota', 'Data / Hora', 'Produto', 'NCM', 'PIS/COFINS (CST)', 'Quantidade', 'Valor Total (R$)', 'Classificação'],
         ...lista.map(it => [
@@ -984,39 +1213,36 @@ export function gerarRelatorioMonofasicos(
       })
     }
 
-    // PDF
+    // PDF PROFISSIONAL COM RESUMO NO INÍCIO E TOTAL APENAS NO FINAL
     if (formatos.includes('pdf')) {
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-      doc.setFontSize(14)
-      doc.text(titulo, 14, 15)
-      doc.setFontSize(9)
-      doc.text(`Empresa: ${empresa.razao_social} | CNPJ: ${empresa.cnpj} | Competência: ${competencia}`, 14, 21)
-
-      const tableBody = lista.map(it => [
+      const colunas = ['Nota', 'Data/Hora', 'Produto', 'NCM', 'PIS/COFINS', 'Qtd', 'Valor Total', 'Status']
+      const linhas = lista.map(it => [
         it.numero_nota || '—',
         formatDateTime(it.data_hora),
-        it.produto_nome.slice(0, 35),
+        it.produto_nome.slice(0, 36),
         formatarNcm(it.ncm),
-        it.cst_pis_cofins,
+        it.cst_pis_cofins || '01',
         it.quantidade.toFixed(2),
         `R$ ${formatMoney(it.valor_total)}`,
         it.is_monofasico ? 'Monofásico' : 'Tributado'
       ])
 
-      autoTable(doc, {
-        startY: 25,
-        head: [['Nota', 'Data/Hora', 'Produto', 'NCM', 'PIS/COFINS', 'Qtd', 'Valor Total', 'Tipo']],
-        body: tableBody,
-        foot: [['', '', '', 'TOTAL GERAL:', '', totalQtd.toFixed(2), `R$ ${formatMoney(totalGeral)}`, '']],
-        styles: { fontSize: 7.5, cellPadding: 2 },
-        headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold' },
-        footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' }
+      const pdfBuffer = gerarDocumentoPdfFiscal({
+        titulo,
+        empresa,
+        competencia,
+        totalItens: lista.length,
+        valorTotal: totalGeral,
+        valorMonofasicos: totalMonofasicos,
+        colunas,
+        linhas,
+        colunasAlinhadasDireita: [5, 6],
+        orientacao: 'landscape'
       })
 
-      const pdfBuf = doc.output('arraybuffer')
       resultados.push({
         nomeArquivo: `${baseName}.pdf`,
-        buffer: new Uint8Array(pdfBuf),
+        buffer: pdfBuffer,
         tipo: 'pdf',
         modalidade: 'Relatorios'
       })
@@ -1027,12 +1253,14 @@ export function gerarRelatorioMonofasicos(
     const agrupados = agruparProdutos(itensFiltrados)
     const totalQtd = agrupados.reduce((acc, it) => acc + (it.quantidade_total || 0), 0)
     const totalGeral = agrupados.reduce((acc, it) => acc + (it.valor_total || 0), 0)
+    const totalMonofasicos = agrupados.filter(it => it.is_monofasico).reduce((acc, it) => acc + (it.valor_total || 0), 0)
 
     // CSV
     if (formatos.includes('csv')) {
       let csv = '\uFEFF'
+      csv += `RELATÓRIO FISCAL;${titulo}\r\n`
       csv += `EMPRESA;${empresa.razao_social};CNPJ;${empresa.cnpj};COMPETENCIA;${competencia}\r\n`
-      csv += `TITULO;${titulo}\r\n\r\n`
+      csv += `ESCOPO;${escopo};TIPO;${tipoVisualizacao};PRODUTOS AGRUPADOS;${agrupados.length};TOTAL GERAL;${totalGeral.toFixed(2).replace('.', ',')};TOTAL MONOFÁSICOS;${totalMonofasicos.toFixed(2).replace('.', ',')}\r\n\r\n`
       csv += 'QUANTIDADE;PRODUTO;NCM;PIS/COFINS CST;VALOR TOTAL (R$);STATUS\r\n'
       agrupados.forEach(it => {
         csv += `${it.quantidade_total.toFixed(2).replace('.', ',')};"${it.produto_nome.replace(/"/g, '""')}";${formatarNcm(it.ncm)};${it.cst_pis_cofins};${it.valor_total.toFixed(2).replace('.', ',')};${it.is_monofasico ? 'Monofásico' : 'Tributado'}\r\n`
@@ -1055,9 +1283,12 @@ export function gerarRelatorioMonofasicos(
         tipo: 'agrupado',
         escopo,
         gerado_em: new Date().toISOString(),
-        quantidade_produtos_distintos: agrupados.length,
-        soma_quantidades: totalQtd,
-        valor_total_geral: totalGeral,
+        resumo_executivo: {
+          quantidade_produtos_distintos: agrupados.length,
+          soma_quantidades: totalQtd,
+          valor_total_geral: totalGeral,
+          valor_total_monofasicos: totalMonofasicos
+        },
         itens_agrupados: agrupados
       }, null, 2)
       resultados.push({
@@ -1072,8 +1303,11 @@ export function gerarRelatorioMonofasicos(
     if (formatos.includes('xlsx')) {
       const wb = XLSX.utils.book_new()
       const rows = [
+        ['RELATÓRIO FISCAL:', titulo],
         ['EMPRESA:', empresa.razao_social, 'CNPJ:', empresa.cnpj, 'COMPETÊNCIA:', competencia],
-        [titulo],
+        [],
+        ['RESUMO EXECUTIVO:'],
+        ['PRODUTOS DISTINTOS:', agrupados.length, 'SOMA QUANTIDADES:', totalQtd, 'VALOR TOTAL APURADO (R$):', totalGeral, 'TOTAL MONOFÁSICOS (R$):', totalMonofasicos],
         [],
         ['Quantidade Total', 'Produto', 'NCM', 'PIS/COFINS (CST)', 'Valor Total (R$)', 'Classificação'],
         ...agrupados.map(it => [
@@ -1097,36 +1331,34 @@ export function gerarRelatorioMonofasicos(
       })
     }
 
-    // PDF
+    // PDF PROFISSIONAL COM RESUMO NO INÍCIO E TOTAL APENAS NO FINAL
     if (formatos.includes('pdf')) {
-      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-      doc.setFontSize(14)
-      doc.text(titulo, 14, 15)
-      doc.setFontSize(9)
-      doc.text(`Empresa: ${empresa.razao_social} | CNPJ: ${empresa.cnpj} | Competência: ${competencia}`, 14, 21)
-
-      const tableBody = agrupados.map(it => [
+      const colunas = ['Quantidade Total', 'Produto', 'NCM', 'PIS/COFINS', 'Valor Total', 'Status']
+      const linhas = agrupados.map(it => [
         it.quantidade_total.toFixed(2),
-        it.produto_nome.slice(0, 45),
+        it.produto_nome.slice(0, 42),
         formatarNcm(it.ncm),
-        it.cst_pis_cofins,
-        `R$ ${formatMoney(it.valor_total)}`
+        it.cst_pis_cofins || '01',
+        `R$ ${formatMoney(it.valor_total)}`,
+        it.is_monofasico ? 'Monofásico' : 'Tributado'
       ])
 
-      autoTable(doc, {
-        startY: 25,
-        head: [['Quantidade', 'Produto', 'NCM', 'PIS/COFINS', 'Valor Total']],
-        body: tableBody,
-        foot: [[totalQtd.toFixed(2), 'TOTAL GERAL:', '', '', `R$ ${formatMoney(totalGeral)}`]],
-        styles: { fontSize: 8, cellPadding: 2.5 },
-        headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold' },
-        footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' }
+      const pdfBuffer = gerarDocumentoPdfFiscal({
+        titulo,
+        empresa,
+        competencia,
+        totalItens: agrupados.length,
+        valorTotal: totalGeral,
+        valorMonofasicos: totalMonofasicos,
+        colunas,
+        linhas,
+        colunasAlinhadasDireita: [0, 4],
+        orientacao: 'landscape'
       })
 
-      const pdfBuf = doc.output('arraybuffer')
       resultados.push({
         nomeArquivo: `${baseName}.pdf`,
-        buffer: new Uint8Array(pdfBuf),
+        buffer: pdfBuffer,
         tipo: 'pdf',
         modalidade: 'Relatorios'
       })

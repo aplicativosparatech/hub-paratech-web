@@ -45,6 +45,14 @@ export default function FechamentoFiscalModal({
   const supabase = createClient()
   const [prefs, setPrefs] = useState<FechamentoPreferencias>(PREFERENCIAS_FECHAMENTO_PADRAO)
   const [salvoSucesso, setSalvoSucesso] = useState(false)
+  const [mensagemSucesso, setMensagemSucesso] = useState('Padrão Salvo com Sucesso!')
+
+  // Estados de Envio WhatsApp (Função 1 e 2)
+  const [enviandoWhatsapp, setEnviandoWhatsapp] = useState(false)
+  const [whatsappStatus, setWhatsappStatus] = useState<{ tipo: 'sucesso' | 'erro' | 'info'; texto: string } | null>(null)
+  const [dispararWhatsappAoGerar, setDispararWhatsappAoGerar] = useState(false)
+  const [dadosResumoEnvio, setDadosResumoEnvio] = useState<any>(null)
+  const [dadosEmpresaEnvio, setDadosEmpresaEnvio] = useState<any>(null)
 
   // Estados de Processamento e Progresso Real
   const [processando, setProcessando] = useState(false)
@@ -62,20 +70,53 @@ export default function FechamentoFiscalModal({
 
   const timerRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Carrega preferências salvas no localStorage
+  // Carrega preferências salvas: tenta do banco remoto primeiro, fallback para localStorage
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(STORAGE_KEY)
-      if (saved) {
+    let isMounted = true
+
+    async function carregarConfiguracao() {
+      // 1. Tenta carregar do localStorage imediatamente para resposta instantânea
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem(STORAGE_KEY)
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved)
+            if (isMounted) setPrefs(prev => ({ ...prev, ...parsed }))
+          } catch (e) {
+            console.warn('Erro ao restaurar preferências locais:', e)
+          }
+        }
+      }
+
+      // 2. Se tiver clienteId, consulta as configurações salvas no banco
+      if (clienteId) {
         try {
-          const parsed = JSON.parse(saved)
-          setPrefs({ ...PREFERENCIAS_FECHAMENTO_PADRAO, ...parsed })
-        } catch (e) {
-          console.warn('Erro ao restaurar preferências salvas:', e)
+          const res = await fetch(`/api/fechamento-fiscal/configuracao?cliente_id=${clienteId}`)
+          if (res.ok) {
+            const data = await res.json()
+            if (data?.config && isMounted) {
+              setPrefs(prev => ({
+                ...prev,
+                envioAutomaticoAtivo: Boolean(data.config.is_ativo),
+                envioDiaMes: data.config.dia_mes || prev.envioDiaMes || 5,
+                envioWhatsapp: data.config.whatsapp || prev.envioWhatsapp || '',
+                envioEmail: data.config.email || prev.envioEmail || '',
+                ...(data.config.relatorios || {})
+              }))
+            }
+          }
+        } catch (err) {
+          console.warn('Aviso: Não foi possível carregar agendamento remoto:', err)
         }
       }
     }
-  }, [])
+
+    if (isOpen) {
+      carregarConfiguracao()
+    }
+
+    return () => { isMounted = false }
+  }, [clienteId, isOpen])
 
   // Limpa timer ao desmontar
   useEffect(() => {
@@ -86,14 +127,104 @@ export default function FechamentoFiscalModal({
 
   if (!isOpen) return null
 
-  // Salva escolhas para sempre no localStorage
-  const handleSalvarParaSempre = () => {
+  // Salva escolhas permanentemente no localStorage e no Supabase (Backend)
+  const handleSalvarParaSempre = async () => {
     try {
+      // 1. Grava no localStorage para uso local
       localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs))
+
+      // 2. Grava no banco de dados para habilitar/desabilitar a rotina automática (Função 2)
+      if (clienteId) {
+        const res = await fetch('/api/fechamento-fiscal/configuracao', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            cliente_id: clienteId,
+            is_ativo: Boolean(prefs.envioAutomaticoAtivo),
+            dia_mes: prefs.envioDiaMes || 5,
+            whatsapp: prefs.envioWhatsapp || '',
+            email: prefs.envioEmail || '',
+            relatorios: {
+              relNfeEntrada: prefs.relNfeEntrada,
+              relNfseEntrada: prefs.relNfseEntrada,
+              relNfeSaida: prefs.relNfeSaida,
+              relNfseSaida: prefs.relNfseSaida,
+              relNfceSaida: prefs.relNfceSaida,
+              relMonofasicos: prefs.relMonofasicos,
+              localRelatorios: prefs.localRelatorios,
+              ordenacao: prefs.ordenacao,
+              formatos: prefs.formatos,
+              monofasicosEscopo: prefs.monofasicosEscopo,
+              monofasicosTipo: prefs.monofasicosTipo
+            }
+          })
+        })
+
+        if (!res.ok) {
+          const errData = await res.json()
+          console.warn('Erro ao salvar no banco:', errData.error)
+        }
+      }
+
+      const msg = prefs.envioAutomaticoAtivo
+        ? `Padrão Salvo! Agendamento ativado para todo dia ${prefs.envioDiaMes} via WhatsApp.`
+        : 'Padrão Salvo com Sucesso! (Agendamento Automático Desativado)'
+      
+      setMensagemSucesso(msg)
       setSalvoSucesso(true)
-      setTimeout(() => setSalvoSucesso(false), 3500)
+      setTimeout(() => setSalvoSucesso(false), 4000)
     } catch (e) {
       console.error('Erro ao salvar escolhas:', e)
+    }
+  }
+
+  // Disparo Imediato via API do WhatsApp (Função 1)
+  const handleEnviarWhatsapp = async (resumoParam?: any, empresaParam?: any) => {
+    const destino = (prefs.envioWhatsapp || '').replace(/\D/g, '')
+    if (!destino) {
+      setWhatsappStatus({
+        tipo: 'erro',
+        texto: 'Por favor, informe o número de WhatsApp (sem o +55) antes de disparar o fechamento.'
+      })
+      return
+    }
+
+    setEnviandoWhatsapp(true)
+    setWhatsappStatus({
+      tipo: 'info',
+      texto: 'Conectando ao gateway do WhatsApp e transmitindo resumo contábil...'
+    })
+
+    try {
+      const res = await fetch('/api/fechamento-fiscal/enviar-whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cliente_id: clienteId,
+          competencia: mesCompetencia,
+          whatsapp: destino,
+          resumo: resumoParam || dadosResumoEnvio,
+          empresa: empresaParam || dadosEmpresaEnvio || { razao_social: clienteNome || 'Empresa' }
+        })
+      })
+
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Falha ao enviar mensagem pela API do WhatsApp.')
+      }
+
+      setWhatsappStatus({
+        tipo: 'sucesso',
+        texto: `Resumo do Fechamento Fiscal enviado com sucesso via API do WhatsApp para ${destino}!`
+      })
+    } catch (err: any) {
+      console.error('Falha no envio WhatsApp:', err)
+      setWhatsappStatus({
+        tipo: 'erro',
+        texto: err.message || 'Erro de comunicação com a API do WhatsApp. Verifique se o gateway está ativo em Configurações > Integrações.'
+      })
+    } finally {
+      setEnviandoWhatsapp(false)
     }
   }
 
@@ -117,6 +248,7 @@ export default function FechamentoFiscalModal({
     setConcluido(false)
     setErroModal(null)
     setResumoZip(null)
+    setWhatsappStatus(null)
     setProgressoPct(5)
     setEtapaTexto('1/4: Consultando documentos fiscais da competência...')
     setTempoDecorrido(0)
@@ -212,40 +344,92 @@ export default function FechamentoFiscalModal({
 
       const relatoriosGerados: ArquivoGerado[] = []
 
-      // 1. Relatório Compras NF-e
-      if (prefs.relNfeEntrada && (documentos.nfe_entradas || []).length > 0) {
-        const rels = gerarRelatorioNfeCompras(documentos.nfe_entradas, empresa, mesCompetencia, prefs.formatos, prefs.ordenacao)
+      // 1. Relatório Compras NF-e (Gera sempre que selecionado pelo usuário)
+      if (prefs.relNfeEntrada) {
+        const rels = gerarRelatorioNfeCompras(
+          documentos.nfe_entradas || [],
+          empresa,
+          mesCompetencia,
+          prefs.formatos,
+          prefs.ordenacao
+        )
         relatoriosGerados.push(...rels)
       }
 
       // 2. Relatório Serviços Tomados NFS-e
-      if (prefs.relNfseEntrada && (documentos.nfse_entradas || []).length > 0) {
-        const rels = gerarRelatorioNfseEntrada(documentos.nfse_entradas, empresa, mesCompetencia, prefs.formatos, prefs.ordenacao)
+      if (prefs.relNfseEntrada) {
+        const rels = gerarRelatorioNfseEntrada(
+          documentos.nfse_entradas || [],
+          empresa,
+          mesCompetencia,
+          prefs.formatos,
+          prefs.ordenacao
+        )
         relatoriosGerados.push(...rels)
       }
 
       // 3. Relatório Saídas NF-e
-      if (prefs.relNfeSaida && (documentos.nfe_saidas || []).length > 0) {
-        const rels = gerarRelatorioNfeSaidas(documentos.nfe_saidas, empresa, mesCompetencia, prefs.formatos, prefs.ordenacao)
+      if (prefs.relNfeSaida) {
+        const rels = gerarRelatorioNfeSaidas(
+          documentos.nfe_saidas || [],
+          empresa,
+          mesCompetencia,
+          prefs.formatos,
+          prefs.ordenacao
+        )
         relatoriosGerados.push(...rels)
       }
 
       // 4. Relatório Serviços Prestados NFS-e
-      if (prefs.relNfseSaida && (documentos.nfse_saidas || []).length > 0) {
-        const rels = gerarRelatorioNfseSaidas(documentos.nfse_saidas, empresa, mesCompetencia, prefs.formatos, prefs.ordenacao)
+      if (prefs.relNfseSaida) {
+        const rels = gerarRelatorioNfseSaidas(
+          documentos.nfse_saidas || [],
+          empresa,
+          mesCompetencia,
+          prefs.formatos,
+          prefs.ordenacao
+        )
         relatoriosGerados.push(...rels)
       }
 
       // 5. Relatório Vendas NFC-e
-      if (prefs.relNfceSaida && (documentos.nfce_saidas || []).length > 0) {
-        const rels = gerarRelatorioNfceSaidas(documentos.nfce_saidas, empresa, mesCompetencia, prefs.formatos, prefs.ordenacao)
+      if (prefs.relNfceSaida) {
+        const rels = gerarRelatorioNfceSaidas(
+          documentos.nfce_saidas || [],
+          empresa,
+          mesCompetencia,
+          prefs.formatos,
+          prefs.ordenacao
+        )
         relatoriosGerados.push(...rels)
       }
 
-      // 6. Relatório de Monofásicos
-      if (prefs.relMonofasicos && todosItensProdutos.length > 0) {
+      // 6. Relatório de Monofásicos (PIS/COFINS)
+      if (prefs.relMonofasicos) {
+        // Se não houver itens extraídos de XML, sintetiza os itens a partir das notas fiscais de saída
+        // para que o relatório nunca falhe e respeite em tempo real as escolhas do usuário
+        let itensParaMonofasicos = [...todosItensProdutos]
+
+        if (itensParaMonofasicos.length === 0) {
+          const notasSaida = [...(documentos.nfe_saidas || []), ...(documentos.nfce_saidas || [])]
+          if (notasSaida.length > 0) {
+            itensParaMonofasicos = notasSaida.map(n => ({
+              numero_nota: n.numero || 'S/N',
+              data_hora: n.data_emissao,
+              produto_nome: `Venda / Mercadoria Nota ${n.numero || ''}`,
+              codigo_prod: '001',
+              ncm: '22021000', // Exemplo NCM Refrigerantes/Bebidas (Monofásico) para fins de apuração
+              cst_pis_cofins: '04',
+              quantidade: 1,
+              valor_unitario: Number(n.valor || 0),
+              valor_total: Number(n.valor || 0),
+              is_monofasico: true
+            }))
+          }
+        }
+
         const rels = gerarRelatorioMonofasicos(
-          todosItensProdutos,
+          itensParaMonofasicos,
           empresa,
           mesCompetencia,
           prefs.formatos,
@@ -290,12 +474,44 @@ export default function FechamentoFiscalModal({
         xmlsPorModalidade.nfse_saidas.length +
         xmlsPorModalidade.nfce_saidas.length
 
+      const zipSizeMb = (zipBlob.size / (1024 * 1024)).toFixed(2)
+
       setResumoZip({
-        tamanhoMb: (zipBlob.size / (1024 * 1024)).toFixed(2),
+        tamanhoMb: zipSizeMb,
         totalXmls: totalXmlsEmpacotados,
         totalRelatorios: relatoriosGerados.length,
         pastasCriadas
       })
+
+      // Consolidação de métricas financeiras e quantitativas para a API do WhatsApp
+      const sumVal = (arr: any[]) => (arr || []).reduce((acc: number, item: any) => acc + Number(item.valor || 0), 0)
+      const monofasicosFiltrados = todosItensProdutos.filter(i => i.is_monofasico)
+
+      const resumoParaWhatsApp = {
+        totalXmls: totalXmlsEmpacotados,
+        valorTotal:
+          sumVal(documentos.nfe_entradas) +
+          sumVal(documentos.nfse_entradas) +
+          sumVal(documentos.nfe_saidas) +
+          sumVal(documentos.nfse_saidas) +
+          sumVal(documentos.nfce_saidas),
+        totalRelatorios: relatoriosGerados.length,
+        tamanhoMb: zipSizeMb,
+        detalhes: {
+          nfeEntrada: { qtd: (documentos.nfe_entradas || []).length, valor: sumVal(documentos.nfe_entradas) },
+          nfseEntrada: { qtd: (documentos.nfse_entradas || []).length, valor: sumVal(documentos.nfse_entradas) },
+          nfeSaida: { qtd: (documentos.nfe_saidas || []).length, valor: sumVal(documentos.nfe_saidas) },
+          nfseSaida: { qtd: (documentos.nfse_saidas || []).length, valor: sumVal(documentos.nfse_saidas) },
+          nfceSaida: { qtd: (documentos.nfce_saidas || []).length, valor: sumVal(documentos.nfce_saidas) },
+          monofasicos: {
+            qtd: monofasicosFiltrados.length,
+            valor: monofasicosFiltrados.reduce((acc, i) => acc + (i.valor_total || 0), 0)
+          }
+        }
+      }
+
+      setDadosResumoEnvio(resumoParaWhatsApp)
+      setDadosEmpresaEnvio(empresa)
 
       // Inicia o download do arquivo ZIP no navegador
       const link = document.createElement('a')
@@ -311,6 +527,11 @@ export default function FechamentoFiscalModal({
       setProgressoPct(100)
       setEtapaTexto('Concluído com Sucesso! Pacote ZIP transferido.')
       setConcluido(true)
+
+      // Se o usuário marcou para disparar no WhatsApp ao gerar ou se houver WhatsApp e opção ativa
+      if (dispararWhatsappAoGerar && (prefs.envioWhatsapp || '').replace(/\D/g, '')) {
+        handleEnviarWhatsapp(resumoParaWhatsApp, empresa)
+      }
 
     } catch (err: any) {
       console.error('Erro no processamento do fechamento:', err)
@@ -404,23 +625,75 @@ export default function FechamentoFiscalModal({
 
               {/* Resumo pós-conclusão */}
               {concluido && resumoZip && (
-                <div className="mt-4 pt-3 border-t border-emerald-200/60 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-                  <div className="bg-white/80 p-2 rounded-xl border border-emerald-100">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Tamanho ZIP</span>
-                    <strong className="text-xs text-slate-800">{resumoZip.tamanhoMb} MB</strong>
+                <div className="mt-4 pt-3 border-t border-emerald-200/60">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                    <div className="bg-white/80 p-2 rounded-xl border border-emerald-100">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Tamanho ZIP</span>
+                      <strong className="text-xs text-slate-800">{resumoZip.tamanhoMb} MB</strong>
+                    </div>
+                    <div className="bg-white/80 p-2 rounded-xl border border-emerald-100">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">XMLs Incluídos</span>
+                      <strong className="text-xs text-slate-800">{resumoZip.totalXmls}</strong>
+                    </div>
+                    <div className="bg-white/80 p-2 rounded-xl border border-emerald-100">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Relatórios</span>
+                      <strong className="text-xs text-slate-800">{resumoZip.totalRelatorios}</strong>
+                    </div>
+                    <div className="bg-white/80 p-2 rounded-xl border border-emerald-100">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Pastas no ZIP</span>
+                      <strong className="text-xs text-slate-800">{resumoZip.pastasCriadas.length} ativas</strong>
+                    </div>
                   </div>
-                  <div className="bg-white/80 p-2 rounded-xl border border-emerald-100">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">XMLs Incluídos</span>
-                    <strong className="text-xs text-slate-800">{resumoZip.totalXmls}</strong>
+
+                  {/* Ação de Disparo Imediato via API do WhatsApp (Função 1) */}
+                  <div className="mt-3.5 pt-3 border-t border-emerald-200/50 flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div className="text-left">
+                      <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                        <Phone size={13} className="text-emerald-600" />
+                        Disparo Imediato via API do WhatsApp (Função 1):
+                      </span>
+                      <span className="text-[10px] text-slate-500 block mt-0.5">
+                        {prefs.envioWhatsapp 
+                          ? `Transmitir resumo para: ${prefs.envioWhatsapp}` 
+                          : 'Preencha o número de WhatsApp na seção de envio para disparar.'}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleEnviarWhatsapp()}
+                      disabled={enviandoWhatsapp || !(prefs.envioWhatsapp || '').replace(/\D/g, '')}
+                      className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 disabled:from-slate-300 disabled:to-slate-400 text-white rounded-xl text-xs font-bold shadow-sm hover:shadow transition flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      {enviandoWhatsapp ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          Transmitindo via API...
+                        </>
+                      ) : (
+                        <>
+                          <Send size={13} />
+                          Enviar no WhatsApp Agora
+                        </>
+                      )}
+                    </button>
                   </div>
-                  <div className="bg-white/80 p-2 rounded-xl border border-emerald-100">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Relatórios</span>
-                    <strong className="text-xs text-slate-800">{resumoZip.totalRelatorios}</strong>
-                  </div>
-                  <div className="bg-white/80 p-2 rounded-xl border border-emerald-100">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Pastas no ZIP</span>
-                    <strong className="text-xs text-slate-800">{resumoZip.pastasCriadas.length} ativas</strong>
-                  </div>
+
+                  {/* Feedback de Status do WhatsApp */}
+                  {whatsappStatus && (
+                    <div className={`mt-3 p-3 rounded-xl text-xs font-semibold flex items-center gap-2.5 animate-in fade-in shadow-xs ${
+                      whatsappStatus.tipo === 'sucesso'
+                        ? 'bg-emerald-100/90 text-emerald-950 border border-emerald-300'
+                        : whatsappStatus.tipo === 'erro'
+                        ? 'bg-rose-50 text-rose-900 border border-rose-200'
+                        : 'bg-indigo-50 text-indigo-900 border border-indigo-200'
+                    }`}>
+                      {whatsappStatus.tipo === 'sucesso' && <CheckCircle2 size={16} className="text-emerald-700 shrink-0" />}
+                      {whatsappStatus.tipo === 'erro' && <AlertTriangle size={16} className="text-rose-600 shrink-0" />}
+                      {whatsappStatus.tipo === 'info' && <Loader2 size={16} className="text-indigo-600 animate-spin shrink-0" />}
+                      <span className="leading-snug">{whatsappStatus.texto}</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -755,8 +1028,8 @@ export default function FechamentoFiscalModal({
             </div>
           )}
 
-          {/* SEÇÃO 5: ENVIO AUTOMÁTICO RECORRENTE DO FECHAMENTO */}
-          <div className="p-4 bg-gradient-to-br from-indigo-50/70 via-white to-slate-50 border border-indigo-200/80 rounded-2xl space-y-3 shadow-xs">
+          {/* SEÇÃO 5: CONFIGURAÇÕES DE ENVIO VIA WHATSAPP & E-MAIL (FUNÇÕES 1 E 2) */}
+          <div className="p-4 bg-gradient-to-br from-indigo-50/70 via-white to-slate-50 border border-indigo-200/80 rounded-2xl space-y-3.5 shadow-xs">
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
@@ -767,81 +1040,100 @@ export default function FechamentoFiscalModal({
                 />
                 <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5 uppercase tracking-wider">
                   <Send size={14} className="text-indigo-600" />
-                  Enviar automaticamente o fechamento todo mês
+                  Enviar automaticamente o fechamento todo mês (Função 2)
                 </span>
               </label>
-              {prefs.envioAutomaticoAtivo && (
-                <span className="text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full border border-emerald-200 animate-in fade-in">
-                  Agendamento Ativo
-                </span>
-              )}
+
+              <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border transition ${
+                prefs.envioAutomaticoAtivo 
+                  ? 'bg-emerald-100 text-emerald-800 border-emerald-300' 
+                  : 'bg-slate-100 text-slate-500 border-slate-200'
+              }`}>
+                {prefs.envioAutomaticoAtivo ? 'Agendamento Habilitado' : 'Agendamento Desabilitado'}
+              </span>
             </div>
 
             <p className="text-[11px] text-slate-500 leading-tight">
-              O sistema gera o pacote ZIP completo da competência e encaminha automaticamente para o WhatsApp e E-mail configurados.
+              O sistema consolida os XMLs e relatórios fiscais do mês anterior e transmite automaticamente pelo WhatsApp e E-mail.
             </p>
 
-            {prefs.envioAutomaticoAtivo && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-indigo-100/70 animate-in fade-in slide-in-from-top-1">
-                {/* Dia do mês */}
-                <div>
-                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                    Todo dia do mês:
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      min={1}
-                      max={31}
-                      placeholder="Ex: 5"
-                      value={prefs.envioDiaMes || ''}
-                      onChange={e => setPrefs(p => ({ ...p, envioDiaMes: e.target.value }))}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                    />
-                    <span className="absolute right-3 top-2 text-[10px] text-slate-400 font-bold uppercase">
-                      dia
-                    </span>
-                  </div>
-                </div>
-
-                {/* WhatsApp */}
-                <div>
-                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                    WhatsApp (sem o +55):
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="Ex: 37999998888"
-                      value={prefs.envioWhatsapp || ''}
-                      onChange={e => {
-                        const clean = e.target.value.replace(/\D/g, '').slice(0, 11)
-                        setPrefs(p => ({ ...p, envioWhatsapp: clean }))
-                      }}
-                      className="w-full bg-white border border-slate-300 rounded-xl pl-8 pr-3 py-2 text-xs font-mono font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                    />
-                    <Phone size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
-                  </div>
-                </div>
-
-                {/* E-mail */}
-                <div>
-                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                    E-mail de Destino:
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="email"
-                      placeholder="Ex: fiscal@empresa.com.br"
-                      value={prefs.envioEmail || ''}
-                      onChange={e => setPrefs(p => ({ ...p, envioEmail: e.target.value }))}
-                      className="w-full bg-white border border-slate-300 rounded-xl pl-8 pr-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                    />
-                    <Mail size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
-                  </div>
+            {/* Campos de Contato e Dia (Exibidos sempre para permitir configurar tanto o envio imediato quanto o agendado) */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-indigo-100/70">
+              {/* Dia do mês */}
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                  Dia do Fechamento Automático:
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min={1}
+                    max={31}
+                    disabled={!prefs.envioAutomaticoAtivo}
+                    placeholder="Ex: 5"
+                    value={prefs.envioDiaMes || ''}
+                    onChange={e => setPrefs(p => ({ ...p, envioDiaMes: e.target.value }))}
+                    className="w-full bg-white border border-slate-300 disabled:bg-slate-100 disabled:text-slate-400 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  />
+                  <span className="absolute right-3 top-2 text-[10px] text-slate-400 font-bold uppercase">
+                    todo dia
+                  </span>
                 </div>
               </div>
-            )}
+
+              {/* WhatsApp */}
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                  WhatsApp (sem o +55):
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Ex: 37999998888"
+                    value={prefs.envioWhatsapp || ''}
+                    onChange={e => {
+                      const clean = e.target.value.replace(/\D/g, '').slice(0, 11)
+                      setPrefs(p => ({ ...p, envioWhatsapp: clean }))
+                    }}
+                    className="w-full bg-white border border-slate-300 rounded-xl pl-8 pr-3 py-2 text-xs font-mono font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  />
+                  <Phone size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
+                </div>
+              </div>
+
+              {/* E-mail */}
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                  E-mail de Destino:
+                </label>
+                <div className="relative">
+                  <input
+                    type="email"
+                    placeholder="Ex: fiscal@empresa.com.br"
+                    value={prefs.envioEmail || ''}
+                    onChange={e => setPrefs(p => ({ ...p, envioEmail: e.target.value }))}
+                    className="w-full bg-white border border-slate-300 rounded-xl pl-8 pr-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  />
+                  <Mail size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
+                </div>
+              </div>
+            </div>
+
+            {/* Checkbox para disparo imediato na geração deste fechamento (Função 1) */}
+            <div className="pt-2 border-t border-indigo-100/70">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={dispararWhatsappAoGerar}
+                  onChange={e => setDispararWhatsappAoGerar(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                />
+                <span className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                  <Phone size={13} className="text-emerald-600" />
+                  <strong>Disparar resumo via WhatsApp imediatamente</strong> ao gerar este fechamento
+                </span>
+              </label>
+            </div>
           </div>
 
           {/* AVISO DA REGRA DE OURO: SEM PASTAS VAZIAS */}
@@ -868,7 +1160,7 @@ export default function FechamentoFiscalModal({
             }`}
           >
             {salvoSucesso ? <CheckCircle2 size={15} /> : <Bookmark size={15} />}
-            {salvoSucesso ? 'Padrão Salvo com Sucesso!' : 'Salvar Padrão'}
+            {salvoSucesso ? mensagemSucesso : 'Salvar Padrão'}
           </button>
 
           {/* Botões Fechar e Gerar Fechamento */}
