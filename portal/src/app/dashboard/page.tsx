@@ -749,58 +749,58 @@ export default function DashboardPage() {
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 sm:p-6 rounded-3xl border border-indigo-900/50 shadow-xl mb-8 transition-all duration-300">
         
         {/* LINHA SUPERIOR DO CARD: IDENTIFICAÇÃO + FILTROS + BOTÃO SANFONA */}
-        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         
         {/* Identificação do Fechamento */}
-        <div className="flex items-center gap-3.5">
+        <div className="flex items-center gap-3.5 min-w-0 pr-2">
           <div className="p-3 bg-indigo-500/20 border border-indigo-400/30 rounded-2xl text-indigo-400 shrink-0">
             <Package size={22} />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-white tracking-tight">
+              <span className="text-sm font-bold text-white tracking-tight shrink-0">
                 Fechamento Fiscal Mensal
               </span>
-              <span className="text-[10px] font-extrabold uppercase bg-indigo-500/30 text-indigo-200 px-2.5 py-0.5 rounded-full border border-indigo-400/20">
-                Pacote ZIP de XMLs & Relatórios
+              <span className="text-[10px] font-extrabold uppercase bg-indigo-500/30 text-indigo-200 px-2 py-0.5 rounded-full border border-indigo-400/20 shrink-0">
+                Pacote ZIP & Relatórios
               </span>
             </div>
-            <p className="text-xs text-slate-300 mt-0.5">
+            <p className="text-xs text-slate-300 mt-0.5 truncate max-w-xl">
               Empacotamento automático sem pastas vazias, relatórios oficiais e apuração de monofásicos.
             </p>
           </div>
         </div>
 
-        {/* Filtros e Botão Fechamento */}
-        <div className="flex flex-wrap items-center gap-3">
+        {/* 3 BOTÕES / CONTROLES NA MESMA LINHA */}
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 overflow-x-auto">
           
           {/* 1. SELETOR DE CLIENTE COM BUSCA INTELIGENTE (POR NOME, CNPJ OU TELEFONE) */}
           {userRole === 'cliente' ? (
-            <div className="flex items-center gap-2 bg-slate-800/80 border border-slate-700/80 px-3.5 py-2 rounded-xl text-xs">
+            <div className="flex items-center gap-2 bg-slate-800/80 border border-slate-700/80 px-3 py-1.5 rounded-xl text-xs h-[46px] shrink-0">
               <Building2 size={15} className="text-indigo-400 shrink-0" />
-              <div>
+              <div className="flex flex-col justify-center">
                 <span className="text-[9px] text-slate-400 block font-bold uppercase leading-none">Minha Empresa</span>
-                <span className="text-white font-semibold text-xs leading-tight block truncate max-w-[200px]">
+                <span className="text-white font-semibold text-xs leading-tight block truncate max-w-[150px] sm:max-w-[180px]">
                   {clienteNomeExibicao}
                 </span>
               </div>
             </div>
           ) : (
-            <div className="relative" ref={dropdownClienteRef}>
-              <div className="bg-slate-800/90 border border-slate-700 hover:border-slate-600 rounded-xl px-3 py-1.5 shadow-inner transition">
-                <label className="text-[9px] uppercase font-bold text-slate-400 block">
-                  Cliente / Empresa (Busca por Nome, CNPJ ou Tel)
+            <div className="relative shrink-0" ref={dropdownClienteRef}>
+              <div className="bg-slate-800/90 border border-slate-700 hover:border-slate-600 rounded-xl px-2.5 sm:px-3 py-1.5 shadow-inner transition h-[46px] flex flex-col justify-center">
+                <label className="text-[9px] uppercase font-bold text-slate-400 block leading-tight truncate">
+                  Cliente / Empresa
                 </label>
                 <button
                   type="button"
                   onClick={() => setIsOpenBuscaCliente(prev => !prev)}
-                  className="flex items-center justify-between gap-2 text-xs text-white font-bold cursor-pointer min-w-[220px] max-w-[280px] text-left pt-0.5"
+                  className="flex items-center justify-between gap-1.5 text-xs text-white font-bold cursor-pointer w-[140px] sm:w-[170px] xl:w-[195px] text-left pt-0.5"
                 >
                   <div className="flex items-center gap-1.5 truncate">
                     <Building2 size={13} className="text-indigo-400 shrink-0" />
                     <span className="truncate">{clienteNomeExibicao}</span>
                   </div>
-                  <ChevronDown size={14} className={`text-slate-400 transition-transform ${isOpenBuscaCliente ? 'rotate-180' : ''}`} />
+                  <ChevronDown size={14} className={`text-slate-400 shrink-0 transition-transform ${isOpenBuscaCliente ? 'rotate-180' : ''}`} />
                 </button>
               </div>
 
@@ -883,14 +883,14 @@ export default function DashboardPage() {
           )}
 
           {/* 2. FILTRO MÊS COMPETÊNCIA */}
-          <div className="flex items-center gap-2 bg-slate-800/90 border border-slate-700 rounded-xl px-3 py-1.5 shadow-inner">
+          <div className="flex items-center gap-2 bg-slate-800/90 border border-slate-700 rounded-xl px-2.5 sm:px-3 py-1.5 shadow-inner shrink-0 h-[46px]">
             <Calendar size={15} className="text-indigo-400 shrink-0" />
-            <div className="flex flex-col">
-              <label className="text-[9px] uppercase font-bold text-slate-400">Mês Competência</label>
+            <div className="flex flex-col justify-center">
+              <label className="text-[9px] uppercase font-bold text-slate-400 leading-tight">Mês Competência</label>
               <select
                 value={mesCompetencia}
                 onChange={(e) => setMesCompetencia(e.target.value)}
-                className="bg-transparent text-xs text-white font-bold focus:outline-none cursor-pointer"
+                className="bg-transparent text-xs text-white font-bold focus:outline-none cursor-pointer max-w-[140px] sm:max-w-[170px] xl:max-w-[190px] truncate pt-0.5"
               >
                 {mesesOpcoes.map(m => (
                   <option key={m.valor} value={m.valor} className="bg-slate-900 text-white">
@@ -906,7 +906,7 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => setIsFechamentoModalOpen(prev => !prev)}
-              className={`px-4 py-2.5 rounded-xl text-xs font-black shadow-lg transition-all flex items-center gap-2 transform active:scale-95 ${
+              className={`h-[46px] px-3.5 sm:px-4 rounded-xl text-xs font-black shadow-lg transition-all flex items-center gap-2 transform active:scale-95 shrink-0 whitespace-nowrap ${
                 isFechamentoModalOpen
                   ? 'bg-indigo-600 hover:bg-indigo-700 text-white ring-2 ring-indigo-400/50 shadow-indigo-900/50'
                   : 'bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-600 hover:from-emerald-600 hover:to-indigo-700 text-white hover:shadow-emerald-500/20'
@@ -914,14 +914,14 @@ export default function DashboardPage() {
               title={isFechamentoModalOpen ? 'Recolher Opções do Fechamento' : 'Expandir Opções do Fechamento'}
             >
               <Package size={16} className={isFechamentoModalOpen ? 'text-indigo-200' : 'text-emerald-100'} />
-              <span>{isFechamentoModalOpen ? 'Recolher Fechamento' : 'Fechamento Fiscal'}</span>
-              <span className="bg-white/20 px-2 py-0.5 rounded-full text-[10px] font-mono">
+              <span>{isFechamentoModalOpen ? 'Recolher' : 'Fechamento Fiscal'}</span>
+              <span className="bg-white/20 px-1.5 py-0.5 rounded-md text-[10px] font-mono">
                 {mesCompetencia}
               </span>
               {isFechamentoModalOpen ? (
-                <ChevronUp size={16} className="text-white shrink-0 ml-0.5" />
+                <ChevronUp size={15} className="text-white shrink-0 ml-0.5" />
               ) : (
-                <ChevronDown size={16} className="text-white shrink-0 ml-0.5" />
+                <ChevronDown size={15} className="text-white shrink-0 ml-0.5" />
               )}
             </button>
           )}
