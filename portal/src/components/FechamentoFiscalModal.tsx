@@ -5,7 +5,7 @@ import {
   X, Package, Download, CheckCircle2, AlertTriangle, FileText, 
   FileSpreadsheet, FileCode, CheckSquare, Square, FolderArchive, 
   FolderSync, ArrowUpDown, Bookmark, Sparkles, Clock, Loader2,
-  Calendar, Layers, ShieldCheck
+  Calendar, Layers, ShieldCheck, Send, Mail, Phone
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { 
@@ -52,6 +52,7 @@ export default function FechamentoFiscalModal({
   const [etapaTexto, setEtapaTexto] = useState('')
   const [tempoDecorrido, setTempoDecorrido] = useState(0)
   const [concluido, setConcluido] = useState(false)
+  const [erroModal, setErroModal] = useState<string | null>(null)
   const [resumoZip, setResumoZip] = useState<{
     tamanhoMb: string
     totalXmls: number
@@ -114,6 +115,7 @@ export default function FechamentoFiscalModal({
   const handleExecutarFechamento = async () => {
     setProcessando(true)
     setConcluido(false)
+    setErroModal(null)
     setResumoZip(null)
     setProgressoPct(5)
     setEtapaTexto('1/4: Consultando documentos fiscais da competência...')
@@ -312,7 +314,9 @@ export default function FechamentoFiscalModal({
 
     } catch (err: any) {
       console.error('Erro no processamento do fechamento:', err)
-      alert(`Erro durante o fechamento: ${err.message || 'Erro desconhecido.'}`)
+      setErroModal(err.message || 'Ocorreu uma falha inesperada durante o processamento do fechamento.')
+      setProgressoPct(0)
+      setEtapaTexto('')
     } finally {
       if (timerRef.current) clearInterval(timerRef.current)
       setProcessando(false)
@@ -751,6 +755,95 @@ export default function FechamentoFiscalModal({
             </div>
           )}
 
+          {/* SEÇÃO 5: ENVIO AUTOMÁTICO RECORRENTE DO FECHAMENTO */}
+          <div className="p-4 bg-gradient-to-br from-indigo-50/70 via-white to-slate-50 border border-indigo-200/80 rounded-2xl space-y-3 shadow-xs">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={prefs.envioAutomaticoAtivo}
+                  onChange={e => setPrefs(p => ({ ...p, envioAutomaticoAtivo: e.target.checked }))}
+                  className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                />
+                <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5 uppercase tracking-wider">
+                  <Send size={14} className="text-indigo-600" />
+                  Enviar automaticamente o fechamento todo mês
+                </span>
+              </label>
+              {prefs.envioAutomaticoAtivo && (
+                <span className="text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full border border-emerald-200 animate-in fade-in">
+                  Agendamento Ativo
+                </span>
+              )}
+            </div>
+
+            <p className="text-[11px] text-slate-500 leading-tight">
+              O sistema gera o pacote ZIP completo da competência e encaminha automaticamente para o WhatsApp e E-mail configurados.
+            </p>
+
+            {prefs.envioAutomaticoAtivo && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-indigo-100/70 animate-in fade-in slide-in-from-top-1">
+                {/* Dia do mês */}
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                    Todo dia do mês:
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min={1}
+                      max={31}
+                      placeholder="Ex: 5"
+                      value={prefs.envioDiaMes || ''}
+                      onChange={e => setPrefs(p => ({ ...p, envioDiaMes: e.target.value }))}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                    <span className="absolute right-3 top-2 text-[10px] text-slate-400 font-bold uppercase">
+                      dia
+                    </span>
+                  </div>
+                </div>
+
+                {/* WhatsApp */}
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                    WhatsApp (sem o +55):
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Ex: 37999998888"
+                      value={prefs.envioWhatsapp || ''}
+                      onChange={e => {
+                        const clean = e.target.value.replace(/\D/g, '').slice(0, 11)
+                        setPrefs(p => ({ ...p, envioWhatsapp: clean }))
+                      }}
+                      className="w-full bg-white border border-slate-300 rounded-xl pl-8 pr-3 py-2 text-xs font-mono font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                    <Phone size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
+                  </div>
+                </div>
+
+                {/* E-mail */}
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                    E-mail de Destino:
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="email"
+                      placeholder="Ex: fiscal@empresa.com.br"
+                      value={prefs.envioEmail || ''}
+                      onChange={e => setPrefs(p => ({ ...p, envioEmail: e.target.value }))}
+                      className="w-full bg-white border border-slate-300 rounded-xl pl-8 pr-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                    <Mail size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* AVISO DA REGRA DE OURO: SEM PASTAS VAZIAS */}
           <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-[11px]">
             <ShieldCheck size={16} className="text-emerald-600 shrink-0" />
@@ -764,18 +857,18 @@ export default function FechamentoFiscalModal({
         {/* RODAPÉ DO MODAL COM BOTÕES DE AÇÃO */}
         <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
           
-          {/* Botão Salvar Escolha Para Sempre */}
+          {/* Botão Salvar Padrão */}
           <button
             type="button"
             onClick={handleSalvarParaSempre}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs ${
               salvoSucesso
-                ? 'bg-emerald-600 text-white shadow-sm'
+                ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-200'
                 : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 hover:text-slate-900'
             }`}
           >
-            {salvoSucesso ? <CheckCircle2 size={14} /> : <Bookmark size={14} />}
-            {salvoSucesso ? 'Escolhas Salvas Como Padrão!' : 'Salvar Escolha Para Sempre'}
+            {salvoSucesso ? <CheckCircle2 size={15} /> : <Bookmark size={15} />}
+            {salvoSucesso ? 'Padrão Salvo com Sucesso!' : 'Salvar Padrão'}
           </button>
 
           {/* Botões Fechar e Gerar Fechamento */}
@@ -812,6 +905,42 @@ export default function FechamentoFiscalModal({
         </div>
 
       </div>
+
+      {/* MODAL DE ERRO CENTRALIZADO (PADRÃO UI/UX HUB PARATECH) */}
+      {erroModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl border border-rose-200 w-full max-w-md p-6 text-center animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4 ring-8 ring-rose-50 shadow-inner">
+              <AlertTriangle size={32} />
+            </div>
+            
+            <h3 className="text-lg font-black text-slate-900 tracking-tight">
+              Falha no Fechamento Fiscal
+            </h3>
+            
+            <div className="mt-3.5 p-3.5 bg-rose-50/80 border border-rose-200/80 rounded-2xl text-left">
+              <p className="text-xs text-rose-900 font-semibold leading-relaxed break-words">
+                {erroModal}
+              </p>
+            </div>
+
+            <p className="text-[11px] text-slate-500 mt-3">
+              Verifique a conexão ou os parâmetros da empresa e tente novamente.
+            </p>
+
+            <div className="mt-5">
+              <button
+                type="button"
+                onClick={() => setErroModal(null)}
+                className="w-full py-2.5 px-4 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-700 hover:to-red-800 text-white rounded-xl text-xs font-black shadow-md hover:shadow-lg transition"
+              >
+                Entendido / Fechar Alerta
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

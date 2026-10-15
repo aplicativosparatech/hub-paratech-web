@@ -75,6 +75,12 @@ export interface FechamentoPreferencias {
   // Configuração de Monofásicos
   monofasicosEscopo: 'apenas_monofasicos' | 'todos_produtos'
   monofasicosTipo: 'detalhado' | 'agrupado'
+
+  // Envio Automático Mensal Recorrente
+  envioAutomaticoAtivo: boolean
+  envioDiaMes: number | string
+  envioWhatsapp: string
+  envioEmail: string
 }
 
 export const PREFERENCIAS_FECHAMENTO_PADRAO: FechamentoPreferencias = {
@@ -88,7 +94,11 @@ export const PREFERENCIAS_FECHAMENTO_PADRAO: FechamentoPreferencias = {
   ordenacao: 'data',
   formatos: ['pdf', 'xlsx'],
   monofasicosEscopo: 'apenas_monofasicos',
-  monofasicosTipo: 'detalhado'
+  monofasicosTipo: 'detalhado',
+  envioAutomaticoAtivo: false,
+  envioDiaMes: 5,
+  envioWhatsapp: '',
+  envioEmail: ''
 }
 
 export function formatMoney(val: number): string {

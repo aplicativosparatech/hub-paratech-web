@@ -20,12 +20,13 @@ export async function GET(request: Request) {
     // 1. Busca dados do Cliente
     const { data: cliente, error: errCli } = await supabase
       .from('clientes')
-      .select('id, razao_social, nome_fantasia, cnpj, cidade, estado, regime_tributario, contabilidades(razao_social)')
+      .select('id, razao_social, nome_fantasia, cnpj, cidade, uf, whatsapp, regime_tributario, contabilidades(razao_social)')
       .eq('id', clienteId)
       .single()
 
     if (errCli || !cliente) {
-      return NextResponse.json({ error: 'Cliente não encontrado.' }, { status: 404 })
+      console.error('Erro ao buscar cliente:', errCli)
+      return NextResponse.json({ error: `Cliente não encontrado: ${errCli?.message || 'registro inexistente.'}` }, { status: 404 })
     }
 
     const contabNome = Array.isArray(cliente.contabilidades)
@@ -37,7 +38,7 @@ export async function GET(request: Request) {
       nome_fantasia: cliente.nome_fantasia,
       cnpj: cliente.cnpj || '00.000.000/0000-00',
       cidade: cliente.cidade || '—',
-      uf: cliente.estado || '—',
+      uf: cliente.uf || '—',
       regime_tributario: cliente.regime_tributario || 'simples_nacional',
       contabilidade_nome: contabNome || 'Não vinculada'
     }
@@ -105,7 +106,7 @@ export async function GET(request: Request) {
       data_emissao: n.data_emissao,
       contato_nome: n.destinatario || n.consumidor || 'Consumidor Final',
       cidade: cliente.cidade,
-      uf: cliente.estado,
+      uf: cliente.uf,
       valor: Number(n.valor || 0),
       chave: n.chave || '',
       modalidade: 'nfce_saidas' as const,
@@ -119,7 +120,7 @@ export async function GET(request: Request) {
       data_emissao: n.data_emissao,
       contato_nome: n.cliente || n.destinatario || 'Cliente Geral',
       cidade: n.cidade || cliente.cidade,
-      uf: n.uf || cliente.estado,
+      uf: n.uf || cliente.uf,
       valor: Number(n.valor || 0),
       chave: n.chave || '',
       modalidade: 'nfe_saidas' as const,
@@ -161,7 +162,7 @@ export async function GET(request: Request) {
       data_emissao: n.data_emissao,
       contato_nome: n.cliente || n.tomador || 'Tomador do Serviço',
       cidade: n.cidade || cliente.cidade,
-      uf: n.uf || cliente.estado,
+      uf: n.uf || cliente.uf,
       valor: Number(n.valor || 0),
       chave: n.chave || n.codigo_verificacao || '',
       modalidade: 'nfse_saidas' as const,

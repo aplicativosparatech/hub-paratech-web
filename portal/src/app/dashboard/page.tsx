@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { 
   Users, Building2, AlertTriangle, Receipt, BarChart3, MapPin, 
   Sparkles, ShieldCheck, ArrowRight, Calendar, Filter, Clock, 
-  CheckCircle2, RotateCcw, Layers, Package, FileArchive, Download
+  CheckCircle2, RotateCcw, Layers, Package, FileArchive, Download,
+  Search, Phone, ChevronDown, Check, X as CloseIcon
 } from 'lucide-react'
 import Link from 'next/link'
 import CertificadoAlertaBanner from '@/components/CertificadoAlertaBanner'
@@ -28,11 +29,22 @@ export default function DashboardPage() {
   const [primeiroXmlData, setPrimeiroXmlData] = useState<string | null>(null)
   const [ultimoXmlData, setUltimoXmlData] = useState<string | null>(null)
 
-  // Filtros de Cliente e Mês de Competência para Fechamento Fiscal
-  const [listaClientes, setListaClientes] = useState<Array<{ id: string; razao_social: string; nome_fantasia?: string; cnpj: string }>>([])
+  // Filtros de Cliente e Mês de Competência para Fechamento Fiscal (com busca por Nome, CNPJ e Telefone)
+  const [listaClientes, setListaClientes] = useState<Array<{
+    id: string
+    razao_social: string
+    nome_fantasia?: string
+    cnpj: string
+    whatsapp?: string
+    cidade?: string
+    uf?: string
+  }>>([])
   const [selectedClienteId, setSelectedClienteId] = useState<string>('')
   const [mesCompetencia, setMesCompetencia] = useState<string>('2026-09')
   const [isFechamentoModalOpen, setIsFechamentoModalOpen] = useState(false)
+  const [termoBuscaCliente, setTermoBuscaCliente] = useState('')
+  const [isOpenBuscaCliente, setIsOpenBuscaCliente] = useState(false)
+  const dropdownClienteRef = useRef<HTMLDivElement>(null)
 
   const [metrics, setMetrics] = useState({
     clientes: 0,
@@ -175,8 +187,8 @@ export default function DashboardPage() {
           qFaturas = qFaturas.eq('cliente_id', userRoleData.cliente_id)
         }
 
-        // Consulta lista de Clientes para o Seletor de Fechamento Fiscal
-        let qClientesLista = supabase.from('clientes').select('id, razao_social, nome_fantasia, cnpj', { count: 'exact' }).order('razao_social', { ascending: true })
+        // Consulta lista de Clientes para o Seletor de Fechamento Fiscal (com whatsapp, cidade e uf para busca inteligente)
+        let qClientesLista = supabase.from('clientes').select('id, razao_social, nome_fantasia, cnpj, whatsapp, cidade, uf', { count: 'exact' }).order('razao_social', { ascending: true })
         if (currentRole === 'cliente' && userRoleData?.cliente_id) {
           qClientesLista = qClientesLista.eq('id', userRoleData.cliente_id)
         } else if (currentRole === 'contabilidade' && userRoleData?.contabilidade_id) {
@@ -397,8 +409,42 @@ export default function DashboardPage() {
   const clienteSelecionadoObj = listaClientes.find(c => c.id === selectedClienteId)
   const clienteNomeExibicao = clienteSelecionadoObj
     ? (clienteSelecionadoObj.nome_fantasia || clienteSelecionadoObj.razao_social)
-    : 'Selecione um Cliente'
+    : 'Selecione uma Empresa'
   const mesCompetenciaLabel = mesesOpcoes.find(m => m.valor === mesCompetencia)?.label || mesCompetencia
+
+  // Fecha dropdown de busca de cliente ao clicar fora
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownClienteRef.current && !dropdownClienteRef.current.contains(event.target as Node)) {
+        setIsOpenBuscaCliente(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
+
+  // Filtragem inteligente de clientes por Nome, CNPJ ou Telefone/WhatsApp
+  const clientesFiltrados = listaClientes.filter(c => {
+    if (!termoBuscaCliente.trim()) return true
+    const term = termoBuscaCliente.toLowerCase().trim()
+    const cleanDigits = term.replace(/\D/g, '')
+
+    const matchNome = 
+      (c.razao_social || '').toLowerCase().includes(term) || 
+      (c.nome_fantasia || '').toLowerCase().includes(term)
+
+    const matchCnpj = 
+      (c.cnpj || '').toLowerCase().includes(term) || 
+      (cleanDigits.length >= 3 && (c.cnpj || '').replace(/\D/g, '').includes(cleanDigits))
+
+    const matchTelefone = 
+      (c.whatsapp || '').toLowerCase().includes(term) || 
+      (cleanDigits.length >= 3 && (c.whatsapp || '').replace(/\D/g, '').includes(cleanDigits))
+
+    return Boolean(matchNome || matchCnpj || matchTelefone)
+  })
 
   return (
     <div className="p-6 sm:p-8 space-y-6">
@@ -412,104 +458,6 @@ export default function DashboardPage() {
           </p>
         </div>
       </header>
-
-      {/* PAINEL DE FECHAMENTO FISCAL MENSAL COM FILTROS DE CLIENTE & COMPETÊNCIA */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 sm:p-5 rounded-2xl border border-indigo-900/50 shadow-md flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-        
-        {/* Identificação do Fechamento */}
-        <div className="flex items-center gap-3.5">
-          <div className="p-3 bg-indigo-500/20 border border-indigo-400/30 rounded-2xl text-indigo-400 shrink-0">
-            <Package size={22} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-white tracking-tight">
-                Fechamento Fiscal Mensal
-              </span>
-              <span className="text-[10px] font-extrabold uppercase bg-indigo-500/30 text-indigo-200 px-2.5 py-0.5 rounded-full border border-indigo-400/20">
-                Pacote ZIP de XMLs & Relatórios
-              </span>
-            </div>
-            <p className="text-xs text-slate-300 mt-0.5">
-              Empacotamento automático sem pastas vazias, relatórios oficiais e apuração de monofásicos.
-            </p>
-          </div>
-        </div>
-
-        {/* Filtros e Botão Fechamento */}
-        <div className="flex flex-wrap items-center gap-3">
-          
-          {/* 1. FILTRO DE CLIENTE (Dropdown para Admin/Contabilidade, Tag fixa para Cliente) */}
-          {userRole === 'cliente' ? (
-            <div className="flex items-center gap-2 bg-slate-800/80 border border-slate-700/80 px-3.5 py-2 rounded-xl text-xs">
-              <Building2 size={15} className="text-indigo-400 shrink-0" />
-              <div>
-                <span className="text-[9px] text-slate-400 block font-bold uppercase leading-none">Minha Empresa</span>
-                <span className="text-white font-semibold text-xs leading-tight block truncate max-w-[200px]">
-                  {clienteNomeExibicao}
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 bg-slate-800/90 border border-slate-700 rounded-xl px-3 py-1.5 shadow-inner">
-              <Building2 size={15} className="text-indigo-400 shrink-0" />
-              <div className="flex flex-col">
-                <label className="text-[9px] uppercase font-bold text-slate-400">Cliente / Empresa</label>
-                <select
-                  value={selectedClienteId}
-                  onChange={(e) => setSelectedClienteId(e.target.value)}
-                  className="bg-transparent text-xs text-white font-bold focus:outline-none cursor-pointer max-w-[220px] truncate"
-                >
-                  {listaClientes.map(c => (
-                    <option key={c.id} value={c.id} className="bg-slate-900 text-white">
-                      {c.nome_fantasia || c.razao_social} {c.cnpj ? `(${c.cnpj})` : ''}
-                    </option>
-                  ))}
-                  {listaClientes.length === 0 && (
-                    <option value="" className="bg-slate-900 text-white">Nenhum cliente disponível</option>
-                  )}
-                </select>
-              </div>
-            </div>
-          )}
-
-          {/* 2. FILTRO MÊS COMPETÊNCIA */}
-          <div className="flex items-center gap-2 bg-slate-800/90 border border-slate-700 rounded-xl px-3 py-1.5 shadow-inner">
-            <Calendar size={15} className="text-indigo-400 shrink-0" />
-            <div className="flex flex-col">
-              <label className="text-[9px] uppercase font-bold text-slate-400">Mês Competência</label>
-              <select
-                value={mesCompetencia}
-                onChange={(e) => setMesCompetencia(e.target.value)}
-                className="bg-transparent text-xs text-white font-bold focus:outline-none cursor-pointer"
-              >
-                {mesesOpcoes.map(m => (
-                  <option key={m.valor} value={m.valor} className="bg-slate-900 text-white">
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* 3. BOTÃO FECHAMENTO FISCAL (SURGE QUANDO MÊS ESTÁ ESCOLHIDO) */}
-          {mesCompetencia && selectedClienteId && (
-            <button
-              type="button"
-              onClick={() => setIsFechamentoModalOpen(true)}
-              className="px-4 py-2.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-600 hover:from-emerald-600 hover:to-indigo-700 text-white rounded-xl text-xs font-black shadow-lg hover:shadow-emerald-500/20 transition-all flex items-center gap-2 transform active:scale-95 animate-in fade-in zoom-in-95 duration-200"
-            >
-              <Package size={16} className="text-emerald-100" />
-              <span>Fechamento Fiscal</span>
-              <span className="bg-white/20 px-2 py-0.5 rounded-full text-[10px] font-mono">
-                {mesCompetencia}
-              </span>
-            </button>
-          )}
-
-        </div>
-
-      </div>
 
       {/* Barra de Filtro de Período para Volume de XMLs e Notas */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -795,6 +743,178 @@ export default function DashboardPage() {
             Portal de Notas
           </Link>
         </div>
+      </div>
+
+      {/* CARD DE FECHAMENTO FISCAL MENSAL (ABAIXO DO CARD CENTRAL FISCAL & AUDITORIA INTEGRADA) */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 sm:p-5 rounded-2xl border border-indigo-900/50 shadow-md flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        
+        {/* Identificação do Fechamento */}
+        <div className="flex items-center gap-3.5">
+          <div className="p-3 bg-indigo-500/20 border border-indigo-400/30 rounded-2xl text-indigo-400 shrink-0">
+            <Package size={22} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-white tracking-tight">
+                Fechamento Fiscal Mensal
+              </span>
+              <span className="text-[10px] font-extrabold uppercase bg-indigo-500/30 text-indigo-200 px-2.5 py-0.5 rounded-full border border-indigo-400/20">
+                Pacote ZIP de XMLs & Relatórios
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mt-0.5">
+              Empacotamento automático sem pastas vazias, relatórios oficiais e apuração de monofásicos.
+            </p>
+          </div>
+        </div>
+
+        {/* Filtros e Botão Fechamento */}
+        <div className="flex flex-wrap items-center gap-3">
+          
+          {/* 1. SELETOR DE CLIENTE COM BUSCA INTELIGENTE (POR NOME, CNPJ OU TELEFONE) */}
+          {userRole === 'cliente' ? (
+            <div className="flex items-center gap-2 bg-slate-800/80 border border-slate-700/80 px-3.5 py-2 rounded-xl text-xs">
+              <Building2 size={15} className="text-indigo-400 shrink-0" />
+              <div>
+                <span className="text-[9px] text-slate-400 block font-bold uppercase leading-none">Minha Empresa</span>
+                <span className="text-white font-semibold text-xs leading-tight block truncate max-w-[200px]">
+                  {clienteNomeExibicao}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="relative" ref={dropdownClienteRef}>
+              <div className="bg-slate-800/90 border border-slate-700 hover:border-slate-600 rounded-xl px-3 py-1.5 shadow-inner transition">
+                <label className="text-[9px] uppercase font-bold text-slate-400 block">
+                  Cliente / Empresa (Busca por Nome, CNPJ ou Tel)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsOpenBuscaCliente(prev => !prev)}
+                  className="flex items-center justify-between gap-2 text-xs text-white font-bold cursor-pointer min-w-[220px] max-w-[280px] text-left pt-0.5"
+                >
+                  <div className="flex items-center gap-1.5 truncate">
+                    <Building2 size={13} className="text-indigo-400 shrink-0" />
+                    <span className="truncate">{clienteNomeExibicao}</span>
+                  </div>
+                  <ChevronDown size={14} className={`text-slate-400 transition-transform ${isOpenBuscaCliente ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+
+              {/* Popover Dropdown com Busca Inteligente */}
+              {isOpenBuscaCliente && (
+                <div className="absolute left-0 bottom-full mb-2 sm:bottom-auto sm:top-full sm:mt-2 z-50 w-[320px] sm:w-[380px] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-2.5 animate-in fade-in zoom-in-95 duration-150">
+                  {/* Campo de Busca */}
+                  <div className="relative mb-2">
+                    <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="Buscar por Nome, CNPJ ou Telefone..."
+                      value={termoBuscaCliente}
+                      onChange={(e) => setTermoBuscaCliente(e.target.value)}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-8 pr-8 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                    />
+                    {termoBuscaCliente && (
+                      <button
+                        type="button"
+                        onClick={() => setTermoBuscaCliente('')}
+                        className="absolute right-2.5 top-2 text-slate-400 hover:text-white"
+                      >
+                        <CloseIcon size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Lista de Empresas */}
+                  <div className="max-h-56 overflow-y-auto space-y-1 pr-1 custom-scrollbar text-xs">
+                    {clientesFiltrados.length === 0 ? (
+                      <div className="p-3 text-center text-slate-400 text-xs">
+                        Nenhuma empresa encontrada por nome, CNPJ ou telefone.
+                      </div>
+                    ) : (
+                      clientesFiltrados.map(cli => {
+                        const isSelected = cli.id === selectedClienteId
+                        return (
+                          <button
+                            key={cli.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedClienteId(cli.id)
+                              setIsOpenBuscaCliente(false)
+                            }}
+                            className={`w-full p-2 rounded-xl text-left transition flex items-center justify-between gap-2 ${
+                              isSelected
+                                ? 'bg-indigo-600/30 border border-indigo-500/40 text-white'
+                                : 'hover:bg-slate-800 text-slate-300 hover:text-white'
+                            }`}
+                          >
+                            <div className="truncate">
+                              <p className="font-bold text-white text-xs truncate">
+                                {cli.nome_fantasia || cli.razao_social}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[10px] text-slate-400">
+                                {cli.cnpj && (
+                                  <span>CNPJ: {cli.cnpj}</span>
+                                )}
+                                {cli.whatsapp && (
+                                  <span className="flex items-center gap-1 text-emerald-400 font-mono">
+                                    <Phone size={10} />
+                                    {cli.whatsapp}
+                                  </span>
+                                )}
+                                {cli.cidade && (
+                                  <span>• {cli.cidade}/{cli.uf}</span>
+                                )}
+                              </div>
+                            </div>
+                            {isSelected && <Check size={15} className="text-emerald-400 shrink-0" />}
+                          </button>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 2. FILTRO MÊS COMPETÊNCIA */}
+          <div className="flex items-center gap-2 bg-slate-800/90 border border-slate-700 rounded-xl px-3 py-1.5 shadow-inner">
+            <Calendar size={15} className="text-indigo-400 shrink-0" />
+            <div className="flex flex-col">
+              <label className="text-[9px] uppercase font-bold text-slate-400">Mês Competência</label>
+              <select
+                value={mesCompetencia}
+                onChange={(e) => setMesCompetencia(e.target.value)}
+                className="bg-transparent text-xs text-white font-bold focus:outline-none cursor-pointer"
+              >
+                {mesesOpcoes.map(m => (
+                  <option key={m.valor} value={m.valor} className="bg-slate-900 text-white">
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* 3. BOTÃO FECHAMENTO FISCAL */}
+          {mesCompetencia && selectedClienteId && (
+            <button
+              type="button"
+              onClick={() => setIsFechamentoModalOpen(true)}
+              className="px-4 py-2.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-600 hover:from-emerald-600 hover:to-indigo-700 text-white rounded-xl text-xs font-black shadow-lg hover:shadow-emerald-500/20 transition-all flex items-center gap-2 transform active:scale-95 animate-in fade-in zoom-in-95 duration-200"
+            >
+              <Package size={16} className="text-emerald-100" />
+              <span>Fechamento Fiscal</span>
+              <span className="bg-white/20 px-2 py-0.5 rounded-full text-[10px] font-mono">
+                {mesCompetencia}
+              </span>
+            </button>
+          )}
+
+        </div>
+
       </div>
 
       {/* Modal de Fechamento Fiscal Mensal (Empacotador ZIP & Relatórios) */}
