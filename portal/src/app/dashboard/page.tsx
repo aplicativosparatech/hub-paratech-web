@@ -6,7 +6,7 @@ import {
   Users, Building2, AlertTriangle, Receipt, BarChart3, MapPin, 
   Sparkles, ShieldCheck, ArrowRight, Calendar, Filter, Clock, 
   CheckCircle2, RotateCcw, Layers, Package, FileArchive, Download,
-  Search, Phone, ChevronDown, Check, X as CloseIcon
+  Search, Phone, ChevronDown, ChevronUp, Check, X as CloseIcon
 } from 'lucide-react'
 import Link from 'next/link'
 import CertificadoAlertaBanner from '@/components/CertificadoAlertaBanner'
@@ -745,8 +745,11 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* CARD DE FECHAMENTO FISCAL MENSAL (ABAIXO DO CARD CENTRAL FISCAL & AUDITORIA INTEGRADA) */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 sm:p-5 rounded-2xl border border-indigo-900/50 shadow-md flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+      {/* CARD DE FECHAMENTO FISCAL MENSAL COM EFEITO SANFONA (ABAIXO DO CARD CENTRAL FISCAL & AUDITORIA INTEGRADA) */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 sm:p-6 rounded-3xl border border-indigo-900/50 shadow-xl mb-8 transition-all duration-300">
+        
+        {/* LINHA SUPERIOR DO CARD: IDENTIFICAÇÃO + FILTROS + BOTÃO SANFONA */}
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
         
         {/* Identificação do Fechamento */}
         <div className="flex items-center gap-3.5">
@@ -898,18 +901,28 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* 3. BOTÃO FECHAMENTO FISCAL */}
+          {/* 3. BOTÃO FECHAMENTO FISCAL (EFEITO SANFONA) */}
           {mesCompetencia && selectedClienteId && (
             <button
               type="button"
-              onClick={() => setIsFechamentoModalOpen(true)}
-              className="px-4 py-2.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-600 hover:from-emerald-600 hover:to-indigo-700 text-white rounded-xl text-xs font-black shadow-lg hover:shadow-emerald-500/20 transition-all flex items-center gap-2 transform active:scale-95 animate-in fade-in zoom-in-95 duration-200"
+              onClick={() => setIsFechamentoModalOpen(prev => !prev)}
+              className={`px-4 py-2.5 rounded-xl text-xs font-black shadow-lg transition-all flex items-center gap-2 transform active:scale-95 ${
+                isFechamentoModalOpen
+                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white ring-2 ring-indigo-400/50 shadow-indigo-900/50'
+                  : 'bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-600 hover:from-emerald-600 hover:to-indigo-700 text-white hover:shadow-emerald-500/20'
+              }`}
+              title={isFechamentoModalOpen ? 'Recolher Opções do Fechamento' : 'Expandir Opções do Fechamento'}
             >
-              <Package size={16} className="text-emerald-100" />
-              <span>Fechamento Fiscal</span>
+              <Package size={16} className={isFechamentoModalOpen ? 'text-indigo-200' : 'text-emerald-100'} />
+              <span>{isFechamentoModalOpen ? 'Recolher Fechamento' : 'Fechamento Fiscal'}</span>
               <span className="bg-white/20 px-2 py-0.5 rounded-full text-[10px] font-mono">
                 {mesCompetencia}
               </span>
+              {isFechamentoModalOpen ? (
+                <ChevronUp size={16} className="text-white shrink-0 ml-0.5" />
+              ) : (
+                <ChevronDown size={16} className="text-white shrink-0 ml-0.5" />
+              )}
             </button>
           )}
 
@@ -917,15 +930,21 @@ export default function DashboardPage() {
 
       </div>
 
-      {/* Modal de Fechamento Fiscal Mensal (Empacotador ZIP & Relatórios) */}
-      <FechamentoFiscalModal
-        isOpen={isFechamentoModalOpen}
-        onClose={() => setIsFechamentoModalOpen(false)}
-        clienteId={selectedClienteId}
-        clienteNome={clienteNomeExibicao}
-        mesCompetencia={mesCompetencia}
-        anoMesFormatado={mesCompetenciaLabel}
-      />
+      {/* ÁREA SANFONA EXPANSÍVEL DENTRO DO CARD */}
+      {isFechamentoModalOpen && (
+        <div className="mt-5 pt-5 border-t border-indigo-900/60 w-full animate-in fade-in slide-in-from-top-3 duration-300">
+          <FechamentoFiscalModal
+            isOpen={isFechamentoModalOpen}
+            onClose={() => setIsFechamentoModalOpen(false)}
+            clienteId={selectedClienteId}
+            clienteNome={clienteNomeExibicao}
+            mesCompetencia={mesCompetencia}
+            anoMesFormatado={mesCompetenciaLabel}
+          />
+        </div>
+      )}
+
+    </div>
 
     </div>
   )

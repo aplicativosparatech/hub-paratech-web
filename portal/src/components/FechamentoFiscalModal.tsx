@@ -5,7 +5,7 @@ import {
   X, Package, Download, CheckCircle2, AlertTriangle, FileText, 
   FileSpreadsheet, FileCode, CheckSquare, Square, FolderArchive, 
   FolderSync, ArrowUpDown, Bookmark, Sparkles, Clock, Loader2,
-  Calendar, Layers, ShieldCheck, Send, Mail, Phone
+  Calendar, Layers, ShieldCheck, Send, Mail, Phone, ChevronUp, ChevronDown
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { 
@@ -545,42 +545,42 @@ export default function FechamentoFiscalModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-3xl overflow-hidden flex flex-col max-h-[92vh]">
-        
-        {/* CABEÇALHO DO MODAL */}
-        <div className="px-6 py-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between border-b border-slate-800">
-          <div className="flex items-center gap-3.5">
-            <div className="p-3 bg-indigo-500/20 border border-indigo-400/30 rounded-2xl text-indigo-400 shadow-inner">
-              <Package size={24} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold tracking-tight text-white">
-                  Fechamento Fiscal Mensal
-                </h2>
-                <span className="bg-indigo-500/30 text-indigo-200 text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border border-indigo-400/20">
-                  Pacote ZIP & Relatórios
-                </span>
-              </div>
-              <p className="text-xs text-slate-300 mt-0.5">
-                {clienteNome || 'Empresa'} • Competência: <strong className="text-white">{anoMesFormatado || mesCompetencia}</strong>
-              </p>
-            </div>
+    <div className="w-full bg-white rounded-2xl shadow-xl border border-slate-200/90 overflow-hidden flex flex-col text-slate-800 animate-in fade-in slide-in-from-top-3 duration-300">
+      
+      {/* CABEÇALHO DO PAINEL SANFONA */}
+      <div className="px-6 py-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between border-b border-indigo-900/60">
+        <div className="flex items-center gap-3.5">
+          <div className="p-2.5 bg-indigo-500/20 border border-indigo-400/30 rounded-xl text-indigo-400 shadow-inner">
+            <Package size={22} />
           </div>
-
-          <button
-            onClick={onClose}
-            disabled={processando}
-            className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition disabled:opacity-50"
-            title="Fechar"
-          >
-            <X size={20} />
-          </button>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-bold tracking-tight text-white">
+                Painel de Configuração & Fechamento Fiscal
+              </h3>
+              <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border border-emerald-400/30">
+                Painel Integrado
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mt-0.5">
+              Empresa: <strong className="text-white">{clienteNome || 'Selecionada'}</strong> • Competência: <strong className="text-emerald-400 font-mono">{anoMesFormatado || mesCompetencia}</strong>
+            </p>
+          </div>
         </div>
 
-        {/* CORPO DO MODAL */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1 text-slate-700 text-sm">
+        <button
+          onClick={onClose}
+          disabled={processando}
+          className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition disabled:opacity-50"
+          title="Recolher Sanfona"
+        >
+          <ChevronUp size={16} />
+          <span className="hidden sm:inline">Recolher Sanfona</span>
+        </button>
+      </div>
+
+      {/* CORPO DO PAINEL */}
+      <div className="p-6 space-y-6 flex-1 text-slate-700 text-sm">
 
           {/* BARRA DE PROGRESSO REAL (QUANDO PROCESSANDO OU CONCLUÍDO) */}
           {(processando || concluido) && (
@@ -1163,15 +1163,16 @@ export default function FechamentoFiscalModal({
             {salvoSucesso ? mensagemSucesso : 'Salvar Padrão'}
           </button>
 
-          {/* Botões Fechar e Gerar Fechamento */}
+          {/* Botões Recolher e Gerar Fechamento */}
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <button
               type="button"
               onClick={onClose}
               disabled={processando}
-              className="flex-1 sm:flex-initial px-4 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition disabled:opacity-50"
+              className="flex-1 sm:flex-initial px-4 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition disabled:opacity-50 flex items-center justify-center gap-1.5"
             >
-              Cancelar
+              <ChevronUp size={15} />
+              Recolher Sanfona
             </button>
 
             <button
@@ -1195,8 +1196,6 @@ export default function FechamentoFiscalModal({
           </div>
 
         </div>
-
-      </div>
 
       {/* MODAL DE ERRO CENTRALIZADO (PADRÃO UI/UX HUB PARATECH) */}
       {erroModal && (
