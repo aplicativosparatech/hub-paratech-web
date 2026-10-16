@@ -40,6 +40,9 @@ export default function ConfiguracoesPortalPage() {
     ficticio_cidades: 14
   })
 
+  // Preferência de exibição do Nome Fantasia como título principal
+  const [priorizarNomeFantasia, setPriorizarNomeFantasia] = useState(false)
+
   // Carrega permissões e empresas disponíveis
   useEffect(() => {
     async function init() {
@@ -94,7 +97,11 @@ export default function ConfiguracoesPortalPage() {
         }
       }
 
-      // Se for Admin, carregar valores fictícios do dashboard
+      // Carregar preferência salva em localStorage
+      const localPriorizar = localStorage.getItem('hub_priorizar_nome_fantasia') === 'true'
+      setPriorizarNomeFantasia(localPriorizar)
+
+      // Se for Admin, carregar valores fictícios do dashboard e preferência global
       if (role === 'admin') {
         const { data: geralData } = await supabase
           .from('configuracoes_portal_geral')
@@ -103,6 +110,11 @@ export default function ConfiguracoesPortalPage() {
           .maybeSingle()
 
         if (geralData) {
+          if (geralData.priorizar_nome_fantasia !== undefined && geralData.priorizar_nome_fantasia !== null) {
+            const dbPriorizar = Boolean(geralData.priorizar_nome_fantasia)
+            setPriorizarNomeFantasia(dbPriorizar)
+            localStorage.setItem('hub_priorizar_nome_fantasia', String(dbPriorizar))
+          }
           setFicticioData({
             valores_ficticios_ativos: Boolean(geralData.valores_ficticios_ativos),
             ficticio_clientes: Number(geralData.ficticio_clientes ?? 28),
@@ -180,18 +192,23 @@ export default function ConfiguracoesPortalPage() {
       updated_at: new Date().toISOString()
     }
 
-    // Apenas Admin pode alterar a visibilidade/avisos de certificados
+    // Persiste a preferência em localStorage e notifica todas as abas
+    localStorage.setItem('hub_priorizar_nome_fantasia', String(priorizarNomeFantasia))
+    window.dispatchEvent(new Event('hub_settings_changed'))
+
+    // Apenas Admin pode alterar a visibilidade/avisos de certificados e preferências globais
     if (userRole === 'admin') {
       payload.exibir_certificados_contabilidade = formData.exibir_certificados_contabilidade
       payload.exibir_certificados_cliente = formData.exibir_certificados_cliente
       payload.avisar_whatsapp_certificado = formData.avisar_whatsapp_certificado
       payload.exibir_faixa_topo_certificado = formData.exibir_faixa_topo_certificado
 
-      // Salva também as configurações globais de valores fictícios do dashboard
+      // Salva também as configurações globais de valores fictícios do dashboard e exibição
       const { error: errFicticio } = await supabase
         .from('configuracoes_portal_geral')
         .upsert({
           id: 1,
+          priorizar_nome_fantasia: priorizarNomeFantasia,
           valores_ficticios_ativos: ficticioData.valores_ficticios_ativos,
           ficticio_clientes: ficticioData.ficticio_clientes,
           ficticio_contabilidades: ficticioData.ficticio_contabilidades,
@@ -204,7 +221,7 @@ export default function ConfiguracoesPortalPage() {
         })
 
       if (errFicticio) {
-        console.error('Erro ao salvar valores fictícios:', errFicticio)
+        console.error('Erro ao salvar preferências gerais:', errFicticio)
       }
     }
 
@@ -517,6 +534,55 @@ export default function ConfiguracoesPortalPage() {
                 </span>
                 <span className="inline-flex items-center gap-1.5 mt-3 text-xs font-semibold px-2.5 py-1 rounded-full bg-purple-100 text-purple-800">
                   <CheckCircle2 size={14} /> Ativo para: Super Admin, Contabilidade e Empresa Cliente
+                </span>
+              </label>
+            </div>
+          </div>
+
+          {/* Preferências de Exibição de Empresas & Clientes (Nome Fantasia vs Razão Social) */}
+          <div className="mt-8 pt-8 border-t border-slate-200">
+            <div className="flex items-center gap-3 pb-4 border-b border-slate-100 mb-6">
+              <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
+                <Building2 size={24} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-bold text-slate-900">Exibição de Empresas & Clientes</h3>
+                  <span className="text-[10px] uppercase font-bold tracking-wider bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md border border-blue-200">
+                    Visual & Listagens
+                  </span>
+                </div>
+                <p className="text-slate-500 text-xs">
+                  Defina como os nomes das empresas devem ser apresentados em destaque nas tabelas e no gerenciamento de clientes.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3.5 p-5 bg-slate-50 rounded-2xl border border-slate-200 hover:border-slate-300 transition">
+              <input 
+                type="checkbox" 
+                id="priorizar_nome_fantasia"
+                checked={priorizarNomeFantasia}
+                onChange={e => setPriorizarNomeFantasia(e.target.checked)}
+                className="mt-1 h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+              />
+              <label htmlFor="priorizar_nome_fantasia" className="cursor-pointer select-none">
+                <span className="font-bold text-slate-900 block text-base mb-1">
+                  Exibir Nome Fantasia como Título Principal (e Razão Social como Subtítulo)
+                </span>
+                <span className="text-slate-600 text-sm leading-relaxed block">
+                  Permite alternar a hierarquia visual na tela de <strong>Clientes (Empresas)</strong> e em outras listagens do portal.
+                </span>
+                <span className="text-slate-600 text-sm leading-relaxed block mt-2">
+                  • <strong>Se marcado:</strong> O <strong>Nome Fantasia</strong> ganha destaque em negrito como título principal e a <strong>Razão Social</strong> é exibida logo abaixo em subtítulo cinza.<br />
+                  • <strong>Se desmarcado (Padrão):</strong> A <strong>Razão Social</strong> permanece como título principal em negrito e o <strong>Nome Fantasia</strong> como subtítulo.
+                </span>
+                <span className={`inline-flex items-center gap-1.5 mt-3 text-xs font-semibold px-2.5 py-1 rounded-full ${
+                  priorizarNomeFantasia 
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                    : 'bg-slate-200 text-slate-700'
+                }`}>
+                  <CheckCircle2 size={14} /> {priorizarNomeFantasia ? 'Status: Nome Fantasia em Destaque (Título Principal)' : 'Status: Razão Social em Destaque (Padrão)'}
                 </span>
               </label>
             </div>

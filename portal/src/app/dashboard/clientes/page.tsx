@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Trash2, X, Copy, RefreshCw, Search, Upload } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Copy, RefreshCw, Search, Upload, DollarSign } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { limparDocumento, formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
@@ -18,7 +18,19 @@ export default function ClientesPage() {
   const [deleteModal, setDeleteModal] = useState<{ open: boolean; id: string; nome: string }>({ open: false, id: '', nome: '' })
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [priorizarNomeFantasia, setPriorizarNomeFantasia] = useState(false)
   const supabase = createClient()
+
+  // Listener para sincronização da preferência de exibição (Nome Fantasia vs Razão Social)
+  useEffect(() => {
+    const checkPref = () => {
+      const pref = localStorage.getItem('hub_priorizar_nome_fantasia') === 'true'
+      setPriorizarNomeFantasia(pref)
+    }
+    checkPref()
+    window.addEventListener('hub_settings_changed', checkPref)
+    return () => window.removeEventListener('hub_settings_changed', checkPref)
+  }, [])
 
   async function fetchClientes() {
     const { data } = await supabase
@@ -80,6 +92,15 @@ export default function ClientesPage() {
     })
   }, [clientes, searchTerm])
 
+  // Cálculo da Soma Total das Mensalidades das Empresas
+  const totalMensalidades = useMemo(() => {
+    return clientes.reduce((acc, c) => acc + (Number(c.valor_mensalidade) || 0), 0)
+  }, [clientes])
+
+  const totalMensalidadesFiltradas = useMemo(() => {
+    return clientesFiltrados.reduce((acc, c) => acc + (Number(c.valor_mensalidade) || 0), 0)
+  }, [clientesFiltrados])
+
   const {
     sortedData: clientesOrdenados,
     sortKey,
@@ -105,7 +126,12 @@ export default function ClientesPage() {
       acoes: 120
     },
     customExtractors: {
-      razao_social: (c: any) => c.razao_social || c.nome_fantasia || '',
+      razao_social: (c: any) => {
+        if (priorizarNomeFantasia) {
+          return c.nome_fantasia || c.razao_social || ''
+        }
+        return c.razao_social || c.nome_fantasia || ''
+      },
       cnpj: (c: any) => c.cnpj || '',
       regime: (c: any) => c.regime_tributario || '',
       mensalidade: (c: any) => Number(c.valor_mensalidade || 0),
@@ -118,10 +144,37 @@ export default function ClientesPage() {
 
   return (
     <div className="p-8">
-      <header className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Clientes (Empresas)</h1>
-          <p className="text-slate-500 mt-1">Gerencie os clientes e os tokens de acesso ao Hub.</p>
+      <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 mb-8">
+        <div className="flex flex-wrap items-center gap-5 sm:gap-6">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Clientes (Empresas)</h1>
+            <p className="text-slate-500 mt-1 text-sm">Gerencie os clientes e os tokens de acesso ao Hub.</p>
+          </div>
+
+          {/* Card com a Soma das Mensalidades das Empresas */}
+          <div className="flex items-center gap-3.5 bg-gradient-to-r from-emerald-50 via-teal-50/70 to-emerald-50 border border-emerald-200/90 rounded-2xl px-4 py-2.5 shadow-xs">
+            <div className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-xs shrink-0">
+              <DollarSign size={22} className="stroke-[2.5]" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">
+                  Soma das Mensalidades
+                </span>
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  MRR
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1.5 mt-0.5">
+                <span className="text-xl sm:text-2xl font-black text-emerald-950 font-mono">
+                  {totalMensalidades.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </span>
+                <span className="text-xs text-emerald-700 font-medium">
+                  /mês {searchTerm ? `(filtradas: ${totalMensalidadesFiltradas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : `(${clientes.length} empresas)`}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
         
         <div className="flex items-center gap-3">
@@ -176,7 +229,7 @@ export default function ClientesPage() {
               />
               <ResizableSortableTh
                 columnId="razao_social"
-                label="Razão Social / Ramo"
+                label={priorizarNomeFantasia ? 'Nome Fantasia / Razão Social' : 'Razão Social / Ramo'}
                 sortKey="razao_social"
                 currentSortKey={sortKey}
                 currentSortDirection={sortDirection}
@@ -332,13 +385,30 @@ export default function ClientesPage() {
                         <img src={c.logo_url} alt="Logo" className="w-10 h-10 rounded-full object-cover border border-slate-200" />
                       ) : (
                         <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-400 text-xs font-bold">
-                          {c.razao_social?.charAt(0)}
+                          {((priorizarNomeFantasia && c.nome_fantasia) ? c.nome_fantasia : c.razao_social)?.charAt(0)}
                         </div>
                       )}
                     </td>
                     <td className="p-4 text-slate-800">
-                      <div className="font-bold text-slate-900">{c.razao_social}</div>
-                      <div className="text-xs text-slate-500">{c.nome_fantasia || '—'}</div>
+                      {priorizarNomeFantasia ? (
+                        <>
+                          <div className="font-bold text-slate-900" title={c.nome_fantasia || c.razao_social}>
+                            {c.nome_fantasia || c.razao_social}
+                          </div>
+                          <div className="text-xs text-slate-500" title={c.razao_social}>
+                            {c.nome_fantasia ? c.razao_social : '—'}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="font-bold text-slate-900" title={c.razao_social}>
+                            {c.razao_social}
+                          </div>
+                          <div className="text-xs text-slate-500" title={c.nome_fantasia || '—'}>
+                            {c.nome_fantasia || '—'}
+                          </div>
+                        </>
+                      )}
                       {c.ramo_atividade && (
                         <div className="text-[11px] text-blue-600 font-medium mt-0.5 max-w-[200px] truncate" title={c.ramo_atividade}>
                           🏢 {c.ramo_atividade}

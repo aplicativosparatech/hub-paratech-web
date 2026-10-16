@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { 
   Palette, Sun, Moon, Maximize2, Minimize2, Image as ImageIcon, 
-  Check, Save, Sparkles, Monitor, Eye, Layout, ShieldCheck
+  Check, Save, Sparkles, Monitor, Eye, Layout, ShieldCheck, Building2
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -11,6 +11,7 @@ export default function AparenciaPage() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [displayMode, setDisplayMode] = useState<'window' | 'fullscreen'>('window')
   const [showHeaderBanners, setShowHeaderBanners] = useState<boolean>(true)
+  const [priorizarNomeFantasia, setPriorizarNomeFantasia] = useState<boolean>(false)
   const [saving, setSaving] = useState(false)
   const [mounted, setMounted] = useState(false)
 
@@ -20,10 +21,12 @@ export default function AparenciaPage() {
     const savedTheme = (localStorage.getItem('hub_theme') as 'light' | 'dark') || 'light'
     const savedMode = (localStorage.getItem('hub_display_mode') as 'window' | 'fullscreen') || 'window'
     const savedBanners = localStorage.getItem('hub_show_header_banners') !== 'false'
+    const savedPriorizar = localStorage.getItem('hub_priorizar_nome_fantasia') === 'true'
 
     setTheme(savedTheme)
     setDisplayMode(savedMode)
     setShowHeaderBanners(savedBanners)
+    setPriorizarNomeFantasia(savedPriorizar)
   }, [])
 
   const handleThemeChange = (newTheme: 'light' | 'dark') => {
@@ -64,11 +67,24 @@ export default function AparenciaPage() {
     )
   }
 
+  const handlePriorizarNomeFantasiaToggle = (enabled: boolean) => {
+    setPriorizarNomeFantasia(enabled)
+    localStorage.setItem('hub_priorizar_nome_fantasia', enabled ? 'true' : 'false')
+    window.dispatchEvent(new Event('hub_settings_changed'))
+    toast.success(
+      enabled 
+        ? 'Nome Fantasia definido como título principal das empresas!' 
+        : 'Razão Social restaurada como título principal das empresas.',
+      { icon: '🏢' }
+    )
+  }
+
   const handleSaveAll = () => {
     setSaving(true)
     localStorage.setItem('hub_theme', theme)
     localStorage.setItem('hub_display_mode', displayMode)
     localStorage.setItem('hub_show_header_banners', showHeaderBanners ? 'true' : 'false')
+    localStorage.setItem('hub_priorizar_nome_fantasia', priorizarNomeFantasia ? 'true' : 'false')
     window.dispatchEvent(new Event('hub_settings_changed'))
     
     setTimeout(() => {
@@ -328,6 +344,86 @@ export default function AparenciaPage() {
             <p>
               <strong>Suporte a Abas Atuais e Futuras:</strong> Cada aba do sistema possui um banner exclusivo gerado sob medida (Contabilidades, Clientes, Notas Fiscais, Analisador Tributário, Saneador de Arquivos, Faturas, Relatórios, Integrações, Permissões, Aparência, etc.). Qualquer nova funcionalidade futura herdará automaticamente o design limpo e proporcional.
             </p>
+          </div>
+        </div>
+
+      </div>
+
+      {/* CARD 4: HIERARQUIA DE NOMES DAS EMPRESAS (NOME FANTASIA VS RAZÃO SOCIAL) */}
+      <div className="bg-white dark:bg-[#0B1120] rounded-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-xs transition-colors">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-start gap-3.5">
+            <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-200/60 dark:border-emerald-800 flex-shrink-0">
+              <Building2 size={24} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-slate-800 dark:text-white text-lg">Hierarquia de Nomes das Empresas</h3>
+                <span className="px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold uppercase tracking-wider border border-emerald-200 dark:border-emerald-800">
+                  Clientes & Tabelas
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
+                Define se o <strong>Nome Fantasia</strong> ou a <strong>Razão Social</strong> da empresa deve aparecer como o título principal (em negrito de maior destaque) na tela de Clientes (Empresas) e seletores do portal.
+              </p>
+            </div>
+          </div>
+
+          {/* Toggle Switch */}
+          <div className="flex items-center gap-3 self-end sm:self-center">
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+              {priorizarNomeFantasia ? 'Nome Fantasia como Título' : 'Razão Social como Título (Padrão)'}
+            </span>
+            <button
+              type="button"
+              onClick={() => handlePriorizarNomeFantasiaToggle(!priorizarNomeFantasia)}
+              className={`w-14 h-8 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-200 ease-in-out shrink-0 ${
+                priorizarNomeFantasia ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-700'
+              }`}
+              role="switch"
+              aria-checked={priorizarNomeFantasia}
+            >
+              <div
+                className={`bg-white w-6 h-6 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
+                  priorizarNomeFantasia ? 'translate-x-6' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* Prévia visual da tabela */}
+        <div className="mt-6 space-y-3">
+          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+            <Eye size={14} className="text-emerald-500" />
+            Exemplo de como a empresa aparecerá na listagem de Clientes:
+          </div>
+
+          <div className="p-4 bg-slate-50 dark:bg-slate-900/80 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 flex items-center justify-center font-bold text-sm border border-emerald-200 dark:border-emerald-800">
+                {priorizarNomeFantasia ? 'B' : 'A'}
+              </div>
+              <div>
+                <div className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  {priorizarNomeFantasia ? 'BURGER & BEER RESTAURANTE' : 'AUTO POSTO & CONVENIENCIA SILVA LTDA'}
+                  <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    Título Principal
+                  </span>
+                </div>
+                <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-0.5">
+                  <span>{priorizarNomeFantasia ? 'AUTO POSTO & CONVENIENCIA SILVA LTDA' : 'BURGER & BEER RESTAURANTE'}</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 italic">
+                    (Subtítulo secundário)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-right hidden sm:block">
+              <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300">12.345.678/0001-90</span>
+              <span className="text-[11px] text-slate-400 block">Simples Nacional</span>
+            </div>
           </div>
         </div>
 
