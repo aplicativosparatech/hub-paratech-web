@@ -5,7 +5,7 @@ import {
   Inbox, Search, Download, FileText, CheckCircle2, AlertTriangle, 
   RefreshCw, Archive, Calendar, Building2, CheckSquare, Square, 
   Trash2, ExternalLink, Copy, Check, FileDown, Layers, ShieldCheck,
-  Eye, FolderArchive, ArrowRight, Zap, Filter
+  Eye, FolderArchive, ArrowRight, Zap, Filter, Clock, Timer, Database
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import JSZip from 'jszip'
@@ -21,6 +21,19 @@ interface Cliente {
   cnpj: string
   uf: string
   certificado_url?: string
+}
+
+interface InfoSincronizacaoNsu {
+  ultimoNsuConsultado: string
+  maxNsuSefaz: string
+  statusSefaz: string
+  motivoSefaz: string
+  totalBaixadosUltimaConsulta: number
+  dataUltimaConsulta: string
+  emConsumoIndevido: boolean
+  liberadoEm?: string
+  minutosRestantes?: number
+  segundosRestantes?: number
 }
 
 interface DfeNotaItem {
@@ -81,6 +94,7 @@ export default function DistribuicaoDfePage() {
   const [avisoSefaz, setAvisoSefaz] = useState<string | null>(null)
   const [competenciasDisponiveis, setCompetenciasDisponiveis] = useState<string[]>([])
   const [manifestando, setManifestando] = useState(false)
+  const [infoSincronizacao, setInfoSincronizacao] = useState<InfoSincronizacaoNsu | null>(null)
 
   // Resumo da Consulta
   const [resumo, setResumo] = useState({
@@ -200,6 +214,10 @@ export default function DistribuicaoDfePage() {
         semManifestacao: 0
       })
 
+      if (data.infoSincronizacao) {
+        setInfoSincronizacao(data.infoSincronizacao)
+      }
+
       if (data.aviso) {
         setAvisoSefaz(data.aviso)
       }
@@ -220,6 +238,23 @@ export default function DistribuicaoDfePage() {
       setLoadingConsulta(false)
     }
   }
+
+  // Cronômetro para atualizar tempo restante da trava de 1h da SEFAZ
+  useEffect(() => {
+    if (!infoSincronizacao?.liberadoEm) return
+    const interval = setInterval(() => {
+      const agora = Date.now()
+      const liberadoMs = new Date(infoSincronizacao.liberadoEm!).getTime()
+      const segs = Math.max(0, Math.ceil((liberadoMs - agora) / 1000))
+      const mins = Math.ceil(segs / 60)
+      if (segs <= 0) {
+        setInfoSincronizacao(prev => prev ? { ...prev, emConsumoIndevido: false, minutosRestantes: 0, segundosRestantes: 0 } : null)
+      } else {
+        setInfoSincronizacao(prev => prev ? { ...prev, minutosRestantes: mins, segundosRestantes: segs } : null)
+      }
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [infoSincronizacao?.liberadoEm])
 
   // Carrega notas salvas no banco imediatamente ao trocar de cliente
   useEffect(() => {
@@ -621,14 +656,39 @@ export default function DistribuicaoDfePage() {
               <div className="md:col-span-4 flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => handleAnalisar(competencia, true)}
+                  onClick={() => {
+                    if (consultarAoVivo && infoSincronizacao?.emConsumoIndevido) {
+                      const minRestantes = infoSincronizacao.minutosRestantes || 1
+                      const liberarTxt = infoSincronizacao.liberadoEm 
+                        ? new Date(infoSincronizacao.liberadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                        : ''
+                      const prosseguir = window.confirm(
+                        `⚠️ ATENÇÃO: TRAVA DE INTERVALO DA SEFAZ ATIVA (cStat 656)\n\n` +
+                        `A SEFAZ exige um intervalo de segurança de 1 hora entre consultas quando todos os documentos já foram lidos.\n\n` +
+                        `Tempo restante estimado: ${minRestantes} minuto(s)${liberarTxt ? ` (liberação prevista às ${liberarTxt})` : ''}.\n\n` +
+                        `Efetuar nova consulta antes do horário pode reiniciar a trava de 1 hora!\n\n` +
+                        `Deseja forçar a consulta na SEFAZ mesmo assim?`
+                      )
+                      if (!prosseguir) return
+                    }
+                    handleAnalisar(competencia, true)
+                  }}
                   disabled={loadingConsulta || !selectedClienteId}
-                  className="w-full flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-600/20 transition disabled:opacity-50"
+                  className={`w-full flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition disabled:opacity-50 ${
+                    infoSincronizacao?.emConsumoIndevido
+                      ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-md shadow-amber-600/20'
+                      : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20'
+                  }`}
                 >
                   {loadingConsulta ? (
                     <>
                       <RefreshCw size={15} className="animate-spin" />
                       Consultando SEFAZ...
+                    </>
+                  ) : infoSincronizacao?.emConsumoIndevido ? (
+                    <>
+                      <Clock size={15} className="animate-pulse" />
+                      Trava SEFAZ ({infoSincronizacao.minutosRestantes || 1} min) - Forçar
                     </>
                   ) : (
                     <>
@@ -704,8 +764,117 @@ export default function DistribuicaoDfePage() {
             </div>
           </div>
 
-          {/* Aviso SEFAZ (ex: Consumo Indevido / Rate Limit) */}
-          {avisoSefaz && (
+          {/* PAINEL DE MONITORAMENTO DO NSU E TRAVA DA SEFAZ */}
+          {infoSincronizacao && (
+            <div className="space-y-3 animate-in fade-in">
+              {/* Alerta de Consumo Indevido / Trava Ativa de 1 hora */}
+              {infoSincronizacao.emConsumoIndevido ? (
+                <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-300 rounded-2xl shadow-xs">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-amber-500 text-white rounded-xl shadow-xs shrink-0 mt-0.5">
+                      <Clock size={20} className="animate-pulse" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                        <h4 className="text-sm font-black text-amber-950 flex items-center gap-2">
+                          <span>Trava de Intervalo Temporária da SEFAZ Nacional</span>
+                          <span className="text-[11px] font-bold bg-amber-200 text-amber-900 px-2 py-0.5 rounded-md">
+                            cStat 656 - Consumo Indevido
+                          </span>
+                        </h4>
+                        <div className="flex items-center gap-1.5 px-3 py-1 bg-white/95 border border-amber-300 rounded-xl text-xs font-black text-amber-900 shadow-xs">
+                          <Timer size={14} className="text-amber-600" />
+                          <span>
+                            Próxima busca recomendada em: {infoSincronizacao.minutosRestantes || 1} min
+                            {infoSincronizacao.liberadoEm && ` (~${new Date(infoSincronizacao.liberadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })})`}
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-amber-900 leading-relaxed">
+                        A SEFAZ exige um intervalo de segurança de <strong>1 hora</strong> quando todas as notas já foram consultadas e não há novos lotes.
+                        Fazer novas tentativas antes desse prazo pode <strong>reiniciar a penalidade de 1 hora</strong>. O ponteiro de leitura está seguro no <strong>NSU #{infoSincronizacao.ultimoNsuConsultado}</strong>.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : infoSincronizacao.statusSefaz === '137' ? (
+                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between gap-3 text-xs text-emerald-950 shadow-xs">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 bg-emerald-600 text-white rounded-lg shrink-0">
+                      <CheckCircle2 size={16} />
+                    </div>
+                    <div>
+                      <span className="font-bold block">Fila de Notas SEFAZ 100% Atualizada (cStat 137)</span>
+                      <span className="text-emerald-700 text-[11px]">Nenhum novo documento pendente de download na SEFAZ Nacional até o NSU #{infoSincronizacao.ultimoNsuConsultado}.</span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold bg-white text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-lg">
+                    Sincronizado
+                  </span>
+                </div>
+              ) : null}
+
+              {/* Grid com 4 Indicadores Estruturados do NSU */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-white rounded-xl p-3.5 border border-slate-200/80 shadow-xs">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    <span>NSU Consultado</span>
+                    <Database size={13} className="text-slate-400" />
+                  </div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-xl font-black text-slate-900">#{infoSincronizacao.ultimoNsuConsultado}</span>
+                    {parseInt(infoSincronizacao.maxNsuSefaz || '0', 10) > parseInt(infoSincronizacao.ultimoNsuConsultado || '0', 10) && (
+                      <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                        Fila: #{infoSincronizacao.maxNsuSefaz}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl p-3.5 border border-slate-200/80 shadow-xs">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    <span>Último Lote Baixado</span>
+                    <Download size={13} className="text-indigo-500" />
+                  </div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-xl font-black text-indigo-700">+{infoSincronizacao.totalBaixadosUltimaConsulta}</span>
+                    <span className="text-xs text-slate-500 font-medium">documentos</span>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl p-3.5 border border-slate-200/80 shadow-xs">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    <span>Última Verificação</span>
+                    <Calendar size={13} className="text-slate-400" />
+                  </div>
+                  <div className="text-xs font-bold text-slate-800 truncate">
+                    {infoSincronizacao.dataUltimaConsulta
+                      ? new Date(infoSincronizacao.dataUltimaConsulta).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+                      : 'Não consultado'}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl p-3.5 border border-slate-200/80 shadow-xs">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    <span>Status SEFAZ</span>
+                    <Zap size={13} className="text-slate-400" />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${infoSincronizacao.emConsumoIndevido ? 'bg-amber-500 animate-ping' : infoSincronizacao.statusSefaz === '137' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
+                    <span className="text-xs font-black text-slate-900">
+                      cStat {infoSincronizacao.statusSefaz}
+                    </span>
+                    <span className="text-[10px] text-slate-500 truncate" title={infoSincronizacao.motivoSefaz}>
+                      {infoSincronizacao.emConsumoIndevido ? 'Trava 1h' : infoSincronizacao.statusSefaz === '137' ? 'Em dia' : 'Ativo'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Aviso SEFAZ Textual (se houver aviso customizado) */}
+          {avisoSefaz && !infoSincronizacao?.emConsumoIndevido && (
             <div className="p-3.5 bg-blue-50 border border-blue-200/80 rounded-xl text-xs text-blue-900 flex items-start gap-2.5">
               <AlertTriangle size={16} className="text-blue-600 shrink-0 mt-0.5" />
               <div className="leading-relaxed">

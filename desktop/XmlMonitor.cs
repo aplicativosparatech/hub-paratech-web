@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Linq;
+using System.Runtime.InteropServices;
 
 namespace HubParatechDesktop
 {
@@ -95,6 +96,22 @@ namespace HubParatechDesktop
             "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"
         };
 
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern uint SetThreadExecutionState(uint esFlags);
+
+        private const uint ES_CONTINUOUS = 0x80000000;
+        private const uint ES_SYSTEM_REQUIRED = 0x00000001;
+        private const uint ES_AWAYMODE_REQUIRED = 0x00000040;
+
+        public static void KeepSystemAwake()
+        {
+            try
+            {
+                SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_AWAYMODE_REQUIRED);
+            }
+            catch { }
+        }
+
         public XmlMonitor(string path, string tipoPasta, string token, HttpClient httpClient, string modoProcessamento = "hub")
         {
             this.rootPath = path;
@@ -103,30 +120,51 @@ namespace HubParatechDesktop
             this.http = httpClient;
             this.modoProcessamento = string.Equals(modoProcessamento, "portal", StringComparison.OrdinalIgnoreCase) ? "portal" : "hub";
 
+            // Impede suspensão de thread e economia de energia do Windows para garantir monitoramento ininterrupto
+            KeepSystemAwake();
+
             if (!Directory.Exists(path))
             {
                 try { Directory.CreateDirectory(path); } catch { }
             }
 
+            SetupWatcher();
+
+            // Inicia varredura e monitoramento periódico de arquivos existentes em segundo plano
+            Task.Run(StartPeriodicScanAsync);
+        }
+
+        private void SetupWatcher()
+        {
             try
             {
+                if (watcher != null)
+                {
+                    try { watcher.EnableRaisingEvents = false; watcher.Dispose(); } catch { }
+                }
+
+                if (!Directory.Exists(rootPath)) return;
+
                 // FileSystemWatcher monitorando recursivamente a pasta raiz e todas as subpastas
-                watcher = new FileSystemWatcher(path, "*.xml");
+                watcher = new FileSystemWatcher(rootPath, "*.xml");
                 watcher.IncludeSubdirectories = true; // Captura subpastas criadas pelo ERP (ex: 2026/10, Outubro_2026)
                 watcher.NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size;
+                watcher.InternalBufferSize = 65536; // 64 KB de buffer para evitar InternalBufferOverflowException em rajadas de notas
                 
                 // Eventos de tempo real: assim que o arquivo é gerado ou gravado pelo PDV/ERP
                 watcher.Created += (s, e) => _ = ProcessFileAsync(e.FullPath, isRealTime: true);
                 watcher.Changed += (s, e) => _ = ProcessFileAsync(e.FullPath, isRealTime: true);
+                watcher.Error += (s, e) =>
+                {
+                    Debug.WriteLine($"[XmlMonitor] Erro detectado no FileSystemWatcher para {rootPath}: {e.GetException()?.Message}. Reiniciando...");
+                    Task.Delay(2000).ContinueWith(_ => SetupWatcher());
+                };
                 watcher.EnableRaisingEvents = true;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Erro ao iniciar watcher em {path}: {ex.Message}");
+                Debug.WriteLine($"Erro ao iniciar watcher em {rootPath}: {ex.Message}");
             }
-
-            // Inicia varredura e monitoramento periódico de arquivos existentes em segundo plano
-            Task.Run(StartPeriodicScanAsync);
         }
 
         public void TriggerScan()
@@ -143,8 +181,17 @@ namespace HubParatechDesktop
         {
             while (isRunning)
             {
+                // Garante que o watcher continua ativo no Windows
+                if (watcher != null && !watcher.EnableRaisingEvents && Directory.Exists(rootPath))
+                {
+                    try { watcher.EnableRaisingEvents = true; } catch { }
+                }
+
+                // Mantém a thread e sistema ativos contra suspensão
+                KeepSystemAwake();
+
                 await ScanExistingFilesAsync();
-                await Task.Delay(120000); // Re-varre a cada 2 minutos para resiliência de rede e arquivos copiados
+                await Task.Delay(30000); // Re-varre a cada 30 segundos (em vez de 120s) garantindo persistência sem hibernar
             }
         }
 

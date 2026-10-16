@@ -263,7 +263,7 @@ namespace HubParatechDesktop
 
             if (config.IniciarComWindows)
             {
-                StartupManager.EnableAutoStart();
+                StartupManager.EnsurePersistentInstallation(config.ModoOculto);
             }
             else
             {

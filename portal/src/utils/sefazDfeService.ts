@@ -93,12 +93,26 @@ export interface DfeNotaItem {
   origem: 'sefaz_dfe' | 'nfe_entradas'
 }
 
+export interface InfoSincronizacaoNsu {
+  ultimoNsuConsultado: string
+  maxNsuSefaz: string
+  statusSefaz: string
+  motivoSefaz: string
+  totalBaixadosUltimaConsulta: number
+  dataUltimaConsulta: string
+  emConsumoIndevido: boolean
+  liberadoEm?: string
+  minutosRestantes?: number
+  segundosRestantes?: number
+}
+
 export interface ConsultaDfeResult {
   success: boolean
   cStat: string
   xMotivo: string
   ultNSU?: string
   maxNSU?: string
+  infoSincronizacao?: InfoSincronizacaoNsu
   cliente: {
     id: string
     razao_social: string
@@ -341,6 +355,7 @@ export async function executarConsultaDfeCompleta(params: {
         const MAX_ITERACOES = 6 // Até 6 lotes consecutivos por clique (até 300 documentos da SEFAZ)
         let continuarBuscando = true
         let totalDocsSincronizados = 0
+        let maxNsuRetornado = '0'
 
         while (continuarBuscando && iteracoes < MAX_ITERACOES) {
           iteracoes++
@@ -355,6 +370,7 @@ export async function executarConsultaDfeCompleta(params: {
 
           cStatRetorno = sefazRes.cStat
           xMotivoRetorno = sefazRes.xMotivo
+          if (sefazRes.maxNSU) maxNsuRetornado = sefazRes.maxNSU
 
           // Processa documentos retornados da SEFAZ
           if (sefazRes.documentos && sefazRes.documentos.length > 0) {
@@ -427,28 +443,12 @@ export async function executarConsultaDfeCompleta(params: {
             }
           }
 
-          // Se a SEFAZ informou um ultNSU mais alto, persiste para não regredir
+          // Se a SEFAZ informou um ultNSU mais alto, atualiza para o próximo loop
           if (sefazRes.ultNSU) {
             const numUlt = parseInt(sefazRes.ultNSU, 10)
             const numAtual = parseInt(ultNSUParaConsultar, 10)
             if (!isNaN(numUlt) && numUlt > numAtual) {
               ultNSUParaConsultar = String(numUlt)
-              await supabaseAdmin.from('dfe_notas_destinadas').upsert({
-                cliente_id: cliente.id,
-                chave: '__NSU_SYNC_STATE__',
-                nsu: String(numUlt),
-                numero: '0',
-                serie: '0',
-                emitente_cnpj: cliente.cnpj,
-                emitente_nome: 'CONTROLE DE SINCRONIZACAO SEFAZ',
-                valor: 0,
-                data_emissao: new Date().toISOString(),
-                tipo_documento: '55',
-                situacao_nfe: 'AUTORIZADA',
-                manifestacao_status: 'SEM_MANIFESTACAO',
-                competencia: 'CONTROLE',
-                updated_at: new Date().toISOString()
-              }, { onConflict: 'cliente_id,chave' })
             }
           }
 
@@ -464,7 +464,7 @@ export async function executarConsultaDfeCompleta(params: {
 
           if (sefazRes.cStat === '656') {
             continuarBuscando = false
-            avisoSefaz = `A SEFAZ Nacional aplicou uma trava de segurança temporária (Consumo Indevido - limite de consultas por hora atingido). O ponteiro foi sincronizado no NSU ${ultNSUParaConsultar}. A SEFAZ liberará novas buscas automáticas após o intervalo de 1 hora.`
+            avisoSefaz = `A SEFAZ Nacional aplicou a trava de segurança temporária (Consumo Indevido - limite de consultas por hora atingido). O ponteiro foi sincronizado no NSU ${ultNSUParaConsultar}. Aguarde o intervalo de 1 hora antes de consultar novamente.`
           } else if (sefazRes.cStat === '137') {
             continuarBuscando = false
             avisoSefaz = `SEFAZ Nacional confirmou: Fila de notas 100% atualizada (Nenhum documento pendente até o NSU ${sefazRes.ultNSU}).`
@@ -472,6 +472,40 @@ export async function executarConsultaDfeCompleta(params: {
             avisoSefaz = `Sincronizados ${totalDocsSincronizados} novos documentos da SEFAZ com sucesso (Ponteiro NSU ${ultNSUParaConsultar}).`
           }
         }
+
+        // Persiste o estado consolidado da sincronização (metadados para o portal e controle da trava de 1h)
+        let bloqueadoAte: string | null = null
+        if (cStatRetorno === '656' || cStatRetorno === '137') {
+          bloqueadoAte = new Date(Date.now() + 60 * 60 * 1000).toISOString()
+        }
+
+        const syncMeta = {
+          ultimoNsuConsultado: ultNSUParaConsultar,
+          maxNsuSefaz: maxNsuRetornado || ultNSUParaConsultar,
+          statusSefaz: cStatRetorno,
+          motivoSefaz: xMotivoRetorno,
+          totalBaixadosUltimaConsulta: totalDocsSincronizados,
+          dataUltimaConsulta: new Date().toISOString(),
+          bloqueadoAte
+        }
+
+        await supabaseAdmin.from('dfe_notas_destinadas').upsert({
+          cliente_id: cliente.id,
+          chave: '__NSU_SYNC_STATE__',
+          nsu: ultNSUParaConsultar,
+          numero: '0',
+          serie: '0',
+          emitente_cnpj: cliente.cnpj,
+          emitente_nome: 'CONTROLE DE SINCRONIZACAO SEFAZ',
+          valor: 0,
+          data_emissao: new Date().toISOString(),
+          tipo_documento: '55',
+          situacao_nfe: 'AUTORIZADA',
+          manifestacao_status: 'SEM_MANIFESTACAO',
+          xml_completo: JSON.stringify(syncMeta),
+          competencia: 'CONTROLE',
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'cliente_id,chave' })
       }
     } catch (errSefaz: any) {
       console.warn('Erro ao consultar SEFAZ ao vivo:', errSefaz)
@@ -583,10 +617,59 @@ export async function executarConsultaDfeCompleta(params: {
   const comXml = lista.filter(i => i.tem_xml).length
   const semManifestacao = lista.filter(i => i.manifestacao_status === 'SEM_MANIFESTACAO').length
 
+  // 5. Busca o estado consolidado de sincronização do NSU para feedback em tempo real
+  const { data: syncRow } = await supabaseAdmin
+    .from('dfe_notas_destinadas')
+    .select('*')
+    .eq('cliente_id', cliente.id)
+    .eq('chave', '__NSU_SYNC_STATE__')
+    .maybeSingle()
+
+  let infoSincronizacao: InfoSincronizacaoNsu | undefined = undefined
+
+  if (syncRow?.xml_completo) {
+    try {
+      const meta = JSON.parse(syncRow.xml_completo)
+      const agora = Date.now()
+      const bloqueadoMs = meta.bloqueadoAte ? new Date(meta.bloqueadoAte).getTime() : 0
+      const segundosRestantes = Math.max(0, Math.ceil((bloqueadoMs - agora) / 1000))
+      const minutosRestantes = Math.ceil(segundosRestantes / 60)
+      const emConsumoIndevido = meta.statusSefaz === '656' && segundosRestantes > 0
+
+      infoSincronizacao = {
+        ultimoNsuConsultado: meta.ultimoNsuConsultado || syncRow.nsu || '0',
+        maxNsuSefaz: meta.maxNsuSefaz || syncRow.nsu || '0',
+        statusSefaz: meta.statusSefaz || cStatRetorno,
+        motivoSefaz: meta.motivoSefaz || xMotivoRetorno,
+        totalBaixadosUltimaConsulta: meta.totalBaixadosUltimaConsulta ?? 0,
+        dataUltimaConsulta: meta.dataUltimaConsulta || syncRow.updated_at || '',
+        emConsumoIndevido,
+        liberadoEm: meta.bloqueadoAte || undefined,
+        minutosRestantes: segundosRestantes > 0 ? minutosRestantes : 0,
+        segundosRestantes
+      }
+    } catch { }
+  }
+
+  if (!infoSincronizacao) {
+    infoSincronizacao = {
+      ultimoNsuConsultado: syncRow?.nsu || '0',
+      maxNsuSefaz: syncRow?.nsu || '0',
+      statusSefaz: cStatRetorno,
+      motivoSefaz: xMotivoRetorno,
+      totalBaixadosUltimaConsulta: 0,
+      dataUltimaConsulta: syncRow?.updated_at || '',
+      emConsumoIndevido: false
+    }
+  }
+
   return {
     success: true,
     cStat: cStatRetorno,
     xMotivo: xMotivoRetorno,
+    ultNSU: infoSincronizacao.ultimoNsuConsultado,
+    maxNSU: infoSincronizacao.maxNsuSefaz,
+    infoSincronizacao,
     cliente: {
       id: cliente.id,
       razao_social: cliente.razao_social,

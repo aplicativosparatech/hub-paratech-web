@@ -28,9 +28,81 @@ namespace HubParatechDesktop
             }
         }
 
-        public static bool EnableAutoStart(string? customExePath = null)
+        public static string GetTargetInstallDir()
         {
-            string exePath = customExePath ?? Application.ExecutablePath;
+            if (IsAdmin())
+            {
+                return DefaultInstallDir;
+            }
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Paratech", "HubDesktop");
+        }
+
+        public static string GetTargetInstallExe()
+        {
+            return Path.Combine(GetTargetInstallDir(), "HubParatechDesktop.exe");
+        }
+
+        public static bool EnsurePersistentInstallation(bool stealth = true)
+        {
+            try
+            {
+                string targetDir = GetTargetInstallDir();
+                string targetExe = GetTargetInstallExe();
+                string currentExe = Application.ExecutablePath;
+
+                // 1. Garante que o diretório alvo existe
+                if (!Directory.Exists(targetDir))
+                {
+                    Directory.CreateDirectory(targetDir);
+                }
+
+                // 2. Se o processo atual NÃO está rodando do diretório instalado oficial (ex: rodou de Downloads, PenDrive, Desktop)
+                if (!string.Equals(currentExe, targetExe, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Copia o executável principal para a pasta fixa protegida
+                    File.Copy(currentExe, targetExe, true);
+
+                    // Copia recursos adjacentes (logo, ícone)
+                    string currentDir = Application.StartupPath;
+                    string srcLogo = Path.Combine(currentDir, "logo.png");
+                    string dstLogo = Path.Combine(targetDir, "logo.png");
+                    if (File.Exists(srcLogo)) try { File.Copy(srcLogo, dstLogo, true); } catch { }
+
+                    string srcIcon = Path.Combine(currentDir, "icon.ico");
+                    string dstIcon = Path.Combine(targetDir, "icon.ico");
+                    if (File.Exists(srcIcon)) try { File.Copy(srcIcon, dstIcon, true); } catch { }
+
+                    // Registra inicialização automática apontando para o targetExe oficial
+                    EnableAutoStart(targetExe, stealth);
+
+                    // Inicia o processo definitivo e encerra a instância temporária
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = targetExe,
+                        Arguments = stealth ? "--stealth" : "",
+                        UseShellExecute = true,
+                        WorkingDirectory = targetDir
+                    };
+                    Process.Start(psi);
+                    Environment.Exit(0);
+                    return true;
+                }
+
+                // 3. Se já está rodando do diretório oficial, garante o registro ativo no Windows
+                EnableAutoStart(targetExe, stealth);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Falha na persistência automática: {ex.Message}");
+                return false;
+            }
+        }
+
+        public static bool EnableAutoStart(string? customExePath = null, bool stealth = true)
+        {
+            string exePath = customExePath ?? GetTargetInstallExe();
+            string command = stealth ? $"\"{exePath}\" --stealth" : $"\"{exePath}\"";
             bool success = false;
 
             // 1. Registro do Windows: CurrentUser (Inicialização no Logon do Usuário Atual)
@@ -39,19 +111,19 @@ namespace HubParatechDesktop
                 using var key = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true);
                 if (key != null)
                 {
-                    key.SetValue(AppName, $"\"{exePath}\"");
+                    key.SetValue(AppName, command);
                     success = true;
                 }
             }
             catch { }
 
-            // 2. Registro do Windows: LocalMachine (Para todos os usuários, se tiver permissão de Admin)
+            // 2. Registro do Windows: LocalMachine (Para todos os usuários se tiver permissão de Admin)
             if (IsAdmin())
             {
                 try
                 {
                     using var hklmKey = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true);
-                    hklmKey?.SetValue(AppName, $"\"{exePath}\"");
+                    hklmKey?.SetValue(AppName, command);
                 }
                 catch { }
 
@@ -62,7 +134,7 @@ namespace HubParatechDesktop
                     var psi = new ProcessStartInfo
                     {
                         FileName = "schtasks.exe",
-                        Arguments = $"/create /tn \"{TaskName}\" /tr \"\\\"{exePath}\\\" --stealth\" /sc onlogon /rl highest /f",
+                        Arguments = $"/create /tn \"{TaskName}\" /tr \"\\\"{exePath}\\\" {(stealth ? "--stealth" : "")}\" /sc onlogon /rl highest /f",
                         CreateNoWindow = true,
                         UseShellExecute = false,
                         WindowStyle = ProcessWindowStyle.Hidden
@@ -138,39 +210,40 @@ namespace HubParatechDesktop
 
         public static bool InstallToSystem(out string installedPath, out string errorMessage)
         {
-            installedPath = DefaultInstallExe;
+            installedPath = GetTargetInstallExe();
+            string targetDir = GetTargetInstallDir();
             errorMessage = "";
 
             try
             {
-                if (!Directory.Exists(DefaultInstallDir))
+                if (!Directory.Exists(targetDir))
                 {
-                    Directory.CreateDirectory(DefaultInstallDir);
+                    Directory.CreateDirectory(targetDir);
                 }
 
                 string currentExe = Application.ExecutablePath;
-                if (!string.Equals(currentExe, DefaultInstallExe, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(currentExe, installedPath, StringComparison.OrdinalIgnoreCase))
                 {
-                    File.Copy(currentExe, DefaultInstallExe, true);
+                    File.Copy(currentExe, installedPath, true);
                 }
 
                 string currentDir = Application.StartupPath;
                 string srcLogo = Path.Combine(currentDir, "logo.png");
-                string dstLogo = Path.Combine(DefaultInstallDir, "logo.png");
+                string dstLogo = Path.Combine(targetDir, "logo.png");
                 if (File.Exists(srcLogo) && !File.Exists(dstLogo))
                 {
                     try { File.Copy(srcLogo, dstLogo, true); } catch { }
                 }
 
                 string srcIcon = Path.Combine(currentDir, "icon.ico");
-                string dstIcon = Path.Combine(DefaultInstallDir, "icon.ico");
+                string dstIcon = Path.Combine(targetDir, "icon.ico");
                 if (File.Exists(srcIcon) && !File.Exists(dstIcon))
                 {
                     try { File.Copy(srcIcon, dstIcon, true); } catch { }
                 }
 
                 // Configura inicialização no registro e agendador
-                EnableAutoStart(DefaultInstallExe);
+                EnableAutoStart(installedPath, true);
 
                 return true;
             }

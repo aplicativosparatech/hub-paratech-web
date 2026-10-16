@@ -62,6 +62,12 @@ static class Program
             }
         }
 
+        // Se o token estiver configurado, garante a instalação persistente no sistema
+        if (!string.IsNullOrWhiteSpace(config.HubToken) && config.IniciarComWindows)
+        {
+            StartupManager.EnsurePersistentInstallation(forceStealth || config.ModoOculto);
+        }
+
         // Executa o contexto da bandeja ou modo oculto
         Application.Run(new TrayContext(forceStealth));
     }

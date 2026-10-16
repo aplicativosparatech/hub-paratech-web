@@ -73,6 +73,7 @@ namespace HubParatechDesktop
             var config = ConfigManager.Load();
             isStealthMode = forceStealth || config.ModoOculto;
 
+            XmlMonitor.KeepSystemAwake();
             InitializeIconFrames();
 
             trayIcon = new NotifyIcon()
@@ -454,7 +455,7 @@ namespace HubParatechDesktop
                 var config = ConfigManager.Load();
                 if (config.IniciarComWindows)
                 {
-                    StartupManager.EnableAutoStart();
+                    StartupManager.EnsurePersistentInstallation(isStealthMode);
                 }
             }
             catch { }
