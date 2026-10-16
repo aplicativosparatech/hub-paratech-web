@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import forge from 'node-forge'
 import https from 'https'
+import { SignedXml } from 'xml-crypto'
 
 export interface SefazConsultaResult {
   success: boolean
@@ -135,22 +136,27 @@ export function signNFeXml(xmlString: string, pfxBuffer: Buffer, passphrase: str
   const idMatch = fullInfNFe.match(/Id=["']([^"']+)["']/)
   const infNFeId = idMatch ? idMatch[1] : ''
 
-  // 1. DigestValue do infNFe
-  const canonicalInfNFe = fullInfNFe.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-  const digestValue = crypto.createHash('sha1').update(canonicalInfNFe, 'utf8').digest('base64')
+  const sig = new SignedXml({
+    privateKey: privateKeyPem,
+    signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+    canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+    getKeyInfoContent: () => `<X509Data><X509Certificate>${certBase64}</X509Certificate></X509Data>`
+  })
 
-  // 2. SignedInfo padrão SEFAZ
-  const signedInfo = `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#"><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"></CanonicalizationMethod><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"></SignatureMethod><Reference URI="#${infNFeId}"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"></Transform><Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"></Transform></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"></DigestMethod><DigestValue>${digestValue}</DigestValue></Reference></SignedInfo>`
+  sig.addReference({
+    xpath: `//*[@Id='${infNFeId}']`,
+    transforms: [
+      'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
+      'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
+    ],
+    digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1'
+  })
 
-  // 3. SignatureValue (Assinatura RSA-SHA1 com chave privada)
-  const signer = crypto.createSign('RSA-SHA1')
-  signer.update(signedInfo.replace(/\r\n/g, '\n').replace(/\r/g, '\n'), 'utf8')
-  const signatureValue = signer.sign(privateKeyPem, 'base64')
+  sig.computeSignature(cleanXml)
+  const signedXml = sig.getSignedXml()
+  const digestMatch = signedXml.match(/<DigestValue>([\s\S]*?)<\/DigestValue>/)
+  const digestValue = digestMatch ? digestMatch[1].trim() : ''
 
-  // 4. Bloco Signature completo
-  const signatureXml = `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">${signedInfo}<SignatureValue>${signatureValue}</SignatureValue><KeyInfo><X509Data><X509Certificate>${certBase64}</X509Certificate></X509Data></KeyInfo></Signature>`
-
-  const signedXml = cleanXml.replace('</infNFe>', `</infNFe>${signatureXml}`)
   return { signedXml, digestValue }
 }
 

@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import https from 'https'
+import { SignedXml } from 'xml-crypto'
 import { parsePfxKeys } from './sefazXmlService'
 
 export interface SefazInutilizacaoResult {
@@ -125,25 +126,28 @@ export function buildAndSignInutNFeXml(params: {
 
   const rawXml = `<inutNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><infInut Id="${infInutId}"><tpAmb>${tpAmb}</tpAmb><xServ>INUTILIZAR</xServ><cUF>${cUF}</cUF><ano>${ano}</ano><CNPJ>${cnpj}</CNPJ><mod>${mod}</mod><serie>${serieNum}</serie><nNFIni>${params.nNFIni}</nNFIni><nNFFin>${params.nNFFin}</nNFFin><xJust>${xJust}</xJust></infInut></inutNFe>`
 
-  // Assinatura Digital W3C XML-DSig
+  // Assinatura Digital W3C XML-DSig usando Canonicalização C14N estrita
   const { privateKeyPem, certBase64 } = parsePfxKeys(params.pfxBuffer, params.passphrase)
 
-  const infInutMatch = rawXml.match(/<infInut[^>]*>([\s\S]*?)<\/infInut>/)
-  if (!infInutMatch) throw new Error('Tag <infInut> não encontrada no XML de inutilização')
+  const sig = new SignedXml({
+    privateKey: privateKeyPem,
+    signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+    canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+    getKeyInfoContent: () => `<X509Data><X509Certificate>${certBase64}</X509Certificate></X509Data>`
+  })
 
-  const fullInfInut = infInutMatch[0]
-  const canonicalInfInut = fullInfInut.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-  const digestValue = crypto.createHash('sha1').update(canonicalInfInut, 'utf8').digest('base64')
+  sig.addReference({
+    xpath: `//*[@Id='${infInutId}']`,
+    transforms: [
+      'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
+      'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
+    ],
+    digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1'
+  })
 
-  const signedInfo = `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#"><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"></CanonicalizationMethod><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"></SignatureMethod><Reference URI="#${infInutId}"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"></Transform><Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"></Transform></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"></DigestMethod><DigestValue>${digestValue}</DigestValue></Reference></SignedInfo>`
+  sig.computeSignature(rawXml)
+  const signedXml = sig.getSignedXml()
 
-  const signer = crypto.createSign('RSA-SHA1')
-  signer.update(signedInfo.replace(/\r\n/g, '\n').replace(/\r/g, '\n'), 'utf8')
-  const signatureValue = signer.sign(privateKeyPem, 'base64')
-
-  const signatureXml = `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">${signedInfo}<SignatureValue>${signatureValue}</SignatureValue><KeyInfo><X509Data><X509Certificate>${certBase64}</X509Certificate></X509Data></KeyInfo></Signature>`
-
-  const signedXml = rawXml.replace('</inutNFe>', `${signatureXml}</inutNFe>`)
   return { signedXml, infInutId }
 }
 
