@@ -28,8 +28,7 @@ export async function POST(request: Request) {
       numero_inicial_nfce: Math.max(1, parseInt(String(numero_inicial_nfce || 1), 10)),
       numero_inicial_nfse: Math.max(1, parseInt(String(numero_inicial_nfse || 1), 10)),
       numero_inicial_cte: Math.max(1, parseInt(String(numero_inicial_cte || 1), 10)),
-      numero_inicial_mdfe: Math.max(1, parseInt(String(numero_inicial_mdfe || 1), 10)),
-      updated_at: new Date().toISOString()
+      numero_inicial_mdfe: Math.max(1, parseInt(String(numero_inicial_mdfe || 1), 10))
     }
 
     const { data, error } = await supabaseAdmin

@@ -2030,13 +2030,16 @@ export default function TabelaInutilizacao() {
                   Mês de Início / Competência Inicial:
                 </label>
                 <input
-                  type="date"
-                  value={modalPontoPartida.data_inicio_monitoramento}
-                  onChange={(e) => setModalPontoPartida(prev => ({ ...prev, data_inicio_monitoramento: e.target.value }))}
-                  className="w-full text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
+                  type="month"
+                  value={modalPontoPartida.data_inicio_monitoramento ? modalPontoPartida.data_inicio_monitoramento.substring(0, 7) : ''}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setModalPontoPartida(prev => ({ ...prev, data_inicio_monitoramento: val ? `${val}-01` : '' }))
+                  }}
+                  className="w-full text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Exemplo: selecione 01/09/2026 para início em Setembro/2026. XMLs emitidos anteriormente serão descartados automaticamente.
+                  Ex: selecione <strong>09/2026</strong>. XMLs emitidos antes desta competência serão ignorados e não gerarão pendências.
                 </p>
               </div>
 

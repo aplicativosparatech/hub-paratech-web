@@ -43,6 +43,7 @@ export interface ConsultaDfeResult {
     tem_certificado: boolean
   }
   competencia: string
+  competenciasDisponiveis?: string[]
   resumo: {
     totalNotas: number
     valorTotal: number
@@ -89,6 +90,7 @@ export async function consultarSefazDistribuicaoDfe(params: {
   documentos: Array<{
     tipo: 'resNFe' | 'procNFe' | 'resEvento' | 'outro'
     xml: string
+    nsu?: string
   }>
 }> {
   const tpAmb = params.tpAmb || '1'
@@ -107,7 +109,7 @@ export async function consultarSefazDistribuicaoDfe(params: {
   const distDFeInt = [
     '<distDFeInt xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.01">',
     `  <tpAmb>${tpAmb}</tpAmb>`,
-    `  <cUFAuthor>${cUF}</cUFAuthor>`,
+    `  <cUFAutor>${cUF}</cUFAutor>`,
     `  <CNPJ>${cnpjLimpo}</CNPJ>`,
     '  <distNSU>',
     `    <ultNSU>${ultNSU}</ultNSU>`,
@@ -145,7 +147,7 @@ export async function consultarSefazDistribuicaoDfe(params: {
           'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse"',
           'Content-Length': postData.length
         },
-        timeout: 15000
+        timeout: 20000
       },
       (res) => {
         let respData = ''
@@ -160,12 +162,14 @@ export async function consultarSefazDistribuicaoDfe(params: {
             const maxNSU = extractTag(respData, 'maxNSU') || ultNSU
 
             // Descompacta todos os docZip (GZip Base64)
-            const documentos: Array<{ tipo: 'resNFe' | 'procNFe' | 'resEvento' | 'outro'; xml: string }> = []
+            const documentos: Array<{ tipo: 'resNFe' | 'procNFe' | 'resEvento' | 'outro'; xml: string; nsu?: string }> = []
             const docZipRegex = /<docZip[^>]*>([A-Za-z0-9+/=\s]+)<\/docZip>/g
             let match: RegExpExecArray | null
 
             while ((match = docZipRegex.exec(respData)) !== null) {
               try {
+                const nsuAttrMatch = match[0].match(/NSU="([0-9]+)"/i)
+                const docNsu = nsuAttrMatch ? nsuAttrMatch[1] : undefined
                 const b64 = match[1].replace(/\s/g, '')
                 const gzippedBuffer = Buffer.from(b64, 'base64')
                 const unzippedBuffer = zlib.gunzipSync(gzippedBuffer)
@@ -174,9 +178,9 @@ export async function consultarSefazDistribuicaoDfe(params: {
                 let tipo: 'resNFe' | 'procNFe' | 'resEvento' | 'outro' = 'outro'
                 if (docXml.includes('<resNFe')) tipo = 'resNFe'
                 else if (docXml.includes('<nfeProc') || docXml.includes('<infNFe')) tipo = 'procNFe'
-                else if (docXml.includes('<resEvento')) tipo = 'resEvento'
+                else if (docXml.includes('<resEvento') || docXml.includes('<procEventoNFe')) tipo = 'resEvento'
 
-                documentos.push({ tipo, xml: docXml })
+                documentos.push({ tipo, xml: docXml, nsu: docNsu })
               } catch (zipErr) {
                 console.warn('Falha ao descompactar docZip:', zipErr)
               }
@@ -261,13 +265,25 @@ export async function executarConsultaDfeCompleta(params: {
       }
 
       if (certBlob) {
+        // Busca o maior NSU já registrado no banco para continuar a distribuição incremental da SEFAZ
+        const { data: maxNsuRow } = await supabaseAdmin
+          .from('dfe_notas_destinadas')
+          .select('nsu')
+          .eq('cliente_id', cliente.id)
+          .not('nsu', 'is', null)
+          .order('nsu', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        const ultNSUParaConsultar = maxNsuRow?.nsu ? String(parseInt(maxNsuRow.nsu, 10)) : '0'
+
         const certBuffer = Buffer.from(await certBlob.arrayBuffer())
         const sefazRes = await consultarSefazDistribuicaoDfe({
           cnpj: cliente.cnpj,
           uf: cliente.uf || 'MG',
           pfxBuffer: certBuffer,
           passphrase: cliente.certificado_senha,
-          ultNSU: '0'
+          ultNSU: ultNSUParaConsultar
         })
 
         cStatRetorno = sefazRes.cStat
@@ -303,6 +319,7 @@ export async function executarConsultaDfeCompleta(params: {
               await supabaseAdmin.from('dfe_notas_destinadas').upsert({
                 cliente_id: cliente.id,
                 chave: chNFe,
+                nsu: doc.nsu ? String(doc.nsu) : undefined,
                 numero: String(parseInt(nNF, 10)),
                 serie,
                 emitente_cnpj: emitCnpj,
@@ -323,14 +340,16 @@ export async function executarConsultaDfeCompleta(params: {
         }
 
         if (sefazRes.cStat === '656') {
-          avisoSefaz = 'SEFAZ retornou Consumo Indevido (Aguarde até 1 hora antes de nova consulta ao WebService). Exibindo base de dados local.'
+          avisoSefaz = 'SEFAZ retornou Consumo Indevido (Aguarde até 1 hora antes de nova consulta externa ao WebService). Exibindo base de dados local atualizada.'
         } else if (sefazRes.cStat === '137') {
-          avisoSefaz = 'SEFAZ Nacional confirmou: Nenhum novo documento localizado nos últimos dias.'
+          avisoSefaz = 'SEFAZ Nacional confirmou: Todos os documentos deste CNPJ já estão sincronizados (cStat 137).'
+        } else if (sefazRes.cStat === '138') {
+          avisoSefaz = `SEFAZ retornou novos documentos com sucesso (NSU ${sefazRes.ultNSU}).`
         }
       }
     } catch (errSefaz: any) {
       console.warn('Erro ao consultar SEFAZ ao vivo:', errSefaz)
-      avisoSefaz = 'Não foi possível comunicar com o WebService da SEFAZ: ' + (errSefaz.message || '') + '. Exibindo registros sincronizados no banco.'
+      avisoSefaz = 'Aviso na comunicação com o WebService da SEFAZ: ' + (errSefaz.message || '') + '. Exibindo registros sincronizados no banco.'
     }
   }
 
@@ -346,14 +365,26 @@ export async function executarConsultaDfeCompleta(params: {
     .select('id, chave, numero, serie, valor, data_emissao, storage_path, cnpj_emitente')
     .eq('cliente_id', cliente.id)
 
+  // Identifica todas as competências que possuem notas para este cliente
+  const setCompetencias = new Set<string>()
+  for (const ent of (entradasDb || [])) {
+    if (ent.data_emissao) setCompetencias.add(ent.data_emissao.substring(0, 7))
+  }
+  for (const dest of (destinadasDb || [])) {
+    const comp = dest.competencia || (dest.data_emissao ? dest.data_emissao.substring(0, 7) : '')
+    if (comp) setCompetencias.add(comp)
+  }
+  const competenciasDisponiveis = Array.from(setCompetencias).filter(Boolean).sort().reverse()
+
   const mapaNotas = new Map<string, DfeNotaItem>()
+  const filtrarPorComp = competencia && competencia !== 'todas'
 
   // Processa notas de entrada de nfe_entradas
   for (const ent of (entradasDb || [])) {
     if (ent.chave) {
       const dataStr = ent.data_emissao ? ent.data_emissao.split('T')[0] : ''
       const compEnt = dataStr.substring(0, 7)
-      if (!competencia || compEnt === competencia) {
+      if (!filtrarPorComp || compEnt === competencia) {
         mapaNotas.set(ent.chave, {
           id: ent.id,
           chave: ent.chave,
@@ -378,7 +409,7 @@ export async function executarConsultaDfeCompleta(params: {
   for (const dest of (destinadasDb || [])) {
     const dataStr = dest.data_emissao ? dest.data_emissao.split('T')[0] : ''
     const compDest = dest.competencia || dataStr.substring(0, 7)
-    if (!competencia || compDest === competencia) {
+    if (!filtrarPorComp || compDest === competencia) {
       const exist = mapaNotas.get(dest.chave)
       mapaNotas.set(dest.chave, {
         id: dest.id,
@@ -406,6 +437,18 @@ export async function executarConsultaDfeCompleta(params: {
     return new Date(b.data_emissao).getTime() - new Date(a.data_emissao).getTime()
   })
 
+  // Se a competência solicitada não tiver notas, mas existirem notas em outras competências, informa o usuário
+  if (lista.length === 0 && competenciasDisponiveis.length > 0 && filtrarPorComp) {
+    const formatComp = (c: string) => {
+      const parts = c.split('-')
+      return parts.length === 2 ? `${parts[1]}/${parts[0]}` : c
+    }
+    const compsTexto = competenciasDisponiveis.map(formatComp).join(', ')
+    if (!avisoSefaz) {
+      avisoSefaz = `Nenhuma nota na competência ${competencia}. Foram encontradas ${destinadasDb?.length || 0} notas de compras nas competências: ${compsTexto}.`
+    }
+  }
+
   const totalNotas = lista.length
   const valorTotal = lista.reduce((acc, item) => acc + item.valor, 0)
   const autorizadas = lista.filter(i => i.situacao_nfe === 'AUTORIZADA').length
@@ -425,6 +468,7 @@ export async function executarConsultaDfeCompleta(params: {
       tem_certificado: Boolean(cliente.certificado_url)
     },
     competencia,
+    competenciasDisponiveis,
     resumo: {
       totalNotas,
       valorTotal: Math.round(valorTotal * 100) / 100,

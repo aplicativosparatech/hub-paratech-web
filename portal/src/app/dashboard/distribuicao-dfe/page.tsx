@@ -79,6 +79,7 @@ export default function DistribuicaoDfePage() {
   const [selectedChaves, setSelectedChaves] = useState<string[]>([])
   const [chaveCopiada, setChaveCopiada] = useState<string | null>(null)
   const [avisoSefaz, setAvisoSefaz] = useState<string | null>(null)
+  const [competenciasDisponiveis, setCompetenciasDisponiveis] = useState<string[]>([])
 
   // Resumo da Consulta
   const [resumo, setResumo] = useState({
@@ -155,16 +156,18 @@ export default function DistribuicaoDfePage() {
   }, [clientes, selectedClienteId])
 
   // Ação: Analisar / Consultar Notas Destinadas
-  const handleAnalisar = async () => {
+  const handleAnalisar = async (compOverride?: string, aoVivoParam?: boolean) => {
     if (!selectedClienteId) {
       toast.error('Selecione uma empresa para analisar.')
       return
     }
 
+    const compParaConsultar = compOverride !== undefined ? compOverride : competencia
+    const isLive = aoVivoParam !== undefined ? aoVivoParam : consultarAoVivo
     setLoadingConsulta(true)
     setSelectedChaves([])
     setAvisoSefaz(null)
-    const toastId = toast.loading('Consultando notas emitidas contra o CNPJ na SEFAZ...')
+    const toastId = isLive ? toast.loading('Consultando notas emitidas contra o CNPJ na SEFAZ...') : undefined
 
     try {
       const res = await fetch('/api/sefaz/distribuicao-dfe/consultar', {
@@ -172,8 +175,8 @@ export default function DistribuicaoDfePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cliente_id: selectedClienteId,
-          competencia,
-          ao_vivo: consultarAoVivo
+          competencia: compParaConsultar === 'todas' ? '' : compParaConsultar,
+          ao_vivo: isLive
         })
       })
 
@@ -184,6 +187,9 @@ export default function DistribuicaoDfePage() {
       }
 
       setNotas(data.notas || [])
+      if (data.competenciasDisponiveis) {
+        setCompetenciasDisponiveis(data.competenciasDisponiveis)
+      }
       setResumo(data.resumo || {
         totalNotas: 0,
         valorTotal: 0,
@@ -197,18 +203,29 @@ export default function DistribuicaoDfePage() {
         setAvisoSefaz(data.aviso)
       }
 
-      toast.success(
-        data.notas?.length > 0 
-          ? `Análise concluída: ${data.notas.length} notas fiscais localizadas!` 
-          : 'Nenhuma nota localizada para esta competência.',
-        { id: toastId }
-      )
+      if (toastId) {
+        toast.success(
+          data.notas?.length > 0 
+            ? `Análise concluída: ${data.notas.length} notas fiscais localizadas!` 
+            : (data.aviso || 'Nenhuma nota localizada para esta competência.'),
+          { id: toastId }
+        )
+      }
     } catch (err: any) {
-      toast.error('Erro na análise: ' + (err.message || ''), { id: toastId })
+      if (toastId) {
+        toast.error('Erro na análise: ' + (err.message || ''), { id: toastId })
+      }
     } finally {
       setLoadingConsulta(false)
     }
   }
+
+  // Carrega notas salvas no banco imediatamente ao trocar de cliente
+  useEffect(() => {
+    if (selectedClienteId) {
+      handleAnalisar(competencia, false)
+    }
+  }, [selectedClienteId])
 
   // Filtragem local das notas
   const notasFiltradas = useMemo(() => {
@@ -504,17 +521,51 @@ export default function DistribuicaoDfePage() {
 
               {/* Mês de Competência */}
               <div className="md:col-span-3">
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
-                  Mês de Competência:
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-slate-700 uppercase">
+                    Mês de Competência:
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nova = competencia === 'todas' ? new Date().toISOString().substring(0, 7) : 'todas'
+                      setCompetencia(nova)
+                      handleAnalisar(nova, false)
+                    }}
+                    className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold underline transition"
+                  >
+                    {competencia === 'todas' ? 'Filtrar por Mês' : 'Ver Todos os Meses'}
+                  </button>
+                </div>
                 <div className="relative">
-                  <input
-                    type="month"
-                    value={competencia}
-                    onChange={(e) => setCompetencia(e.target.value)}
-                    disabled={loadingConsulta}
-                    className="w-full text-xs font-bold font-mono text-slate-800 bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none transition"
-                  />
+                  {competencia === 'todas' ? (
+                    <div className="w-full flex items-center justify-between text-xs font-bold font-mono text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-xl px-3.5 py-2.5">
+                      <span>Todas as Competências</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const atual = new Date().toISOString().substring(0, 7)
+                          setCompetencia(atual)
+                          handleAnalisar(atual, false)
+                        }}
+                        className="text-[10px] bg-white text-indigo-700 px-2 py-0.5 rounded border border-indigo-200 hover:bg-indigo-50 font-sans font-semibold transition"
+                      >
+                        Filtrar Mês
+                      </button>
+                    </div>
+                  ) : (
+                    <input
+                      type="month"
+                      value={competencia}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setCompetencia(val)
+                        if (val) handleAnalisar(val, false)
+                      }}
+                      disabled={loadingConsulta}
+                      className="w-full text-xs font-bold font-mono text-slate-800 bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                    />
+                  )}
                 </div>
               </div>
 
@@ -522,7 +573,7 @@ export default function DistribuicaoDfePage() {
               <div className="md:col-span-4 flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={handleAnalisar}
+                  onClick={() => handleAnalisar(competencia, true)}
                   disabled={loadingConsulta || !selectedClienteId}
                   className="w-full flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-600/20 transition disabled:opacity-50"
                 >
@@ -534,12 +585,47 @@ export default function DistribuicaoDfePage() {
                   ) : (
                     <>
                       <Search size={15} />
-                      Analisar Notas Destinadas
+                      Analisar Notas Destinadas (Ao Vivo)
                     </>
                   )}
                 </button>
               </div>
             </div>
+
+            {/* Atalhos Rápidos por Competência Encontrada */}
+            {competenciasDisponiveis.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100 text-xs">
+                <span className="text-[11px] font-bold text-slate-500">Compras registradas por mês:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompetencia('todas')
+                    handleAnalisar('todas', false)
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${competencia === 'todas' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
+                >
+                  Ver Todas ({resumo.totalNotas})
+                </button>
+                {competenciasDisponiveis.map(c => {
+                  const parts = c.split('-')
+                  const rotulo = parts.length === 2 ? `${parts[1]}/${parts[0]}` : c
+                  const isSel = competencia === c
+                  return (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => {
+                        setCompetencia(c)
+                        handleAnalisar(c, false)
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${isSel ? 'bg-indigo-600 text-white shadow-xs' : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80'}`}
+                    >
+                      {rotulo}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
 
             {/* Status do Certificado e Opção de Consulta ao Vivo */}
             <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
@@ -808,12 +894,48 @@ export default function DistribuicaoDfePage() {
                           <Inbox size={32} className="text-slate-300" />
                           <p className="font-bold text-sm text-slate-700">
                             {notas.length === 0 
-                              ? 'Nenhuma consulta realizada para esta competência.' 
+                              ? 'Nenhuma nota de compra encontrada para os filtros atuais.' 
                               : 'Nenhuma nota encontrada com os filtros aplicados.'}
                           </p>
                           <p className="text-xs text-slate-400 max-w-md">
-                            Selecione a empresa, o mês de competência desejado e clique em <strong>Analisar Notas Destinadas</strong> para carregar os registros da SEFAZ.
+                            Selecione o mês desejado ou clique em <strong>Analisar Notas Destinadas (Ao Vivo)</strong> para buscar registros atualizados na SEFAZ.
                           </p>
+                          {competenciasDisponiveis.length > 0 && (
+                            <div className="mt-4 p-3 bg-indigo-50/60 border border-indigo-100 rounded-xl flex flex-col items-center gap-2 max-w-md">
+                              <span className="text-xs font-bold text-indigo-900">
+                                Existem compras registradas em outros meses:
+                              </span>
+                              <div className="flex flex-wrap items-center justify-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCompetencia('todas')
+                                    handleAnalisar('todas', false)
+                                  }}
+                                  className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition shadow-xs"
+                                >
+                                  Ver Todas as Notas
+                                </button>
+                                {competenciasDisponiveis.map(c => {
+                                  const parts = c.split('-')
+                                  const rotulo = parts.length === 2 ? `${parts[1]}/${parts[0]}` : c
+                                  return (
+                                    <button
+                                      key={c}
+                                      type="button"
+                                      onClick={() => {
+                                        setCompetencia(c)
+                                        handleAnalisar(c, false)
+                                      }}
+                                      className="px-2.5 py-1 bg-white hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold transition"
+                                    >
+                                      {rotulo}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>
