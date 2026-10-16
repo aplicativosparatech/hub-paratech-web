@@ -162,13 +162,28 @@ export default function ClientesPage() {
                 if (c.certificado_validade) {
                   const valDate = new Date(c.certificado_validade)
                   const diffDays = Math.ceil((valDate.getTime() - new Date().getTime()) / (1000 * 3600 * 24))
+
+                  const rawDate = String(c.certificado_validade).split('T')[0]
+                  const parts = rawDate.split('-')
+                  const dataFormatada = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : valDate.toLocaleDateString('pt-BR')
+
+                  let badge
                   if (diffDays < 0) {
-                    certStatus = <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-red-100 text-red-700">Vencido</span>
+                    badge = <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-red-100 text-red-700 whitespace-nowrap">Vencido</span>
                   } else if (diffDays <= 45) {
-                    certStatus = <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-800">Vence em {diffDays}d</span>
+                    badge = <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-800 whitespace-nowrap">Vence em {diffDays}d</span>
                   } else {
-                    certStatus = <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800">Válido ({diffDays}d)</span>
+                    badge = <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800 whitespace-nowrap">Válido ({diffDays}d)</span>
                   }
+
+                  certStatus = (
+                    <div className="flex flex-col items-start gap-1">
+                      {badge}
+                      <span className="text-[11px] text-slate-500 font-mono font-medium whitespace-nowrap">
+                        {dataFormatada}
+                      </span>
+                    </div>
+                  )
                 }
 
                 const getRegimeBadge = (regime: string) => {
