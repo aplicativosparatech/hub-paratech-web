@@ -62,6 +62,13 @@ export default function NotasFiscaisLayout({
             <span className="text-amber-500">⚠️</span>
             Arquivos para Correção
           </Link>
+          <Link 
+            href="/dashboard/notas-fiscais/saidas/inutilizar"
+            className={`px-4 py-1.5 rounded-full text-sm font-medium transition flex items-center gap-1.5 ${pathname.endsWith('/saidas/inutilizar') ? 'bg-rose-100 text-rose-800 font-bold border border-rose-300' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+          >
+            <span className="text-rose-500">🚫</span>
+            A Inutilizar / Faltantes
+          </Link>
         </div>
       )}
 
