@@ -15,10 +15,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Parâmetro cliente_id é obrigatório.' }, { status: 400 })
     }
 
-    // 1. Busca dados do cliente para conferência de certificado e CNPJ
+    // 1. Busca dados do cliente para conferência de certificado, CNPJ e Ponto de Partida Fiscal
     const { data: cliente, error: cliErr } = await supabaseAdmin
       .from('clientes')
-      .select('id, razao_social, cnpj, uf, certificado_url')
+      .select('id, razao_social, cnpj, uf, certificado_url, data_inicio_monitoramento, numero_inicial_nfe, numero_inicial_nfce, numero_inicial_nfse, numero_inicial_cte, numero_inicial_mdfe')
       .eq('id', cliente_id)
       .single()
 
@@ -36,22 +36,34 @@ export async function GET(request: Request) {
     const { data: inutilizacoesExistentes } = await inutQuery
     const inuts = inutilizacoesExistentes || []
 
-    // 3. Busca as notas fiscais emitidas
+    // 3. Busca as notas fiscais emitidas (respeitando data de início do monitoramento se configurada)
     const resultadosNotas: { modelo: string; data: any[] }[] = []
 
     if (modeloParam === '55' || modeloParam === 'todos') {
-      const { data: nfeData } = await supabaseAdmin
+      let nfeQ = supabaseAdmin
         .from('nfe_saidas')
         .select('id, numero, chave, data_emissao')
         .eq('cliente_id', cliente_id)
+
+      if (cliente.data_inicio_monitoramento) {
+        nfeQ = nfeQ.gte('data_emissao', cliente.data_inicio_monitoramento)
+      }
+
+      const { data: nfeData } = await nfeQ
       resultadosNotas.push({ modelo: '55', data: nfeData || [] })
     }
 
     if (modeloParam === '65' || modeloParam === 'todos') {
-      const { data: nfceData } = await supabaseAdmin
+      let nfceQ = supabaseAdmin
         .from('nfce_saidas')
         .select('id, numero, chave, data_emissao')
         .eq('cliente_id', cliente_id)
+
+      if (cliente.data_inicio_monitoramento) {
+        nfceQ = nfceQ.gte('data_emissao', cliente.data_inicio_monitoramento)
+      }
+
+      const { data: nfceData } = await nfceQ
       resultadosNotas.push({ modelo: '65', data: nfceData || [] })
     }
 
@@ -109,67 +121,83 @@ export async function GET(request: Request) {
     const gaps: GapItem[] = []
 
     grupos.forEach((grupo, key) => {
-      // Ordena números de forma crescente e remove duplicados
-      const nums = Array.from(new Set(grupo.numbers)).sort((a, b) => a - b)
-      if (nums.length <= 1) return
+      let numInicialEsperado = 1
+      if (grupo.modelo === '55') numInicialEsperado = cliente.numero_inicial_nfe || 1
+      else if (grupo.modelo === '65') numInicialEsperado = cliente.numero_inicial_nfce || 1
 
+      // Considera apenas números a partir do ponto de partida configurado
+      const nums = Array.from(new Set(grupo.numbers))
+        .filter(n => n >= numInicialEsperado)
+        .sort((a, b) => a - b)
+
+      if (nums.length === 0) return
+
+      const testarEAdicionarGap = (nIni: number, nFin: number, dataReferencia?: string) => {
+        if (nFin < nIni) return
+        const qtd = nFin - nIni + 1
+        const ano = dataReferencia ? new Date(dataReferencia).getFullYear().toString().slice(-2) : new Date().getFullYear().toString().slice(-2)
+
+        const inutMatch = inuts.find(inut => 
+          inut.modelo === grupo.modelo &&
+          String(inut.serie) === grupo.serie &&
+          inut.numero_inicial <= nIni &&
+          inut.numero_final >= nFin
+        )
+
+        let status: 'PENDENTE' | 'HOMOLOGADO' | 'UTILIZADA_SEFAZ' = 'PENDENTE'
+        let motivo = 'Numeração faltante identificada no fluxo de emissão'
+        let protocolo: string | undefined = undefined
+        let dataRegistro: string | undefined = undefined
+
+        if (inutMatch) {
+          dataRegistro = inutMatch.data_hora || inutMatch.created_at
+          if (['102', '204', '563'].includes(inutMatch.status_sefaz)) {
+            status = 'HOMOLOGADO'
+            motivo = inutMatch.status_sefaz === '102'
+              ? (inutMatch.motivo_sefaz || 'Inutilização homologada pela SEFAZ')
+              : `Confirmado na SEFAZ: Já se encontrava inutilizado (Cód. ${inutMatch.status_sefaz})`
+            protocolo = inutMatch.protocolo || undefined
+          } else if (['206', '256', '241'].includes(inutMatch.status_sefaz)) {
+            status = 'UTILIZADA_SEFAZ'
+            motivo = `Consta como UTILIZADA na SEFAZ (${inutMatch.motivo_sefaz || 'Nota emitida'}). XML ausente no portal.`
+          } else {
+            motivo = inutMatch.motivo_sefaz || 'Tentativa anterior rejeitada'
+          }
+        }
+
+        gaps.push({
+          id: `${grupo.modelo}_${grupo.serie}_${nIni}_${nFin}`,
+          modelo: grupo.modelo,
+          serie: grupo.serie,
+          nNFIni: nIni,
+          nNFFin: nFin,
+          quantidade: qtd,
+          ano,
+          status,
+          motivo,
+          protocolo,
+          data_registro: dataRegistro,
+          ultimaEmissaoProxima: dataReferencia || undefined
+        })
+      }
+
+      // 1. GAP INICIAL: Se o primeiro número emitido encontrado for superior ao número inicial esperado
+      if (nums[0] > numInicialEsperado) {
+        const primDataRef = grupo.emissaoMap.get(nums[0])
+        testarEAdicionarGap(numInicialEsperado, nums[0] - 1, primDataRef)
+      }
+
+      // 2. GAPS INTERMEDIÁRIOS: Entre números emitidos consecutivos
       for (let i = 0; i < nums.length - 1; i++) {
         const atual = nums[i]
         const proximo = nums[i + 1]
-
         const diff = proximo - atual
+
         if (diff > 1) {
           const nIni = atual + 1
           const nFin = proximo - 1
-          const qtd = nFin - nIni + 1
-
-          // Estima o ano a partir da data de emissão mais próxima
           const dataRef = grupo.emissaoMap.get(atual) || grupo.emissaoMap.get(proximo)
-          const ano = dataRef ? new Date(dataRef).getFullYear().toString().slice(-2) : new Date().getFullYear().toString().slice(-2)
-
-          // Verifica se já existe registro de inutilização no banco para essa faixa/número
-          const inutMatch = inuts.find(inut => 
-            inut.modelo === grupo.modelo &&
-            String(inut.serie) === grupo.serie &&
-            inut.numero_inicial <= nIni &&
-            inut.numero_final >= nFin
-          )
-
-          let status: 'PENDENTE' | 'HOMOLOGADO' | 'UTILIZADA_SEFAZ' = 'PENDENTE'
-          let motivo = 'Numeração faltante identificada no fluxo de emissão'
-          let protocolo: string | undefined = undefined
-          let dataRegistro: string | undefined = undefined
-
-          if (inutMatch) {
-            dataRegistro = inutMatch.data_hora || inutMatch.created_at
-            if (['102', '204', '563'].includes(inutMatch.status_sefaz)) {
-              status = 'HOMOLOGADO'
-              motivo = inutMatch.status_sefaz === '102'
-                ? (inutMatch.motivo_sefaz || 'Inutilização homologada pela SEFAZ')
-                : `Confirmado na SEFAZ: Já se encontrava inutilizado (Cód. ${inutMatch.status_sefaz})`
-              protocolo = inutMatch.protocolo || undefined
-            } else if (['206', '256', '241'].includes(inutMatch.status_sefaz)) {
-              status = 'UTILIZADA_SEFAZ'
-              motivo = `Consta como UTILIZADA na SEFAZ (${inutMatch.motivo_sefaz || 'Nota emitida'}). XML ausente no portal.`
-            } else {
-              motivo = inutMatch.motivo_sefaz || 'Tentativa anterior rejeitada'
-            }
-          }
-
-          gaps.push({
-            id: `${grupo.modelo}_${grupo.serie}_${nIni}_${nFin}`,
-            modelo: grupo.modelo,
-            serie: grupo.serie,
-            nNFIni: nIni,
-            nNFFin: nFin,
-            quantidade: qtd,
-            ano,
-            status,
-            motivo,
-            protocolo,
-            data_registro: dataRegistro,
-            ultimaEmissaoProxima: dataRef || undefined
-          })
+          testarEAdicionarGap(nIni, nFin, dataRef)
         }
       }
     })
@@ -190,7 +218,15 @@ export async function GET(request: Request) {
         razao_social: cliente.razao_social,
         cnpj: cliente.cnpj,
         uf: cliente.uf,
-        tem_certificado: Boolean(cliente.certificado_url)
+        tem_certificado: Boolean(cliente.certificado_url),
+        ponto_partida: {
+          data_inicio_monitoramento: cliente.data_inicio_monitoramento || null,
+          numero_inicial_nfe: cliente.numero_inicial_nfe || 1,
+          numero_inicial_nfce: cliente.numero_inicial_nfce || 1,
+          numero_inicial_nfse: cliente.numero_inicial_nfse || 1,
+          numero_inicial_cte: cliente.numero_inicial_cte || 1,
+          numero_inicial_mdfe: cliente.numero_inicial_mdfe || 1
+        }
       },
       resumo: {
         totalGaps: gaps.length,

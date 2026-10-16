@@ -5,7 +5,7 @@ import {
   AlertTriangle, CheckCircle2, RefreshCw, Zap, ShieldAlert, 
   Search, Filter, Check, Clock, FileText, ExternalLink, HelpCircle,
   FileCheck, ShieldCheck, ChevronRight, X, Play, CheckSquare, Square,
-  AlertOctagon, ArrowRight, Copy, CheckCheck
+  AlertOctagon, ArrowRight, Copy, CheckCheck, Calendar, SlidersHorizontal, Hash
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useNotasFiscaisFilters } from './NotasFiscaisFilterContext'
@@ -62,10 +62,19 @@ export default function TabelaInutilizacao() {
     utilizadasSefaz: 0
   })
   const [clienteInfo, setClienteInfo] = useState<{
+    id?: string
     razao_social?: string
     cnpj?: string
     uf?: string
     tem_certificado?: boolean
+    ponto_partida?: {
+      data_inicio_monitoramento: string | null
+      numero_inicial_nfe: number
+      numero_inicial_nfce: number
+      numero_inicial_nfse: number
+      numero_inicial_cte: number
+      numero_inicial_mdfe: number
+    }
   } | null>(null)
 
   // Filtros Locais
@@ -123,6 +132,72 @@ export default function TabelaInutilizacao() {
   const [processandoId, setProcessandoId] = useState<string | null>(null)
   const [processandoLote, setProcessandoLote] = useState(false)
   const [progressoLote, setProgressoLote] = useState({ atual: 0, total: 0, itemAtual: '' })
+  const [modalPontoPartida, setModalPontoPartida] = useState<{
+    open: boolean
+    saving: boolean
+    data_inicio_monitoramento: string
+    numero_inicial_nfe: number
+    numero_inicial_nfce: number
+    numero_inicial_nfse: number
+    numero_inicial_cte: number
+    numero_inicial_mdfe: number
+  }>({
+    open: false,
+    saving: false,
+    data_inicio_monitoramento: '',
+    numero_inicial_nfe: 1,
+    numero_inicial_nfce: 1,
+    numero_inicial_nfse: 1,
+    numero_inicial_cte: 1,
+    numero_inicial_mdfe: 1
+  })
+
+  const handleAbrirModalPontoPartida = () => {
+    const pp = clienteInfo?.ponto_partida
+    setModalPontoPartida({
+      open: true,
+      saving: false,
+      data_inicio_monitoramento: pp?.data_inicio_monitoramento || '',
+      numero_inicial_nfe: pp?.numero_inicial_nfe || 1,
+      numero_inicial_nfce: pp?.numero_inicial_nfce || 1,
+      numero_inicial_nfse: pp?.numero_inicial_nfse || 1,
+      numero_inicial_cte: pp?.numero_inicial_cte || 1,
+      numero_inicial_mdfe: pp?.numero_inicial_mdfe || 1
+    })
+  }
+
+  const handleSalvarPontoPartida = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!clienteAtualId) return
+    setModalPontoPartida(prev => ({ ...prev, saving: true }))
+    const toastId = toast.loading('Atualizando ponto de partida fiscal...')
+    try {
+      const res = await fetch('/api/clientes/ponto-partida', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cliente_id: clienteAtualId,
+          data_inicio_monitoramento: modalPontoPartida.data_inicio_monitoramento || null,
+          numero_inicial_nfe: modalPontoPartida.numero_inicial_nfe,
+          numero_inicial_nfce: modalPontoPartida.numero_inicial_nfce,
+          numero_inicial_nfse: modalPontoPartida.numero_inicial_nfse,
+          numero_inicial_cte: modalPontoPartida.numero_inicial_cte,
+          numero_inicial_mdfe: modalPontoPartida.numero_inicial_mdfe
+        })
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Falha ao salvar ponto de partida fiscal.')
+      }
+      toast.success('Ponto de partida fiscal atualizado com sucesso!', { id: toastId })
+      setModalPontoPartida(prev => ({ ...prev, open: false, saving: false }))
+      // Recarrega os gaps para refletir o novo ponto de partida
+      await carregarGaps(clienteAtualId)
+    } catch (err: any) {
+      toast.error('Erro ao salvar: ' + (err.message || ''), { id: toastId })
+      setModalPontoPartida(prev => ({ ...prev, saving: false }))
+    }
+  }
 
   // Define o cliente ativo
   useEffect(() => {
@@ -528,6 +603,68 @@ export default function TabelaInutilizacao() {
             )}
           </div>
         )}
+      </div>
+
+      {/* Banner de Ponto de Partida Fiscal & Competência Inicial */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-xl p-4 shadow-sm border border-indigo-900/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="p-1.5 bg-indigo-500/20 text-indigo-400 rounded-lg">
+              <Calendar size={15} />
+            </span>
+            <span className="text-xs font-bold uppercase tracking-wider text-indigo-300">
+              Ponto de Partida Fiscal & Competência Inicial
+            </span>
+            <span className="text-[10px] bg-indigo-500/30 text-indigo-200 px-2 py-0.5 rounded-full font-medium">
+              Contrato de Monitoramento
+            </span>
+          </div>
+          <div className="text-sm font-semibold text-white flex flex-wrap items-center gap-2">
+            <span>Início das Atividades / Envio:</span>
+            <span className="text-indigo-200 font-mono font-bold bg-indigo-950 px-2.5 py-0.5 rounded border border-indigo-700/60">
+              {clienteInfo?.ponto_partida?.data_inicio_monitoramento
+                ? new Date(clienteInfo.ponto_partida.data_inicio_monitoramento + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase()
+                : 'Todas as competências (Desde o início)'}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-300 leading-relaxed">
+            XMLs anteriores a esta data ou com números inferiores ao ponto de partida são ignorados automaticamente e não geram falsos gaps.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 text-center">
+            <div className="bg-slate-800/80 border border-slate-700/80 rounded-lg px-2.5 py-1 min-w-[70px]">
+              <span className="text-[9px] block text-slate-400 font-bold uppercase">NF-e (55)</span>
+              <span className="text-xs font-black text-emerald-400 font-mono">#{clienteInfo?.ponto_partida?.numero_inicial_nfe || 1}</span>
+            </div>
+            <div className="bg-slate-800/80 border border-slate-700/80 rounded-lg px-2.5 py-1 min-w-[70px]">
+              <span className="text-[9px] block text-slate-400 font-bold uppercase">NFC-e (65)</span>
+              <span className="text-xs font-black text-emerald-400 font-mono">#{clienteInfo?.ponto_partida?.numero_inicial_nfce || 1}</span>
+            </div>
+            <div className="bg-slate-800/80 border border-slate-700/80 rounded-lg px-2.5 py-1 min-w-[70px]">
+              <span className="text-[9px] block text-slate-400 font-bold uppercase">NFS-e</span>
+              <span className="text-xs font-black text-cyan-400 font-mono">#{clienteInfo?.ponto_partida?.numero_inicial_nfse || 1}</span>
+            </div>
+            <div className="bg-slate-800/80 border border-slate-700/80 rounded-lg px-2.5 py-1 min-w-[70px]">
+              <span className="text-[9px] block text-slate-400 font-bold uppercase">CT-e (57)</span>
+              <span className="text-xs font-black text-purple-400 font-mono">#{clienteInfo?.ponto_partida?.numero_inicial_cte || 1}</span>
+            </div>
+            <div className="bg-slate-800/80 border border-slate-700/80 rounded-lg px-2.5 py-1 min-w-[70px]">
+              <span className="text-[9px] block text-slate-400 font-bold uppercase">MDF-e (58)</span>
+              <span className="text-xs font-black text-purple-400 font-mono">#{clienteInfo?.ponto_partida?.numero_inicial_mdfe || 1}</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleAbrirModalPontoPartida}
+            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition shadow-sm"
+          >
+            <SlidersHorizontal size={13} />
+            Ajustar
+          </button>
+        </div>
       </div>
 
       {/* Cards de Resumo KPI */}
@@ -1403,6 +1540,139 @@ export default function TabelaInutilizacao() {
                 Entendi
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Ajuste Rápido do Ponto de Partida Fiscal */}
+      {modalPontoPartida.open && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2 text-indigo-700">
+                <SlidersHorizontal size={20} />
+                <h3 className="font-bold text-slate-900 text-base">Ponto de Partida Fiscal & Competência</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalPontoPartida(prev => ({ ...prev, open: false }))}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSalvarPontoPartida} className="space-y-4">
+              <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-xs text-indigo-900 leading-relaxed">
+                Configure a partir de qual data/competência o cliente iniciou as atividades no HUB e quais as numerações iniciais de contagem. O monitoramento e a auditoria de quebra de sequência (SEFAZ) respeitarão estritamente estes valores.
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Mês de Início / Competência Inicial:
+                </label>
+                <input
+                  type="date"
+                  value={modalPontoPartida.data_inicio_monitoramento}
+                  onChange={(e) => setModalPontoPartida(prev => ({ ...prev, data_inicio_monitoramento: e.target.value }))}
+                  className="w-full text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Exemplo: selecione 01/09/2026 para início em Setembro/2026. XMLs emitidos anteriormente serão descartados automaticamente.
+                </p>
+              </div>
+
+              <div className="border-t border-slate-100 pt-3">
+                <label className="block text-xs font-bold text-slate-700 mb-2">
+                  Primeiro Número de Cada Documento (Contador Inicial):
+                </label>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                      NF-e (Mod. 55)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={modalPontoPartida.numero_inicial_nfe}
+                      onChange={(e) => setModalPontoPartida(prev => ({ ...prev, numero_inicial_nfe: parseInt(e.target.value) || 1 }))}
+                      className="w-full text-xs font-mono font-bold text-slate-800 border border-slate-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                      NFC-e (Mod. 65)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={modalPontoPartida.numero_inicial_nfce}
+                      onChange={(e) => setModalPontoPartida(prev => ({ ...prev, numero_inicial_nfce: parseInt(e.target.value) || 1 }))}
+                      className="w-full text-xs font-mono font-bold text-slate-800 border border-slate-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                      NFS-e (Serviço)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={modalPontoPartida.numero_inicial_nfse}
+                      onChange={(e) => setModalPontoPartida(prev => ({ ...prev, numero_inicial_nfse: parseInt(e.target.value) || 1 }))}
+                      className="w-full text-xs font-mono font-bold text-slate-800 border border-slate-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                      CT-e (Mod. 57)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={modalPontoPartida.numero_inicial_cte}
+                      onChange={(e) => setModalPontoPartida(prev => ({ ...prev, numero_inicial_cte: parseInt(e.target.value) || 1 }))}
+                      className="w-full text-xs font-mono font-bold text-slate-800 border border-slate-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                      MDF-e (Mod. 58)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={modalPontoPartida.numero_inicial_mdfe}
+                      onChange={(e) => setModalPontoPartida(prev => ({ ...prev, numero_inicial_mdfe: parseInt(e.target.value) || 1 }))}
+                      className="w-full text-xs font-mono font-bold text-slate-800 border border-slate-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setModalPontoPartida(prev => ({ ...prev, open: false }))}
+                  disabled={modalPontoPartida.saving}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={modalPontoPartida.saving}
+                  className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl transition shadow-sm"
+                >
+                  {modalPontoPartida.saving ? 'Salvando...' : 'Salvar e Recalcular'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

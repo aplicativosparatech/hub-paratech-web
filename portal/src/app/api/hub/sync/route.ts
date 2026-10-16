@@ -12,7 +12,11 @@ export async function POST(request: Request) {
     if (!token) return NextResponse.json({ error: 'Token inválido' }, { status: 400 })
 
     // 1. Busca o cliente
-    const { data: cliente } = await supabase.from('clientes').select('id, nome_sistema_utilizado, is_ativo').eq('hub_token', token).single()
+    const { data: cliente } = await supabase
+      .from('clientes')
+      .select('id, nome_sistema_utilizado, is_ativo, data_inicio_monitoramento, numero_inicial_nfe, numero_inicial_nfce, numero_inicial_nfse, numero_inicial_cte, numero_inicial_mdfe')
+      .eq('hub_token', token)
+      .single()
     if (!cliente) return NextResponse.json({ error: 'Cliente não encontrado' }, { status: 404 })
 
     // 2. Busca configuração (offline_secret, exes_monitorados, modo_processamento_xml)
@@ -79,6 +83,12 @@ export async function POST(request: Request) {
       pastas_compras: config?.pastas_compras || [],
       offline_secret: config?.offline_secret || '123456',
       modo_processamento: config?.modo_processamento_xml || 'hub',
+      data_inicio_monitoramento: cliente.data_inicio_monitoramento || null,
+      numero_inicial_nfe: cliente.numero_inicial_nfe || 1,
+      numero_inicial_nfce: cliente.numero_inicial_nfce || 1,
+      numero_inicial_nfse: cliente.numero_inicial_nfse || 1,
+      numero_inicial_cte: cliente.numero_inicial_cte || 1,
+      numero_inicial_mdfe: cliente.numero_inicial_mdfe || 1,
       fatura: faturaVencida ? {
         valor: faturaVencida.valor,
         pix_payload: finalPix || 'ERRO_PIX',

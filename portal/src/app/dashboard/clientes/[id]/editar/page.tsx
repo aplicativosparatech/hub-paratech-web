@@ -54,6 +54,12 @@ export default function EditarClientePage() {
     bairro: '',
     cidade: '',
     uf: '',
+    data_inicio_monitoramento: '',
+    numero_inicial_nfe: 1,
+    numero_inicial_nfce: 1,
+    numero_inicial_nfse: 1,
+    numero_inicial_cte: 1,
+    numero_inicial_mdfe: 1,
     regime_tributario: 'simples_nacional',
     ramo_atividade: '',
     valor_mensalidade: '',
@@ -93,6 +99,12 @@ export default function EditarClientePage() {
           bairro: d.bairro || '',
           cidade: d.cidade || '',
           uf: d.uf || '',
+          data_inicio_monitoramento: d.data_inicio_monitoramento ? d.data_inicio_monitoramento.split('T')[0] : '',
+          numero_inicial_nfe: d.numero_inicial_nfe || 1,
+          numero_inicial_nfce: d.numero_inicial_nfce || 1,
+          numero_inicial_nfse: d.numero_inicial_nfse || 1,
+          numero_inicial_cte: d.numero_inicial_cte || 1,
+          numero_inicial_mdfe: d.numero_inicial_mdfe || 1,
           regime_tributario: d.regime_tributario || 'simples_nacional',
           ramo_atividade: d.ramo_atividade || '',
           valor_mensalidade: d.valor_mensalidade !== undefined && d.valor_mensalidade !== null ? String(d.valor_mensalidade) : '',
@@ -387,6 +399,12 @@ export default function EditarClientePage() {
       is_ativo: formData.is_ativo,
       dia_vencimento: parseInt(String(formData.dia_vencimento)) || 10,
       valor_mensalidade: clienteData.valor_mensalidade ? parseFloat(String(clienteData.valor_mensalidade).replace(',', '.')) : 0,
+      data_inicio_monitoramento: formData.data_inicio_monitoramento || null,
+      numero_inicial_nfe: parseInt(String(formData.numero_inicial_nfe)) || 1,
+      numero_inicial_nfce: parseInt(String(formData.numero_inicial_nfce)) || 1,
+      numero_inicial_nfse: parseInt(String(formData.numero_inicial_nfse)) || 1,
+      numero_inicial_cte: parseInt(String(formData.numero_inicial_cte)) || 1,
+      numero_inicial_mdfe: parseInt(String(formData.numero_inicial_mdfe)) || 1,
       contabilidade_id: clienteData.contabilidade_id || null,
       certificado_validade: clienteData.certificado_validade || null,
       certificado_url: finalCertUrl,
@@ -767,6 +785,126 @@ export default function EditarClientePage() {
                   value={formData.uf} 
                   onChange={e => setFormData({...formData, uf: e.target.value.toUpperCase()})} 
                 />
+              </div>
+            </div>
+          </div>
+
+          {/* Ponto de Partida Fiscal & Competência Inicial */}
+          <div className="pt-4 border-t border-slate-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 mb-4 border-b border-slate-100 gap-2">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Calendar className="text-blue-600" size={20} />
+                Ponto de Partida Fiscal & Competência Inicial
+              </h3>
+              <span className="text-xs text-slate-500 font-normal">
+                Define o mês e números iniciais a partir dos quais os XMLs serão enviados ao Portal
+              </span>
+            </div>
+
+            <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-800 mb-1 flex items-center gap-1.5">
+                    <span>Mês / Ano de Início das Atividades</span>
+                    <span className="text-xs text-blue-600 font-bold">*</span>
+                  </label>
+                  <input 
+                    type="month" 
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white font-semibold text-slate-800"
+                    value={formData.data_inicio_monitoramento ? formData.data_inicio_monitoramento.substring(0, 7) : ''} 
+                    onChange={e => {
+                      const val = e.target.value
+                      setFormData({ ...formData, data_inicio_monitoramento: val ? `${val}-01` : '' })
+                    }} 
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Ex: <strong>09/2026</strong>. XMLs emitidos antes desta competência serão ignorados pelo Hub.
+                  </p>
+                </div>
+
+                <div className="md:col-span-2 flex items-center bg-blue-50/70 border border-blue-100 rounded-xl p-3 text-xs text-blue-900 leading-relaxed">
+                  <p>
+                    <strong>💡 Controle Anti-Poluição & Inutilizações:</strong> Configurar a data e número de início impede o envio de notas de anos passados e garante que a auditoria de <strong>inutilizações e numerações faltantes</strong> conte apenas as notas legítimas a partir do início do contrato.
+                  </p>
+                </div>
+              </div>
+
+              {/* Grid com Numerações Iniciais de Cada Documento Fiscal */}
+              <div className="pt-2 border-t border-slate-200/60">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                  Primeiro Número de Cada Documento Fiscal (Início da Contagem / Envio)
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                  {/* NF-e Modelo 55 */}
+                  <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                    <span className="text-[11px] font-bold text-blue-700 block mb-1">NF-e (Mod. 55)</span>
+                    <input 
+                      type="number" 
+                      min={1}
+                      placeholder="Ex: 1"
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold text-slate-900 text-sm"
+                      value={formData.numero_inicial_nfe}
+                      onChange={e => setFormData({ ...formData, numero_inicial_nfe: parseInt(e.target.value) || 1 })}
+                    />
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">Nota Fiscal Eletrônica</span>
+                  </div>
+
+                  {/* NFC-e Modelo 65 */}
+                  <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                    <span className="text-[11px] font-bold text-emerald-700 block mb-1">NFC-e (Mod. 65)</span>
+                    <input 
+                      type="number" 
+                      min={1}
+                      placeholder="Ex: 1"
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold text-slate-900 text-sm"
+                      value={formData.numero_inicial_nfce}
+                      onChange={e => setFormData({ ...formData, numero_inicial_nfce: parseInt(e.target.value) || 1 })}
+                    />
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">Cupom Fiscal / Varejo</span>
+                  </div>
+
+                  {/* NFS-e Serviço */}
+                  <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                    <span className="text-[11px] font-bold text-indigo-700 block mb-1">NFS-e (Serviço)</span>
+                    <input 
+                      type="number" 
+                      min={1}
+                      placeholder="Ex: 1"
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold text-slate-900 text-sm"
+                      value={formData.numero_inicial_nfse}
+                      onChange={e => setFormData({ ...formData, numero_inicial_nfse: parseInt(e.target.value) || 1 })}
+                    />
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">Nota Fiscal de Serviços</span>
+                  </div>
+
+                  {/* CT-e Modelo 57 */}
+                  <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                    <span className="text-[11px] font-bold text-amber-700 block mb-1">CT-e (Mod. 57)</span>
+                    <input 
+                      type="number" 
+                      min={1}
+                      placeholder="Ex: 1"
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold text-slate-900 text-sm"
+                      value={formData.numero_inicial_cte}
+                      onChange={e => setFormData({ ...formData, numero_inicial_cte: parseInt(e.target.value) || 1 })}
+                    />
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">Transporte / Cargas</span>
+                  </div>
+
+                  {/* MDF-e Modelo 58 */}
+                  <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                    <span className="text-[11px] font-bold text-purple-700 block mb-1">MDF-e (Mod. 58)</span>
+                    <input 
+                      type="number" 
+                      min={1}
+                      placeholder="Ex: 1"
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold text-slate-900 text-sm"
+                      value={formData.numero_inicial_mdfe}
+                      onChange={e => setFormData({ ...formData, numero_inicial_mdfe: parseInt(e.target.value) || 1 })}
+                    />
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">Manifesto de Carga</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

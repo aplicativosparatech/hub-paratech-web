@@ -134,7 +134,7 @@ export async function POST(request: Request) {
     // 1. Validar Cliente e configurações
     const { data: cliente } = await supabaseAdmin
       .from('clientes')
-      .select('id, cnpj, razao_social, inscricao_estadual, is_ativo, certificado_url, certificado_senha, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, modo_processamento_xml)')
+      .select('id, cnpj, razao_social, inscricao_estadual, is_ativo, certificado_url, certificado_senha, data_inicio_monitoramento, numero_inicial_nfe, numero_inicial_nfce, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, modo_processamento_xml)')
       .eq('hub_token', token)
       .single()
 
@@ -216,6 +216,33 @@ export async function POST(request: Request) {
       const ano2 = chave.substring(2, 4)
       const mes2 = chave.substring(4, 6)
       emissao = `20${ano2}-${mes2}-01T00:00:00-03:00`
+    }
+
+    // REGRA FISCAL: Filtro de Competência Inicial e Numeração de Ponto de Partida
+    if (tipoPasta === 'vendas') {
+      const dataEmissaoStr = emissao ? emissao.split('T')[0] : null
+      if (cliente.data_inicio_monitoramento && dataEmissaoStr && dataEmissaoStr < cliente.data_inicio_monitoramento) {
+        return NextResponse.json({
+          ignored: true,
+          reason: `XML com data de emissão (${dataEmissaoStr}) anterior à competência de início de monitoramento da empresa (${cliente.data_inicio_monitoramento}).`
+        }, { status: 200 })
+      }
+
+      const numInt = numero ? parseInt(String(numero).replace(/\D/g, ''), 10) : 0
+      if (numInt > 0) {
+        if (mod === '55' && cliente.numero_inicial_nfe && numInt < cliente.numero_inicial_nfe) {
+          return NextResponse.json({
+            ignored: true,
+            reason: `NF-e número ${numInt} anterior ao número inicial de contagem da empresa (${cliente.numero_inicial_nfe}).`
+          }, { status: 200 })
+        }
+        if (mod === '65' && cliente.numero_inicial_nfce && numInt < cliente.numero_inicial_nfce) {
+          return NextResponse.json({
+            ignored: true,
+            reason: `NFC-e número ${numInt} anterior ao número inicial de contagem da empresa (${cliente.numero_inicial_nfce}).`
+          }, { status: 200 })
+        }
+      }
     }
 
     let transmissao = extractTag(xmlString, 'dhRecbto')
