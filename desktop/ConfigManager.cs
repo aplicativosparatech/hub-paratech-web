@@ -7,6 +7,8 @@ namespace HubParatechDesktop
     public class ConfigData
     {
         public string HubToken { get; set; } = "";
+        public bool ModoOculto { get; set; } = false;
+        public bool IniciarComWindows { get; set; } = true;
     }
 
     public static class ConfigManager
@@ -15,20 +17,28 @@ namespace HubParatechDesktop
 
         public static ConfigData Load()
         {
-            if (File.Exists(ConfigPath))
+            try
             {
-                var json = File.ReadAllText(ConfigPath);
-                return JsonSerializer.Deserialize<ConfigData>(json) ?? new ConfigData();
+                if (File.Exists(ConfigPath))
+                {
+                    var json = File.ReadAllText(ConfigPath);
+                    return JsonSerializer.Deserialize<ConfigData>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new ConfigData();
+                }
             }
+            catch { }
             return new ConfigData();
         }
 
         public static void Save(ConfigData data)
         {
-            var dir = Path.GetDirectoryName(ConfigPath);
-            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir!);
-            var json = JsonSerializer.Serialize(data);
-            File.WriteAllText(ConfigPath, json);
+            try
+            {
+                var dir = Path.GetDirectoryName(ConfigPath);
+                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir!);
+                var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(ConfigPath, json);
+            }
+            catch { }
         }
     }
 }

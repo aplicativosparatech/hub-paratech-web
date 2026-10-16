@@ -20,7 +20,7 @@ namespace HubParatechDesktop
 
             try
             {
-                if (File.Exists("icon.ico")) Icon = new Icon("icon.ico");
+                Icon = AppResources.GetIcon();
             }
             catch { }
             
@@ -47,7 +47,8 @@ namespace HubParatechDesktop
                 SizeMode = PictureBoxSizeMode.Zoom,
                 BackColor = Color.Transparent
             };
-            if (File.Exists("logo.png")) pbLogo.Image = Image.FromFile("logo.png");
+            var logoImg = AppResources.GetLogo();
+            if (logoImg != null) pbLogo.Image = logoImg;
 
             var lblTitle = new Label
             {

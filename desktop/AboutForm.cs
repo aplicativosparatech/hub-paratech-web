@@ -21,7 +21,7 @@ namespace HubParatechDesktop
 
             try
             {
-                if (File.Exists("icon.ico")) Icon = new Icon("icon.ico");
+                Icon = AppResources.GetIcon();
             }
             catch { }
 
@@ -29,11 +29,12 @@ namespace HubParatechDesktop
             int formWidth = 520;
 
             // Logomarca Oficial da Paratech
-            if (File.Exists("logo.png"))
+            var logoImg = AppResources.GetLogo();
+            if (logoImg != null)
             {
                 var pbLogo = new PictureBox
                 {
-                    Image = Image.FromFile("logo.png"),
+                    Image = logoImg,
                     SizeMode = PictureBoxSizeMode.Zoom,
                     Size = new Size(320, 90),
                     Location = new Point((formWidth - 320) / 2, curY),
@@ -59,7 +60,7 @@ namespace HubParatechDesktop
             // Versão Oficial
             var lblVersion = new Label
             {
-                Text = "Versão v2.4.2 • Build Oficial Outubro/2026",
+                Text = "Versão v2.5.0 • Build Autocontido Outubro/2026",
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(14, 116, 144), // cyan-700
                 TextAlign = ContentAlignment.MiddleCenter,

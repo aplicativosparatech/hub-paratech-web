@@ -66,19 +66,24 @@ namespace HubParatechDesktop
         private string currentModoProcessamento = "hub";
         private DateTime lastSync = DateTime.MinValue;
 
-        public TrayContext()
+        private bool isStealthMode = false;
+
+        public TrayContext(bool forceStealth = false)
         {
+            var config = ConfigManager.Load();
+            isStealthMode = forceStealth || config.ModoOculto;
+
             InitializeIconFrames();
 
             trayIcon = new NotifyIcon()
             {
                 Icon = baseIcon,
                 ContextMenuStrip = new ContextMenuStrip(),
-                Visible = true,
-                Text = "Hub Paratech v2.4.2 - Monitorando"
+                Visible = !isStealthMode,
+                Text = "Hub Paratech v2.5.0 - Monitorando"
             };
 
-            var itemVersao = new ToolStripMenuItem("Hub Paratech v2.4.2") { Enabled = false, Font = new Font(Control.DefaultFont, FontStyle.Bold) };
+            var itemVersao = new ToolStripMenuItem("Hub Paratech v2.5.0") { Enabled = false, Font = new Font(Control.DefaultFont, FontStyle.Bold) };
             trayIcon.ContextMenuStrip.Items.Add(itemVersao);
             trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
 
@@ -94,10 +99,11 @@ namespace HubParatechDesktop
             trayIcon.ContextMenuStrip.Items.Add("Ver Status Interno", null, (s, e) => {
                 string procs = targetProcesses.Count > 0 ? string.Join(", ", targetProcesses) : "Nenhum processo restrito";
                 string syncTxt = lastSync > DateTime.MinValue ? lastSync.ToString("dd/MM/yyyy HH:mm:ss") : "Pendente";
-                string msg = $"Status Operacional do Hub Paratech v2.4.2:\n\n" +
+                string msg = $"Status Operacional do Hub Paratech v2.5.0:\n\n" +
                              $"• Situação do Sistema: {(isBlocked ? "BLOQUEADO" : "LIBERADO / REGULAR")}\n" +
                              $"• Processos Alvo: {procs}\n" +
                              $"• Modo de Operação: {currentModoProcessamento.ToUpper()}\n" +
+                             $"• Modo Oculto: {(isStealthMode ? "ATIVADO (Invisível ao cliente)" : "DESATIVADO (Ícone visível)")}\n" +
                              $"• Monitores XML Ativos: {activeMonitors.Count} (com busca recursiva de subpastas)\n" +
                              $"• Inspeção Fiscal: Tags <dhEmi>, <cStat> e Chave de 44 dígitos ativas\n" +
                              $"• Fatura Pendente: R$ {faturaValor:F2}\n" +
@@ -113,7 +119,7 @@ namespace HubParatechDesktop
                 ParatechDialog.ShowSuccess("Sincronização com o Portal Paratech concluída com sucesso!\nTodos os diretórios de notas e subpastas foram conferidos.", "Sincronização Concluída");
             });
 
-            trayIcon.ContextMenuStrip.Items.Add("Configurar Token", null, SetupToken);
+            trayIcon.ContextMenuStrip.Items.Add("Configurações...", null, SetupToken);
             trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
 
             trayIcon.ContextMenuStrip.Items.Add("Sobre o Hub Paratech...", null, (s, e) => {
@@ -128,7 +134,10 @@ namespace HubParatechDesktop
                 LiveMonitorForm.OpenMonitor(activeMonitors.Count, currentModoProcessamento);
             };
 
-            trayIcon.ShowBalloonTip(3000, "Hub Paratech v2.4.2", "Monitoramento em tempo real ativo em todas as pastas e subpastas.", ToolTipIcon.Info);
+            if (!isStealthMode)
+            {
+                trayIcon.ShowBalloonTip(3000, "Hub Paratech v2.5.0", "Monitoramento em tempo real ativo em todas as pastas e subpastas.", ToolTipIcon.Info);
+            }
             EnableAutoStart();
 
             // Assinatura de Eventos dos Monitores de XML para feedback visual dinâmico
@@ -159,7 +168,7 @@ namespace HubParatechDesktop
         {
             try
             {
-                baseIcon = File.Exists("icon.ico") ? new Icon("icon.ico") : SystemIcons.Application;
+                baseIcon = AppResources.GetIcon();
                 syncFrames[0] = baseIcon;
 
                 // Cores vivas para o badge animado (Cyan, Emerald, Sky)
@@ -235,7 +244,7 @@ namespace HubParatechDesktop
                     isCurrentlySyncing = false;
                     animTimer.Stop();
                     trayIcon.Icon = baseIcon;
-                    SetTrayText("Hub Paratech v2.4.2 - Monitorando");
+                    SetTrayText("Hub Paratech v2.5.0 - Monitorando");
                 }
             }
             catch { }
@@ -245,8 +254,8 @@ namespace HubParatechDesktop
         {
             try
             {
-                // Se for um XML emitido em tempo real pelo PDV/ERP (não lote massivo), exibe notificação balão
-                if (e.IsRealTime && e.Sucesso && e.Dados != null)
+                // Se for um XML emitido em tempo real pelo PDV/ERP (não lote massivo), exibe notificação balão apenas se não estiver em modo oculto
+                if (!isStealthMode && e.IsRealTime && e.Sucesso && e.Dados != null)
                 {
                     if ((DateTime.Now - lastBalloonTime).TotalSeconds >= 2.0)
                     {
@@ -442,8 +451,11 @@ namespace HubParatechDesktop
         {
             try
             {
-                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey("SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run", true);
-                key?.SetValue("HubParatech", Application.ExecutablePath);
+                var config = ConfigManager.Load();
+                if (config.IniciarComWindows)
+                {
+                    StartupManager.EnableAutoStart();
+                }
             }
             catch { }
         }

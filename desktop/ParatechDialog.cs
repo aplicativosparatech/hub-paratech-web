@@ -7,21 +7,9 @@ namespace HubParatechDesktop
 {
     public class ParatechDialog : Form
     {
-        private static Image? cachedLogo = null;
-
         private static Image? GetLogo()
         {
-            if (cachedLogo != null) return cachedLogo;
-            try
-            {
-                if (File.Exists("logo.png"))
-                {
-                    cachedLogo = Image.FromFile("logo.png");
-                    return cachedLogo;
-                }
-            }
-            catch { }
-            return null;
+            return AppResources.GetLogo();
         }
 
         public ParatechDialog(string message, string title, MessageBoxButtons buttons = MessageBoxButtons.OK, MessageBoxIcon icon = MessageBoxIcon.Information)
@@ -37,10 +25,7 @@ namespace HubParatechDesktop
 
             try
             {
-                if (File.Exists("icon.ico"))
-                {
-                    Icon = new Icon("icon.ico");
-                }
+                Icon = AppResources.GetIcon();
             }
             catch { }
 

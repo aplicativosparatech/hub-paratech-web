@@ -81,7 +81,7 @@ namespace HubParatechDesktop
 
             try
             {
-                if (File.Exists("icon.ico")) Icon = new Icon("icon.ico");
+                Icon = AppResources.GetIcon();
             }
             catch { }
 
@@ -106,13 +106,14 @@ namespace HubParatechDesktop
 
             // Logomarca (se existir)
             int headerLeft = 20;
-            if (File.Exists("logo.png"))
+            var logoImg = AppResources.GetLogo();
+            if (logoImg != null)
             {
                 try
                 {
                     var pbLogo = new PictureBox
                     {
-                        Image = Image.FromFile("logo.png"),
+                        Image = logoImg,
                         SizeMode = PictureBoxSizeMode.Zoom,
                         Size = new Size(160, 60),
                         Location = new Point(headerLeft, 12),

@@ -7,13 +7,21 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIcon>icon.ico</ApplicationIcon>
-    <Version>2.4.2</Version>
-    <AssemblyVersion>2.4.2.0</AssemblyVersion>
-    <FileVersion>2.4.2.0</FileVersion>
-    <InformationalVersion>2.4.2</InformationalVersion>
+    <Version>2.5.0</Version>
+    <AssemblyVersion>2.5.0.0</AssemblyVersion>
+    <FileVersion>2.5.0.0</FileVersion>
+    <InformationalVersion>2.5.0</InformationalVersion>
     <Product>Hub Paratech Desktop</Product>
     <Company>Paratech Sistemas</Company>
-    <Description>Hub de Monitoramento e Bloqueio Paratech</Description>
+    <Description>Hub de Monitoramento e Bloqueio Paratech - Versao Autocontida</Description>
+
+    <!-- Publicacao de Executavel Unico 100% Autocontido (Nao necessita .NET instalado no cliente) -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,6 +31,8 @@
     <Content Include="logo.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <EmbeddedResource Include="icon.ico" />
+    <EmbeddedResource Include="logo.png" />
   </ItemGroup>
 
   <ItemGroup>

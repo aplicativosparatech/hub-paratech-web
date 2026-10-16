@@ -8,13 +8,16 @@ namespace HubParatechDesktop
     public class SetupForm : Form
     {
         private TextBox txtToken;
+        private CheckBox chkModoOculto;
+        private CheckBox chkAutoStart;
+        private Button btnInstallSystem;
         private Button btnSave;
         private Button btnCancel;
 
         public SetupForm()
         {
-            Text = "Configuração do Hub Paratech v2.4.2";
-            Size = new Size(460, 330);
+            Text = "Configuração do Hub Paratech v2.5.0";
+            Size = new Size(500, 480);
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
@@ -24,26 +27,27 @@ namespace HubParatechDesktop
 
             try
             {
-                if (File.Exists("icon.ico")) Icon = new Icon("icon.ico");
+                Icon = AppResources.GetIcon();
             }
             catch { }
 
             int curY = 16;
-            int formWidth = 460;
+            int formWidth = 500;
 
             // Logomarca Paratech Oficial
-            if (File.Exists("logo.png"))
+            var logoImg = AppResources.GetLogo();
+            if (logoImg != null)
             {
                 var pbLogo = new PictureBox
                 {
-                    Image = Image.FromFile("logo.png"),
+                    Image = logoImg,
                     SizeMode = PictureBoxSizeMode.Zoom,
-                    Size = new Size(260, 75),
+                    Size = new Size(260, 70),
                     Location = new Point((formWidth - 260) / 2, curY),
                     BackColor = Color.Transparent
                 };
                 Controls.Add(pbLogo);
-                curY += 85;
+                curY += 76;
 
                 // Separador
                 var separator = new Panel
@@ -53,31 +57,31 @@ namespace HubParatechDesktop
                     BackColor = Color.FromArgb(226, 232, 240)
                 };
                 Controls.Add(separator);
-                curY += 16;
+                curY += 14;
             }
 
             var lblPrompt = new Label
             {
-                Text = "Informe o Token do Cliente (disponível no Portal Paratech):",
+                Text = "Token de Autenticação do Cliente (Portal Paratech):",
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(30, 41, 59),
                 Location = new Point(24, curY),
                 AutoSize = true
             };
             Controls.Add(lblPrompt);
-            curY += 26;
+            curY += 24;
 
             var config = ConfigManager.Load();
             txtToken = new TextBox
             {
                 Location = new Point(24, curY),
                 Width = formWidth - 48,
-                Font = new Font("Segoe UI", 10.5f, FontStyle.Regular),
+                Font = new Font("Segoe UI", 10f, FontStyle.Regular),
                 ForeColor = Color.FromArgb(15, 23, 42),
                 Text = config.HubToken
             };
             Controls.Add(txtToken);
-            curY += 38;
+            curY += 34;
 
             var lnkPortal = new LinkLabel
             {
@@ -101,7 +105,78 @@ namespace HubParatechDesktop
                 catch { }
             };
             Controls.Add(lnkPortal);
-            curY += 32;
+            curY += 28;
+
+            // Opções de Segurança e Inicialização
+            var grpSecurity = new Panel
+            {
+                Location = new Point(24, curY),
+                Size = new Size(formWidth - 48, 120),
+                BackColor = Color.FromArgb(248, 250, 252),
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            chkAutoStart = new CheckBox
+            {
+                Text = "Iniciar automaticamente junto com o Windows (Protegido)",
+                Checked = config.IniciarComWindows,
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(30, 41, 59),
+                Location = new Point(12, 10),
+                AutoSize = true
+            };
+            grpSecurity.Controls.Add(chkAutoStart);
+
+            var lblAutoStartDesc = new Label
+            {
+                Text = "Configura o Registro e o Agendador de Tarefas do Windows para inicialização automática com privilégios.",
+                Font = new Font("Segoe UI", 8f, FontStyle.Regular),
+                ForeColor = Color.FromArgb(100, 116, 139),
+                Location = new Point(32, 32),
+                Size = new Size(grpSecurity.Width - 40, 28)
+            };
+            grpSecurity.Controls.Add(lblAutoStartDesc);
+
+            chkModoOculto = new CheckBox
+            {
+                Text = "Modo Oculto (Sem ícone na barra de tarefas / Invisível ao cliente)",
+                Checked = config.ModoOculto,
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(185, 28, 28), // red-700
+                Location = new Point(12, 64),
+                AutoSize = true
+            };
+            grpSecurity.Controls.Add(chkModoOculto);
+
+            var lblModoOcultoDesc = new Label
+            {
+                Text = "O aplicativo roda 100% invisível em segundo plano. O cliente não pode fechar nem burlar os bloqueios.",
+                Font = new Font("Segoe UI", 8f, FontStyle.Regular),
+                ForeColor = Color.FromArgb(100, 116, 139),
+                Location = new Point(32, 86),
+                Size = new Size(grpSecurity.Width - 40, 28)
+            };
+            grpSecurity.Controls.Add(lblModoOcultoDesc);
+
+            Controls.Add(grpSecurity);
+            curY += 130;
+
+            // Botão Instalação do Sistema
+            btnInstallSystem = new Button
+            {
+                Text = "🛡️ Instalar no Sistema (C:\\Paratech\\HubDesktop)",
+                Size = new Size(formWidth - 48, 34),
+                Location = new Point(24, curY),
+                BackColor = Color.FromArgb(241, 245, 249),
+                ForeColor = Color.FromArgb(15, 23, 42),
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btnInstallSystem.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
+            btnInstallSystem.Click += BtnInstallSystem_Click;
+            Controls.Add(btnInstallSystem);
+            curY += 44;
 
             // Painel inferior com botões
             var bottomPanel = new Panel
@@ -121,7 +196,7 @@ namespace HubParatechDesktop
 
             var lblVersao = new Label
             {
-                Text = "v2.4.2",
+                Text = "v2.5.0 Standalone",
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Regular),
                 ForeColor = Color.FromArgb(148, 163, 184),
                 Location = new Point(24, 20),
@@ -131,7 +206,7 @@ namespace HubParatechDesktop
 
             btnSave = new Button
             {
-                Text = "Salvar Token",
+                Text = "Salvar e Iniciar",
                 Size = new Size(130, 36),
                 Location = new Point(formWidth - 154, 12),
                 BackColor = Color.FromArgb(14, 116, 144), // cyan-700
@@ -166,13 +241,36 @@ namespace HubParatechDesktop
             CancelButton = btnCancel;
         }
 
+        private void BtnInstallSystem_Click(object? sender, EventArgs e)
+        {
+            if (StartupManager.InstallToSystem(out string targetPath, out string err))
+            {
+                ParatechDialog.ShowSuccess($"Hub Paratech instalado com sucesso em:\n{targetPath}\n\nO executável foi copiado e configurado no Agendador de Tarefas e Registro do Windows para iniciar com o sistema.", "Instalação no Sistema Concluída");
+            }
+            else
+            {
+                ParatechDialog.ShowError($"Não foi possível copiar para {StartupManager.DefaultInstallDir}:\n{err}\n\nRecomenda-se executar o Hub Paratech como Administrador.", "Falha na Instalação");
+            }
+        }
+
         private void BtnSave_Click(object? sender, EventArgs e)
         {
             var config = ConfigManager.Load();
             config.HubToken = txtToken.Text.Trim();
+            config.ModoOculto = chkModoOculto.Checked;
+            config.IniciarComWindows = chkAutoStart.Checked;
             ConfigManager.Save(config);
 
-            ParatechDialog.ShowSuccess("Token configurado com sucesso!\nO Hub Paratech já iniciou o monitoramento e sincronização.", "Configuração Salva");
+            if (config.IniciarComWindows)
+            {
+                StartupManager.EnableAutoStart();
+            }
+            else
+            {
+                StartupManager.DisableAutoStart();
+            }
+
+            ParatechDialog.ShowSuccess("Configurações salvas com sucesso!\nO Hub Paratech está ativo e monitorando este computador.", "Configuração Salva");
             Close();
         }
     }
