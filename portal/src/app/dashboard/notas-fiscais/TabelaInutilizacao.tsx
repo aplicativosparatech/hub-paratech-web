@@ -508,12 +508,18 @@ export default function TabelaInutilizacao() {
                         {gap.status === 'HOMOLOGADO' && (
                           <div className="flex items-center gap-1.5 text-emerald-700">
                             <CheckCircle2 size={14} className="text-emerald-600 flex-shrink-0" />
-                            <span className="font-bold">Inutilizada na SEFAZ</span>
-                            {gap.protocolo && (
+                            <span className="font-bold">
+                              {gap.motivo?.includes('204') ? 'Já Inutilizada no PDV/SEFAZ' : 'Inutilizada na SEFAZ'}
+                            </span>
+                            {gap.protocolo ? (
                               <span className="text-[10px] font-mono text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded ml-1">
                                 Prot: {gap.protocolo}
                               </span>
-                            )}
+                            ) : gap.motivo?.includes('204') ? (
+                              <span className="text-[10px] font-mono text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded ml-1">
+                                Cód. 204
+                              </span>
+                            ) : null}
                           </div>
                         )}
 
@@ -560,7 +566,7 @@ export default function TabelaInutilizacao() {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-semibold text-xs transition shadow-sm disabled:opacity-50"
                           >
                             <Zap size={13} className={processandoId === gap.id ? 'animate-spin' : ''} />
-                            {processandoId === gap.id ? 'Enviando...' : 'Inutilizar na SEFAZ'}
+                            {processandoId === gap.id ? 'Consultando...' : 'Consultar / Inutilizar'}
                           </button>
                         )}
                       </td>
