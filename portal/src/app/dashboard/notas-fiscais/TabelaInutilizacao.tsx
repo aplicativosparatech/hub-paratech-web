@@ -738,7 +738,7 @@ export default function TabelaInutilizacao() {
               setClienteAtualId(e.target.value)
               setSelectedCliente(e.target.value)
             }}
-            className="text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-rose-500 outline-none"
+            className="min-w-[280px] sm:min-w-[400px] text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl px-3.5 py-2 focus:ring-2 focus:ring-rose-500 outline-none shadow-xs cursor-pointer"
           >
             {clientes.map(cli => (
               <option key={cli.id} value={cli.id}>

@@ -8,10 +8,11 @@ interface NotasFiscaisFilterContextType {
   // Usuário e Clientes
   userRole: 'admin' | 'contabilidade' | 'cliente'
   clientes: any[]
+  clienteAtual: any | null
   loadingClientes: boolean
   refreshClientes: () => Promise<void>
 
-  // Filtro de Cliente Selecionado
+  // Filtro de Cliente Selecionado (Sempre obrigatório, nunca vazio)
   selectedCliente: string
   setSelectedCliente: (id: string) => void
   clientSearchTerm: string
@@ -141,59 +142,80 @@ export function NotasFiscaisFilterProvider({ children }: { children: React.React
         return
       }
 
-      const { data: roleData } = await supabase
-        .from('user_roles')
-        .select('role, cliente_id, contabilidade_id')
-        .eq('user_id', user.id)
-        .single()
+      // Consulta de papel com fallback resiliente
+      let role: 'admin' | 'contabilidade' | 'cliente' = 'admin'
+      let roleData: any = null
 
-      const role = (roleData?.role as any) || 'admin'
+      try {
+        const { data } = await supabase
+          .from('user_roles')
+          .select('role, cliente_id, contabilidade_id')
+          .eq('user_id', user.id)
+          .maybeSingle()
+        if (data) {
+          roleData = data
+          role = (data.role as any) || 'admin'
+        }
+      } catch (errRole) {
+        console.warn('user_roles indisponível, assumindo admin:', errRole)
+      }
+
       setUserRole(role)
 
+      let clisData: any[] = []
+      const camposSelect = 'id, razao_social, nome_fantasia, cnpj, certificado_url, logo_url, uf, cidade, regime_tributario, data_inicio_monitoramento, numero_inicial_nfe, numero_inicial_nfce, numero_inicial_nfse, numero_inicial_cte, numero_inicial_mdfe'
+
       if (role === 'cliente' && roleData?.cliente_id) {
-        setSelectedCliente(roleData.cliente_id)
         const { data: cli } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, certificado_url, logo_url')
+          .select(camposSelect)
           .eq('id', roleData.cliente_id)
-          .single()
-        if (cli) setClientes([cli])
+          .maybeSingle()
+        if (cli) clisData = [cli]
       } else if (role === 'contabilidade' && roleData?.contabilidade_id) {
         const { data: clis } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, certificado_url, logo_url')
+          .select(camposSelect)
           .eq('contabilidade_id', roleData.contabilidade_id)
           .order('razao_social')
-        if (clis) {
-          setClientes(clis)
-          // Se não houver cliente salvo, pré-seleciona o primeiro
-          _setSelectedCliente(prev => {
-            if (clienteIdUrl) return clienteIdUrl
-            if (prev && clis.some(c => c.id === prev)) return prev
-            const firstId = clis.length > 0 ? clis[0].id : ''
-            setSessionValue('cliente', firstId)
-            return firstId
-          })
-        }
+        if (clis) clisData = clis
       } else {
-        // Admin: busca todos os clientes
+        // Admin: busca todas as empresas
         const { data: clis } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, certificado_url, logo_url')
+          .select(camposSelect)
           .order('razao_social')
-        if (clis) {
-          setClientes(clis)
-          if (clienteIdUrl) {
-            setSelectedCliente(clienteIdUrl)
+        if (clis) clisData = clis
+      }
+
+      setClientes(clisData)
+
+      // Regra Fundamental de Segurança: SEMPRE seleciona uma empresa específica
+      // Jamais deixa selectedCliente vazio para não misturar XMLs de empresas diferentes
+      if (clisData.length > 0) {
+        _setSelectedCliente(prev => {
+          if (clienteIdUrl && clisData.some(c => c.id === clienteIdUrl)) {
+            setSessionValue('cliente', clienteIdUrl)
+            return clienteIdUrl
           }
-        }
+          if (prev && clisData.some(c => c.id === prev)) {
+            return prev
+          }
+          const savedSession = getSessionValue('cliente', '')
+          if (savedSession && clisData.some(c => c.id === savedSession)) {
+            return savedSession
+          }
+          const defaultId = clisData[0].id
+          setSessionValue('cliente', defaultId)
+          return defaultId
+        })
       }
     } catch (e) {
       console.error('Erro ao carregar clientes no contexto de notas fiscais:', e)
     } finally {
       setLoadingClientes(false)
     }
-  }, [supabase, clienteIdUrl, setSelectedCliente])
+  }, [supabase, clienteIdUrl])
 
   useEffect(() => {
     loadUserAndClients()
@@ -206,7 +228,13 @@ export function NotasFiscaisFilterProvider({ children }: { children: React.React
     }
   }, [clienteIdUrl, selectedCliente, setSelectedCliente])
 
-  // Limpa apenas os filtros de dados (mantém o cliente ativo)
+  // Objeto completo da empresa selecionada em análise
+  const clienteAtual = useMemo(() => {
+    if (!selectedCliente) return clientes.length > 0 ? clientes[0] : null
+    return clientes.find(c => c.id === selectedCliente) || (clientes.length > 0 ? clientes[0] : null)
+  }, [clientes, selectedCliente])
+
+  // Limpa apenas os filtros de dados (mantém a empresa ativa)
   const limparFiltros = useCallback(() => {
     setFiltroMes('')
     setDataInicio('')
@@ -215,14 +243,11 @@ export function NotasFiscaisFilterProvider({ children }: { children: React.React
     setBuscaGeral('')
   }, [setFiltroMes, setDataInicio, setDataFim, setBuscaNumero, setBuscaGeral])
 
-  // Limpa tudo (filtros de dados e seleção de cliente se for admin)
+  // Limpa filtros de pesquisa mantendo a empresa selecionada
   const limparTudo = useCallback(() => {
     limparFiltros()
-    if (userRole === 'admin') {
-      setSelectedCliente('')
-      setClientSearchTerm('')
-    }
-  }, [limparFiltros, userRole, setSelectedCliente, setClientSearchTerm])
+    setClientSearchTerm('')
+  }, [limparFiltros, setClientSearchTerm])
 
   const temFiltroAtivo = useMemo(() => {
     return Boolean(filtroMes || dataInicio || dataFim || buscaNumero || buscaGeral)
@@ -235,6 +260,7 @@ export function NotasFiscaisFilterProvider({ children }: { children: React.React
   const value = useMemo<NotasFiscaisFilterContextType>(() => ({
     userRole,
     clientes,
+    clienteAtual,
     loadingClientes,
     refreshClientes: loadUserAndClients,
     selectedCliente,
@@ -260,6 +286,7 @@ export function NotasFiscaisFilterProvider({ children }: { children: React.React
   }), [
     userRole,
     clientes,
+    clienteAtual,
     loadingClientes,
     loadUserAndClients,
     selectedCliente,

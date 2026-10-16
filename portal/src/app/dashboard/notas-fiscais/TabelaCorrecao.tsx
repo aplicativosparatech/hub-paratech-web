@@ -111,49 +111,42 @@ export default function TabelaCorrecao() {
     setUltimaConsultaHora(agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
     loadUltimaSincronizacao()
 
-    let clienteIds: string[] = []
-    if (userRole === 'cliente') {
-      if (selectedCliente) clienteIds = [selectedCliente]
-    } else if (userRole === 'contabilidade') {
-      if (selectedCliente) {
-        clienteIds = [selectedCliente]
-      } else {
-        clienteIds = clientes?.map((c: any) => c.id) || []
-      }
-    } else {
-      if (selectedCliente) {
-        clienteIds = [selectedCliente]
-      }
+    const targetClienteId = selectedCliente || (clientes?.length > 0 ? clientes[0].id : null)
+
+    if (!targetClienteId) {
+      setNotas([])
+      setLoading(false)
+      return
     }
 
-    // Busca em nfce_saidas
-    let queryNfce = supabase.from('nfce_saidas').select('*').order('data_emissao', { ascending: false })
-    if (clienteIds.length > 0) queryNfce = queryNfce.in('cliente_id', clienteIds)
+    // Busca em nfce_saidas estritamente da empresa selecionada
+    const queryNfce = supabase.from('nfce_saidas').select('*').eq('cliente_id', targetClienteId).order('data_emissao', { ascending: false })
 
-    // Busca em nfe_saidas
-    let queryNfe = supabase.from('nfe_saidas').select('*').order('data_emissao', { ascending: false })
-    if (clienteIds.length > 0) queryNfe = queryNfe.in('cliente_id', clienteIds)
+    // Busca em nfe_saidas estritamente da empresa selecionada
+    const queryNfe = supabase.from('nfe_saidas').select('*').eq('cliente_id', targetClienteId).order('data_emissao', { ascending: false })
 
     const [resNfce, resNfe] = await Promise.all([queryNfce, queryNfe])
 
-    const currentCli = clientes.find(c => c.id === selectedCliente) || (userRole === 'cliente' ? clientes[0] : null)
+    const currentCli = clientes.find(c => c.id === targetClienteId) || (userRole === 'cliente' ? clientes[0] : null)
     const cleanCurrentCnpj = limparDocumento(currentCli?.cnpj)
 
     const pendentesNfce = (resNfce.data || [])
       .filter((n: any) => {
+        const isAut = n.is_autorizada === true || n.cstat === '100' || (Boolean(n.protocolo) && Boolean(n.tem_assinatura))
         const cleanChaveCnpj = n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : ''
         const emit = limparDocumento(n.cnpj_emitente || cleanChaveCnpj)
         const isDivergente = Boolean(cleanCurrentCnpj) && Boolean(emit) && cleanCurrentCnpj !== emit
-        return n.is_autorizada === false || !n.tem_assinatura || n.cnpj_divergente || isDivergente
+        return !isAut || !n.tem_assinatura || n.cnpj_divergente || isDivergente
       })
       .map((n: any) => ({ ...n, _tabela: 'nfce_saidas', _tipo: 'NFC-e (Mod 65)' }))
 
     const pendentesNfe = (resNfe.data || [])
       .filter((n: any) => {
+        const isAut = n.is_autorizada === true || n.cstat === '100' || (Boolean(n.protocolo) && Boolean(n.tem_assinatura))
         const cleanChaveCnpj = n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : ''
         const emit = limparDocumento(n.cnpj_emitente || cleanChaveCnpj)
         const isDivergente = Boolean(cleanCurrentCnpj) && Boolean(emit) && cleanCurrentCnpj !== emit
-        return n.is_autorizada === false || !n.tem_assinatura || n.cnpj_divergente || isDivergente
+        return !isAut || !n.tem_assinatura || n.cnpj_divergente || isDivergente
       })
       .map((n: any) => ({ ...n, _tabela: 'nfe_saidas', _tipo: 'NF-e (Mod 55)' }))
 

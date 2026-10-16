@@ -379,6 +379,8 @@ export async function POST(request: Request) {
       data_transmissao: transmissao || null,
       tem_assinatura: temAssinatura,
       storage_path: filePath,
+      is_autorizada: isAutorizada,
+      valor_monofasico: valorMonofasico || 0,
       cnpj_emitente: cnpjEmitente || null,
       cnpj_divergente: isCnpjDivergente,
       motivo_divergencia: isCnpjDivergente ? motivoDivergencia : null,
@@ -417,6 +419,7 @@ export async function POST(request: Request) {
         data_emissao: emissao || null,
         data_transmissao: transmissao || null,
         tem_assinatura: temAssinatura,
+        is_autorizada: isAutorizada,
         storage_path: filePath
       }
       await supabaseAdmin.from(tabela).upsert(fallbackPayload, { onConflict: 'chave' })

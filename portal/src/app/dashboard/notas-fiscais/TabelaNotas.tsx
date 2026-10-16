@@ -90,24 +90,15 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     setUltimaConsultaHora(agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
     loadUltimaSincronizacao()
 
-    let query = supabase.from(tabela).select('*').order('data_emissao', { ascending: false })
+    const targetClienteId = selectedCliente || (clientes?.length > 0 ? clientes[0].id : null)
 
-    if (userRole === 'cliente') {
-      if (selectedCliente) query = query.eq('cliente_id', selectedCliente)
-    } else if (userRole === 'contabilidade') {
-      if (selectedCliente) {
-        query = query.eq('cliente_id', selectedCliente)
-      } else {
-        const ids = clientes?.map((c: any) => c.id) || []
-        if (ids.length === 0) { setNotas([]); setLoading(false); return }
-        query = query.in('cliente_id', ids)
-      }
-    } else {
-      // Admin: se escolheu um cliente específico, filtra por ele. Senão, mostra todos!
-      if (selectedCliente) {
-        query = query.eq('cliente_id', selectedCliente)
-      }
+    if (!targetClienteId) {
+      setNotas([])
+      setLoading(false)
+      return
     }
+
+    let query = supabase.from(tabela).select('*').eq('cliente_id', targetClienteId).order('data_emissao', { ascending: false })
 
     const { data } = await query
     setNotas(data || [])
@@ -170,7 +161,8 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
   // Se a nota tiver erro/pendência (não autorizada pela SEFAZ, sem assinatura, divergente),
   // ela NÃO é listada nas abas normais (NFC-e e NF-e), e sim exclusivamente na nova aba "Arquivos para Correção".
   const pendentesList = notas.filter(n => {
-    if (n.is_autorizada === false) return true
+    const isAut = n.is_autorizada === true || n.cstat === '100' || (Boolean(n.protocolo) && Boolean(n.tem_assinatura))
+    if (!isAut) return true
     if (!n.tem_assinatura) return true
     if (n.cnpj_divergente) return true
     const cleanChaveCnpj = n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : ''
@@ -370,107 +362,11 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
 
   return (
     <div className="space-y-4">
-      {/* Barra de Filtro de Clientes para Admin e Contabilidade */}
-      {userRole !== 'cliente' && clientes.length > 0 && (
+      {/* Resumo Financeiro da Empresa Selecionada */}
+      {clientes.length > 0 && (
         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div className="flex-1 max-w-lg space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                {userRole === 'admin' ? '🔍 Localizar Cliente (Admin)' : '🏢 Empresa Selecionada'}
-              </span>
-              {userRole === 'admin' && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-blue-600 font-medium">
-                    {selectedCliente ? 'Filtrado por empresa' : 'Exibindo todas as empresas'}
-                  </span>
-                  {selectedCliente && (
-                    <button
-                      type="button"
-                      onClick={() => { setSelectedCliente(''); setClientSearchTerm(''); }}
-                      className="text-[11px] text-slate-400 hover:text-rose-600 font-semibold flex items-center gap-0.5 transition"
-                      title="Exibir todas as empresas"
-                    >
-                      <X size={12} /> Limpar
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-2">
-              {userRole === 'admin' && (
-                <div className="relative w-full sm:w-1/2">
-                  <input
-                    type="text"
-                    placeholder="Buscar por nome, CNPJ ou CPF..."
-                    value={clientSearchTerm}
-                    onChange={e => {
-                      const term = e.target.value
-                      setClientSearchTerm(term)
-                      if (term.trim()) {
-                        const t = term.toLowerCase().trim()
-                        const ct = limparDocumento(t)
-                        const match = clientes.find(c => {
-                          const doc = (c.cnpj || '').toLowerCase()
-                          const cleanDoc = limparDocumento(doc)
-                          return (
-                            (c.razao_social && c.razao_social.toLowerCase().includes(t)) ||
-                            (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(t)) ||
-                            doc.includes(t) ||
-                            (ct && cleanDoc.includes(ct))
-                          )
-                        })
-                        if (match && match.id !== selectedCliente) {
-                          setSelectedCliente(match.id)
-                        }
-                      } else {
-                        setSelectedCliente('')
-                      }
-                    }}
-                    className="w-full bg-white border border-slate-200 px-3 py-1.5 pr-7 rounded-lg text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-                  />
-                  {clientSearchTerm && (
-                    <button
-                      type="button"
-                      onClick={() => { setClientSearchTerm(''); setSelectedCliente(''); }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
-                      title="Limpar busca"
-                    >
-                      <X size={12} />
-                    </button>
-                  )}
-                </div>
-              )}
-
-              <select
-                value={selectedCliente}
-                onChange={e => setSelectedCliente(e.target.value)}
-                className={`w-full ${userRole === 'admin' ? 'sm:w-1/2' : ''} bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium`}
-              >
-                {userRole === 'admin' && (
-                  <option value="">-- Todos os Clientes --</option>
-                )}
-                {clientes
-                  .filter(c => {
-                    if (!clientSearchTerm) return true
-                    const term = clientSearchTerm.toLowerCase().trim()
-                    const cleanTerm = limparDocumento(term)
-                    const doc = (c.cnpj || '').toLowerCase()
-                    const cleanDoc = limparDocumento(doc)
-                    return (
-                      (c.razao_social && c.razao_social.toLowerCase().includes(term)) ||
-                      (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(term)) ||
-                      doc.includes(term) ||
-                      (cleanTerm && cleanDoc.includes(cleanTerm))
-                    )
-                  })
-                  .map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.razao_social} {c.nome_fantasia ? `(${c.nome_fantasia})` : ''} {c.cnpj ? `— ${formatarCnpjCpf(c.cnpj)}` : ''}
-                    </option>
-                  ))}
-              </select>
-            </div>
+          <div className="text-xs text-slate-700 font-medium">
+            Empresa em Análise: <strong className="text-slate-900">{currentCli?.razao_social || 'Empresa'}</strong> {currentCli?.cnpj ? `(${formatarCnpjCpf(currentCli.cnpj)})` : ''}
           </div>
 
           <div className="flex flex-col sm:items-end justify-center gap-1.5 text-right sm:self-end">
@@ -487,7 +383,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
               </span>
             </div>
 
-            {/* Modalidades de Pagamento (PIX, Dinheiro, Cartões, etc.) */}
+            {/* Modalidades de Pagamento */}
             {resumoFinanceiro.formas.length > 0 && (
               <div className="flex flex-wrap items-center justify-end gap-1.5 text-[11px] mt-0.5">
                 {resumoFinanceiro.formas.map(fp => {
@@ -554,73 +450,6 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
             <span>Ir para Correção ({pendentesList.length})</span>
             <ArrowRight size={15} />
           </Link>
-        </div>
-      )}
-
-      {/* Identificação de Empresa e Resumo Financeiro para o perfil Cliente */}
-      {userRole === 'cliente' && clientes.length > 0 && (
-        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div className="text-xs text-slate-700 font-medium">
-            Empresa Titular: <strong className="text-slate-900">{clientes[0].razao_social}</strong> ({clientes[0].cnpj})
-          </div>
-
-          <div className="flex flex-col sm:items-end justify-center gap-1.5 text-right sm:self-end">
-            <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
-              <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1 rounded-xl font-bold flex items-center gap-1 shadow-2xs">
-                <span>Total:</span>
-                <strong className="text-emerald-700 text-sm">
-                  R$ {resumoFinanceiro.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </strong>
-              </span>
-
-              <span className="text-slate-500 bg-white border border-slate-200 px-2.5 py-1 rounded-xl font-medium">
-                <strong className="text-slate-800 font-semibold">{notasFiltradas.length}</strong> {notasFiltradas.length === 1 ? 'nota oficial' : 'notas oficiais'}
-              </span>
-            </div>
-
-            {/* Modalidades de Pagamento (PIX, Dinheiro, Cartões, etc.) */}
-            {resumoFinanceiro.formas.length > 0 && (
-              <div className="flex flex-wrap items-center justify-end gap-1.5 text-[11px] mt-0.5">
-                {resumoFinanceiro.formas.map(fp => {
-                  let badgeColor = 'bg-slate-50 text-slate-700 border-slate-200'
-                  let icon = '🏷️'
-                  const nomeLower = fp.nome.toLowerCase()
-                  if (nomeLower.includes('pix')) {
-                    badgeColor = 'bg-teal-50 text-teal-800 border-teal-200'
-                    icon = '⚡'
-                  } else if (nomeLower.includes('dinheiro')) {
-                    badgeColor = 'bg-green-50 text-green-800 border-green-200'
-                    icon = '💵'
-                  } else if (nomeLower.includes('crédito') || nomeLower.includes('credito')) {
-                    badgeColor = 'bg-blue-50 text-blue-800 border-blue-200'
-                    icon = '💳'
-                  } else if (nomeLower.includes('débito') || nomeLower.includes('debito')) {
-                    badgeColor = 'bg-sky-50 text-sky-800 border-sky-200'
-                    icon = '💳'
-                  } else if (nomeLower.includes('boleto')) {
-                    badgeColor = 'bg-amber-50 text-amber-800 border-amber-200'
-                    icon = '📄'
-                  } else if (nomeLower.includes('depósito') || nomeLower.includes('transferência')) {
-                    badgeColor = 'bg-purple-50 text-purple-800 border-purple-200'
-                    icon = '🏦'
-                  }
-
-                  return (
-                    <span 
-                      key={fp.nome} 
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border font-medium ${badgeColor}`}
-                      title={`${fp.nome}: R$ ${fp.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${fp.qtd} notas)`}
-                    >
-                      <span>{icon} {fp.nome}:</span>
-                      <strong className="font-bold">
-                        R$ {fp.total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </strong>
-                    </span>
-                  )
-                })}
-              </div>
-            )}
-          </div>
         </div>
       )}
 
