@@ -7,6 +7,7 @@ using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Collections.Generic;
 using System.Text.Json;
+using System.Linq;
 
 namespace HubParatechDesktop
 {
@@ -25,12 +26,39 @@ namespace HubParatechDesktop
         public string? Serie { get; set; }
         public decimal ValorTotal { get; set; }
         public string? DataEmissao { get; set; }
+        public string? CStat { get; set; }
+        public string? MotivoSefaz { get; set; }
+        public bool IsAutorizada { get; set; }
         public List<FormaPagamentoLocal> FormasPagamento { get; set; } = new List<FormaPagamentoLocal>();
         public string FormasPagamentoJson { get; set; } = "[]";
     }
 
+    public class ValidacaoXmlResultado
+    {
+        public bool Valido { get; set; } = false;
+        public string? MotivoDescarte { get; set; }
+        public DadosXmlExtraidos? Dados { get; set; }
+    }
+
+    public class XmlSyncEventArgs : EventArgs
+    {
+        public bool IsSyncing { get; set; }
+        public string StatusMessage { get; set; } = "";
+        public string? FileName { get; set; }
+        public DadosXmlExtraidos? Dados { get; set; }
+        public bool IsRealTime { get; set; }
+        public bool Sucesso { get; set; }
+        public string? StatusDescricao { get; set; }
+        public string? TipoPasta { get; set; }
+        public string? FilePath { get; set; }
+    }
+
     public class XmlMonitor
     {
+        // Eventos globais para comunicação com a UI do Tray e Monitor em Tempo Real
+        public static event EventHandler<XmlSyncEventArgs>? OnSyncStatusChanged;
+        public static event EventHandler<XmlSyncEventArgs>? OnXmlProcessed;
+
         private FileSystemWatcher? watcher;
         private string rootPath;
         private string hubToken;
@@ -82,11 +110,14 @@ namespace HubParatechDesktop
 
             try
             {
+                // FileSystemWatcher monitorando recursivamente a pasta raiz e todas as subpastas
                 watcher = new FileSystemWatcher(path, "*.xml");
-                watcher.IncludeSubdirectories = true; // Monitora todas as subpastas
+                watcher.IncludeSubdirectories = true; // Captura subpastas criadas pelo ERP (ex: 2026/10, Outubro_2026)
                 watcher.NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size;
-                watcher.Created += (s, e) => _ = ProcessFileAsync(e.FullPath);
-                watcher.Changed += (s, e) => _ = ProcessFileAsync(e.FullPath);
+                
+                // Eventos de tempo real: assim que o arquivo é gerado ou gravado pelo PDV/ERP
+                watcher.Created += (s, e) => _ = ProcessFileAsync(e.FullPath, isRealTime: true);
+                watcher.Changed += (s, e) => _ = ProcessFileAsync(e.FullPath, isRealTime: true);
                 watcher.EnableRaisingEvents = true;
             }
             catch (Exception ex)
@@ -123,25 +154,44 @@ namespace HubParatechDesktop
 
             try
             {
-                // Busca todos os .xml na pasta e em todas as subpastas
-                var files = Directory.GetFiles(rootPath, "*.xml", SearchOption.AllDirectories);
-                int totalArquivos = files.Length;
+                // Busca todos os .xml na pasta principal e em todas as subpastas recursivamente
+                var dirInfo = new DirectoryInfo(rootPath);
+                var files = dirInfo.GetFiles("*.xml", SearchOption.AllDirectories)
+                                   .OrderByDescending(f => f.LastWriteTime) // Prioriza os mais recentes (de hoje e deste mês)
+                                   .ToList();
+
+                int totalArquivos = files.Count;
                 int jaProcessados = 0;
                 int enviadosNestaRodada = 0;
                 int falhas = 0;
 
                 Debug.WriteLine($"[Auditoria Hub] Iniciando conferência em {rootPath}. Total de arquivos XML encontrados: {totalArquivos}");
 
-                foreach (var file in files)
+                if (totalArquivos > 0)
+                {
+                    OnSyncStatusChanged?.Invoke(this, new XmlSyncEventArgs
+                    {
+                        IsSyncing = true,
+                        StatusMessage = $"Varrendo {totalArquivos} notas fiscais...",
+                        TipoPasta = tipoPasta
+                    });
+                }
+
+                foreach (var fileInfo in files)
                 {
                     if (!isRunning) break;
 
-                    string fileName = Path.GetFileName(file);
-                    string fileNameWithoutExt = Path.GetFileNameWithoutExtension(file);
-                    if (fileNameWithoutExt.Length <= 35) continue;
+                    string file = fileInfo.FullName;
+                    string fileName = fileInfo.Name;
+                    string fileNameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
 
-                    FileInfo fi = new FileInfo(file);
-                    string fileIdentifier = $"{fileName}_{fi.Length}";
+                    // REGRA: Arquivos menores que 35 chars sem chave são tipicamente rascunhos temporários do ERP
+                    if (fileNameWithoutExt.Length <= 35 && !Regex.IsMatch(fileName, @"\d{44}"))
+                    {
+                        continue;
+                    }
+
+                    string fileIdentifier = $"{fileName}_{fileInfo.Length}";
 
                     if (XmlUploadCache.IsUploaded(fileIdentifier))
                     {
@@ -149,29 +199,70 @@ namespace HubParatechDesktop
                         continue;
                     }
 
-                    bool sucesso = await ProcessFileAsync(file);
+                    bool sucesso = await ProcessFileAsync(file, isRealTime: false);
                     if (sucesso) enviadosNestaRodada++;
                     else falhas++;
 
                     await Task.Delay(40); // Pausa suave para não sobrecarregar I/O ou rede
                 }
 
-                Debug.WriteLine($"[Auditoria Hub] Resumo de conferência em {rootPath}: Total={totalArquivos}, No Cache={jaProcessados}, Enviados={enviadosNestaRodada}, Falhas={falhas}");
+                OnSyncStatusChanged?.Invoke(this, new XmlSyncEventArgs
+                {
+                    IsSyncing = false,
+                    StatusMessage = "Monitorando",
+                    TipoPasta = tipoPasta
+                });
+
+                Debug.WriteLine($"[Auditoria Hub] Resumo em {rootPath}: Total={totalArquivos}, No Cache={jaProcessados}, Enviados={enviadosNestaRodada}, Falhas={falhas}");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Erro ao varrer arquivos existentes em {rootPath}: {ex.Message}");
+                OnSyncStatusChanged?.Invoke(this, new XmlSyncEventArgs
+                {
+                    IsSyncing = false,
+                    StatusMessage = "Monitorando",
+                    TipoPasta = tipoPasta
+                });
             }
         }
 
-        public static DadosXmlExtraidos ExtrairDadosXmlLocal(byte[] fileBytes, string fileName)
+        public static ValidacaoXmlResultado ValidarEExtrairXml(byte[] fileBytes, string fileName)
         {
-            var dados = new DadosXmlExtraidos();
+            var res = new ValidacaoXmlResultado();
+            if (fileBytes == null || fileBytes.Length < 180)
+            {
+                res.MotivoDescarte = "Arquivo vazio ou muito curto (< 180 bytes).";
+                return res;
+            }
+
             try
             {
                 string xml = System.Text.Encoding.UTF8.GetString(fileBytes);
 
-                // 1. Chave de Acesso (44 caracteres - suporta CNPJ alfanumérico IN RFB 2.229/2024)
+                // 1. Descartar eventos fiscais (Cancelamento, Carta de Correção) e inutilizações que não sejam a nota fiscal
+                if (xml.Contains("<procEventoNFe") || xml.Contains("<retEnvEvento") || xml.Contains("<detEvento"))
+                {
+                    res.MotivoDescarte = "Arquivo é um Evento Fiscal (Cancelamento ou CC-e), não uma emissão de NF-e/NFC-e.";
+                    return res;
+                }
+                if (xml.Contains("<procInutNFe") || xml.Contains("<inutNFe") || xml.Contains("<retInutNFe"))
+                {
+                    res.MotivoDescarte = "Arquivo é uma Inutilização de Numeração, não uma emissão.";
+                    return res;
+                }
+
+                // 2. Deve conter a estrutura de nota fiscal eletrônica
+                bool hasInfNFe = xml.Contains("<infNFe") || xml.Contains("<nfeProc") || xml.Contains("<NFe");
+                if (!hasInfNFe)
+                {
+                    res.MotivoDescarte = "Arquivo XML não contém estrutura de NF-e ou NFC-e (<infNFe>).";
+                    return res;
+                }
+
+                var dados = new DadosXmlExtraidos();
+
+                // 3. Chave de Acesso (44 caracteres - suporta CNPJ alfanumérico IN RFB 2.229/2024)
                 var matchChave = Regex.Match(xml, @"<(?:chNFe|chCTe|chMDFe)[^>]*>([A-Za-z0-9]{44})<");
                 if (matchChave.Success)
                 {
@@ -194,36 +285,60 @@ namespace HubParatechDesktop
                     }
                 }
 
-                // 2. Modelo (55 ou 65)
-                if (!string.IsNullOrEmpty(dados.Chave) && dados.Chave.Length == 44)
+                if (string.IsNullOrEmpty(dados.Chave) || dados.Chave.Length != 44)
                 {
-                    dados.Modelo = dados.Chave.Substring(20, 2);
+                    res.MotivoDescarte = "Chave de acesso de 44 caracteres não encontrada no XML.";
+                    return res;
                 }
-                else
+
+                // 4. Modelo (55 = NF-e, 65 = NFC-e)
+                dados.Modelo = dados.Chave.Substring(20, 2);
+                if (dados.Modelo != "55" && dados.Modelo != "65")
                 {
                     var matchMod = Regex.Match(xml, @"<mod>(\d{2})</mod>");
                     if (matchMod.Success) dados.Modelo = matchMod.Groups[1].Value;
                 }
 
-                // 3. Número e Série
+                // 5. Número e Série
                 var matchNum = Regex.Match(xml, @"<nNF>(\d+)</nNF>");
                 if (matchNum.Success) dados.Numero = matchNum.Groups[1].Value;
+                else dados.Numero = Convert.ToInt64(dados.Chave.Substring(25, 9)).ToString();
 
                 var matchSerie = Regex.Match(xml, @"<serie>(\d+)</serie>");
                 if (matchSerie.Success) dados.Serie = matchSerie.Groups[1].Value;
+                else dados.Serie = Convert.ToInt32(dados.Chave.Substring(22, 3)).ToString();
 
-                // 4. Valor Total
+                // 6. Data de Emissão REAL DO XML (<dhEmi> ou <dEmi>)
+                // Esta é a verdade fiscal soberana registrada no momento da assinatura/autorização
+                var matchEmi = Regex.Match(xml, @"<(?:dhEmi|dEmi)[^>]*>([^<]+)<");
+                if (matchEmi.Success)
+                {
+                    dados.DataEmissao = matchEmi.Groups[1].Value;
+                }
+                else
+                {
+                    // Fallback para os dígitos da Chave (AAMM)
+                    string aamm = dados.Chave.Substring(2, 4);
+                    dados.DataEmissao = $"20{aamm.Substring(0, 2)}-{aamm.Substring(2, 2)}-01T00:00:00-03:00";
+                }
+
+                // 7. Valor Total
                 var matchValor = Regex.Match(xml, @"<vNF>([\d\.]+)</vNF>");
                 if (matchValor.Success && decimal.TryParse(matchValor.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal v))
                 {
                     dados.ValorTotal = v;
                 }
 
-                // 5. Data de Emissão
-                var matchEmi = Regex.Match(xml, @"<(?:dhEmi|dEmi)[^>]*>([^<]+)<");
-                if (matchEmi.Success) dados.DataEmissao = matchEmi.Groups[1].Value;
+                // 8. Status SEFAZ (<cStat> e <protNFe>)
+                var matchStat = Regex.Match(xml, @"<cStat>(\d+)</cStat>");
+                if (matchStat.Success) dados.CStat = matchStat.Groups[1].Value;
 
-                // 6. Formas de Pagamento (<detPag> ou <pag>)
+                var matchMotivo = Regex.Match(xml, @"<xMotivo>([^<]+)</xMotivo>");
+                if (matchMotivo.Success) dados.MotivoSefaz = matchMotivo.Groups[1].Value;
+
+                dados.IsAutorizada = (dados.CStat == "100" || xml.Contains("Autorizado o uso")) && xml.Contains("<Signature");
+
+                // 9. Formas de Pagamento (<detPag> ou <pag>)
                 var detPagMatches = Regex.Matches(xml, @"<detPag[^>]*>([\s\S]*?)</detPag>");
                 if (detPagMatches.Count > 0)
                 {
@@ -273,16 +388,19 @@ namespace HubParatechDesktop
                 }
 
                 dados.FormasPagamentoJson = JsonSerializer.Serialize(dados.FormasPagamento);
+
+                res.Valido = true;
+                res.Dados = dados;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Erro na extração local de XML: {ex.Message}");
+                res.MotivoDescarte = $"Erro ao interpretar conteúdo XML: {ex.Message}";
             }
 
-            return dados;
+            return res;
         }
 
-        private async Task<bool> ProcessFileAsync(string filePath)
+        private async Task<bool> ProcessFileAsync(string filePath, bool isRealTime = false)
         {
             try
             {
@@ -291,41 +409,57 @@ namespace HubParatechDesktop
                 string fileName = Path.GetFileName(filePath);
                 string fileNameWithoutExt = Path.GetFileNameWithoutExtension(filePath);
 
-                // REGRA: Ignora arquivos curtos (<= 35 caracteres) como rascunhos do Gdoor
-                if (fileNameWithoutExt.Length <= 35)
-                {
-                    return false;
-                }
-
-                // Identificador único (Nome do arquivo + Tamanho do arquivo)
+                // Identificador preliminar
                 FileInfo fi = new FileInfo(filePath);
                 string fileIdentifier = $"{fileName}_{fi.Length}";
 
-                // Se já foi enviado anteriormente, NÃO envia de novo
+                // Se já foi enviado anteriormente, não envia de novo
                 if (XmlUploadCache.IsUploaded(fileIdentifier))
                 {
                     return true;
                 }
 
-                // Tenta ler o arquivo com segurança (lidando com gravação pelo ERP)
+                // Tenta ler o arquivo com segurança (esperando o ERP terminar a gravação no disco)
                 byte[]? fileBytes = await ReadFileWithRetryAsync(filePath, maxRetries: 4, delayMs: 1500);
                 if (fileBytes == null || fileBytes.Length == 0) return false;
 
-                // Se estiver no modo "hub", realiza pré-processamento local e anexa os metadados.
-                // Se estiver no modo "portal", envia apenas o arquivo bruto para processamento 100% em nuvem.
-                DadosXmlExtraidos? dadosLocais = null;
-                if (modoProcessamento == "hub")
+                // Análise e Validação Fiscal Completa do Conteúdo
+                var validacao = ValidarEExtrairXml(fileBytes, fileName);
+                if (!validacao.Valido || validacao.Dados == null)
                 {
-                    dadosLocais = ExtrairDadosXmlLocal(fileBytes, fileName);
+                    Debug.WriteLine($"[Hub Monitor] Arquivo ignorado ({fileName}): {validacao.MotivoDescarte}");
+                    return false;
                 }
+
+                var dadosLocais = validacao.Dados;
+
+                // Se a chave já estiver no cache, marca o identificador e pula
+                if (XmlUploadCache.IsUploaded(fileIdentifier, dadosLocais.Chave))
+                {
+                    XmlUploadCache.MarkAsUploaded(fileIdentifier, dadosLocais.Chave);
+                    return true;
+                }
+
+                // Dispara indicador visual de que está sincronizando/enviando
+                string modeloNome = dadosLocais.Modelo == "65" ? "NFC-e" : (dadosLocais.Modelo == "55" ? "NF-e" : "Nota");
+                OnSyncStatusChanged?.Invoke(this, new XmlSyncEventArgs
+                {
+                    IsSyncing = true,
+                    StatusMessage = $"Enviando {modeloNome} nº {dadosLocais.Numero}...",
+                    FileName = fileName,
+                    Dados = dadosLocais,
+                    IsRealTime = isRealTime,
+                    TipoPasta = tipoPasta,
+                    FilePath = filePath
+                });
 
                 using (var content = new MultipartFormDataContent())
                 {
                     content.Add(new StringContent(hubToken), "hub_token");
                     content.Add(new StringContent(tipoPasta), "tipo_pasta");
 
-                    // Anexa metadados já mastigados pelo Hub apenas quando o processamento for local
-                    if (dadosLocais != null)
+                    // Anexa metadados já analisados pelo Hub
+                    if (modoProcessamento == "hub")
                     {
                         if (!string.IsNullOrEmpty(dadosLocais.FormasPagamentoJson))
                             content.Add(new StringContent(dadosLocais.FormasPagamentoJson), "formas_pagamento_json");
@@ -351,18 +485,91 @@ namespace HubParatechDesktop
 
                     if (response.IsSuccessStatusCode)
                     {
-                        // 1. Marca no cache local que foi enviado (evita duplicidades no futuro)
-                        XmlUploadCache.MarkAsUploaded(fileIdentifier);
+                        // 1. Marca no cache local que foi enviado
+                        XmlUploadCache.MarkAsUploaded(fileIdentifier, dadosLocais.Chave);
 
-                        // 2. Cria cópia de conferência em Contabilidade_Paratech/{MM-MES-AAAA} SEM mexer no original
-                        SaveBackupCopy(filePath, fileBytes);
+                        // 2. Cria cópia de conferência na pasta Contabilidade_Paratech/{MM-MES-AAAA}
+                        SaveBackupCopy(filePath, fileBytes, dadosLocais);
 
-                        Debug.WriteLine($"[Hub Local] XML enviado e conferido com sucesso: {fileName} (Modo: {modoProcessamento})");
+                        // 3. Adiciona ao log em tempo real
+                        LiveMonitorForm.AddLog(new XmlLogItem
+                        {
+                            Timestamp = DateTime.Now,
+                            TipoPasta = tipoPasta == "compras" ? "Entrada" : "Saída",
+                            Modelo = dadosLocais.Modelo ?? "65",
+                            Numero = dadosLocais.Numero ?? "",
+                            Serie = dadosLocais.Serie ?? "1",
+                            DataEmissao = dadosLocais.DataEmissao ?? "",
+                            ValorTotal = dadosLocais.ValorTotal,
+                            Chave = dadosLocais.Chave ?? "",
+                            Status = "Sucesso",
+                            Arquivo = fileName,
+                            IsRealTime = isRealTime
+                        });
+
+                        // 4. Notifica ouvintes da UI
+                        OnXmlProcessed?.Invoke(this, new XmlSyncEventArgs
+                        {
+                            IsSyncing = false,
+                            StatusMessage = "Sincronizado",
+                            FileName = fileName,
+                            Dados = dadosLocais,
+                            IsRealTime = isRealTime,
+                            Sucesso = true,
+                            StatusDescricao = "Enviado com sucesso",
+                            TipoPasta = tipoPasta,
+                            FilePath = filePath
+                        });
+
+                        OnSyncStatusChanged?.Invoke(this, new XmlSyncEventArgs
+                        {
+                            IsSyncing = false,
+                            StatusMessage = "Monitorando",
+                            TipoPasta = tipoPasta
+                        });
+
+                        Debug.WriteLine($"[Hub Local] XML enviado com sucesso: {fileName} (Chave: {dadosLocais.Chave})");
                         return true;
                     }
                     else
                     {
                         Debug.WriteLine($"[Hub Local] Falha ao enviar XML {fileName}: Status {response.StatusCode}");
+
+                        LiveMonitorForm.AddLog(new XmlLogItem
+                        {
+                            Timestamp = DateTime.Now,
+                            TipoPasta = tipoPasta == "compras" ? "Entrada" : "Saída",
+                            Modelo = dadosLocais.Modelo ?? "65",
+                            Numero = dadosLocais.Numero ?? "",
+                            Serie = dadosLocais.Serie ?? "1",
+                            DataEmissao = dadosLocais.DataEmissao ?? "",
+                            ValorTotal = dadosLocais.ValorTotal,
+                            Chave = dadosLocais.Chave ?? "",
+                            Status = $"Falha ({response.StatusCode})",
+                            Arquivo = fileName,
+                            IsRealTime = isRealTime
+                        });
+
+                        OnXmlProcessed?.Invoke(this, new XmlSyncEventArgs
+                        {
+                            IsSyncing = false,
+                            StatusMessage = "Erro no envio",
+                            FileName = fileName,
+                            Dados = dadosLocais,
+                            IsRealTime = isRealTime,
+                            Sucesso = false,
+                            StatusDescricao = $"Erro HTTP {(int)response.StatusCode}",
+                            TipoPasta = tipoPasta,
+                            FilePath = filePath
+                        });
+
+                        OnSyncStatusChanged?.Invoke(this, new XmlSyncEventArgs
+                        {
+                            IsSyncing = false,
+                            StatusMessage = "Monitorando",
+                            TipoPasta = tipoPasta
+                        });
+
                         return false;
                     }
                 }
@@ -370,46 +577,37 @@ namespace HubParatechDesktop
             catch (Exception ex)
             {
                 Debug.WriteLine($"Erro ao processar XML {filePath}: {ex.Message}");
+                OnSyncStatusChanged?.Invoke(this, new XmlSyncEventArgs
+                {
+                    IsSyncing = false,
+                    StatusMessage = "Monitorando",
+                    TipoPasta = tipoPasta
+                });
                 return false;
             }
         }
 
-        private void SaveBackupCopy(string sourceFilePath, byte[] fileBytes)
+        private void SaveBackupCopy(string sourceFilePath, byte[] fileBytes, DadosXmlExtraidos? dados)
         {
             try
             {
-                // Determina Ano e Mês (priorizando a data de emissão do XML)
                 int ano = DateTime.Now.Year;
                 int mes = DateTime.Now.Month;
 
-                try
+                if (dados != null && !string.IsNullOrEmpty(dados.DataEmissao))
                 {
-                    string xmlPreview = System.Text.Encoding.UTF8.GetString(fileBytes, 0, Math.Min(fileBytes.Length, 4096));
-                    var match = Regex.Match(xmlPreview, @"<(?:dhEmi|dEmi)[^>]*>(\d{4})-(\d{2})-(\d{2})");
+                    var match = Regex.Match(dados.DataEmissao, @"^(\d{4})-(\d{2})");
                     if (match.Success)
                     {
                         ano = int.Parse(match.Groups[1].Value);
                         mes = int.Parse(match.Groups[2].Value);
                     }
-                    else
-                    {
-                        var fi = new FileInfo(sourceFilePath);
-                        ano = fi.LastWriteTime.Year;
-                        mes = fi.LastWriteTime.Month;
-                    }
-                }
-                catch
-                {
-                    var fi = new FileInfo(sourceFilePath);
-                    ano = fi.LastWriteTime.Year;
-                    mes = fi.LastWriteTime.Month;
                 }
 
                 if (mes < 1 || mes > 12) mes = DateTime.Now.Month;
                 string nomeMes = NomeMeses[mes - 1];
                 string folderMesAno = $"{mes:D2}-{nomeMes}-{ano}";
 
-                // Base do drive onde o arquivo monitorado reside (ex: C:\ ou D:\)
                 string driveRoot = Path.GetPathRoot(sourceFilePath) ?? "C:\\";
                 string targetDir = Path.Combine(driveRoot, "Contabilidade_Paratech", folderMesAno);
 
@@ -421,7 +619,6 @@ namespace HubParatechDesktop
                 }
                 catch
                 {
-                    // Fallback para a pasta do perfil caso a raiz do drive exija elevação
                     string fallbackRoot = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
                     string fallbackDir = Path.Combine(fallbackRoot, "Contabilidade_Paratech", folderMesAno);
                     if (!Directory.Exists(fallbackDir)) Directory.CreateDirectory(fallbackDir);

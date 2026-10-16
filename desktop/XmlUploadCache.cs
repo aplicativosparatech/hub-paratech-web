@@ -40,23 +40,34 @@ namespace HubParatechDesktop
             catch { }
         }
 
-        public static bool IsUploaded(string fileIdentifier)
+        public static bool IsUploaded(string fileIdentifier, string? chave = null)
         {
             lock (LockObj)
             {
-                return UploadedKeys.Contains(fileIdentifier);
+                if (UploadedKeys.Contains(fileIdentifier)) return true;
+                if (!string.IsNullOrEmpty(chave) && UploadedKeys.Contains(chave)) return true;
+                return false;
             }
         }
 
-        public static void MarkAsUploaded(string fileIdentifier)
+        public static void MarkAsUploaded(string fileIdentifier, string? chave = null)
         {
             lock (LockObj)
             {
-                if (UploadedKeys.Add(fileIdentifier))
+                bool addedAny = false;
+                if (UploadedKeys.Add(fileIdentifier)) addedAny = true;
+                if (!string.IsNullOrEmpty(chave) && UploadedKeys.Add(chave)) addedAny = true;
+
+                if (addedAny)
                 {
                     try
                     {
-                        File.AppendAllLines(CachePath, new[] { fileIdentifier });
+                        var list = new List<string> { fileIdentifier };
+                        if (!string.IsNullOrEmpty(chave) && chave != fileIdentifier)
+                        {
+                            list.Add(chave);
+                        }
+                        File.AppendAllLines(CachePath, list);
                     }
                     catch { }
                 }

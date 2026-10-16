@@ -5,6 +5,9 @@ using System.Diagnostics;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Collections.Generic;
+using System.IO;
+using System.Runtime.InteropServices;
 
 namespace HubParatechDesktop
 {
@@ -30,11 +33,22 @@ namespace HubParatechDesktop
 
     public class TrayContext : ApplicationContext
     {
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern bool DestroyIcon(IntPtr handle);
+
         private NotifyIcon trayIcon;
         private System.Windows.Forms.Timer syncTimer;
         private System.Windows.Forms.Timer processTimer;
+        private System.Windows.Forms.Timer animTimer;
         private static readonly HttpClient http = new HttpClient();
         private BlockerForm? activeBlocker = null;
+
+        // Estado do Ícone Dinâmico e Animação
+        private Icon baseIcon = SystemIcons.Application;
+        private Icon[] syncFrames = new Icon[4];
+        private int currentAnimFrame = 0;
+        private bool isCurrentlySyncing = false;
+        private DateTime lastBalloonTime = DateTime.MinValue;
 
         // Estado cacheado
         private bool isBlocked = false;
@@ -54,26 +68,38 @@ namespace HubParatechDesktop
 
         public TrayContext()
         {
+            InitializeIconFrames();
+
             trayIcon = new NotifyIcon()
             {
-                Icon = new Icon("icon.ico"),
+                Icon = baseIcon,
                 ContextMenuStrip = new ContextMenuStrip(),
                 Visible = true,
-                Text = "Hub Paratech v2.3.0 - Monitorando"
+                Text = "Hub Paratech v2.4.2 - Monitorando"
             };
 
-            var itemVersao = new ToolStripMenuItem("Hub Paratech v2.3.0") { Enabled = false, Font = new Font(Control.DefaultFont, FontStyle.Bold) };
+            var itemVersao = new ToolStripMenuItem("Hub Paratech v2.4.2") { Enabled = false, Font = new Font(Control.DefaultFont, FontStyle.Bold) };
             trayIcon.ContextMenuStrip.Items.Add(itemVersao);
             trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
+
+            // Menu: Monitor em Tempo Real
+            var itemMonitor = new ToolStripMenuItem("📡 Monitor em Tempo Real (XMLs)...", null, (s, e) => {
+                LiveMonitorForm.OpenMonitor(activeMonitors.Count, currentModoProcessamento);
+            })
+            {
+                Font = new Font(Control.DefaultFont, FontStyle.Bold)
+            };
+            trayIcon.ContextMenuStrip.Items.Add(itemMonitor);
 
             trayIcon.ContextMenuStrip.Items.Add("Ver Status Interno", null, (s, e) => {
                 string procs = targetProcesses.Count > 0 ? string.Join(", ", targetProcesses) : "Nenhum processo restrito";
                 string syncTxt = lastSync > DateTime.MinValue ? lastSync.ToString("dd/MM/yyyy HH:mm:ss") : "Pendente";
-                string msg = $"Status Operacional do Hub Paratech:\n\n" +
+                string msg = $"Status Operacional do Hub Paratech v2.4.2:\n\n" +
                              $"• Situação do Sistema: {(isBlocked ? "BLOQUEADO" : "LIBERADO / REGULAR")}\n" +
                              $"• Processos Alvo: {procs}\n" +
                              $"• Modo de Operação: {currentModoProcessamento.ToUpper()}\n" +
-                             $"• Monitores XML Ativos: {activeMonitors.Count}\n" +
+                             $"• Monitores XML Ativos: {activeMonitors.Count} (com busca recursiva de subpastas)\n" +
+                             $"• Inspeção Fiscal: Tags <dhEmi>, <cStat> e Chave de 44 dígitos ativas\n" +
                              $"• Fatura Pendente: R$ {faturaValor:F2}\n" +
                              $"• Empresa: {(string.IsNullOrEmpty(clienteNome) ? "Cliente Paratech" : clienteNome)}\n" +
                              $"• Última Sincronização: {syncTxt}";
@@ -81,9 +107,10 @@ namespace HubParatechDesktop
             });
 
             trayIcon.ContextMenuStrip.Items.Add("Sincronizar Agora", null, async (s, e) => {
+                SetTrayText("Hub Paratech - Sincronizando com a Nuvem...");
                 await SyncWithServer();
                 foreach (var m in activeMonitors) m.TriggerScan();
-                ParatechDialog.ShowSuccess("Sincronização com o Portal Paratech concluída com sucesso!\nTodos os diretórios de notas foram verificados.", "Sincronização Concluída");
+                ParatechDialog.ShowSuccess("Sincronização com o Portal Paratech concluída com sucesso!\nTodos os diretórios de notas e subpastas foram conferidos.", "Sincronização Concluída");
             });
 
             trayIcon.ContextMenuStrip.Items.Add("Configurar Token", null, SetupToken);
@@ -96,8 +123,21 @@ namespace HubParatechDesktop
             trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
             trayIcon.ContextMenuStrip.Items.Add("Sair", null, Exit);
 
-            trayIcon.ShowBalloonTip(3000, "Hub Paratech v2.3.0", "Iniciado e monitorando os sistemas.", ToolTipIcon.Info);
+            // Duplo clique no ícone do Tray abre o Monitor em Tempo Real
+            trayIcon.DoubleClick += (s, e) => {
+                LiveMonitorForm.OpenMonitor(activeMonitors.Count, currentModoProcessamento);
+            };
+
+            trayIcon.ShowBalloonTip(3000, "Hub Paratech v2.4.2", "Monitoramento em tempo real ativo em todas as pastas e subpastas.", ToolTipIcon.Info);
             EnableAutoStart();
+
+            // Assinatura de Eventos dos Monitores de XML para feedback visual dinâmico
+            XmlMonitor.OnSyncStatusChanged += HandleSyncStatusChanged;
+            XmlMonitor.OnXmlProcessed += HandleXmlProcessed;
+
+            // Timer de animação do ícone durante sincronizações
+            animTimer = new System.Windows.Forms.Timer { Interval = 280 };
+            animTimer.Tick += AnimTimer_Tick;
 
             // Timer para sincronizar com a nuvem a cada 1 hora (3600000 ms)
             syncTimer = new System.Windows.Forms.Timer();
@@ -105,7 +145,7 @@ namespace HubParatechDesktop
             syncTimer.Tick += async (s, e) => await SyncWithServer();
             syncTimer.Start();
 
-            // Timer para matar o processo alvo se estiver bloqueado (ex: a cada 2 segundos)
+            // Timer para monitoramento de bloqueio financeiro
             processTimer = new System.Windows.Forms.Timer();
             processTimer.Interval = 2000;
             processTimer.Tick += ProcessTimer_Tick;
@@ -113,6 +153,130 @@ namespace HubParatechDesktop
 
             // Faz a primeira sincronização instantaneamente
             _ = SyncWithServer();
+        }
+
+        private void InitializeIconFrames()
+        {
+            try
+            {
+                baseIcon = File.Exists("icon.ico") ? new Icon("icon.ico") : SystemIcons.Application;
+                syncFrames[0] = baseIcon;
+
+                // Cores vivas para o badge animado (Cyan, Emerald, Sky)
+                Color[] badgeColors = new Color[]
+                {
+                    Color.FromArgb(6, 182, 212),   // Cyan
+                    Color.FromArgb(16, 185, 129),  // Emerald
+                    Color.FromArgb(14, 165, 233)   // Sky
+                };
+
+                using (Bitmap baseBmp = baseIcon.ToBitmap())
+                {
+                    for (int i = 0; i < 3; i++)
+                    {
+                        using (Bitmap bmp = new Bitmap(baseBmp))
+                        using (Graphics g = Graphics.FromImage(bmp))
+                        {
+                            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+                            int badgeSize = Math.Max(7, bmp.Width / 3);
+                            int badgeX = bmp.Width - badgeSize - 1;
+                            int badgeY = 1;
+
+                            // Borda branca protetora
+                            using (var brushBorder = new SolidBrush(Color.White))
+                            {
+                                g.FillEllipse(brushBorder, badgeX - 1, badgeY - 1, badgeSize + 2, badgeSize + 2);
+                            }
+
+                            // Ponto colorido pulsante
+                            using (var brushDot = new SolidBrush(badgeColors[i]))
+                            {
+                                g.FillEllipse(brushDot, badgeX, badgeY, badgeSize, badgeSize);
+                            }
+
+                            IntPtr hIcon = bmp.GetHicon();
+                            syncFrames[i + 1] = (Icon)Icon.FromHandle(hIcon).Clone();
+                            DestroyIcon(hIcon);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                baseIcon = SystemIcons.Application;
+                for (int i = 0; i < 4; i++) syncFrames[i] = baseIcon;
+            }
+        }
+
+        private void SetTrayText(string text)
+        {
+            try
+            {
+                // Limite do Windows para NotifyIcon.Text é de 63 caracteres
+                if (text.Length > 63) text = text.Substring(0, 60) + "...";
+                trayIcon.Text = text;
+            }
+            catch { }
+        }
+
+        private void HandleSyncStatusChanged(object? sender, XmlSyncEventArgs e)
+        {
+            try
+            {
+                if (e.IsSyncing)
+                {
+                    isCurrentlySyncing = true;
+                    if (!animTimer.Enabled) animTimer.Start();
+                    SetTrayText(!string.IsNullOrEmpty(e.StatusMessage) ? $"Hub: {e.StatusMessage}" : "Hub Paratech - Sincronizando notas...");
+                }
+                else
+                {
+                    isCurrentlySyncing = false;
+                    animTimer.Stop();
+                    trayIcon.Icon = baseIcon;
+                    SetTrayText("Hub Paratech v2.4.2 - Monitorando");
+                }
+            }
+            catch { }
+        }
+
+        private void HandleXmlProcessed(object? sender, XmlSyncEventArgs e)
+        {
+            try
+            {
+                // Se for um XML emitido em tempo real pelo PDV/ERP (não lote massivo), exibe notificação balão
+                if (e.IsRealTime && e.Sucesso && e.Dados != null)
+                {
+                    if ((DateTime.Now - lastBalloonTime).TotalSeconds >= 2.0)
+                    {
+                        lastBalloonTime = DateTime.Now;
+                        string modStr = e.Dados.Modelo == "65" ? "NFC-e" : (e.Dados.Modelo == "55" ? "NF-e" : "Nota");
+                        string valorTxt = e.Dados.ValorTotal > 0 ? $" • R$ {e.Dados.ValorTotal:F2}" : "";
+                        trayIcon.ShowBalloonTip(
+                            2500,
+                            "Hub Paratech - XML Enviado",
+                            $"{modStr} nº {e.Dados.Numero} (Série {e.Dados.Serie}{valorTxt}) sincronizada com o Portal!",
+                            ToolTipIcon.Info
+                        );
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private void AnimTimer_Tick(object? sender, EventArgs e)
+        {
+            if (!isCurrentlySyncing)
+            {
+                animTimer.Stop();
+                trayIcon.Icon = baseIcon;
+                return;
+            }
+
+            currentAnimFrame++;
+            if (currentAnimFrame > 3) currentAnimFrame = 1;
+            trayIcon.Icon = syncFrames[currentAnimFrame];
         }
 
         private async Task SyncWithServer()
@@ -125,7 +289,6 @@ namespace HubParatechDesktop
                 var jsonReq = JsonSerializer.Serialize(new { token = config.HubToken });
                 var content = new StringContent(jsonReq, System.Text.Encoding.UTF8, "application/json");
                 
-                // Usando a URL real de produção da Vercel
                 var response = await http.PostAsync("https://hub-paratech-web.vercel.app/api/hub/sync", content);
                 
                 if (response.IsSuccessStatusCode)
@@ -135,22 +298,17 @@ namespace HubParatechDesktop
                     if (data != null)
                     {
                         isBlocked = data.bloqueado;
-                        
                         targetProcesses.Clear();
                         
-                        // Adiciona o executável antigo (se houver)
                         if (!string.IsNullOrWhiteSpace(data.executavel)) 
                         {
                             targetProcesses.Add(data.executavel.Replace(".exe", "", StringComparison.OrdinalIgnoreCase));
                         }
 
-                        // Adiciona a lista de executáveis novos (campo texto do configuracoes_hub configurado pelo usuário)
                         if (data.executaveis != null)
                         {
                             foreach (var exeInfo in data.executaveis)
                             {
-                                // O JSON salva as strings, que pode conter quebras de linha dependendo do textarea.
-                                // Na nossa base ele separa por quebra de linha. Se a string vier com \n, a gente dá split.
                                 var lines = exeInfo.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
                                 foreach (var line in lines)
                                 {
@@ -173,17 +331,14 @@ namespace HubParatechDesktop
                         }
                         lastSync = DateTime.Now;
                         
-                        // Configurar modo de processamento (hub ou portal)
                         string novoModo = !string.IsNullOrWhiteSpace(data.modo_processamento) ? data.modo_processamento : "hub";
                         currentModoProcessamento = novoModo;
 
-                        // Atualiza o modo nos monitores já em execução
                         foreach (var m in activeMonitors)
                         {
                             m.SetModoProcessamento(currentModoProcessamento);
                         }
 
-                        // Configurar monitores de XML
                         string novasVendasStr = data.pastas_vendas != null ? string.Join("|", data.pastas_vendas) : "";
                         string novasComprasStr = data.pastas_compras != null ? string.Join("|", data.pastas_compras) : "";
 
@@ -212,7 +367,6 @@ namespace HubParatechDesktop
                             currentComprasStr = novasComprasStr;
                         }
 
-                        // Se não estiver mais bloqueado e a tela estiver aberta, fecha ela
                         if (!isBlocked && activeBlocker != null && !activeBlocker.IsDisposed)
                         {
                             activeBlocker.Invoke((MethodInvoker)(() => {
@@ -226,7 +380,7 @@ namespace HubParatechDesktop
             }
             catch (Exception)
             {
-                // Se der erro de internet, mantém o último estado conhecido (isBlocked)
+                // Mantém o estado cacheado em caso de instabilidade de internet
             }
         }
 
@@ -248,20 +402,16 @@ namespace HubParatechDesktop
                 }
             }
 
-            // Exibe a tela de bloqueio se não estiver visível E tiver matado algum
-            // Ou se já quisermos exibir a tela direto:
-            // Por segurança, vamos exibir se matou ou se já tiver ativa (para bloquear uso)
             if (killedAny)
             {
                 if (activeBlocker == null || activeBlocker.IsDisposed)
                 {
                     activeBlocker = new BlockerForm(pixPayload, faturaValor, offlineSecret, faturaVencimento, clienteNome);
                     
-                    // Adiciona evento para saber quando a tela é fechada pelo Desbloqueio Offline
                     activeBlocker.FormClosed += (s, ev) => {
                         if (activeBlocker.IsOfflineUnlocked)
                         {
-                            isBlocked = false; // Desbloqueia temporariamente localmente
+                            isBlocked = false;
                             activeBlocker = null;
                         }
                     };

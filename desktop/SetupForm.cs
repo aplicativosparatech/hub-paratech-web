@@ -13,7 +13,7 @@ namespace HubParatechDesktop
 
         public SetupForm()
         {
-            Text = "Configuração do Hub Paratech v2.3.0";
+            Text = "Configuração do Hub Paratech v2.4.2";
             Size = new Size(460, 330);
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -121,7 +121,7 @@ namespace HubParatechDesktop
 
             var lblVersao = new Label
             {
-                Text = "v2.3.0",
+                Text = "v2.4.2",
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Regular),
                 ForeColor = Color.FromArgb(148, 163, 184),
                 Location = new Point(24, 20),
