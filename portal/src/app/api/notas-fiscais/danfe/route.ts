@@ -13,7 +13,7 @@ export async function GET(request: Request) {
       return new NextResponse('ID da nota não fornecido.', { status: 400 });
     }
 
-    if (!['nfce_saidas', 'nfe_saidas', 'nfe_entradas'].includes(tabela)) {
+    if (!['nfce_saidas', 'nfe_saidas', 'nfe_entradas', 'dfe_notas_destinadas'].includes(tabela)) {
       return new NextResponse('Tabela inválida.', { status: 400 });
     }
 
@@ -22,16 +22,12 @@ export async function GET(request: Request) {
     // 1. Busca a nota fiscal
     const { data: nota, error: errNota } = await supabaseAdmin
       .from(tabela)
-      .select('id, chave, numero, storage_path, cliente_id')
+      .select('id, chave, numero, storage_path, cliente_id, xml_completo')
       .eq('id', id)
       .single();
 
     if (errNota || !nota) {
       return new NextResponse('Nota fiscal não encontrada.', { status: 404 });
-    }
-
-    if (!nota.storage_path) {
-      return new NextResponse('Arquivo XML da nota fiscal não localizado no armazenamento.', { status: 404 });
     }
 
     // 2. Busca o cadastro do cliente para obter a logomarca oficial (logo_url)
@@ -48,17 +44,25 @@ export async function GET(request: Request) {
       }
     }
 
-    // 3. Baixa o XML original do Storage do Supabase
-    const { data: fileData, error: errStorage } = await supabaseAdmin.storage
-      .from('xmls')
-      .download(nota.storage_path);
+    // 3. Obtém o XML original da nota
+    let xmlString: string | null = (nota as any).xml_completo || null;
 
-    if (errStorage || !fileData) {
-      return new NextResponse('Arquivo XML não pôde ser baixado do Storage: ' + (errStorage?.message || ''), { status: 500 });
+    if (!xmlString) {
+      if (!nota.storage_path) {
+        return new NextResponse('Arquivo XML da nota fiscal não localizado no armazenamento.', { status: 404 });
+      }
+
+      const { data: fileData, error: errStorage } = await supabaseAdmin.storage
+        .from('xmls')
+        .download(nota.storage_path);
+
+      if (errStorage || !fileData) {
+        return new NextResponse('Arquivo XML não pôde ser baixado do Storage: ' + (errStorage?.message || ''), { status: 500 });
+      }
+
+      const arrayBuffer = await fileData.arrayBuffer();
+      xmlString = Buffer.from(arrayBuffer).toString('utf-8');
     }
-
-    const arrayBuffer = await fileData.arrayBuffer();
-    const xmlString = Buffer.from(arrayBuffer).toString('utf-8');
 
     // 4. Parse dos dados da DANFE
     const danfeData = await parseXmlParaDanfe(xmlString, logoUrl);

@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, Building2, Settings, FileText, 
   LogOut, BarChart3, Receipt, FileDown, PlugZap, UserCircle,
   Menu, X, Sliders, ShieldCheck, Sparkles, Database,
-  Maximize2, Minimize2, Sun, Moon, Palette, ScanText, GraduationCap
+  Maximize2, Minimize2, Sun, Moon, Palette, ScanText, GraduationCap, Inbox
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
@@ -164,6 +164,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { prefixo: '/dashboard/faturas', modulo: 'faturas', nome: 'Faturas' },
       { prefixo: '/dashboard/notas-fiscais/saidas/correcao', modulo: 'notas_fiscais_correcao', nome: 'Correção de Notas Fiscais' },
       { prefixo: '/dashboard/notas-fiscais', modulo: 'notas_fiscais', nome: 'Notas Fiscais' },
+      { prefixo: '/dashboard/distribuicao-dfe', modulo: 'distribuicao_dfe', nome: 'Distribuição de DF-e' },
       { prefixo: '/dashboard/configuracoes-portal', modulo: 'configuracoes_portal', nome: 'Configurações do Portal' },
       { prefixo: '/dashboard/configuracoes', modulo: 'configuracoes_hub', nome: 'Configurações Hub' },
       { prefixo: '/dashboard/integracoes', modulo: 'integracoes', nome: 'Integrações (APIs)' },
@@ -285,6 +286,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <NavItem href="/dashboard/clientes" icon={Users} label="Clientes" />
             <NavItem href="/dashboard/faturas" icon={Receipt} label="Faturas" />
             <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Notas Fiscais" />
+            <NavItem href="/dashboard/distribuicao-dfe" icon={Inbox} label="Distribuição de DF-e" />
             
             <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 px-4 mt-6">Sistema</div>
             <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
@@ -306,6 +308,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 px-4 mt-6">Meu Espaço</div>
             {canAccess('faturas') && <NavItem href="/dashboard/minhas-faturas" icon={Receipt} label="Minhas Faturas" />}
             {canAccess('notas_fiscais') && <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Minhas Notas Fiscais" />}
+            {canAccess('distribuicao_dfe') && <NavItem href="/dashboard/distribuicao-dfe" icon={Inbox} label="Distribuição de DF-e" />}
             {(canAccess('relatorios') || canAccess('relatorios_resumo') || canAccess('relatorios_monofasicos') || canAccess('relatorios_auditoria')) && (
               <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
             )}
@@ -327,6 +330,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 px-4 mt-6">Escritório</div>
             {canAccess('contabilidade_meus_clientes') && <NavItem href="/dashboard/meus-clientes" icon={Users} label="Meus Clientes" />}
             {canAccess('notas_fiscais') && <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Notas Fiscais (XMLs)" />}
+            {canAccess('distribuicao_dfe') && <NavItem href="/dashboard/distribuicao-dfe" icon={Inbox} label="Distribuição de DF-e" />}
             {(canAccess('relatorios') || canAccess('relatorios_resumo') || canAccess('relatorios_monofasicos') || canAccess('relatorios_auditoria')) && (
               <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
             )}
