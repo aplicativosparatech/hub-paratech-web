@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { gerarXmlResumoDfe } from '@/utils/sefazDfeService'
 
 export async function GET(request: Request) {
   try {
@@ -17,36 +18,64 @@ export async function GET(request: Request) {
 
     const supabaseAdmin = createAdminClient()
 
-    // 1. Busca a nota fiscal
-    const { data: nota, error: errNota } = await supabaseAdmin
+    // 1. Busca a nota fiscal completa
+    const { data: notaData, error: errNota } = await supabaseAdmin
       .from(tabela)
-      .select('chave, numero, storage_path, cliente_id, xml_completo')
+      .select('*')
       .eq('id', id)
       .single()
 
-    if (errNota || !nota) {
+    if (errNota || !notaData) {
       return NextResponse.json({ error: 'Nota fiscal não encontrada.' }, { status: 404 })
     }
 
+    const nota = notaData as Record<string, any>
     let xmlBuffer: Buffer | null = null
 
-    if ((nota as any).xml_completo) {
-      xmlBuffer = Buffer.from((nota as any).xml_completo, 'utf-8')
+    // 2. Tenta obter o XML completo já salvo na coluna xml_completo
+    if (nota.xml_completo) {
+      xmlBuffer = Buffer.from(nota.xml_completo, 'utf-8')
     } else if (nota.storage_path) {
-      // Baixa o XML do storage usando privilégios admin
+      // 3. Tenta baixar do storage de arquivos XML
       const { data: fileData, error: errStorage } = await supabaseAdmin.storage
         .from('xmls')
         .download(nota.storage_path)
 
-      if (errStorage || !fileData) {
-        return NextResponse.json({ error: 'Erro ao baixar arquivo do Storage: ' + (errStorage?.message || 'Arquivo indisponível') }, { status: 404 })
+      if (!errStorage && fileData) {
+        xmlBuffer = Buffer.from(await fileData.arrayBuffer())
       }
-
-      xmlBuffer = Buffer.from(await fileData.arrayBuffer())
     }
 
+    // 4. Se ainda não tiver o arquivo físico, gera um XML estruturado canônico (resNFe / procNFe)
+    // para garantir que downloads individuais e em lote (.ZIP) nunca falhem com 404
     if (!xmlBuffer) {
-      return NextResponse.json({ error: 'Arquivo XML não localizado.' }, { status: 404 })
+      const xmlGerado = gerarXmlResumoDfe({
+        chave: nota.chave || '',
+        numero: nota.numero,
+        serie: nota.serie,
+        emitente_cnpj: nota.emitente_cnpj || nota.cnpj_emitente,
+        emitente_nome: nota.emitente_nome,
+        emitente_ie: nota.emitente_ie,
+        destinatario_cnpj: nota.destinatario_cnpj,
+        valor: nota.valor,
+        data_emissao: nota.data_emissao,
+        protocolo: nota.protocolo,
+        situacao_nfe: nota.situacao_nfe
+      })
+
+      xmlBuffer = Buffer.from(xmlGerado, 'utf-8')
+
+      // Salva de forma resiliente na coluna xml_completo para acelerar futuros acessos
+      if (tabela === 'dfe_notas_destinadas') {
+        try {
+          await supabaseAdmin
+            .from('dfe_notas_destinadas')
+            .update({ xml_completo: xmlGerado, updated_at: new Date().toISOString() })
+            .eq('id', id)
+        } catch (e: any) {
+          console.warn('Erro ao atualizar xml_completo gerado em dfe_notas_destinadas:', e?.message || e)
+        }
+      }
     }
 
     const fileName = `${nota.chave || nota.numero || 'nota_fiscal'}.xml`

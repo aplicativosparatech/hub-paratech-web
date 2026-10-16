@@ -80,6 +80,7 @@ export default function DistribuicaoDfePage() {
   const [chaveCopiada, setChaveCopiada] = useState<string | null>(null)
   const [avisoSefaz, setAvisoSefaz] = useState<string | null>(null)
   const [competenciasDisponiveis, setCompetenciasDisponiveis] = useState<string[]>([])
+  const [manifestando, setManifestando] = useState(false)
 
   // Resumo da Consulta
   const [resumo, setResumo] = useState({
@@ -354,9 +355,56 @@ export default function DistribuicaoDfePage() {
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
 
-      toast.success(`Pacote ZIP gerado com sucesso (${baixadas} notas)!`, { id: toastId })
+      toast.success(`Pacote ZIP gerado com sucesso (${baixadas} notas de compras)!`, { id: toastId })
     } catch (err: any) {
       toast.error('Erro ao gerar pacote ZIP: ' + (err.message || ''), { id: toastId })
+    }
+  }
+
+  // Ação: Manifestação do Destinatário (Ciência da Emissão)
+  const handleManifestarCiencia = async (chavesParaManifestar: string[]) => {
+    if (!selectedClienteId) {
+      toast.error('Selecione uma empresa.')
+      return
+    }
+    if (!clienteAtual?.certificado_url) {
+      toast.error('A empresa selecionada não possui Certificado Digital A1 cadastrado para assinar a manifestação na SEFAZ.')
+      return
+    }
+    if (chavesParaManifestar.length === 0) {
+      toast.error('Nenhuma nota fiscal selecionada para manifestar.')
+      return
+    }
+
+    setManifestando(true)
+    const toastId = toast.loading(`Registrando Ciência da Emissão para ${chavesParaManifestar.length} nota(s) na SEFAZ...`)
+    try {
+      const res = await fetch('/api/sefaz/distribuicao-dfe/manifestar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cliente_id: selectedClienteId,
+          chaves: chavesParaManifestar,
+          tipo_evento: '210210' // Ciência da Emissão
+        })
+      })
+
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Falha ao registrar manifestação na SEFAZ.')
+      }
+
+      toast.success(
+        `Ciência registrada na SEFAZ com sucesso! ${data.totalManifestadas} nota(s) atualizadas e ${data.totalComXmlLiberado} XML(s) liberados.`,
+        { id: toastId }
+      )
+
+      // Atualiza a listagem local para refletir o status
+      await handleAnalisar(competencia, false)
+    } catch (err: any) {
+      toast.error('Erro ao manifestar: ' + (err.message || ''), { id: toastId })
+    } finally {
+      setManifestando(false)
     }
   }
 
@@ -737,6 +785,17 @@ export default function DistribuicaoDfePage() {
                   <>
                     <button
                       type="button"
+                      onClick={() => handleManifestarCiencia(selectedChaves)}
+                      disabled={manifestando || !clienteAtual?.certificado_url}
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-xs disabled:opacity-50"
+                      title="Registrar Ciência da Emissão na SEFAZ e obter XML completo com itens"
+                    >
+                      <Zap size={13} className={manifestando ? 'animate-spin' : ''} />
+                      Dar Ciência nos Selecionados ({selectedChaves.length})
+                    </button>
+
+                    <button
+                      type="button"
                       onClick={handleDownloadZipLote}
                       className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition shadow-xs"
                     >
@@ -1021,24 +1080,47 @@ export default function DistribuicaoDfePage() {
 
                           {/* Manifestação */}
                           <td className="p-3.5 text-center">
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-600">
-                              {n.manifestacao_status === 'CONFIRMADA'
-                                ? 'Confirmada'
-                                : n.manifestacao_status === 'CIENCIA'
-                                  ? 'Ciência da Emissão'
-                                  : 'Sem Manifestação'}
-                            </span>
+                            {n.manifestacao_status === 'CONFIRMADA' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                <CheckCircle2 size={11} className="text-emerald-600" />
+                                Confirmada
+                              </span>
+                            ) : n.manifestacao_status === 'CIENCIA' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">
+                                <ShieldCheck size={11} className="text-blue-600" />
+                                Ciência Registrada
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200/60">
+                                <AlertTriangle size={10} className="text-amber-600" />
+                                Sem Manifestação
+                              </span>
+                            )}
                           </td>
 
                           {/* Ações Rápidas por Linha */}
                           <td className="p-3.5 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-1.5">
+                              {/* Dar Ciência na SEFAZ (se ainda sem manifestação) */}
+                              {n.manifestacao_status === 'SEM_MANIFESTACAO' && clienteAtual?.certificado_url && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleManifestarCiencia([n.chave])}
+                                  disabled={manifestando}
+                                  className="flex items-center gap-1 px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold transition border border-emerald-200/80 disabled:opacity-50"
+                                  title="Registrar Ciência da Emissão na SEFAZ para liberar o XML com produtos detalhados"
+                                >
+                                  <Zap size={12} className={manifestando ? 'animate-spin' : ''} />
+                                  <span>Ciência</span>
+                                </button>
+                              )}
+
                               {/* Baixar XML */}
                               <button
                                 type="button"
                                 onClick={() => handleBaixarXmlIndividual(n)}
                                 className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold transition"
-                                title="Baixar arquivo XML original"
+                                title="Baixar arquivo XML"
                               >
                                 <Download size={12} />
                                 <span>XML</span>

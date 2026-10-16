@@ -330,7 +330,13 @@ export function renderDanfeNfeHtml(data: DanfeData): string {
         </tr>
       </thead>
       <tbody>
-        ${data.itens.map(item => `
+        ${data.itens.length === 0 ? `
+          <tr>
+            <td colspan="11" style="text-align: center; padding: 12px; color: #475569; font-style: italic; background: #f8fafc;">
+              Documento Fiscal em Distribuição DF-e (Resumo Oficial da SEFAZ). O detalhamento item a item dos produtos será carregado após a confirmação da Manifestação do Destinatário (Ciência da Emissão).
+            </td>
+          </tr>
+        ` : data.itens.map(item => `
           <tr>
             <td style="font-family: monospace;">${item.codigo || '-'}</td>
             <td><strong>${item.descricao}</strong></td>

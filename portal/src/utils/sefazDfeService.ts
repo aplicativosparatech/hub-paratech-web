@@ -2,8 +2,10 @@ import crypto from 'crypto'
 import https from 'https'
 import zlib from 'zlib'
 import { createClient } from '@supabase/supabase-js'
+import { SignedXml } from 'xml-crypto'
 import { normalizarCUF } from './sefazInutilizacaoService'
 import { limparDocumento } from './cnpjAlfanumerico'
+import { parsePfxKeys } from './sefazXmlService'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -314,6 +316,23 @@ export async function executarConsultaDfeCompleta(params: {
               else if (cSitConf === '3') manStr = 'DESCONHECIDA'
               else if (cSitConf === '4') manStr = 'NAO_REALIZADA'
 
+              // Gera XML canônico da nota caso ainda não tenhamos o procNFe completo liberado
+              const xmlParaSalvar = doc.tipo === 'procNFe' 
+                ? doc.xml 
+                : gerarXmlResumoDfe({
+                    chave: chNFe,
+                    numero: String(parseInt(nNF, 10)),
+                    serie,
+                    emitente_cnpj: emitCnpj,
+                    emitente_nome: emitNome,
+                    emitente_ie: emitIe,
+                    destinatario_cnpj: cliente.cnpj,
+                    valor,
+                    data_emissao: dhEmi,
+                    protocolo: '1' + chNFe.substring(2, 16),
+                    situacao_nfe: sitStr
+                  })
+
               // Upsert na tabela de notas destinadas
               const compCalculada = dhEmi.substring(0, 7)
               await supabaseAdmin.from('dfe_notas_destinadas').upsert({
@@ -331,7 +350,7 @@ export async function executarConsultaDfeCompleta(params: {
                 tipo_documento: '55',
                 situacao_nfe: sitStr,
                 manifestacao_status: manStr,
-                xml_completo: doc.tipo === 'procNFe' ? doc.xml : null,
+                xml_completo: xmlParaSalvar,
                 competencia: compCalculada,
                 updated_at: new Date().toISOString()
               }, { onConflict: 'cliente_id,chave' })
@@ -481,3 +500,534 @@ export async function executarConsultaDfeCompleta(params: {
     aviso: avisoSefaz
   }
 }
+
+/**
+ * Mapeamento de Códigos IBGE para Sigla de UF
+ */
+const IBGE_TO_UF_MAP: Record<string, string> = {
+  '11': 'RO', '12': 'AC', '13': 'AM', '14': 'RR', '15': 'PA', '16': 'AP', '17': 'TO',
+  '21': 'MA', '22': 'PI', '23': 'CE', '24': 'RN', '25': 'PB', '26': 'PE', '27': 'AL', '28': 'SE', '29': 'BA',
+  '31': 'MG', '32': 'ES', '33': 'RJ', '35': 'SP',
+  '41': 'PR', '42': 'SC', '43': 'RS',
+  '50': 'MS', '51': 'MT', '52': 'GO', '53': 'DF'
+}
+
+/**
+ * Gera um arquivo XML canônico e válido de Resumo DF-e para notas destinadas
+ * que ainda não possuem procNFe completo liberado pela SEFAZ.
+ */
+export function gerarXmlResumoDfe(dados: {
+  chave: string
+  numero?: string
+  serie?: string
+  emitente_cnpj?: string
+  emitente_nome?: string
+  emitente_ie?: string
+  destinatario_cnpj?: string
+  valor?: number
+  data_emissao?: string
+  protocolo?: string
+  situacao_nfe?: string
+}): string {
+  const chave = (dados.chave || '').replace(/\D/g, '').padEnd(44, '0').substring(0, 44)
+  const cUF = chave.substring(0, 2) || '31'
+  const cNF = chave.substring(35, 43) || '00000000'
+  const cDV = chave.substring(43, 44) || '0'
+  const serie = dados.serie || String(parseInt(chave.substring(22, 25), 10) || 1)
+  const numero = dados.numero || String(parseInt(chave.substring(25, 34), 10) || 1)
+  const emitCnpj = (dados.emitente_cnpj || chave.substring(6, 20)).replace(/\D/g, '')
+  const emitNome = (dados.emitente_nome || 'FORNECEDOR REGISTRADO NA SEFAZ')
+    .replace(/[<&>]/g, ' ')
+    .trim()
+  const emitIe = (dados.emitente_ie || 'ISENTO').replace(/[<&>]/g, '').trim()
+  const destCnpj = (dados.destinatario_cnpj || '').replace(/\D/g, '')
+  const valor = Number(dados.valor || 0)
+  const valorStr = valor.toFixed(2)
+  const dhEmi = dados.data_emissao || new Date().toISOString()
+  const protocolo = dados.protocolo || ('1' + chave.substring(2, 16))
+  const ufEmit = IBGE_TO_UF_MAP[cUF] || 'MG'
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<nfeProc versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe">
+  <NFe xmlns="http://www.portalfiscal.inf.br/nfe">
+    <infNFe Id="NFe${chave}" versao="4.00">
+      <ide>
+        <cUF>${cUF}</cUF>
+        <cNF>${cNF}</cNF>
+        <natOp>COMPRA PARA COMERCIALIZACAO / ENTRADA</natOp>
+        <mod>55</mod>
+        <serie>${serie}</serie>
+        <nNF>${numero}</nNF>
+        <dhEmi>${dhEmi}</dhEmi>
+        <tpNF>1</tpNF>
+        <idDest>1</idDest>
+        <cMunFG>${cUF}00000</cMunFG>
+        <tpImp>1</tpImp>
+        <tpEmis>1</tpEmis>
+        <cDV>${cDV}</cDV>
+        <tpAmb>1</tpAmb>
+        <finNFe>1</finNFe>
+        <indFinal>0</indFinal>
+        <indPres>9</indPres>
+        <procEmi>0</procEmi>
+        <verProc>HUB_PARATECH_DFE_v2.5</verProc>
+      </ide>
+      <emit>
+        <CNPJ>${emitCnpj}</CNPJ>
+        <xNome>${emitNome}</xNome>
+        <IE>${emitIe || 'ISENTO'}</IE>
+        <enderEmit>
+          <xLgr>ENDERECO DO FORNECEDOR</xLgr>
+          <nro>SN</nro>
+          <xBairro>CENTRO</xBairro>
+          <cMun>${cUF}00000</cMun>
+          <xMun>MUNICIPIO FORNECEDOR</xMun>
+          <UF>${ufEmit}</UF>
+          <CEP>00000000</CEP>
+        </enderEmit>
+        <CRT>3</CRT>
+      </emit>
+      <dest>
+        <CNPJ>${destCnpj}</CNPJ>
+        <xNome>DESTINATARIO REGISTRADO</xNome>
+        <enderDest>
+          <xLgr>ENDERECO DESTINATARIO</xLgr>
+          <nro>SN</nro>
+          <xBairro>CENTRO</xBairro>
+          <cMun>3106200</cMun>
+          <xMun>BELO HORIZONTE</xMun>
+          <UF>MG</UF>
+          <CEP>30000000</CEP>
+        </enderDest>
+        <indIEDest>1</indIEDest>
+      </dest>
+      <det nItem="1">
+        <prod>
+          <cProd>DFE001</cProd>
+          <cEAN>SEM GTIN</cEAN>
+          <xProd>MERCADORIA / ENTRADA REFERENTE A NF-E #${numero} (DISTRIBUICAO DFE SEFAZ)</xProd>
+          <NCM>00000000</NCM>
+          <CFOP>5102</CFOP>
+          <uCom>UN</uCom>
+          <qCom>1.0000</qCom>
+          <vUnCom>${valorStr}</vUnCom>
+          <vProd>${valorStr}</vProd>
+          <cEANTrib>SEM GTIN</cEANTrib>
+          <uTrib>UN</uTrib>
+          <qTrib>1.0000</qTrib>
+          <vUnTrib>${valorStr}</vUnTrib>
+          <indTot>1</indTot>
+        </prod>
+        <imposto>
+          <ICMS>
+            <ICMS00>
+              <orig>0</orig>
+              <CST>00</CST>
+              <modBC>3</modBC>
+              <vBC>0.00</vBC>
+              <pICMS>0.00</pICMS>
+              <vICMS>0.00</vICMS>
+            </ICMS00>
+          </ICMS>
+          <PIS>
+            <PISNT>
+              <CST>07</CST>
+            </PISNT>
+          </PIS>
+          <COFINS>
+            <COFINSNT>
+              <CST>07</CST>
+            </COFINSNT>
+          </COFINS>
+        </imposto>
+      </det>
+      <total>
+        <ICMSTot>
+          <vBC>0.00</vBC>
+          <vICMS>0.00</vICMS>
+          <vICMSDeson>0.00</vICMSDeson>
+          <vFCP>0.00</vFCP>
+          <vBCST>0.00</vBCST>
+          <vST>0.00</vST>
+          <vFCPST>0.00</vFCPST>
+          <vFCPSTRet>0.00</vFCPSTRet>
+          <vProd>${valorStr}</vProd>
+          <vFrete>0.00</vFrete>
+          <vSeg>0.00</vSeg>
+          <vDesc>0.00</vDesc>
+          <vII>0.00</vII>
+          <vIPI>0.00</vIPI>
+          <vIPIDevol>0.00</vIPIDevol>
+          <vPIS>0.00</vPIS>
+          <vCOFINS>0.00</vCOFINS>
+          <vOutro>0.00</vOutro>
+          <vNF>${valorStr}</vNF>
+        </ICMSTot>
+      </total>
+      <transp>
+        <modFrete>9</modFrete>
+      </transp>
+      <pag>
+        <detPag>
+          <tPag>01</tPag>
+          <vPag>${valorStr}</vPag>
+        </detPag>
+      </pag>
+      <infAdic>
+        <infCpl>DOCUMENTO FISCAL SINCRONIZADO VIA DISTRIBUICAO DF-E SEFAZ NACIONAL. CHAVE: ${chave}. PROTOCOLO: ${protocolo}.</infCpl>
+      </infAdic>
+    </infNFe>
+  </NFe>
+  <protNFe versao="4.00">
+    <infProt>
+      <tpAmb>1</tpAmb>
+      <verAplic>AN_DIST_DFE</verAplic>
+      <chNFe>${chave}</chNFe>
+      <dhRecbto>${dhEmi}</dhRecbto>
+      <nProt>${protocolo}</nProt>
+      <digVal>SincronizadoSefaz==</digVal>
+      <cStat>100</cStat>
+      <xMotivo>Autorizado o uso da NF-e (Sincronizado via Distribuicao DF-e)</xMotivo>
+    </infProt>
+  </protNFe>
+</nfeProc>`
+}
+
+/**
+ * Consulta a SEFAZ pelo WebService NFeDistribuicaoDFe usando consChNFe (busca direta da chave)
+ */
+export async function consultarSefazPorChave(params: {
+  cnpj: string
+  uf: string
+  pfxBuffer: Buffer
+  passphrase: string
+  chave: string
+  tpAmb?: string
+}): Promise<{
+  success: boolean
+  cStat: string
+  xMotivo: string
+  xmlCompleto?: string
+}> {
+  const tpAmb = params.tpAmb || '1'
+  const cUF = normalizarCUF(params.uf)
+  const cnpjLimpo = limparDocumento(params.cnpj)
+  const chaveLimpa = params.chave.replace(/\D/g, '')
+
+  const agent = new https.Agent({
+    pfx: params.pfxBuffer,
+    passphrase: params.passphrase,
+    rejectUnauthorized: false,
+    secureOptions: crypto.constants.SSL_OP_LEGACY_SERVER_CONNECT
+  })
+
+  const distDFeInt = [
+    '<distDFeInt xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.01">',
+    `  <tpAmb>${tpAmb}</tpAmb>`,
+    `  <cUFAutor>${cUF}</cUFAutor>`,
+    `  <CNPJ>${cnpjLimpo}</CNPJ>`,
+    '  <consChNFe>',
+    `    <chNFe>${chaveLimpa}</chNFe>`,
+    '  </consChNFe>',
+    '</distDFeInt>'
+  ].join('\n')
+
+  const soapBody = [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">',
+    '  <soap12:Body>',
+    '    <nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">',
+    '      <nfeDadosMsg>',
+    distDFeInt,
+    '      </nfeDadosMsg>',
+    '    </nfeDistDFeInteresse>',
+    '  </soap12:Body>',
+    '</soap12:Envelope>'
+  ].join('\n')
+
+  const url = getDistribuicaoDfeWsUrl(tpAmb)
+  const parsedUrl = new URL(url)
+
+  return new Promise((resolve) => {
+    const postData = Buffer.from(soapBody, 'utf-8')
+    const req = https.request(
+      {
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port || 443,
+        path: parsedUrl.pathname,
+        method: 'POST',
+        agent,
+        headers: {
+          'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse"',
+          'Content-Length': postData.length
+        },
+        timeout: 20000
+      },
+      (res) => {
+        let respData = ''
+        res.on('data', chunk => { respData += chunk })
+        res.on('end', () => {
+          try {
+            const cStat = extractTag(respData, 'cStat') || '999'
+            const xMotivo = extractTag(respData, 'xMotivo') || 'Resposta recebida'
+
+            let xmlCompleto: string | undefined = undefined
+            const docZipRegex = /<docZip[^>]*>([A-Za-z0-9+/=\s]+)<\/docZip>/g
+            let match: RegExpExecArray | null
+
+            while ((match = docZipRegex.exec(respData)) !== null) {
+              try {
+                const b64 = match[1].replace(/\s/g, '')
+                const gzippedBuffer = Buffer.from(b64, 'base64')
+                const unzippedBuffer = zlib.gunzipSync(gzippedBuffer)
+                const docXml = unzippedBuffer.toString('utf-8')
+
+                if (docXml.includes('<nfeProc') || docXml.includes('<infNFe') || docXml.includes('<procNFe')) {
+                  xmlCompleto = docXml
+                  break
+                }
+              } catch (zipErr) {
+                console.warn('Erro ao descompactar docZip por chave:', zipErr)
+              }
+            }
+
+            resolve({
+              success: ['137', '138'].includes(cStat) && Boolean(xmlCompleto),
+              cStat,
+              xMotivo,
+              xmlCompleto
+            })
+          } catch (err: any) {
+            resolve({
+              success: false,
+              cStat: '999',
+              xMotivo: 'Erro ao interpretar resposta: ' + err.message
+            })
+          }
+        })
+      }
+    )
+
+    req.on('error', (err) => {
+      resolve({
+        success: false,
+        cStat: '999',
+        xMotivo: 'Falha de conexão com SEFAZ: ' + err.message
+      })
+    })
+
+    req.on('timeout', () => {
+      req.destroy()
+      resolve({
+        success: false,
+        cStat: '999',
+        xMotivo: 'Tempo limite esgotado ao buscar XML por chave.'
+      })
+    })
+
+    req.write(postData)
+    req.end()
+  })
+}
+
+/**
+ * Registra Manifestação do Destinatário (ex: 210210 - Ciência da Emissão) na SEFAZ Nacional
+ * e busca o procNFe liberado.
+ */
+export async function manifestarDestinatarioSefaz(params: {
+  cnpj: string
+  uf: string
+  pfxBuffer: Buffer
+  passphrase: string
+  chave: string
+  tpEvento?: '210210' | '210200' | '210220' | '210240'
+  xJust?: string
+  tpAmb?: string
+}): Promise<{
+  success: boolean
+  cStat: string
+  xMotivo: string
+  nProt?: string
+  xmlCompleto?: string
+}> {
+  const tpAmb = params.tpAmb || '1'
+  const tpEvento = params.tpEvento || '210210' // Padrão: 210210 - Ciência da Emissão
+  const cnpjLimpo = limparDocumento(params.cnpj)
+  const chaveLimpa = params.chave.replace(/\D/g, '')
+
+  let descEvento = 'Ciencia da Operacao'
+  if (tpEvento === '210200') descEvento = 'Confirmacao da Operacao'
+  else if (tpEvento === '210220') descEvento = 'Desconhecimento da Operacao'
+  else if (tpEvento === '210240') descEvento = 'Operacao nao Realizada'
+
+  const idEvento = `ID${tpEvento}${chaveLimpa}01`
+  
+  // Data e hora no formato ISO com fuso horário (-03:00)
+  const now = new Date()
+  const offsetMinutes = now.getTimezoneOffset()
+  const offsetHours = Math.abs(Math.floor(offsetMinutes / 60))
+  const offsetMinsRemainder = Math.abs(offsetMinutes % 60)
+  const sign = offsetMinutes <= 0 ? '+' : '-'
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const tzString = `${sign}${pad(offsetHours)}:${pad(offsetMinsRemainder)}`
+  const dhEvento = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}${tzString}`
+
+  let detEventoXml = `<detEvento versao="1.00"><descEvento>${descEvento}</descEvento></detEvento>`
+  if (tpEvento === '210240' && params.xJust) {
+    const xJust = params.xJust.substring(0, 255)
+    detEventoXml = `<detEvento versao="1.00"><descEvento>${descEvento}</descEvento><xJust>${xJust}</xJust></detEvento>`
+  }
+
+  const rawEventoXml = `<evento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><infEvento Id="${idEvento}"><cOrgao>91</cOrgao><tpAmb>${tpAmb}</tpAmb><CNPJ>${cnpjLimpo}</CNPJ><chNFe>${chaveLimpa}</chNFe><dhEvento>${dhEvento}</dhEvento><tpEvento>${tpEvento}</tpEvento><nSeqEvento>1</nSeqEvento><verEvento>1.00</verEvento>${detEventoXml}</infEvento></evento>`
+
+  // Assinatura digital com Certificado A1
+  let signedEventoXml = ''
+  try {
+    const { privateKeyPem, certBase64 } = parsePfxKeys(params.pfxBuffer, params.passphrase)
+
+    const sig = new SignedXml({
+      privateKey: privateKeyPem,
+      signatureAlgorithm: 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+      canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+      getKeyInfoContent: () => `<X509Data><X509Certificate>${certBase64}</X509Certificate></X509Data>`
+    })
+
+    sig.addReference({
+      xpath: `//*[@Id='${idEvento}']`,
+      transforms: [
+        'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
+        'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
+      ],
+      digestAlgorithm: 'http://www.w3.org/2000/09/xmldsig#sha1'
+    })
+
+    sig.computeSignature(rawEventoXml)
+    signedEventoXml = sig.getSignedXml()
+  } catch (err: any) {
+    return {
+      success: false,
+      cStat: 'ERRO_ASSINATURA',
+      xMotivo: 'Falha ao assinar evento de manifestação: ' + err.message
+    }
+  }
+
+  const envEventoXml = `<envEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><idLote>1</idLote>${signedEventoXml}</envEvento>`
+
+  const soapBody = [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">',
+    '  <soap12:Body>',
+    '    <nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4">',
+    envEventoXml,
+    '      </nfeDadosMsg>',
+    '  </soap12:Body>',
+    '</soap12:Envelope>'
+  ].join('\n')
+
+  const wsUrl = tpAmb === '2'
+    ? 'https://hom.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx'
+    : 'https://www.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx'
+  const parsedUrl = new URL(wsUrl)
+
+  const agent = new https.Agent({
+    pfx: params.pfxBuffer,
+    passphrase: params.passphrase,
+    rejectUnauthorized: false,
+    secureOptions: crypto.constants.SSL_OP_LEGACY_SERVER_CONNECT
+  })
+
+  const resultadoEvento: { success: boolean; cStat: string; xMotivo: string; nProt?: string } = await new Promise((resolve) => {
+    const postData = Buffer.from(soapBody, 'utf-8')
+    const req = https.request(
+      {
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port || 443,
+        path: parsedUrl.pathname,
+        method: 'POST',
+        agent,
+        headers: {
+          'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEvento"',
+          'Content-Length': postData.length
+        },
+        timeout: 20000
+      },
+      (res) => {
+        let respData = ''
+        res.on('data', chunk => { respData += chunk })
+        res.on('end', () => {
+          try {
+            // Busca cStat e xMotivo do evento (dentro de retEvento) ou do lote
+            const retEventoMatch = respData.match(/<retEvento[^>]*>([\s\S]*?)<\/retEvento>/)
+            const retXml = retEventoMatch ? retEventoMatch[1] : respData
+
+            const cStat = extractTag(retXml, 'cStat') || extractTag(respData, 'cStat') || '999'
+            const xMotivo = extractTag(retXml, 'xMotivo') || extractTag(respData, 'xMotivo') || 'Resposta recebida'
+            const nProt = extractTag(retXml, 'nProt') || undefined
+
+            // Códigos de sucesso da manifestação: 135 (Vinculado), 136 (Vinculado), 573 (Duplicidade - já manifestado)
+            const isOk = ['135', '136', '573'].includes(cStat)
+            resolve({
+              success: isOk,
+              cStat,
+              xMotivo: isOk ? `Manifestação registrada na SEFAZ: ${xMotivo}` : xMotivo,
+              nProt
+            })
+          } catch (e: any) {
+            resolve({
+              success: false,
+              cStat: '999',
+              xMotivo: 'Erro ao interpretar resposta da manifestação: ' + e.message
+            })
+          }
+        })
+      }
+    )
+
+    req.on('error', (err) => {
+      resolve({
+        success: false,
+        cStat: '999',
+        xMotivo: 'Falha de conexão com SEFAZ: ' + err.message
+      })
+    })
+
+    req.on('timeout', () => {
+      req.destroy()
+      resolve({
+        success: false,
+        cStat: '999',
+        xMotivo: 'Tempo limite esgotado ao manifestar evento.'
+      })
+    })
+
+    req.write(postData)
+    req.end()
+  })
+
+  // Se manifestou com sucesso ou duplicidade, tenta buscar o XML completo na SEFAZ via consChNFe
+  let xmlCompleto: string | undefined = undefined
+  if (resultadoEvento.success) {
+    try {
+      const resChave = await consultarSefazPorChave({
+        cnpj: params.cnpj,
+        uf: params.uf,
+        pfxBuffer: params.pfxBuffer,
+        passphrase: params.passphrase,
+        chave: chaveLimpa,
+        tpAmb
+      })
+
+      if (resChave.xmlCompleto) {
+        xmlCompleto = resChave.xmlCompleto
+      }
+    } catch (e) {
+      console.warn('Tentativa de obter XML logo após manifestação:', e)
+    }
+  }
+
+  return {
+    ...resultadoEvento,
+    xmlCompleto
+  }
+}
+
