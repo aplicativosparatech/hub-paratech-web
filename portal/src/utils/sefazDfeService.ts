@@ -3,6 +3,7 @@ import https from 'https'
 import zlib from 'zlib'
 import { createClient } from '@supabase/supabase-js'
 import { SignedXml } from 'xml-crypto'
+import forge from 'node-forge'
 import { normalizarCUF } from './sefazInutilizacaoService'
 import { limparDocumento } from './cnpjAlfanumerico'
 import { parsePfxKeys } from './sefazXmlService'
@@ -10,6 +11,67 @@ import { parsePfxKeys } from './sefazXmlService'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 const supabaseAdmin = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseKey)
+
+/**
+ * Converte PFX em chaves PEM compatíveis com Node TLS sem restrições de OpenSSL 3
+ */
+export function parsePfxToTlsOptions(pfxBuffer: Buffer, passphrase: string): { key: string; cert: string; ca?: string[] } {
+  const p12Der = forge.util.createBuffer(pfxBuffer.toString('binary'))
+  const p12Asn1 = forge.asn1.fromDer(p12Der)
+  const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, passphrase)
+
+  const certBags = p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag] || []
+  let cert: any = null
+  const caCerts: string[] = []
+  for (const b of certBags) {
+    if (b.cert) {
+      const bc = b.cert.getExtension('basicConstraints') as any
+      if (!bc || !bc.cA) {
+        if (!cert) cert = b.cert
+      } else {
+        caCerts.push(forge.pki.certificateToPem(b.cert))
+      }
+    }
+  }
+  if (!cert && certBags[0]) cert = certBags[0].cert
+  if (!cert) throw new Error('Certificado X509 não encontrado no .pfx')
+
+  const keyBags = p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag })[forge.pki.oids.pkcs8ShroudedKeyBag] ||
+                  p12.getBags({ bagType: forge.pki.oids.keyBag })[forge.pki.oids.keyBag] || []
+  const keyObj = keyBags[0]?.key
+  if (!keyObj) throw new Error('Chave privada não encontrada no .pfx')
+
+  const privateKeyPem = forge.pki.privateKeyToPem(keyObj)
+  const certPem = forge.pki.certificateToPem(cert)
+
+  return {
+    key: privateKeyPem,
+    cert: certPem,
+    ca: caCerts.length > 0 ? caCerts : undefined
+  }
+}
+
+/**
+ * Cria Agent HTTPS resiliente para conexão com WebServices da SEFAZ
+ */
+export function createSefazHttpsAgent(pfxBuffer: Buffer, passphrase: string): https.Agent {
+  try {
+    const tlsOpts = parsePfxToTlsOptions(pfxBuffer, passphrase)
+    return new https.Agent({
+      key: tlsOpts.key,
+      cert: tlsOpts.cert,
+      ca: tlsOpts.ca,
+      rejectUnauthorized: false
+    })
+  } catch (e) {
+    return new https.Agent({
+      pfx: pfxBuffer,
+      passphrase,
+      rejectUnauthorized: false,
+      secureOptions: crypto.constants.SSL_OP_LEGACY_SERVER_CONNECT
+    })
+  }
+}
 
 export interface DfeNotaItem {
   id: string
@@ -100,12 +162,7 @@ export async function consultarSefazDistribuicaoDfe(params: {
   const cnpjLimpo = limparDocumento(params.cnpj)
   const ultNSU = (params.ultNSU || '0').padStart(15, '0')
 
-  const agent = new https.Agent({
-    pfx: params.pfxBuffer,
-    passphrase: params.passphrase,
-    rejectUnauthorized: false,
-    secureOptions: crypto.constants.SSL_OP_LEGACY_SERVER_CONNECT
-  })
+  const agent = createSefazHttpsAgent(params.pfxBuffer, params.passphrase)
 
   // Monta o XML de Requisição oficial <distDFeInt>
   const distDFeInt = [
@@ -267,60 +324,89 @@ export async function executarConsultaDfeCompleta(params: {
       }
 
       if (certBlob) {
-        // Busca o maior NSU já registrado no banco para continuar a distribuição incremental da SEFAZ
-        const { data: maxNsuRow } = await supabaseAdmin
+        const certBuffer = Buffer.from(await certBlob.arrayBuffer())
+
+        // Busca o maior NSU local numericamante para garantir avanço sequencial
+        const { data: rowsNsu } = await supabaseAdmin
           .from('dfe_notas_destinadas')
           .select('nsu')
           .eq('cliente_id', cliente.id)
           .not('nsu', 'is', null)
-          .order('nsu', { ascending: false })
-          .limit(1)
-          .maybeSingle()
 
-        const ultNSUParaConsultar = maxNsuRow?.nsu ? String(parseInt(maxNsuRow.nsu, 10)) : '0'
+        const numsNsu = (rowsNsu || []).map(r => parseInt(r.nsu, 10)).filter(n => !isNaN(n))
+        const maiorNsuLocal = numsNsu.length > 0 ? Math.max(...numsNsu) : 0
+        let ultNSUParaConsultar = String(maiorNsuLocal)
 
-        const certBuffer = Buffer.from(await certBlob.arrayBuffer())
-        const sefazRes = await consultarSefazDistribuicaoDfe({
-          cnpj: cliente.cnpj,
-          uf: cliente.uf || 'MG',
-          pfxBuffer: certBuffer,
-          passphrase: cliente.certificado_senha,
-          ultNSU: ultNSUParaConsultar
-        })
+        let iteracoes = 0
+        const MAX_ITERACOES = 6 // Até 6 lotes consecutivos por clique (até 300 documentos da SEFAZ)
+        let continuarBuscando = true
+        let totalDocsSincronizados = 0
 
-        cStatRetorno = sefazRes.cStat
-        xMotivoRetorno = sefazRes.xMotivo
+        while (continuarBuscando && iteracoes < MAX_ITERACOES) {
+          iteracoes++
 
-        // Processa documentos retornados da SEFAZ
-        for (const doc of sefazRes.documentos) {
-          if (doc.tipo === 'resNFe' || doc.tipo === 'procNFe') {
-            const chNFe = extractTag(doc.xml, 'chNFe')
-            if (chNFe && chNFe.length === 44) {
-              const emitCnpj = extractTag(doc.xml, 'CNPJ') || extractTag(doc.xml, 'CPF') || ''
-              const emitNome = extractTag(doc.xml, 'xNome') || 'Fornecedor'
-              const emitIe = extractTag(doc.xml, 'IE') || ''
-              const valor = parseFloat(extractTag(doc.xml, 'vNF') || '0')
-              const dhEmi = extractTag(doc.xml, 'dhEmi') || extractTag(doc.xml, 'dEmi') || new Date().toISOString()
-              const cSitNFe = extractTag(doc.xml, 'cSitNFe') || '1'
-              const cSitConf = extractTag(doc.xml, 'cSitConf') || '0'
-              const nNF = extractTag(doc.xml, 'nNF') || chNFe.substring(25, 34)
-              const serie = extractTag(doc.xml, 'serie') || String(parseInt(chNFe.substring(22, 25), 10) || 1)
+          const sefazRes = await consultarSefazDistribuicaoDfe({
+            cnpj: cliente.cnpj,
+            uf: cliente.uf || 'MG',
+            pfxBuffer: certBuffer,
+            passphrase: cliente.certificado_senha,
+            ultNSU: ultNSUParaConsultar
+          })
 
-              let sitStr = 'AUTORIZADA'
-              if (cSitNFe === '3') sitStr = 'CANCELADA'
-              else if (cSitNFe === '2') sitStr = 'DENEGADA'
+          cStatRetorno = sefazRes.cStat
+          xMotivoRetorno = sefazRes.xMotivo
 
-              let manStr = 'SEM_MANIFESTACAO'
-              if (cSitConf === '1') manStr = 'CIENCIA'
-              else if (cSitConf === '2') manStr = 'CONFIRMADA'
-              else if (cSitConf === '3') manStr = 'DESCONHECIDA'
-              else if (cSitConf === '4') manStr = 'NAO_REALIZADA'
+          // Processa documentos retornados da SEFAZ
+          if (sefazRes.documentos && sefazRes.documentos.length > 0) {
+            totalDocsSincronizados += sefazRes.documentos.length
 
-              // Gera XML canônico da nota caso ainda não tenhamos o procNFe completo liberado
-              const xmlParaSalvar = doc.tipo === 'procNFe' 
-                ? doc.xml 
-                : gerarXmlResumoDfe({
+            for (const doc of sefazRes.documentos) {
+              if (doc.tipo === 'resNFe' || doc.tipo === 'procNFe') {
+                const chNFe = extractTag(doc.xml, 'chNFe')
+                if (chNFe && chNFe.length === 44) {
+                  const emitCnpj = extractTag(doc.xml, 'CNPJ') || extractTag(doc.xml, 'CPF') || ''
+                  const emitNome = extractTag(doc.xml, 'xNome') || 'Fornecedor'
+                  const emitIe = extractTag(doc.xml, 'IE') || ''
+                  const valor = parseFloat(extractTag(doc.xml, 'vNF') || '0')
+                  const dhEmi = extractTag(doc.xml, 'dhEmi') || extractTag(doc.xml, 'dEmi') || new Date().toISOString()
+                  const cSitNFe = extractTag(doc.xml, 'cSitNFe') || '1'
+                  const cSitConf = extractTag(doc.xml, 'cSitConf') || '0'
+                  const nNF = extractTag(doc.xml, 'nNF') || chNFe.substring(25, 34)
+                  const serie = extractTag(doc.xml, 'serie') || String(parseInt(chNFe.substring(22, 25), 10) || 1)
+
+                  let sitStr = 'AUTORIZADA'
+                  if (cSitNFe === '3') sitStr = 'CANCELADA'
+                  else if (cSitNFe === '2') sitStr = 'DENEGADA'
+
+                  let manStr = 'SEM_MANIFESTACAO'
+                  if (cSitConf === '1') manStr = 'CIENCIA'
+                  else if (cSitConf === '2') manStr = 'CONFIRMADA'
+                  else if (cSitConf === '3') manStr = 'DESCONHECIDA'
+                  else if (cSitConf === '4') manStr = 'NAO_REALIZADA'
+
+                  // Gera XML canônico da nota caso ainda não tenhamos o procNFe completo liberado
+                  const xmlParaSalvar = doc.tipo === 'procNFe' 
+                    ? doc.xml 
+                    : gerarXmlResumoDfe({
+                        chave: chNFe,
+                        numero: String(parseInt(nNF, 10)),
+                        serie,
+                        emitente_cnpj: emitCnpj,
+                        emitente_nome: emitNome,
+                        emitente_ie: emitIe,
+                        destinatario_cnpj: cliente.cnpj,
+                        valor,
+                        data_emissao: dhEmi,
+                        protocolo: '1' + chNFe.substring(2, 16),
+                        situacao_nfe: sitStr
+                      })
+
+                  // Upsert na tabela de notas destinadas
+                  const compCalculada = dhEmi.substring(0, 7)
+                  await supabaseAdmin.from('dfe_notas_destinadas').upsert({
+                    cliente_id: cliente.id,
                     chave: chNFe,
+                    nsu: doc.nsu ? String(doc.nsu) : undefined,
                     numero: String(parseInt(nNF, 10)),
                     serie,
                     emitente_cnpj: emitCnpj,
@@ -329,41 +415,62 @@ export async function executarConsultaDfeCompleta(params: {
                     destinatario_cnpj: cliente.cnpj,
                     valor,
                     data_emissao: dhEmi,
-                    protocolo: '1' + chNFe.substring(2, 16),
-                    situacao_nfe: sitStr
-                  })
+                    tipo_documento: '55',
+                    situacao_nfe: sitStr,
+                    manifestacao_status: manStr,
+                    xml_completo: xmlParaSalvar,
+                    competencia: compCalculada,
+                    updated_at: new Date().toISOString()
+                  }, { onConflict: 'cliente_id,chave' })
+                }
+              }
+            }
+          }
 
-              // Upsert na tabela de notas destinadas
-              const compCalculada = dhEmi.substring(0, 7)
+          // Se a SEFAZ informou um ultNSU mais alto, persiste para não regredir
+          if (sefazRes.ultNSU) {
+            const numUlt = parseInt(sefazRes.ultNSU, 10)
+            const numAtual = parseInt(ultNSUParaConsultar, 10)
+            if (!isNaN(numUlt) && numUlt > numAtual) {
+              ultNSUParaConsultar = String(numUlt)
               await supabaseAdmin.from('dfe_notas_destinadas').upsert({
                 cliente_id: cliente.id,
-                chave: chNFe,
-                nsu: doc.nsu ? String(doc.nsu) : undefined,
-                numero: String(parseInt(nNF, 10)),
-                serie,
-                emitente_cnpj: emitCnpj,
-                emitente_nome: emitNome,
-                emitente_ie: emitIe,
-                destinatario_cnpj: cliente.cnpj,
-                valor,
-                data_emissao: dhEmi,
+                chave: '__NSU_SYNC_STATE__',
+                nsu: String(numUlt),
+                numero: '0',
+                serie: '0',
+                emitente_cnpj: cliente.cnpj,
+                emitente_nome: 'CONTROLE DE SINCRONIZACAO SEFAZ',
+                valor: 0,
+                data_emissao: new Date().toISOString(),
                 tipo_documento: '55',
-                situacao_nfe: sitStr,
-                manifestacao_status: manStr,
-                xml_completo: xmlParaSalvar,
-                competencia: compCalculada,
+                situacao_nfe: 'AUTORIZADA',
+                manifestacao_status: 'SEM_MANIFESTACAO',
+                competencia: 'CONTROLE',
                 updated_at: new Date().toISOString()
               }, { onConflict: 'cliente_id,chave' })
             }
           }
-        }
 
-        if (sefazRes.cStat === '656') {
-          avisoSefaz = 'SEFAZ retornou Consumo Indevido (Aguarde até 1 hora antes de nova consulta externa ao WebService). Exibindo base de dados local atualizada.'
-        } else if (sefazRes.cStat === '137') {
-          avisoSefaz = 'SEFAZ Nacional confirmou: Todos os documentos deste CNPJ já estão sincronizados (cStat 137).'
-        } else if (sefazRes.cStat === '138') {
-          avisoSefaz = `SEFAZ retornou novos documentos com sucesso (NSU ${sefazRes.ultNSU}).`
+          const ultNum = parseInt(sefazRes.ultNSU || '0', 10)
+          const maxNum = parseInt(sefazRes.maxNSU || '0', 10)
+
+          if (sefazRes.cStat === '138' && ultNum < maxNum) {
+            continuarBuscando = true
+            await new Promise(r => setTimeout(r, 1200))
+          } else {
+            continuarBuscando = false
+          }
+
+          if (sefazRes.cStat === '656') {
+            continuarBuscando = false
+            avisoSefaz = `A SEFAZ Nacional aplicou uma trava de segurança temporária (Consumo Indevido - limite de consultas por hora atingido). O ponteiro foi sincronizado no NSU ${ultNSUParaConsultar}. A SEFAZ liberará novas buscas automáticas após o intervalo de 1 hora.`
+          } else if (sefazRes.cStat === '137') {
+            continuarBuscando = false
+            avisoSefaz = `SEFAZ Nacional confirmou: Fila de notas 100% atualizada (Nenhum documento pendente até o NSU ${sefazRes.ultNSU}).`
+          } else if (totalDocsSincronizados > 0) {
+            avisoSefaz = `Sincronizados ${totalDocsSincronizados} novos documentos da SEFAZ com sucesso (Ponteiro NSU ${ultNSUParaConsultar}).`
+          }
         }
       }
     } catch (errSefaz: any) {
@@ -372,11 +479,12 @@ export async function executarConsultaDfeCompleta(params: {
     }
   }
 
-  // 3. Busca todas as notas destinadas salvas para este cliente
+  // 3. Busca todas as notas destinadas salvas para este cliente (ignora registro de controle de NSU)
   const { data: destinadasDb } = await supabaseAdmin
     .from('dfe_notas_destinadas')
     .select('*')
     .eq('cliente_id', cliente.id)
+    .neq('chave', '__NSU_SYNC_STATE__')
 
   // 4. Busca notas fiscais de entrada (compras) gravadas na tabela oficial nfe_entradas
   const { data: entradasDb } = await supabaseAdmin
@@ -714,12 +822,7 @@ export async function consultarSefazPorChave(params: {
   const cnpjLimpo = limparDocumento(params.cnpj)
   const chaveLimpa = params.chave.replace(/\D/g, '')
 
-  const agent = new https.Agent({
-    pfx: params.pfxBuffer,
-    passphrase: params.passphrase,
-    rejectUnauthorized: false,
-    secureOptions: crypto.constants.SSL_OP_LEGACY_SERVER_CONNECT
-  })
+  const agent = createSefazHttpsAgent(params.pfxBuffer, params.passphrase)
 
   const distDFeInt = [
     '<distDFeInt xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.01">',
@@ -929,12 +1032,7 @@ export async function manifestarDestinatarioSefaz(params: {
     : 'https://www.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx'
   const parsedUrl = new URL(wsUrl)
 
-  const agent = new https.Agent({
-    pfx: params.pfxBuffer,
-    passphrase: params.passphrase,
-    rejectUnauthorized: false,
-    secureOptions: crypto.constants.SSL_OP_LEGACY_SERVER_CONNECT
-  })
+  const agent = createSefazHttpsAgent(params.pfxBuffer, params.passphrase)
 
   const resultadoEvento: { success: boolean; cStat: string; xMotivo: string; nProt?: string } = await new Promise((resolve) => {
     const postData = Buffer.from(soapBody, 'utf-8')

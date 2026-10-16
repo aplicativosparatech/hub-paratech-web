@@ -715,6 +715,25 @@ export default function DistribuicaoDfePage() {
             </div>
           )}
 
+          {/* Card Explicativo: Regras Oficiais de Compras SEFAZ Nacional */}
+          <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl text-xs text-slate-700 flex items-start gap-2.5">
+            <Zap size={16} className="text-amber-500 shrink-0 mt-0.5" />
+            <div className="leading-relaxed">
+              <span className="font-bold text-slate-900 block mb-0.5">
+                Regras Fiscais da Distribuição DF-e (SEFAZ Nacional):
+              </span>
+              <p className="text-[11px] text-slate-600">
+                • <strong>Exclusividade de NF-e (Modelo 55)</strong>: A SEFAZ Nacional disponibiliza exclusivamente Notas Fiscais Eletrônicas mercantis (Modelo 55) faturadas contra o CNPJ da empresa.
+              </p>
+              <p className="text-[11px] text-slate-600 mt-0.5">
+                • <strong>Compras em Atacarejos e Supermercados</strong>: Compras com emissão de <em>Cupom Fiscal / NFC-e (Modelo 65)</em> no caixa de balcão (mesmo com CNPJ impresso) não entram no Ambiente Nacional de Distribuição DF-e por determinação do ENCAT/Receita Federal e devem ser importadas via XML pelo menu Entradas ou pelo Hub Desktop.
+              </p>
+              <p className="text-[11px] text-slate-600 mt-0.5">
+                • <strong>Sincronização Contínua em Lotes</strong>: O sistema agora sincroniza até 300 documentos por clique de forma sequencial até o NSU mais recente. Caso a SEFAZ informe intervalo temporário de segurança (limite de requisições por hora), o ponteiro fica salvo e novas buscas externas são liberadas pela SEFAZ após 1 hora.
+              </p>
+            </div>
+          </div>
+
           {/* Cards de Resumo KPI */}
           {notas.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 animate-in fade-in">
