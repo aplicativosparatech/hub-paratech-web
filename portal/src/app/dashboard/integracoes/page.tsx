@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { PlugZap, CreditCard, MessageCircle, Save, Send, Calendar, Sliders, Bell, FileText, CheckCircle2, AlertTriangle, Cpu, Sparkles, Bot, ExternalLink, RefreshCw, Check, ShieldCheck, Zap, Server } from 'lucide-react'
+import { PlugZap, CreditCard, MessageCircle, Save, Send, Calendar, Sliders, Bell, FileText, CheckCircle2, AlertTriangle, Cpu, Sparkles, Bot, ExternalLink, RefreshCw, Check, ShieldCheck, Zap, Server, Database, Building2, Layers, FileSpreadsheet } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { createClient } from '@/utils/supabase/client'
 
@@ -15,13 +15,17 @@ type Integracao = {
 
 export default function IntegracoesPage() {
   const supabase = createClient()
-  const [activeTab, setActiveTab] = useState<'gateways' | 'whatsapp' | 'ia_mcp'>('gateways')
+  const [activeTab, setActiveTab] = useState<'gateways' | 'whatsapp' | 'ia_mcp' | 'alterdata'>('gateways')
   const [isLoading, setIsLoading] = useState(true)
   const [integracoes, setIntegracoes] = useState<Integracao[]>([])
   const [testPhone, setTestPhone] = useState('')
   const [isTestingWpp, setIsTestingWpp] = useState(false)
   const [testandoIa, setTestandoIa] = useState<string | null>(null)
   const [resultadoTesteIa, setResultadoTesteIa] = useState<Record<string, { ok: boolean; msg: string; tempo?: number }>>({})
+  const [testandoAlterdata, setTestandoAlterdata] = useState(false)
+  const [resultadoTesteAlterdata, setResultadoTesteAlterdata] = useState<any>(null)
+  const [logsAlterdata, setLogsAlterdata] = useState<any[]>([])
+  const [loadingLogsAlterdata, setLoadingLogsAlterdata] = useState(false)
 
   const handleTestWhatsApp = async () => {
     if (!testPhone) {
@@ -175,6 +179,52 @@ export default function IntegracoesPage() {
     }
   }
 
+  const handleTestarAlterdata = async () => {
+    const item = getIntegracao('alterdata')
+    setTestandoAlterdata(true)
+    const tId = toast.loading('Testando conexão com a nuvem da Alterdata...')
+    try {
+      const res = await fetch('/api/alterdata/testar-conexao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credenciais: item.credenciais })
+      })
+      const data = await res.json()
+      setResultadoTesteAlterdata(data.resultados)
+      if (data.success) {
+        toast.success('Conexão com a Alterdata validada com sucesso!', { id: tId })
+      } else {
+        toast.error(data.error || 'Falha na validação das credenciais Alterdata', { id: tId })
+      }
+    } catch (err: any) {
+      toast.error(`Erro: ${err.message}`, { id: tId })
+    } finally {
+      setTestandoAlterdata(false)
+    }
+  }
+
+  const carregarLogsAlterdata = async () => {
+    setLoadingLogsAlterdata(true)
+    try {
+      const { data } = await supabase
+        .from('alterdata_sync_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10)
+      if (data) setLogsAlterdata(data)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoadingLogsAlterdata(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'alterdata') {
+      carregarLogsAlterdata()
+    }
+  }, [activeTab])
+
   const handleSave = async () => {
     const loadingToast = toast.loading('Salvando configurações...')
     try {
@@ -242,6 +292,7 @@ export default function IntegracoesPage() {
   const mcpFiscalBrasil = getIntegracao('mcp_fiscal_brasil')
   const fiscalAi = getIntegracao('fiscal_ai')
   const iaGeral = getIntegracao('ia_geral')
+  const alterdata = getIntegracao('alterdata')
 
   const totalIasAtivas = [gemini, groq, openai, claude, ollama, mcpFiscalBrasil, fiscalAi].filter(i => i.is_ativo).length
 
@@ -285,6 +336,19 @@ export default function IntegracoesPage() {
           {totalIasAtivas > 0 && (
             <span className="ml-1 px-2 py-0.5 text-xs font-bold bg-purple-100 text-purple-700 rounded-full">
               {totalIasAtivas} ativas
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('alterdata')}
+          className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
+            activeTab === 'alterdata' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Database size={18} /> Alterdata (Nuvem & ePlugin)
+          {alterdata.is_ativo && (
+            <span className="ml-1 px-2 py-0.5 text-xs font-bold bg-rose-100 text-rose-700 rounded-full">
+              Ativo
             </span>
           )}
         </button>
@@ -1316,6 +1380,407 @@ export default function IntegracoesPage() {
               </div>
 
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== ABA ALTERDATA ===================== */}
+      {activeTab === 'alterdata' && (
+        <div className="space-y-8">
+          {/* Card Principal de Conexão */}
+          <div className={`bg-white rounded-2xl p-6 sm:p-8 border-2 transition-all duration-300 ${alterdata.is_ativo ? 'border-rose-500 shadow-xl shadow-rose-500/10' : 'border-slate-200'}`}>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 pb-6 border-b border-slate-100">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-rose-500 to-rose-700 flex items-center justify-center text-white shadow-lg shadow-rose-500/25">
+                  <Database size={28} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-2xl font-bold text-slate-900">Ecossistema Alterdata (Pack & eContador)</h2>
+                    {alterdata.is_ativo ? (
+                      <span className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-bold flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        Conector Ativo
+                      </span>
+                    ) : (
+                      <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-semibold">
+                        Inativo
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-slate-500 text-sm mt-1">
+                    Conexão direta com as APIs oficiais do <strong>nf-stock</strong> (Fiscal/XMLs) e <strong>ePlugin</strong> (Contábil, DP e Documentos).
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={alterdata.is_ativo}
+                    onChange={() => updateIntegracaoLocal('alterdata', { is_ativo: !alterdata.is_ativo })}
+                  />
+                  <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[4px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-rose-600"></div>
+                </label>
+              </div>
+            </div>
+
+            {/* Grid de Configurações das Duas APIs */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+              
+              {/* 1. Módulo Fiscal: nf-stock */}
+              <div className="bg-slate-50/70 border border-slate-200 rounded-xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-rose-100 text-rose-700 rounded-lg">
+                      <FileSpreadsheet size={20} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900">1. API nf-stock (Documentos Fiscais)</h3>
+                      <p className="text-xs text-slate-500">Tráfego de XMLs para o Alterdata Escrita Fiscal</p>
+                    </div>
+                  </div>
+                  <a
+                    href="https://docs-nfstock.pack.alterdata.com.br/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-rose-600 hover:text-rose-700 font-medium flex items-center gap-1"
+                  >
+                    Doc Técnica <ExternalLink size={12} />
+                  </a>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Token de Integração nf-stock <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={alterdata.credenciais?.nfstock_token || ''}
+                      onChange={e => handleCredencialChange('alterdata', 'nfstock_token', e.target.value)}
+                      placeholder="Cole o Bearer Token gerado no portal nf-stock"
+                      className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-lg text-sm focus:ring-2 focus:ring-rose-500 focus:outline-none font-mono"
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Obtido no portal <a href="https://www.nfstock.com.br" target="_blank" rel="noreferrer" className="underline text-rose-600">nfstock.com.br</a> em <em>Opções da Conta &gt; Integração</em>.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Código CRM do Escritório (6 dígitos)
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={alterdata.credenciais?.nfstock_codigo_crm || ''}
+                      onChange={e => handleCredencialChange('alterdata', 'nfstock_codigo_crm', e.target.value)}
+                      placeholder="Ex: 001234"
+                      className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-lg text-sm focus:ring-2 focus:ring-rose-500 focus:outline-none font-mono"
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Código identificador do escritório na Alterdata (necessário para baixar notas de compras).
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Módulo Contábil & DP: ePlugin */}
+              <div className="bg-slate-50/70 border border-slate-200 rounded-xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-blue-100 text-blue-700 rounded-lg">
+                      <Building2 size={20} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900">2. API ePlugin (Contábil, DP &amp; Guias)</h3>
+                      <p className="text-xs text-slate-500">Conexão REST com a plataforma eContador</p>
+                    </div>
+                  </div>
+                  <a
+                    href="https://eplugin.pack.alterdata.com.br/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                  >
+                    Doc Técnica <ExternalLink size={12} />
+                  </a>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Token ePlugin (eContador Master) <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={alterdata.credenciais?.eplugin_token || ''}
+                      onChange={e => handleCredencialChange('alterdata', 'eplugin_token', e.target.value)}
+                      placeholder="Cole o Token gerado no eContador"
+                      className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Gerado no eContador em <em>Configurações &gt; ePlugin &gt; Gerar Token</em> (exige plano Master).
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        CNPJ da Contabilidade / Empresa
+                      </label>
+                      <input
+                        type="text"
+                        maxLength={18}
+                        value={alterdata.credenciais?.cnpj_contabilidade || ''}
+                        onChange={e => handleCredencialChange('alterdata', 'cnpj_contabilidade', e.target.value)}
+                        placeholder="00.000.000/0000-00"
+                        className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Ambiente da API
+                      </label>
+                      <select
+                        value={alterdata.credenciais?.ambiente || 'producao'}
+                        onChange={e => handleCredencialChange('alterdata', 'ambiente', e.target.value)}
+                        className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      >
+                        <option value="producao">Produção (Nuvem Oficial)</option>
+                        <option value="homologacao">Homologação / Testes</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Matriz de Recursos Configuráveis (Feature Flags) */}
+            <div className="mb-8">
+              <h3 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
+                <Sliders size={18} className="text-rose-600" />
+                Matriz de Recursos &amp; Automações Ativas
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                
+                {/* 1. Sincronização XMLs Vendas */}
+                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-800">Envio Automático de XMLs (Vendas)</h4>
+                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                      Despacha NFC-e e NF-e do Hub Desktop diretamente ao nf-stock para escrituração automática no Fiscal.
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={alterdata.credenciais?.sync_xml_vendas ?? true}
+                    onChange={e => handleCredencialChange('alterdata', 'sync_xml_vendas', e.target.checked as any)}
+                    className="w-4 h-4 text-rose-600 rounded focus:ring-rose-500 mt-1 cursor-pointer"
+                  />
+                </div>
+
+                {/* 2. Segregação de Monofásicos */}
+                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-800">Espelho Fiscal de Monofásicos</h4>
+                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                      Gera relatório de segregação de bebidas (PIS/COFINS e ICMS-ST) para apoiar a apuração do DAS sem imposto duplicado.
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={alterdata.credenciais?.relatorio_monofasicos ?? true}
+                    onChange={e => handleCredencialChange('alterdata', 'relatorio_monofasicos', e.target.checked as any)}
+                    className="w-4 h-4 text-rose-600 rounded focus:ring-rose-500 mt-1 cursor-pointer"
+                  />
+                </div>
+
+                {/* 3. Fechamento Contábil */}
+                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-800">Lançamentos Contábeis de Caixa</h4>
+                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                      Converte vendas diárias e formas de pagamento em arquivo TXT padrão e envia ao Alterdata Contábil via API.
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={alterdata.credenciais?.fechamento_contabil ?? false}
+                    onChange={e => handleCredencialChange('alterdata', 'fechamento_contabil', e.target.checked as any)}
+                    className="w-4 h-4 text-rose-600 rounded focus:ring-rose-500 mt-1 cursor-pointer"
+                  />
+                </div>
+
+                {/* 4. Leitura de Guias do eContador */}
+                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-800">Mural de Guias &amp; Tributos</h4>
+                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                      Busca automática de guias do Simples, FGTS e DARF publicadas pelo escritório no eContador para exibir no Portal.
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={alterdata.credenciais?.leitura_guias ?? true}
+                    onChange={e => handleCredencialChange('alterdata', 'leitura_guias', e.target.checked as any)}
+                    className="w-4 h-4 text-rose-600 rounded focus:ring-rose-500 mt-1 cursor-pointer"
+                  />
+                </div>
+
+                {/* 5. Alerta de Guias no WhatsApp */}
+                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-800">Avisos de Guias via WhatsApp</h4>
+                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                      Dispara PDF da guia e lembrete de vencimento no WhatsApp do cliente quando o contador publicar no eContador.
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={alterdata.credenciais?.aviso_whatsapp_guias ?? false}
+                    onChange={e => handleCredencialChange('alterdata', 'aviso_whatsapp_guias', e.target.checked as any)}
+                    className="w-4 h-4 text-rose-600 rounded focus:ring-rose-500 mt-1 cursor-pointer"
+                  />
+                </div>
+
+                {/* 6. Baixa de Compras (Futuro ERP) */}
+                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-800">XMLs de Compras (Futuro ERP)</h4>
+                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                      Captura notas fiscais de fornecedores via nf-stock para alimentar o estoque e contas a pagar do restaurante.
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={alterdata.credenciais?.sync_xml_compras ?? false}
+                    onChange={e => handleCredencialChange('alterdata', 'sync_xml_compras', e.target.checked as any)}
+                    className="w-4 h-4 text-rose-600 rounded focus:ring-rose-500 mt-1 cursor-pointer"
+                  />
+                </div>
+
+              </div>
+            </div>
+
+            {/* Ações de Teste e Salvamento */}
+            <div className="flex flex-wrap items-center justify-between gap-4 pt-6 border-t border-slate-200">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleTestarAlterdata}
+                  disabled={testandoAlterdata}
+                  className="flex items-center gap-2 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-sm disabled:opacity-50"
+                >
+                  <Zap size={16} className={testandoAlterdata ? 'animate-spin' : ''} />
+                  {testandoAlterdata ? 'Validando Conexão...' : 'Testar Conexão com a Nuvem'}
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleSalvarIndividual('alterdata')}
+                  className="flex items-center gap-2 bg-rose-600 text-white hover:bg-rose-700 px-6 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-md shadow-rose-600/20"
+                >
+                  <Save size={16} /> Salvar Integração Alterdata
+                </button>
+              </div>
+            </div>
+
+            {/* Painel de Diagnóstico do Teste */}
+            {resultadoTesteAlterdata && (
+              <div className="mt-6 p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-3">
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Diagnóstico de Conexão em Tempo Real</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {resultadoTesteAlterdata.nfstock && (
+                    <div className={`p-3.5 rounded-lg border ${resultadoTesteAlterdata.nfstock.ok ? 'bg-emerald-50/60 border-emerald-200 text-emerald-900' : 'bg-red-50/60 border-red-200 text-red-900'}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-xs flex items-center gap-1.5">
+                          {resultadoTesteAlterdata.nfstock.ok ? <CheckCircle2 size={14} className="text-emerald-600" /> : <AlertTriangle size={14} className="text-red-600" />}
+                          API nf-stock (Fiscal)
+                        </span>
+                        <span className="text-[11px] font-mono font-medium">{resultadoTesteAlterdata.nfstock.tempoMs}ms</span>
+                      </div>
+                      <p className="text-xs leading-relaxed">{resultadoTesteAlterdata.nfstock.msg}</p>
+                    </div>
+                  )}
+
+                  {resultadoTesteAlterdata.eplugin && (
+                    <div className={`p-3.5 rounded-lg border ${resultadoTesteAlterdata.eplugin.ok ? 'bg-emerald-50/60 border-emerald-200 text-emerald-900' : 'bg-red-50/60 border-red-200 text-red-900'}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-xs flex items-center gap-1.5">
+                          {resultadoTesteAlterdata.eplugin.ok ? <CheckCircle2 size={14} className="text-emerald-600" /> : <AlertTriangle size={14} className="text-red-600" />}
+                          API ePlugin (Contábil &amp; DP)
+                        </span>
+                        <span className="text-[11px] font-mono font-medium">{resultadoTesteAlterdata.eplugin.tempoMs}ms</span>
+                      </div>
+                      <p className="text-xs leading-relaxed">{resultadoTesteAlterdata.eplugin.msg}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+          </div>
+
+          {/* Card de Logs Recentes de Sincronização */}
+          <div className="bg-white rounded-2xl p-6 border border-slate-200">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Auditoria &amp; Disparos Recentes com a Alterdata</h3>
+                <p className="text-xs text-slate-500">Últimas transmissões de XMLs e lotes contábeis para a nuvem</p>
+              </div>
+              <button
+                type="button"
+                onClick={carregarLogsAlterdata}
+                disabled={loadingLogsAlterdata}
+                className="text-xs text-slate-600 hover:text-slate-900 font-medium flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <RefreshCw size={12} className={loadingLogsAlterdata ? 'animate-spin' : ''} /> Atualizar
+              </button>
+            </div>
+
+            {logsAlterdata.length === 0 ? (
+              <div className="text-center py-8 text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                Nenhuma sincronização registrada ainda. Quando os primeiros XMLs forem transmitidos, eles aparecerão aqui.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-600">
+                  <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+                    <tr>
+                      <th className="py-2.5 px-3">Data/Hora</th>
+                      <th className="py-2.5 px-3">Operação</th>
+                      <th className="py-2.5 px-3">Status</th>
+                      <th className="py-2.5 px-3">Identificador / Documento</th>
+                      <th className="py-2.5 px-3">Retorno / Detalhes</th>
+                      <th className="py-2.5 px-3 text-right">Duração</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-mono">
+                    {logsAlterdata.map(log => (
+                      <tr key={log.id} className="hover:bg-slate-50/50">
+                        <td className="py-2.5 px-3 whitespace-nowrap">{new Date(log.created_at).toLocaleString('pt-BR')}</td>
+                        <td className="py-2.5 px-3 font-semibold text-slate-800">{log.tipo_operacao}</td>
+                        <td className="py-2.5 px-3">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${log.status === 'SUCESSO' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                            {log.status}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 max-w-[200px] truncate" title={log.identificador_externo || ''}>{log.identificador_externo || '-'}</td>
+                        <td className="py-2.5 px-3 max-w-[300px] truncate font-sans text-slate-500" title={log.mensagem_retorno || ''}>{log.mensagem_retorno || '-'}</td>
+                        <td className="py-2.5 px-3 text-right">{log.duracao_ms ? `${log.duracao_ms}ms` : '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}
