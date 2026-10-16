@@ -227,10 +227,28 @@ export default function TabelaInutilizacao() {
       setResumo(data.resumo || { totalGaps: 0, totalNumerosFaltantes: 0, pendentes: 0, homologadas: 0, utilizadasSefaz: 0 })
       setClienteInfo(data.cliente || null)
 
-      // Identifica ocorrências anteriores registradas no histórico
+      // Identifica ocorrências anteriores registradas no histórico (ignorando faixas já resolvidas ou anteriores ao ponto de partida)
       if (data.historicoInutilizacoes) {
+        const ppNfe = data.cliente?.ponto_partida?.numero_inicial_nfe || 1
+        const ppNfce = data.cliente?.ponto_partida?.numero_inicial_nfce || 1
+
+        const faixasHomologadas = new Set(
+          (data.gaps || [])
+            .filter((g: any) => g.status === 'HOMOLOGADO')
+            .map((g: any) => `${g.modelo}_${g.serie}_${g.nNFIni}_${g.nNFFin}`)
+        )
+
         const errosBd: ErroProcessamentoItem[] = data.historicoInutilizacoes
-          .filter((h: any) => h.status_sefaz && !['102', '204', '563'].includes(h.status_sefaz))
+          .filter((h: any) => {
+            if (!h.status_sefaz || ['102', '204', '563'].includes(h.status_sefaz)) return false
+            const minNum = h.modelo === '55' ? ppNfe : ppNfce
+            // Se for anterior ao ponto de partida fiscal, não deve exibir como erro
+            if (h.numero_final < minNum) return false
+            // Se a faixa já foi homologada posteriormente, não exibe como erro
+            const chave = `${h.modelo}_${h.serie}_${h.numero_inicial}_${h.numero_final}`
+            if (faixasHomologadas.has(chave)) return false
+            return true
+          })
           .map((h: any) => ({
             id: h.id,
             modelo: h.modelo,
@@ -242,18 +260,53 @@ export default function TabelaInutilizacao() {
             dataHora: h.data_hora || h.created_at
           }))
         
-        setErrosProcessamento(prev => {
-          const map = new Map<string, ErroProcessamentoItem>()
-          errosBd.forEach(e => map.set(`${e.modelo}_${e.serie}_${e.nNFIni}`, e))
-          prev.forEach(e => map.set(`${e.modelo}_${e.serie}_${e.nNFIni}`, e))
-          return Array.from(map.values())
-        })
+        setErrosProcessamento(errosBd)
+      } else {
+        setErrosProcessamento([])
       }
 
     } catch (err: any) {
       toast.error('Erro ao buscar numeração faltante: ' + (err.message || ''))
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Limpeza persistente de todos os erros/rejeições do cliente
+  const handleLimparErros = async () => {
+    if (!clienteAtualId) return
+    const toastId = toast.loading('Limpando lista de ocorrências...')
+    try {
+      const res = await fetch(`/api/sefaz/inutilizacoes?cliente_id=${clienteAtualId}&limpar_erros=true`, {
+        method: 'DELETE'
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Falha ao limpar erros.')
+      }
+      setErrosProcessamento([])
+      toast.success('Lista de erros limpa com sucesso!', { id: toastId })
+      await carregarGaps()
+    } catch (err: any) {
+      toast.error('Erro ao limpar ocorrências: ' + (err.message || ''), { id: toastId })
+    }
+  }
+
+  // Descarte de um erro individual específico
+  const handleDescartarErro = async (item: ErroProcessamentoItem, foiResolvido = false) => {
+    try {
+      await fetch(`/api/sefaz/inutilizacoes?id=${item.id}&cliente_id=${clienteAtualId}&modelo=${item.modelo}&serie=${item.serie}&numero_inicial=${item.nNFIni}`, {
+        method: 'DELETE'
+      })
+      setErrosProcessamento(prev => prev.filter(e => e.id !== item.id))
+      if (foiResolvido) {
+        toast.success('Esta numeração já foi regularizada! Alerta de pendência removido com sucesso.')
+      } else {
+        toast.success('Ocorrência descartada!')
+      }
+      await carregarGaps()
+    } catch (err: any) {
+      toast.error('Erro ao descartar: ' + (err.message || ''))
     }
   }
 
@@ -527,6 +580,11 @@ export default function TabelaInutilizacao() {
     )
   }
 
+  // Histórico contendo exclusivamente inutilizações homologadas/confirmadas pela SEFAZ
+  const historicoHomologado = useMemo(() => {
+    return historico.filter(h => ['102', '204', '563'].includes(h.status_sefaz))
+  }, [historico])
+
   return (
     <div className="space-y-6">
       {/* Cabeçalho da Seção */}
@@ -669,13 +727,29 @@ export default function TabelaInutilizacao() {
 
       {/* Cards de Resumo KPI */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-            Numerações Faltantes
+        <div className={`rounded-xl p-4 border shadow-sm transition ${
+          resumo.totalNumerosFaltantes === 0
+            ? 'bg-emerald-50/50 border-emerald-200'
+            : 'bg-white border-slate-200'
+        }`}>
+          <span className={`text-[11px] font-bold uppercase tracking-wider block mb-1 ${
+            resumo.totalNumerosFaltantes === 0 ? 'text-emerald-800' : 'text-slate-500'
+          }`}>
+            Numerações Pendentes
           </span>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-black text-slate-900">{resumo.totalNumerosFaltantes}</span>
-            <span className="text-xs text-slate-400 font-medium">em {resumo.totalGaps} quebras</span>
+            <span className={`text-2xl font-black ${
+              resumo.totalNumerosFaltantes === 0 ? 'text-emerald-700' : 'text-slate-900'
+            }`}>
+              {resumo.totalNumerosFaltantes}
+            </span>
+            <span className={`text-xs font-medium ${
+              resumo.totalNumerosFaltantes === 0 ? 'text-emerald-600 font-bold' : 'text-slate-400'
+            }`}>
+              {resumo.totalNumerosFaltantes === 0
+                ? `todas as ${resumo.homologadas} regularizadas`
+                : `em ${resumo.totalGaps} quebras`}
+            </span>
           </div>
         </div>
 
@@ -765,7 +839,7 @@ export default function TabelaInutilizacao() {
                 : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
-            Histórico Homologado ({historico.length})
+            Histórico Homologado ({historicoHomologado.length})
           </button>
 
           <button
@@ -1001,9 +1075,9 @@ export default function TabelaInutilizacao() {
       ) : abaExibicao === 'historico' ? (
         /* Tabela de Histórico de Inutilizações Homologadas */
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-          {historico.length === 0 ? (
+          {historicoHomologado.length === 0 ? (
             <div className="p-12 text-center text-slate-400 text-xs">
-              Nenhuma inutilização registrada para este cliente até o momento.
+              Nenhuma inutilização homologada registrada para este cliente até o momento.
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -1020,7 +1094,7 @@ export default function TabelaInutilizacao() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-mono">
-                  {historico.map((item) => (
+                  {historicoHomologado.map((item) => (
                     <tr key={item.id} className="hover:bg-slate-50/70">
                       <td className="py-3 px-4 whitespace-nowrap text-slate-500">
                         {new Date(item.data_hora || item.created_at).toLocaleString('pt-BR')}
@@ -1035,12 +1109,8 @@ export default function TabelaInutilizacao() {
                         {item.numero_inicial} a {item.numero_final}
                       </td>
                       <td className="py-3 px-4">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          item.status_sefaz === '102' || item.status_sefaz === '204' || item.status_sefaz === '563'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {item.status_sefaz} - {item.status_sefaz === '102' ? 'HOMOLOGADO' : ['204', '563'].includes(item.status_sefaz) ? 'JÁ INUTILIZADO' : 'RECUSADO'}
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                          {item.status_sefaz} - {item.status_sefaz === '102' ? 'HOMOLOGADO' : 'JÁ INUTILIZADO'}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-emerald-700 font-bold">
@@ -1067,8 +1137,8 @@ export default function TabelaInutilizacao() {
             {errosProcessamento.length > 0 && (
               <button
                 type="button"
-                onClick={() => setErrosProcessamento([])}
-                className="text-xs text-red-700 hover:text-red-900 font-semibold px-2 py-1 rounded hover:bg-red-100"
+                onClick={handleLimparErros}
+                className="text-xs text-red-700 hover:text-red-900 font-semibold px-2.5 py-1 rounded hover:bg-red-100 transition"
               >
                 Limpar Lista de Erros
               </button>
@@ -1094,7 +1164,7 @@ export default function TabelaInutilizacao() {
                     <th className="py-3 px-4">Numeração</th>
                     <th className="py-3 px-4">Código SEFAZ</th>
                     <th className="py-3 px-4">Motivo / Rejeição</th>
-                    <th className="py-3 px-4 text-right">Ação</th>
+                    <th className="py-3 px-4 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1120,24 +1190,32 @@ export default function TabelaInutilizacao() {
                       <td className="py-3 px-4 text-red-800 max-w-md font-sans">
                         {item.motivo}
                       </td>
-                      <td className="py-3 px-4 text-right whitespace-nowrap">
+                      <td className="py-3 px-4 text-right whitespace-nowrap space-x-1.5">
                         <button
                           type="button"
-                          onClick={() => {
-                            const gapAlvo = gaps.find(g => g.modelo === item.modelo && g.serie === item.serie && g.nNFIni === item.nNFIni)
-                            if (gapAlvo) {
+                          onClick={async () => {
+                            const gapAlvo = gaps.find(g => g.modelo === item.modelo && g.serie === item.serie && g.nNFIni <= item.nNFIni && g.nNFFin >= item.nNFFin)
+                            if (gapAlvo && gapAlvo.status === 'PENDENTE') {
                               setModalInutilizar({
                                 open: true,
                                 gap: gapAlvo,
                                 justificativa: 'Erro de comunicacao com os servidores da SEFAZ durante a emissao'
                               })
                             } else {
-                              toast.error('Esta numeração já foi resolvida ou atualizada.')
+                              await handleDescartarErro(item, true)
                             }
                           }}
-                          className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold"
+                          className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition"
                         >
                           Tentar Novamente
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDescartarErro(item, false)}
+                          className="px-2.5 py-1 text-slate-500 hover:text-red-700 hover:bg-red-50 rounded-lg text-xs font-medium transition"
+                          title="Descartar este alerta"
+                        >
+                          Descartar
                         </button>
                       </td>
                     </tr>

@@ -26,7 +26,30 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Cliente não encontrado.' }, { status: 404 })
     }
 
-    // 2. Busca histórico de inutilizações registradas para cruzar com os gaps
+    const numIniNfe = cliente.numero_inicial_nfe || 1
+    const numIniNfce = cliente.numero_inicial_nfce || 1
+
+    // 2. Limpa automaticamente rejeições obsoletas anteriores ao ponto de partida fiscal
+    if (numIniNfce > 1) {
+      await supabaseAdmin
+        .from('inutilizacoes_saidas')
+        .delete()
+        .eq('cliente_id', cliente_id)
+        .eq('modelo', '65')
+        .lt('numero_final', numIniNfce)
+        .not('status_sefaz', 'in', '(102,204,563)')
+    }
+    if (numIniNfe > 1) {
+      await supabaseAdmin
+        .from('inutilizacoes_saidas')
+        .delete()
+        .eq('cliente_id', cliente_id)
+        .eq('modelo', '55')
+        .lt('numero_final', numIniNfe)
+        .not('status_sefaz', 'in', '(102,204,563)')
+    }
+
+    // 3. Busca histórico de inutilizações registradas para cruzar com os gaps
     let inutQuery = supabaseAdmin
       .from('inutilizacoes_saidas')
       .select('*')
@@ -34,7 +57,28 @@ export async function GET(request: Request) {
       .order('created_at', { ascending: false })
 
     const { data: inutilizacoesExistentes } = await inutQuery
-    const inuts = inutilizacoesExistentes || []
+    const inutsBrutos = inutilizacoesExistentes || []
+
+    // Identifica faixas que já foram homologadas (102, 204, 563)
+    const faixasHomologadas = new Set(
+      inutsBrutos
+        .filter(i => ['102', '204', '563'].includes(i.status_sefaz))
+        .map(i => `${i.modelo}_${i.serie}_${i.numero_inicial}_${i.numero_final}`)
+    )
+
+    // Filtra inuts para ignorar rejeições que são anteriores ao ponto de partida ou já foram homologadas
+    const inuts = inutsBrutos.filter(inut => {
+      const isHomologado = ['102', '204', '563'].includes(inut.status_sefaz)
+      if (isHomologado) return true
+
+      const minNum = inut.modelo === '55' ? numIniNfe : numIniNfce
+      if (inut.numero_final < minNum) return false
+
+      const chaveFaixa = `${inut.modelo}_${inut.serie}_${inut.numero_inicial}_${inut.numero_final}`
+      if (faixasHomologadas.has(chaveFaixa)) return false
+
+      return true
+    })
 
     // 3. Busca as notas fiscais emitidas (respeitando data de início do monitoramento se configurada)
     const resultadosNotas: { modelo: string; data: any[] }[] = []
@@ -206,10 +250,11 @@ export async function GET(request: Request) {
     gaps.sort((a, b) => b.nNFIni - a.nNFIni)
 
     // 5. Calcula resumo
-    const totalNumerosFaltantes = gaps.reduce((acc, g) => acc + g.quantidade, 0)
     const pendentes = gaps.filter(g => g.status === 'PENDENTE').reduce((acc, g) => acc + g.quantidade, 0)
     const homologadas = gaps.filter(g => g.status === 'HOMOLOGADO').reduce((acc, g) => acc + g.quantidade, 0)
     const utilizadasSefaz = gaps.filter(g => g.status === 'UTILIZADA_SEFAZ').reduce((acc, g) => acc + g.quantidade, 0)
+    // Números que realmente estão com pendência ativa (pendentes de envio + ausentes no portal)
+    const totalNumerosFaltantes = pendentes + utilizadasSefaz
 
     return NextResponse.json({
       success: true,
