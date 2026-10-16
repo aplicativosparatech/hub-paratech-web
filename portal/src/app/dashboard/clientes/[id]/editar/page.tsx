@@ -360,6 +360,24 @@ export default function EditarClientePage() {
     e.preventDefault()
     setSaving(true)
 
+    // Bloqueio rigoroso de cadastro repetido com outro cliente
+    const rawDoc = limparDocumento(formData.cnpj)
+    if (rawDoc) {
+      const formatted = formatarCnpjCpf(rawDoc)
+      const { data: outroCliente } = await supabase
+        .from('clientes')
+        .select('id, razao_social, nome_fantasia, cnpj')
+        .neq('id', params.id)
+        .or(`cnpj.eq.${formatted},cnpj.eq.${rawDoc}`)
+        .maybeSingle()
+
+      if (outroCliente) {
+        toast.error(`❌ Alteração bloqueada! Este CNPJ/CPF já pertence a outro cliente cadastrado: "${outroCliente.nome_fantasia || outroCliente.razao_social}" (${outroCliente.cnpj}). Não é permitido cadastros repetidos.`, { duration: 7000 })
+        setSaving(false)
+        return
+      }
+    }
+
     let finalLogoUrl = formData.logo_url
     if (logoFile) {
       const fileName = `${Date.now()}_${logoFile.name}`

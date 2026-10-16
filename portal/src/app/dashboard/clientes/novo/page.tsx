@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, UserPlus, Save, Search, Eye, EyeOff, ShieldCheck, FileKey, FileCode, Upload, MapPin, Calendar } from 'lucide-react'
+import { ArrowLeft, UserPlus, Save, Search, Eye, EyeOff, ShieldCheck, ShieldAlert, FileKey, FileCode, Upload, MapPin, Calendar } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { limparDocumento, formatarCnpjCpf, validarCnpj, validarCpf, isCnpjAlfanumerico } from '@/utils/cnpjAlfanumerico'
@@ -20,6 +20,8 @@ export default function NovoClientePage() {
   const [showCertPassword, setShowCertPassword] = useState(false)
   const [contabilidades, setContabilidades] = useState<any[]>([])
   const [sistemasSugeridos, setSistemasSugeridos] = useState<string[]>(ERP_PADRAO)
+  const [clienteExistente, setClienteExistente] = useState<{ id: string; razao_social: string; nome_fantasia?: string; cnpj: string } | null>(null)
+  const [checkingDuplicidade, setCheckingDuplicidade] = useState(false)
 
   const [formData, setFormData] = useState({
     razao_social: '',
@@ -148,9 +150,53 @@ export default function NovoClientePage() {
     }
   }
 
+  // Verificação em tempo real de cadastro duplicado (Bloqueio de Clientes Repetidos)
+  const checarCnpjDuplicado = async (documento: string) => {
+    const raw = limparDocumento(documento)
+    if (!raw || (raw.length !== 11 && raw.length !== 14)) {
+      setClienteExistente(null)
+      return null
+    }
+    setCheckingDuplicidade(true)
+    try {
+      const formatted = formatarCnpjCpf(raw)
+      const { data } = await supabase
+        .from('clientes')
+        .select('id, razao_social, nome_fantasia, cnpj')
+        .or(`cnpj.eq.${formatted},cnpj.eq.${raw}`)
+        .maybeSingle()
+
+      if (data) {
+        setClienteExistente(data)
+        toast.error(`⚠️ Documento já cadastrado para: "${data.nome_fantasia || data.razao_social}". Não é permitido cadastrar clientes repetidos.`, { duration: 6000 })
+        return data
+      } else {
+        setClienteExistente(null)
+        return null
+      }
+    } catch (err) {
+      console.error('Erro ao checar duplicidade:', err)
+      return null
+    } finally {
+      setCheckingDuplicidade(false)
+    }
+  }
+
   // Busca de CNPJ via Open CNPJa / ReceitaWS com Inscrição Estadual e Endereço Completo
   const handleConsultarCnpj = async () => {
     const rawDoc = limparDocumento(formData.cnpj)
+
+    if (!rawDoc) {
+      toast.error('Digite o CNPJ ou CPF para consultar.')
+      return
+    }
+
+    // 0. Bloqueio imediato de cadastro repetido
+    const jaExiste = await checarCnpjDuplicado(rawDoc)
+    if (jaExiste) {
+      toast.error(`❌ O cliente "${jaExiste.nome_fantasia || jaExiste.razao_social}" já está cadastrado com este documento (${jaExiste.cnpj}). Cadastros repetidos são bloqueados.`, { duration: 7000 })
+      return
+    }
 
     if (rawDoc.length === 11) {
       // É CPF (Pessoa Física / Produtor Rural)
@@ -310,6 +356,17 @@ export default function NovoClientePage() {
     e.preventDefault()
     setLoading(true)
 
+    // Bloqueio rigoroso de cadastro repetido
+    const rawDoc = limparDocumento(formData.cnpj)
+    if (rawDoc) {
+      const duplicado = await checarCnpjDuplicado(rawDoc)
+      if (duplicado) {
+        toast.error(`❌ Cadastro bloqueado! O cliente "${duplicado.nome_fantasia || duplicado.razao_social}" já utiliza este CNPJ/CPF (${duplicado.cnpj}). Não é permitido cadastros repetidos no sistema.`, { duration: 7000 })
+        setLoading(false)
+        return
+      }
+    }
+
     let finalLogoUrl = ''
     if (logoFile) {
       const fileName = `${Date.now()}_${logoFile.name}`
@@ -459,21 +516,42 @@ export default function NovoClientePage() {
                     required 
                     type="text" 
                     placeholder="00.000.000/0000-00 ou 000.000.000-00"
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                    className={`w-full px-4 py-2.5 rounded-xl border focus:outline-none focus:ring-2 bg-slate-50/50 ${
+                      clienteExistente 
+                        ? 'border-red-400 focus:ring-red-500 text-red-900 bg-red-50/30' 
+                        : 'border-slate-200 focus:ring-blue-500'
+                    }`}
                     value={formData.cnpj} 
-                    onChange={e => setFormData({...formData, cnpj: e.target.value})} 
+                    onChange={e => {
+                      setFormData({...formData, cnpj: e.target.value})
+                      if (clienteExistente) setClienteExistente(null)
+                    }} 
+                    onBlur={() => checarCnpjDuplicado(formData.cnpj)}
                   />
                   <button
                     type="button"
                     onClick={handleConsultarCnpj}
-                    disabled={searchingCnpj}
+                    disabled={searchingCnpj || checkingDuplicidade}
                     title="Buscar dados do CNPJ na Receita Federal ou validar CPF"
                     className="px-3.5 py-2.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl font-semibold flex items-center justify-center transition border border-blue-200 disabled:opacity-50"
                   >
-                    <Search size={18} className={searchingCnpj ? 'animate-spin' : ''} />
+                    <Search size={18} className={(searchingCnpj || checkingDuplicidade) ? 'animate-spin' : ''} />
                   </button>
                 </div>
-                <p className="text-[11px] text-slate-400 mt-1">Aceita CNPJ de Pessoa Jurídica ou CPF de Pessoa Física</p>
+                {clienteExistente ? (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-800 flex items-start gap-2 mt-2 font-medium animate-in fade-in">
+                    <ShieldAlert size={16} className="text-red-600 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="block text-red-900 font-bold">Cadastro Repetido Bloqueado</strong>
+                      Já existe um cliente cadastrado com este documento:
+                      <span className="font-bold text-red-950 block mt-0.5">
+                        {clienteExistente.nome_fantasia || clienteExistente.razao_social} ({clienteExistente.cnpj})
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-400 mt-1">Aceita CNPJ de Pessoa Jurídica ou CPF de Pessoa Física (Cadastros repetidos são bloqueados)</p>
+                )}
               </div>
 
               {/* Inscrição Estadual (IE) */}
