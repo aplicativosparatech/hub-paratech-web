@@ -69,8 +69,8 @@ const PASSOS_TOUR: TourStep[] = [
   },
   {
     id: 'passo-4',
-    titulo: '4. Corretor Tributário de XMLs & Reforma',
-    modulo: 'Corretor Tributário',
+    titulo: '4. Analisador Tributário de XMLs & Reforma',
+    modulo: 'Analisador Tributário',
     rota: '/dashboard/corretor-tributario',
     icone: Sparkles,
     descricao: 'Audite os arquivos XML emitidos pelo seu sistema para identificar inconsistências cadastrais e antecipar a adequação aos tributos IBS e CBS da EC 132/2023.',
@@ -79,7 +79,7 @@ const PASSOS_TOUR: TourStep[] = [
       'Identificação de itens da Cesta Básica Nacional e regimes diferenciados',
       'Conformidade com os leiautes técnicos da Receita Federal'
     ],
-    dicaOuro: 'O Corretor aponta divergências antes que o arquivo seja transmitido para a contabilidade ou para o Fisco.'
+    dicaOuro: 'O Analisador aponta divergências antes que o arquivo seja transmitido para a contabilidade ou para o Fisco.'
   },
   {
     id: 'passo-5',

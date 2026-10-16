@@ -326,7 +326,7 @@ export default function AparenciaPage() {
           <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200/80 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 flex items-start gap-2.5">
             <Sparkles size={16} className="text-blue-500 mt-0.5 flex-shrink-0" />
             <p>
-              <strong>Suporte a Abas Atuais e Futuras:</strong> Cada aba do sistema possui um banner exclusivo gerado sob medida (Contabilidades, Clientes, Notas Fiscais, Corretor Tributário, Saneador de Arquivos, Faturas, Relatórios, Integrações, Permissões, Aparência, etc.). Qualquer nova funcionalidade futura herdará automaticamente o design limpo e proporcional.
+              <strong>Suporte a Abas Atuais e Futuras:</strong> Cada aba do sistema possui um banner exclusivo gerado sob medida (Contabilidades, Clientes, Notas Fiscais, Analisador Tributário, Saneador de Arquivos, Faturas, Relatórios, Integrações, Permissões, Aparência, etc.). Qualquer nova funcionalidade futura herdará automaticamente o design limpo e proporcional.
             </p>
           </div>
         </div>

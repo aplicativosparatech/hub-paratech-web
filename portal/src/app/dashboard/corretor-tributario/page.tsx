@@ -424,8 +424,8 @@ export default function CorretorTributarioPage() {
 
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Corretor_Tributario')
-    XLSX.writeFile(wb, `Corretor_Tributario_${selectedMonth || 'periodo'}.xlsx`)
+    XLSX.utils.book_append_sheet(wb, ws, 'Analisador_Tributario')
+    XLSX.writeFile(wb, `Analisador_Tributario_${selectedMonth || 'periodo'}.xlsx`)
     toast.success('Planilha Excel exportada com sucesso!')
   }
 
@@ -433,7 +433,7 @@ export default function CorretorTributarioPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
         <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-slate-500 font-medium text-sm">Carregando módulo Corretor Tributário...</p>
+        <p className="text-slate-500 font-medium text-sm">Carregando módulo Analisador Tributário...</p>
       </div>
     )
   }
@@ -443,7 +443,7 @@ export default function CorretorTributarioPage() {
   return (
     <div className="space-y-8 pb-16">
       
-      {/* 1. Header do Corretor Tributário */}
+      {/* 1. Header do Analisador Tributário */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
         <div className="absolute right-0 top-0 translate-x-12 -translate-y-8 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -454,7 +454,7 @@ export default function CorretorTributarioPage() {
               Auditoria Inteligente & Reforma Tributária (IBS, CBS e IVA Dual)
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Corretor Tributário de Produtos
+              Analisador Tributário de Produtos
             </h1>
             <p className="text-slate-300 text-sm max-w-2xl leading-relaxed">
               Analise os itens emitidos nos XMLs (NFe e NFCe), detecte inconsistências cadastrais de 

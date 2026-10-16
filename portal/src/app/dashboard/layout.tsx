@@ -168,7 +168,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { prefixo: '/dashboard/configuracoes-portal', modulo: 'configuracoes_portal', nome: 'Configurações do Portal' },
       { prefixo: '/dashboard/configuracoes', modulo: 'configuracoes_hub', nome: 'Configurações Hub' },
       { prefixo: '/dashboard/integracoes', modulo: 'integracoes', nome: 'Integrações (APIs)' },
-      { prefixo: '/dashboard/corretor-tributario', modulo: 'corretor_tributario', nome: 'Corretor Tributário' },
+      { prefixo: '/dashboard/corretor-tributario', modulo: 'corretor_tributario', nome: 'Analisador Tributário' },
       { prefixo: '/dashboard/saneador-arquivos', modulo: 'saneador_arquivos', nome: 'Saneador de Arquivos' },
       { prefixo: '/dashboard/sugestor-tributario', modulo: 'sugestor_tributario', nome: 'Sugestor Tributário' },
       { prefixo: '/dashboard/meus-clientes', modulo: 'contabilidade_meus_clientes', nome: 'Meus Clientes' },
@@ -290,7 +290,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             
             <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 px-4 mt-6">Sistema</div>
             <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
-            <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Corretor Tributário" />
+            <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Analisador Tributário" />
             <NavItem href="/dashboard/saneador-arquivos" icon={Database} label="Saneador de Arquivos" />
             <NavItem href="/dashboard/sugestor-tributario" icon={ScanText} label="Sugestor Tributário" />
             <NavItem href="/dashboard/integracoes" icon={PlugZap} label="Integrações (APIs)" />
@@ -312,7 +312,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {(canAccess('relatorios') || canAccess('relatorios_resumo') || canAccess('relatorios_monofasicos') || canAccess('relatorios_auditoria')) && (
               <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
             )}
-            {canAccess('corretor_tributario') && <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Corretor Tributário" />}
+            {canAccess('corretor_tributario') && <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Analisador Tributário" />}
             {canAccess('saneador_arquivos') && <NavItem href="/dashboard/saneador-arquivos" icon={Database} label="Saneador de Arquivos" />}
             {canAccess('sugestor_tributario') && <NavItem href="/dashboard/sugestor-tributario" icon={ScanText} label="Sugestor Tributário" />}
             {canAccess('aparencia') && <NavItem href="/dashboard/aparencia" icon={Palette} label="Aparência" />}
@@ -334,7 +334,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {(canAccess('relatorios') || canAccess('relatorios_resumo') || canAccess('relatorios_monofasicos') || canAccess('relatorios_auditoria')) && (
               <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
             )}
-            {canAccess('corretor_tributario') && <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Corretor Tributário" />}
+            {canAccess('corretor_tributario') && <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Analisador Tributário" />}
             {canAccess('saneador_arquivos') && <NavItem href="/dashboard/saneador-arquivos" icon={Database} label="Saneador de Arquivos" />}
             {canAccess('sugestor_tributario') && <NavItem href="/dashboard/sugestor-tributario" icon={ScanText} label="Sugestor Tributário" />}
             {canAccess('aparencia') && <NavItem href="/dashboard/aparencia" icon={Palette} label="Aparência" />}
