@@ -13,6 +13,8 @@ import {
 import toast from 'react-hot-toast'
 import * as XLSX from 'xlsx'
 import { DiagnosticoItem } from '@/utils/tributario/auditorEngine'
+import { useTableFeatures } from '@/hooks/useTableFeatures'
+import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
 
 export default function CorretorTributarioPage() {
   const router = useRouter()
@@ -352,6 +354,39 @@ export default function CorretorTributarioPage() {
       return true
     })
   }, [diagnosticos, filtroStatus, filtroTipo, filtroReforma, buscaTermo])
+
+  const {
+    sortedData: diagnosticosOrdenados,
+    sortKey,
+    sortDirection,
+    handleSort,
+    columnWidths,
+    handleResizeColumn
+  } = useTableFeatures({
+    data: diagnosticosFiltrados,
+    tableId: 'tabela_corretor_tributario',
+    defaultSortKey: 'produto',
+    defaultSortDirection: 'asc',
+    initialWidths: {
+      produto: 300,
+      xml: 170,
+      sugestao: 170,
+      diagnostico: 240,
+      reforma: 200,
+      decisao: 120
+    },
+    customExtractors: {
+      produto: (d: any) => d.item?.xProd || '',
+      xml: (d: any) => d.item?.ncm || '',
+      sugestao: (d: any) => d.sugestao?.ncmSugerido || d.item?.ncm || '',
+      diagnostico: (d: any) => d.inconsistencias?.length || 0,
+      reforma: (d: any) => d.reformaTributaria?.nomeRegime || '',
+      decisao: (d: any) => {
+        const id = d.item.idItem || `${d.item.cProd}_${d.item.numeroNota}`
+        return decisoes[id] || (d.status === 'inconsistente' ? 'corrigir' : 'manter')
+      }
+    }
+  })
 
   // Exportar Relatório em Planilha Excel (.xlsx)
   const handleExportarExcel = () => {
@@ -851,26 +886,87 @@ export default function CorretorTributarioPage() {
           {/* 5. Tabela de Diagnóstico Comparativo */}
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-600">
+              <table className="w-full text-left text-xs text-slate-600" style={{ tableLayout: 'fixed' }}>
                 <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
                   <tr>
-                    <th className="p-4">Produto / Identificação</th>
-                    <th className="p-4">No XML (Atual)</th>
-                    <th className="p-4">Sugestão do Corretor</th>
-                    <th className="p-4">Diagnóstico & Apontamento</th>
-                    <th className="p-4">Reforma (IBS + CBS)</th>
-                    <th className="p-4 text-center">Decisão</th>
+                    <ResizableSortableTh
+                      columnId="produto"
+                      label="Produto / Identificação"
+                      sortKey="produto"
+                      currentSortKey={sortKey}
+                      currentSortDirection={sortDirection}
+                      onSort={handleSort}
+                      width={columnWidths.produto}
+                      onResize={handleResizeColumn}
+                      minWidth={180}
+                    />
+                    <ResizableSortableTh
+                      columnId="xml"
+                      label="No XML (Atual)"
+                      sortKey="xml"
+                      currentSortKey={sortKey}
+                      currentSortDirection={sortDirection}
+                      onSort={handleSort}
+                      width={columnWidths.xml}
+                      onResize={handleResizeColumn}
+                      minWidth={130}
+                    />
+                    <ResizableSortableTh
+                      columnId="sugestao"
+                      label="Sugestão do Corretor"
+                      sortKey="sugestao"
+                      currentSortKey={sortKey}
+                      currentSortDirection={sortDirection}
+                      onSort={handleSort}
+                      width={columnWidths.sugestao}
+                      onResize={handleResizeColumn}
+                      minWidth={130}
+                    />
+                    <ResizableSortableTh
+                      columnId="diagnostico"
+                      label="Diagnóstico & Apontamento"
+                      sortKey="diagnostico"
+                      currentSortKey={sortKey}
+                      currentSortDirection={sortDirection}
+                      onSort={handleSort}
+                      width={columnWidths.diagnostico}
+                      onResize={handleResizeColumn}
+                      minWidth={180}
+                    />
+                    <ResizableSortableTh
+                      columnId="reforma"
+                      label="Reforma (IBS + CBS)"
+                      sortKey="reforma"
+                      currentSortKey={sortKey}
+                      currentSortDirection={sortDirection}
+                      onSort={handleSort}
+                      width={columnWidths.reforma}
+                      onResize={handleResizeColumn}
+                      minWidth={150}
+                    />
+                    <ResizableSortableTh
+                      columnId="decisao"
+                      label="Decisão"
+                      sortKey="decisao"
+                      currentSortKey={sortKey}
+                      currentSortDirection={sortDirection}
+                      onSort={handleSort}
+                      width={columnWidths.decisao}
+                      onResize={handleResizeColumn}
+                      minWidth={100}
+                      align="center"
+                    />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {diagnosticosFiltrados.length === 0 ? (
+                  {diagnosticosOrdenados.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="p-12 text-center text-slate-400">
                         Nenhum item corresponde aos filtros selecionados.
                       </td>
                     </tr>
                   ) : (
-                    diagnosticosFiltrados.map((d, idx) => {
+                    diagnosticosOrdenados.map((d, idx) => {
                       const id = d.item.idItem || `${d.item.cProd}_${d.item.numeroNota}_${idx}`
                       const decisao = decisoes[id] || (d.status === 'inconsistente' ? 'corrigir' : 'manter')
                       const isCorrigido = decisao === 'corrigir'

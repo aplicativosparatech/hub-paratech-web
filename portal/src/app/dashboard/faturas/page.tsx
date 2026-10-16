@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { FileText, Plus, X, Pencil, Trash2, RefreshCw, Zap } from 'lucide-react'
 import toast from 'react-hot-toast'
+import ResizableSortableTh from '@/components/ui/ResizableSortableTh'
+import { useTableFeatures } from '@/hooks/useTableFeatures'
 
 export default function FaturasPage() {
   const [faturas, setFaturas] = useState<any[]>([])
@@ -182,6 +184,35 @@ export default function FaturasPage() {
     return new Date(dataVenc) < new Date()
   }
 
+  const {
+    sortedData: faturasOrdenadas,
+    sortKey,
+    sortDirection,
+    handleSort,
+    columnWidths,
+    handleResizeColumn
+  } = useTableFeatures({
+    data: faturas,
+    tableId: 'faturas_admin',
+    defaultSortKey: 'data_vencimento',
+    defaultSortDirection: 'desc',
+    initialWidths: {
+      cliente: 260,
+      competencia: 130,
+      vencimento: 160,
+      valor: 130,
+      status: 130,
+      acoes: 140
+    },
+    customExtractors: {
+      cliente: (f: any) => f.clientes?.razao_social || '',
+      competencia: (f: any) => f.competencia || '',
+      data_vencimento: (f: any) => f.data_vencimento || '',
+      valor: (f: any) => Number(f.valor || 0),
+      status: (f: any) => f.status || ''
+    }
+  })
+
   return (
     <div className="p-8">
       <header className="flex justify-between items-center mb-8">
@@ -211,21 +242,79 @@ export default function FaturasPage() {
       </header>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <table className="w-full text-left border-collapse">
+        <table className="w-full text-left border-collapse" style={{ tableLayout: 'fixed' }}>
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
-              <th className="p-4 font-semibold text-slate-600 text-sm">Cliente</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">Competência</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">Vencimento</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">Valor</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">Status</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm text-right">Ações</th>
+              <ResizableSortableTh
+                columnId="cliente"
+                label="Cliente"
+                sortKey="cliente"
+                currentSortKey={sortKey}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+                width={columnWidths.cliente}
+                onResize={handleResizeColumn}
+                minWidth={150}
+              />
+              <ResizableSortableTh
+                columnId="competencia"
+                label="Competência"
+                sortKey="competencia"
+                currentSortKey={sortKey}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+                width={columnWidths.competencia}
+                onResize={handleResizeColumn}
+                minWidth={100}
+              />
+              <ResizableSortableTh
+                columnId="vencimento"
+                label="Vencimento"
+                sortKey="data_vencimento"
+                currentSortKey={sortKey}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+                width={columnWidths.vencimento}
+                onResize={handleResizeColumn}
+                minWidth={110}
+              />
+              <ResizableSortableTh
+                columnId="valor"
+                label="Valor"
+                sortKey="valor"
+                currentSortKey={sortKey}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+                width={columnWidths.valor}
+                onResize={handleResizeColumn}
+                minWidth={90}
+              />
+              <ResizableSortableTh
+                columnId="status"
+                label="Status"
+                sortKey="status"
+                currentSortKey={sortKey}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+                width={columnWidths.status}
+                onResize={handleResizeColumn}
+                minWidth={90}
+              />
+              <ResizableSortableTh
+                columnId="acoes"
+                label="Ações"
+                disableSort
+                width={columnWidths.acoes}
+                onResize={handleResizeColumn}
+                minWidth={120}
+                align="right"
+              />
             </tr>
           </thead>
           <tbody>
             {loading ? (
                <tr><td colSpan={6} className="p-8 text-center text-slate-500">Carregando...</td></tr>
-            ) : faturas.length === 0 ? (
+            ) : faturasOrdenadas.length === 0 ? (
               <tr>
                 <td colSpan={6} className="p-12 text-center">
                   <div className="flex flex-col items-center gap-2">
@@ -236,7 +325,7 @@ export default function FaturasPage() {
                 </td>
               </tr>
             ) : (
-              faturas.map(f => (
+              faturasOrdenadas.map(f => (
                 <tr key={f.id} className={`border-b border-slate-100 hover:bg-slate-50 ${isVencida(f.data_vencimento, f.status) ? 'bg-red-50' : ''}`}>
                   <td className="p-4 font-medium text-slate-800">{f.clientes?.razao_social}</td>
                   <td className="p-4 text-slate-600">{f.competencia}</td>

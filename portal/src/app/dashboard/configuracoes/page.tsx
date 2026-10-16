@@ -5,6 +5,8 @@ import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { RefreshCw, Download } from 'lucide-react'
 import { APP_VERSION } from '@/utils/version'
+import { useTableFeatures } from '@/hooks/useTableFeatures'
+import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
 
 export default function ConfiguracoesPage() {
   const supabase = createClient()
@@ -14,6 +16,45 @@ export default function ConfiguracoesPage() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+
+  const {
+    sortedData: hubsOrdenados,
+    sortKey,
+    sortDirection,
+    handleSort,
+    columnWidths,
+    handleResizeColumn
+  } = useTableFeatures({
+    data: hubs,
+    tableId: 'tabela_hubs_configuracoes',
+    defaultSortKey: 'cliente',
+    defaultSortDirection: 'asc',
+    initialWidths: {
+      cliente: 260,
+      contraSenha: 200,
+      ultimaSync: 180,
+      status: 120,
+      acao: 110
+    },
+    customExtractors: {
+      cliente: (h: any) => h.razao_social || '',
+      contraSenha: (h: any) => {
+        const config = Array.isArray(h.configuracoes_hub) ? h.configuracoes_hub[0] : h.configuracoes_hub
+        return config?.offline_secret || ''
+      },
+      ultimaSync: (h: any) => {
+        const config = Array.isArray(h.configuracoes_hub) ? h.configuracoes_hub[0] : h.configuracoes_hub
+        return config?.ultima_sincronizacao || ''
+      },
+      status: (h: any) => {
+        const config = Array.isArray(h.configuracoes_hub) ? h.configuracoes_hub[0] : h.configuracoes_hub
+        const lastSync = config?.ultima_sincronizacao
+        if (!lastSync) return 0
+        const diff = new Date().getTime() - new Date(lastSync).getTime()
+        return diff < 180000 ? 1 : 0
+      }
+    }
+  })
 
   const [formData, setFormData] = useState({
     dia_vencimento: 10,
@@ -227,18 +268,66 @@ export default function ConfiguracoesPage() {
             <h3 className="font-semibold text-lg text-slate-800">Hubs Ativos (Monitoramento)</h3>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse" style={{ tableLayout: 'fixed' }}>
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-sm text-slate-500">
-                  <th className="p-4 font-medium">Cliente</th>
-                  <th className="p-4 font-medium">Contra-Senha (Offline)</th>
-                  <th className="p-4 font-medium">Última Sincronização</th>
-                  <th className="p-4 font-medium">Status do Hub</th>
-                  <th className="p-4 font-medium text-right">Ação</th>
+                  <ResizableSortableTh
+                    columnId="cliente"
+                    label="Cliente"
+                    sortKey="cliente"
+                    currentSortKey={sortKey}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    width={columnWidths.cliente}
+                    onResize={handleResizeColumn}
+                    minWidth={160}
+                  />
+                  <ResizableSortableTh
+                    columnId="contraSenha"
+                    label="Contra-Senha (Offline)"
+                    sortKey="contraSenha"
+                    currentSortKey={sortKey}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    width={columnWidths.contraSenha}
+                    onResize={handleResizeColumn}
+                    minWidth={150}
+                  />
+                  <ResizableSortableTh
+                    columnId="ultimaSync"
+                    label="Última Sincronização"
+                    sortKey="ultimaSync"
+                    currentSortKey={sortKey}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    width={columnWidths.ultimaSync}
+                    onResize={handleResizeColumn}
+                    minWidth={150}
+                  />
+                  <ResizableSortableTh
+                    columnId="status"
+                    label="Status do Hub"
+                    sortKey="status"
+                    currentSortKey={sortKey}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    width={columnWidths.status}
+                    onResize={handleResizeColumn}
+                    minWidth={110}
+                  />
+                  <ResizableSortableTh
+                    columnId="acao"
+                    label="Ação"
+                    disableSort
+                    width={columnWidths.acao}
+                    onResize={handleResizeColumn}
+                    minWidth={100}
+                    align="right"
+                  />
                 </tr>
               </thead>
               <tbody>
-                {hubs.map((hub) => {
+                {hubsOrdenados.map((hub) => {
                   const config = Array.isArray(hub.configuracoes_hub) ? hub.configuracoes_hub[0] : hub.configuracoes_hub;
                   const lastSync = config?.ultima_sincronizacao;
                   const offlineSecret = config?.offline_secret || 'Não gerada';
@@ -252,12 +341,14 @@ export default function ConfiguracoesPage() {
 
                   return (
                     <tr key={hub.id} className="border-b border-slate-100 hover:bg-slate-50">
-                      <td className="p-4 text-sm font-medium text-slate-800">{hub.razao_social}</td>
-                      <td className="p-4 text-sm text-slate-600 font-mono bg-slate-100 rounded px-2 py-1 select-all">{offlineSecret}</td>
-                      <td className="p-4 text-sm text-slate-600">
+                      <td className="p-4 text-sm font-medium text-slate-800 truncate" title={hub.razao_social}>{hub.razao_social}</td>
+                      <td className="p-4 text-sm text-slate-600 font-mono truncate">
+                        <span className="bg-slate-100 rounded px-2 py-1 select-all">{offlineSecret}</span>
+                      </td>
+                      <td className="p-4 text-sm text-slate-600 truncate">
                         {lastSync ? new Date(lastSync).toLocaleString('pt-BR') : 'Nunca'}
                       </td>
-                      <td className="p-4 text-sm">
+                      <td className="p-4 text-sm truncate">
                         {isOnline ? (
                           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
                             <span className="w-2 h-2 rounded-full bg-green-500 mr-1.5 animate-pulse"></span>
@@ -269,7 +360,7 @@ export default function ConfiguracoesPage() {
                           </span>
                         )}
                       </td>
-                      <td className="p-4 text-right">
+                      <td className="p-4 text-right whitespace-nowrap">
                         <button
                           onClick={() => setSelectedCliente(hub.id)}
                           className="text-blue-600 hover:text-blue-800 text-sm font-medium"

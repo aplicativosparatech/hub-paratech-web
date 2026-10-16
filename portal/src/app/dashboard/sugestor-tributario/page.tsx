@@ -12,6 +12,8 @@ import toast from 'react-hot-toast'
 import * as XLSX from 'xlsx'
 import { createClient } from '@/utils/supabase/client'
 import { ProdutoTributadoOutput, ItemExtraidoOcr } from '@/utils/tributario/sugestorEngine'
+import { useTableFeatures } from '@/hooks/useTableFeatures'
+import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
 
 export default function SugestorTributarioPage() {
   const supabase = createClient()
@@ -508,6 +510,41 @@ export default function SugestorTributarioPage() {
     if (filtroTabela === 'cesta_basica') return item.classificacaoReforma.toLowerCase().includes('cesta') || item.ibsAliq === 0
 
     return true
+  })
+
+  const {
+    sortedData: itensOrdenados,
+    sortKey,
+    sortDirection,
+    handleSort,
+    columnWidths,
+    handleResizeColumn
+  } = useTableFeatures({
+    data: itensFiltrados,
+    tableId: 'tabela_sugestor_tributario',
+    defaultSortKey: 'produto',
+    defaultSortDirection: 'asc',
+    initialWidths: {
+      produto: 260,
+      ncm: 110,
+      cest: 110,
+      cfopInterno: 110,
+      cfopInterestadual: 130,
+      icms: 110,
+      pisCofins: 130,
+      reforma: 140,
+      acoes: 100
+    },
+    customExtractors: {
+      produto: (i: any) => i.descricao || '',
+      ncm: (i: any) => i.ncm || '',
+      cest: (i: any) => i.cest || '',
+      cfopInterno: (i: any) => i.cfopInterno || '',
+      cfopInterestadual: (i: any) => i.cfopInterestadual || '',
+      icms: (i: any) => i.csosn || i.cstIcms || '',
+      pisCofins: (i: any) => `${i.cstPis || ''}/${i.cstCofins || ''}`,
+      reforma: (i: any) => i.classificacaoReforma || ''
+    }
   })
 
   // EXPORTAR EM EXCEL (.XLSX)
@@ -1560,29 +1597,122 @@ export default function SugestorTributarioPage() {
         {/* Tabela de Produtos */}
         <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-xs" style={{ tableLayout: 'fixed' }}>
               <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-slate-500 uppercase tracking-wider font-bold text-[10px]">
                 <tr>
-                  <th className="px-4 py-3">Produto</th>
-                  <th className="px-3 py-3">NCM</th>
-                  <th className="px-3 py-3">CEST</th>
-                  <th className="px-3 py-3 text-center">CFOP Interno</th>
-                  <th className="px-3 py-3 text-center">CFOP Interestadual</th>
-                  <th className="px-3 py-3 text-center">{crt === 1 ? 'CSOSN' : 'CST ICMS'}</th>
-                  <th className="px-3 py-3 text-center">PIS / COFINS</th>
-                  <th className="px-3 py-3 text-center">IBS + CBS (Reforma)</th>
-                  <th className="px-4 py-3 text-right">Ações</th>
+                  <ResizableSortableTh
+                    columnId="produto"
+                    label="Produto"
+                    sortKey="produto"
+                    currentSortKey={sortKey}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    width={columnWidths.produto}
+                    onResize={handleResizeColumn}
+                    minWidth={160}
+                  />
+                  <ResizableSortableTh
+                    columnId="ncm"
+                    label="NCM"
+                    sortKey="ncm"
+                    currentSortKey={sortKey}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    width={columnWidths.ncm}
+                    onResize={handleResizeColumn}
+                    minWidth={90}
+                  />
+                  <ResizableSortableTh
+                    columnId="cest"
+                    label="CEST"
+                    sortKey="cest"
+                    currentSortKey={sortKey}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    width={columnWidths.cest}
+                    onResize={handleResizeColumn}
+                    minWidth={90}
+                  />
+                  <ResizableSortableTh
+                    columnId="cfopInterno"
+                    label="CFOP Interno"
+                    sortKey="cfopInterno"
+                    currentSortKey={sortKey}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    width={columnWidths.cfopInterno}
+                    onResize={handleResizeColumn}
+                    minWidth={95}
+                    align="center"
+                  />
+                  <ResizableSortableTh
+                    columnId="cfopInterestadual"
+                    label="CFOP Interestadual"
+                    sortKey="cfopInterestadual"
+                    currentSortKey={sortKey}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    width={columnWidths.cfopInterestadual}
+                    onResize={handleResizeColumn}
+                    minWidth={110}
+                    align="center"
+                  />
+                  <ResizableSortableTh
+                    columnId="icms"
+                    label={crt === 1 ? 'CSOSN' : 'CST ICMS'}
+                    sortKey="icms"
+                    currentSortKey={sortKey}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    width={columnWidths.icms}
+                    onResize={handleResizeColumn}
+                    minWidth={95}
+                    align="center"
+                  />
+                  <ResizableSortableTh
+                    columnId="pisCofins"
+                    label="PIS / COFINS"
+                    sortKey="pisCofins"
+                    currentSortKey={sortKey}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    width={columnWidths.pisCofins}
+                    onResize={handleResizeColumn}
+                    minWidth={110}
+                    align="center"
+                  />
+                  <ResizableSortableTh
+                    columnId="reforma"
+                    label="IBS + CBS (Reforma)"
+                    sortKey="reforma"
+                    currentSortKey={sortKey}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    width={columnWidths.reforma}
+                    onResize={handleResizeColumn}
+                    minWidth={120}
+                    align="center"
+                  />
+                  <ResizableSortableTh
+                    columnId="acoes"
+                    label="Ações"
+                    disableSort
+                    width={columnWidths.acoes}
+                    onResize={handleResizeColumn}
+                    minWidth={90}
+                    align="right"
+                  />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
-                {itensFiltrados.length === 0 ? (
+                {itensOrdenados.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="px-4 py-8 text-center text-slate-400 italic">
                       Nenhum produto cadastrado na tabela. Digite um produto acima, envie uma planilha ou tire uma foto para tributar!
                     </td>
                   </tr>
                 ) : (
-                  itensFiltrados.map((item) => (
+                  itensOrdenados.map((item) => (
                     <tr 
                       key={item.id}
                       className="hover:bg-slate-50/70 dark:hover:bg-slate-900/40 transition-colors"

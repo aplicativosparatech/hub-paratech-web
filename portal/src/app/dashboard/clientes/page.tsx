@@ -1,12 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Plus, Pencil, Trash2, X, Copy, RefreshCw, Search, Upload } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { limparDocumento, formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
 import ImportadorLoteModal from '@/components/ImportadorLoteModal'
+import ResizableSortableTh from '@/components/ui/ResizableSortableTh'
+import { useTableFeatures } from '@/hooks/useTableFeatures'
 
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<any[]>([])
@@ -61,6 +63,59 @@ export default function ClientesPage() {
     toast.success('Token copiado!')
   }
 
+  const clientesFiltrados = useMemo(() => {
+    return clientes.filter(c => {
+      if (!searchTerm) return true
+      const term = searchTerm.toLowerCase().trim()
+      const cleanTerm = limparDocumento(term)
+      const doc = (c.cnpj || '').toLowerCase()
+      const cleanDoc = limparDocumento(doc)
+      return (
+        (c.razao_social && c.razao_social.toLowerCase().includes(term)) ||
+        (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(term)) ||
+        (c.contabilidades?.razao_social && c.contabilidades.razao_social.toLowerCase().includes(term)) ||
+        doc.includes(term) ||
+        (cleanTerm && cleanDoc.includes(cleanTerm))
+      )
+    })
+  }, [clientes, searchTerm])
+
+  const {
+    sortedData: clientesOrdenados,
+    sortKey,
+    sortDirection,
+    handleSort,
+    columnWidths,
+    handleResizeColumn
+  } = useTableFeatures({
+    data: clientesFiltrados,
+    tableId: 'clientes_admin',
+    defaultSortKey: 'razao_social',
+    defaultSortDirection: 'asc',
+    initialWidths: {
+      logo: 70,
+      razao_social: 250,
+      cnpj: 180,
+      regime: 130,
+      mensalidade: 120,
+      certificado: 170,
+      contabilidade: 180,
+      status: 100,
+      token: 140,
+      acoes: 120
+    },
+    customExtractors: {
+      razao_social: (c: any) => c.razao_social || c.nome_fantasia || '',
+      cnpj: (c: any) => c.cnpj || '',
+      regime: (c: any) => c.regime_tributario || '',
+      mensalidade: (c: any) => Number(c.valor_mensalidade || 0),
+      certificado: (c: any) => c.certificado_validade || '',
+      contabilidade: (c: any) => c.contabilidades?.razao_social || '',
+      status: (c: any) => (c.ativo ? 1 : 0),
+      token: (c: any) => c.hub_token || ''
+    }
+  })
+
   return (
     <div className="p-8">
       <header className="flex justify-between items-center mb-8">
@@ -103,61 +158,128 @@ export default function ClientesPage() {
           />
         </div>
         <div className="text-xs text-slate-500 font-medium">
-          {clientes.filter(c => {
-            if (!searchTerm) return true
-            const term = searchTerm.toLowerCase().trim()
-            const cleanTerm = limparDocumento(term)
-            const doc = (c.cnpj || '').toLowerCase()
-            const cleanDoc = limparDocumento(doc)
-            return (
-              (c.razao_social && c.razao_social.toLowerCase().includes(term)) ||
-              (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(term)) ||
-              (c.contabilidades?.razao_social && c.contabilidades.razao_social.toLowerCase().includes(term)) ||
-              doc.includes(term) ||
-              (cleanTerm && cleanDoc.includes(cleanTerm))
-            )
-          }).length} {clientes.length === 1 ? 'cliente encontrado' : 'clientes encontrados'}
+          {clientesFiltrados.length} {clientesFiltrados.length === 1 ? 'cliente encontrado' : 'clientes encontrados'}
         </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <table className="w-full text-left border-collapse">
+        <table className="w-full text-left border-collapse" style={{ tableLayout: 'fixed' }}>
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
-              <th className="p-4 font-semibold text-slate-600 text-sm">Logo</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">Razão Social / Ramo</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">CNPJ / CPF / Responsável</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">Regime</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">Mensalidade</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">Certificado Digital</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">Contabilidade</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">Status</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">Token do Hub</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm text-right">Ações</th>
+              <ResizableSortableTh
+                columnId="logo"
+                label="Logo"
+                disableSort
+                width={columnWidths.logo}
+                onResize={handleResizeColumn}
+                minWidth={60}
+              />
+              <ResizableSortableTh
+                columnId="razao_social"
+                label="Razão Social / Ramo"
+                sortKey="razao_social"
+                currentSortKey={sortKey}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+                width={columnWidths.razao_social}
+                onResize={handleResizeColumn}
+                minWidth={150}
+              />
+              <ResizableSortableTh
+                columnId="cnpj"
+                label="CNPJ / CPF"
+                sortKey="cnpj"
+                currentSortKey={sortKey}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+                width={columnWidths.cnpj}
+                onResize={handleResizeColumn}
+                minWidth={130}
+              />
+              <ResizableSortableTh
+                columnId="regime"
+                label="Regime"
+                sortKey="regime"
+                currentSortKey={sortKey}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+                width={columnWidths.regime}
+                onResize={handleResizeColumn}
+                minWidth={100}
+              />
+              <ResizableSortableTh
+                columnId="mensalidade"
+                label="Mensalidade"
+                sortKey="mensalidade"
+                currentSortKey={sortKey}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+                width={columnWidths.mensalidade}
+                onResize={handleResizeColumn}
+                minWidth={100}
+              />
+              <ResizableSortableTh
+                columnId="certificado"
+                label="Certificado Digital"
+                sortKey="certificado"
+                currentSortKey={sortKey}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+                width={columnWidths.certificado}
+                onResize={handleResizeColumn}
+                minWidth={140}
+              />
+              <ResizableSortableTh
+                columnId="contabilidade"
+                label="Contabilidade"
+                sortKey="contabilidade"
+                currentSortKey={sortKey}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+                width={columnWidths.contabilidade}
+                onResize={handleResizeColumn}
+                minWidth={130}
+              />
+              <ResizableSortableTh
+                columnId="status"
+                label="Status"
+                sortKey="status"
+                currentSortKey={sortKey}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+                width={columnWidths.status}
+                onResize={handleResizeColumn}
+                minWidth={90}
+              />
+              <ResizableSortableTh
+                columnId="token"
+                label="Token do Hub"
+                sortKey="token"
+                currentSortKey={sortKey}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+                width={columnWidths.token}
+                onResize={handleResizeColumn}
+                minWidth={120}
+              />
+              <ResizableSortableTh
+                columnId="acoes"
+                label="Ações"
+                disableSort
+                width={columnWidths.acoes}
+                onResize={handleResizeColumn}
+                minWidth={110}
+                align="right"
+              />
             </tr>
           </thead>
           <tbody>
             {loading ? (
                <tr><td colSpan={10} className="p-8 text-center text-slate-500">Carregando...</td></tr>
-            ) : clientes.length === 0 ? (
+            ) : clientesOrdenados.length === 0 ? (
               <tr><td colSpan={10} className="p-8 text-center text-slate-500">Nenhum cliente cadastrado.</td></tr>
             ) : (
-              clientes
-                .filter(c => {
-                  if (!searchTerm) return true
-                  const term = searchTerm.toLowerCase().trim()
-                  const cleanTerm = limparDocumento(term)
-                  const doc = (c.cnpj || '').toLowerCase()
-                  const cleanDoc = limparDocumento(doc)
-                  return (
-                    (c.razao_social && c.razao_social.toLowerCase().includes(term)) ||
-                    (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(term)) ||
-                    (c.contabilidades?.razao_social && c.contabilidades.razao_social.toLowerCase().includes(term)) ||
-                    doc.includes(term) ||
-                    (cleanTerm && cleanDoc.includes(cleanTerm))
-                  )
-                })
-                .map(c => {
+              clientesOrdenados.map(c => {
                 let certStatus = <span className="text-slate-400 text-xs">Não cadastrado</span>
                 if (c.certificado_validade) {
                   const valDate = new Date(c.certificado_validade)

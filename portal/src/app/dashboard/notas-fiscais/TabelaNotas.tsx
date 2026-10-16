@@ -19,6 +19,8 @@ import {
   extrairDataIsoBrasil 
 } from '@/utils/dateBrasil'
 import { limparDocumento, formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
+import ResizableSortableTh from '@/components/ui/ResizableSortableTh'
+import { useTableFeatures } from '@/hooks/useTableFeatures'
 
 function AssinaturaChip({ ok }: { ok: boolean }) {
   return ok
@@ -254,11 +256,45 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     setCurrentPage(1)
   }, [filtroMes, dataInicio, dataFim, buscaNumero, buscaGeral, selectedCliente, pageSize])
 
-  // Paginação dos registros filtrados
+  // Hook de Ordenação Inteligente e Redimensionamento de Colunas
+  const {
+    sortedData: notasOrdenadas,
+    sortKey,
+    sortDirection,
+    handleSort,
+    columnWidths,
+    handleResizeColumn
+  } = useTableFeatures({
+    data: notasFiltradas,
+    tableId: `notas_${tabela}`,
+    defaultSortKey: 'numero',
+    defaultSortDirection: 'desc',
+    initialWidths: {
+      numero: 110,
+      chave: 320,
+      emitente: 220,
+      valor: 120,
+      emissao: 130,
+      transmissao: 130,
+      assinatura: 100,
+      acoes: 160
+    },
+    customExtractors: {
+      numero: (n: any) => Number(String(n.numero || '0').replace(/\D/g, '')),
+      chave: (n: any) => n.chave || '',
+      emitente: (n: any) => n.cnpj_emitente || (n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : '') || '',
+      valor: (n: any) => Number(n.valor || 0),
+      emissao: (n: any) => n.data_emissao || '',
+      transmissao: (n: any) => n.data_transmissao || '',
+      assinatura: (n: any) => (n.tem_assinatura ? 1 : 0)
+    }
+  })
+
+  // Paginação dos registros ordenados
   const notasPaginadas = useMemo(() => {
     const start = (currentPage - 1) * pageSize
-    return notasFiltradas.slice(start, start + pageSize)
-  }, [notasFiltradas, currentPage, pageSize])
+    return notasOrdenadas.slice(start, start + pageSize)
+  }, [notasOrdenadas, currentPage, pageSize])
 
   const syncInfo = formatRelativeSync(ultimaSincronizacaoHub)
 
@@ -747,17 +783,96 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
         <div className="text-slate-400 py-8 text-center animate-pulse">Carregando notas...</div>
       ) : (
         <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs bg-white">
-          <table className="w-full text-left text-sm text-slate-600">
+          <table className="w-full text-left text-sm text-slate-600" style={{ tableLayout: 'fixed' }}>
             <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
               <tr>
-                <th className="p-4">Número</th>
-                <th className="p-4">Chave de Acesso</th>
-                <th className="p-4">Emitente (CNPJ / CPF)</th>
-                <th className="p-4">Valor (R$)</th>
-                <th className="p-4">Emissão</th>
-                <th className="p-4">Transmissão</th>
-                <th className="p-4 text-center">Assinatura</th>
-                <th className="p-4 text-center">Ações</th>
+                <ResizableSortableTh
+                  columnId="numero"
+                  label="Número"
+                  sortKey="numero"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.numero}
+                  onResize={handleResizeColumn}
+                  minWidth={80}
+                />
+                <ResizableSortableTh
+                  columnId="chave"
+                  label="Chave de Acesso"
+                  sortKey="chave"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.chave}
+                  onResize={handleResizeColumn}
+                  minWidth={160}
+                />
+                <ResizableSortableTh
+                  columnId="emitente"
+                  label="Emitente (CNPJ / CPF)"
+                  sortKey="emitente"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.emitente}
+                  onResize={handleResizeColumn}
+                  minWidth={150}
+                />
+                <ResizableSortableTh
+                  columnId="valor"
+                  label="Valor (R$)"
+                  sortKey="valor"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.valor}
+                  onResize={handleResizeColumn}
+                  minWidth={90}
+                />
+                <ResizableSortableTh
+                  columnId="emissao"
+                  label="Emissão"
+                  sortKey="emissao"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.emissao}
+                  onResize={handleResizeColumn}
+                  minWidth={110}
+                />
+                <ResizableSortableTh
+                  columnId="transmissao"
+                  label="Transmissão"
+                  sortKey="transmissao"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.transmissao}
+                  onResize={handleResizeColumn}
+                  minWidth={110}
+                />
+                <ResizableSortableTh
+                  columnId="assinatura"
+                  label="Assinatura"
+                  sortKey="assinatura"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.assinatura}
+                  onResize={handleResizeColumn}
+                  minWidth={85}
+                  align="center"
+                />
+                <ResizableSortableTh
+                  columnId="acoes"
+                  label="Ações"
+                  disableSort
+                  width={columnWidths.acoes}
+                  onResize={handleResizeColumn}
+                  minWidth={140}
+                  align="center"
+                />
               </tr>
             </thead>
             <tbody>
@@ -780,34 +895,53 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                     key={n.id} 
                     className={`border-b transition ${isDivergente ? 'bg-red-50 hover:bg-red-100/90 text-red-900 border-red-200' : 'border-slate-100 hover:bg-slate-50'}`}
                   >
-                    <td className="p-4 font-mono">
-                      <div className="flex items-center gap-2">
-                        <span className={isDivergente ? 'font-bold text-red-700' : ''}>{n.numero || '—'}</span>
+                    <td className="p-3.5 font-mono overflow-hidden">
+                      <div className="flex items-center gap-2 truncate">
+                        <span className={isDivergente ? 'font-bold text-red-700' : 'text-slate-800 font-semibold'}>{n.numero || '—'}</span>
                         {isDivergente && (
                           <span 
-                            className="bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 shadow-sm"
+                            className="bg-red-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0"
                             title={n.motivo_divergencia || 'Emitente não pertence à empresa cadastrada'}
                           >
-                            ⚠️ Não Pertence à Empresa
+                            ⚠️ Divergente
                           </span>
                         )}
                       </div>
                     </td>
-                    <td className="p-4 font-mono text-xs text-slate-500" title={n.chave}>
-                      {n.chave ? n.chave.substring(0, 22) + '...' : '—'}
+                    <td className="p-3.5 font-mono text-xs text-slate-500 overflow-hidden" title={n.chave || ''}>
+                      <div className="flex items-center gap-1.5 overflow-hidden">
+                        <span className="truncate select-all" title={n.chave || ''}>
+                          {n.chave || '—'}
+                        </span>
+                        {n.chave && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(n.chave)
+                              toast.success('Chave copiada!')
+                            }}
+                            className="text-slate-400 hover:text-blue-600 p-0.5 rounded transition shrink-0"
+                            title="Copiar chave de acesso"
+                          >
+                            <Copy size={12} />
+                          </button>
+                        )}
+                      </div>
                     </td>
-                    <td className="p-4 font-mono text-xs">
-                      <div className={isDivergente ? 'text-red-700 font-bold' : ''}>
+                    <td className="p-3.5 font-mono text-xs overflow-hidden">
+                      <div className={`truncate ${isDivergente ? 'text-red-700 font-bold' : 'text-slate-800'}`} title={formatDoc(emitenteDoc)}>
                         {formatDoc(emitenteDoc)}
                       </div>
                       {isDivergente && (
-                        <div className="text-[11px] text-red-600 mt-0.5 font-sans max-w-xs" title={n.motivo_divergencia || 'Emitente diverge da empresa atual'}>
-                          {n.motivo_divergencia || `CNPJ na nota (${formatDoc(emitenteDoc)}) diverge da empresa (${formatDoc(currentCli?.cnpj)})`}
+                        <div className="text-[10px] text-red-600 mt-0.5 font-sans truncate" title={n.motivo_divergencia || 'Emitente diverge da empresa atual'}>
+                          {n.motivo_divergencia || `CNPJ diverge da empresa`}
                         </div>
                       )}
                     </td>
-                    <td className="p-4 font-medium">R$ {Number(n.valor || 0).toFixed(2)}</td>
-                    <td className="p-4 text-xs">
+                    <td className="p-3.5 font-medium overflow-hidden whitespace-nowrap">
+                      R$ {Number(n.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-3.5 text-xs overflow-hidden whitespace-nowrap">
                       <div className="font-semibold text-slate-800">{formatarDataBrasil(n.data_emissao)}</div>
                       {n.data_emissao && (
                         <div className="text-[11px] text-slate-400 font-mono mt-0.5" title="Horário Oficial de Brasília / MG">
@@ -815,7 +949,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                         </div>
                       )}
                     </td>
-                    <td className="p-4 text-xs">
+                    <td className="p-3.5 text-xs overflow-hidden whitespace-nowrap">
                       <div className="font-semibold text-slate-800">{formatarDataBrasil(n.data_transmissao)}</div>
                       {n.data_transmissao && (
                         <div className="text-[11px] text-slate-400 font-mono mt-0.5" title="Horário de Transmissão SEFAZ">
@@ -823,7 +957,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                         </div>
                       )}
                     </td>
-                    <td className="p-4 text-center"><AssinaturaChip ok={n.tem_assinatura} /></td>
+                    <td className="p-3.5 text-center overflow-hidden"><AssinaturaChip ok={n.tem_assinatura} /></td>
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center gap-1">
                         {/* 1. Botão Gerar DANFE / DANFE-NFCe */}

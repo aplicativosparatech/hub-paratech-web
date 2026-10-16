@@ -16,6 +16,8 @@ import {
 } from '@/utils/relatorioExporter'
 import Pagination from '@/components/Pagination'
 import { limparDocumento, formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
+import { useTableFeatures } from '@/hooks/useTableFeatures'
+import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
 
 export default function RelatoriosPage() {
   const supabase = createClient()
@@ -342,17 +344,83 @@ export default function RelatoriosPage() {
     setPageMonofasico(1)
   }, [filtroNcmSelecionado, modoAgrupamentoMonofasico, buscaMonofasico, selectedMonth, selectedCliente, pageSizeMonofasico])
 
+  // Hook de ordenação e redimensionamento - Monofásicos Analítico (Cupom)
+  const {
+    sortedData: monofasicosFiltradosOrdenados,
+    sortKey: sortKeyMonoCupom,
+    sortDirection: sortDirMonoCupom,
+    handleSort: handleSortMonoCupom,
+    columnWidths: colWidthsMonoCupom,
+    handleResizeColumn: handleResizeMonoCupom
+  } = useTableFeatures({
+    data: produtosMonofasicosFiltrados,
+    tableId: 'tabela_monofasicos_cupom',
+    defaultSortKey: 'total',
+    defaultSortDirection: 'desc',
+    initialWidths: {
+      cupom: 170,
+      produto: 250,
+      ncm: 200,
+      cfopCst: 140,
+      qtd: 90,
+      vlrUnit: 110,
+      total: 140
+    },
+    customExtractors: {
+      cupom: (i: any) => Number(i.cupom_numero || 0),
+      produto: (i: any) => i.xProd || '',
+      ncm: (i: any) => i.ncm || '',
+      cfopCst: (i: any) => `${i.cfop || ''}/${i.cst_pis || ''}`,
+      qtd: (i: any) => Number(i.qCom || 0),
+      vlrUnit: (i: any) => Number(i.vUnCom || 0),
+      total: (i: any) => Number(i.vProd || 0)
+    }
+  })
+
+  // Hook de ordenação e redimensionamento - Monofásicos Sintético (NCM/Produto)
+  const {
+    sortedData: monofasicosAgrupadosOrdenados,
+    sortKey: sortKeyMonoNcm,
+    sortDirection: sortDirMonoNcm,
+    handleSort: handleSortMonoNcm,
+    columnWidths: colWidthsMonoNcm,
+    handleResizeColumn: handleResizeMonoNcm
+  } = useTableFeatures({
+    data: produtosMonofasicosAgrupados,
+    tableId: 'tabela_monofasicos_ncm',
+    defaultSortKey: 'total',
+    defaultSortDirection: 'desc',
+    initialWidths: {
+      ncm: 220,
+      produto: 260,
+      cupons: 110,
+      qtdTotal: 100,
+      precoMedio: 120,
+      total: 140,
+      percentual: 110
+    },
+    customExtractors: {
+      ncm: (i: any) => i.ncm || '',
+      produto: (i: any) => i.xProd || '',
+      cupons: (i: any) => Number(i.qtd_cupons || 0),
+      qtdTotal: (i: any) => Number(i.qtd_total || 0),
+      precoMedio: (i: any) => Number(i.preco_medio || 0),
+      total: (i: any) => Number(i.valor_total || 0),
+      percentual: (i: any) => Number(i.percentual || 0)
+    }
+  })
+
   // Fatiamento Paginado - Monofásicos Analítico (Cupom)
   const produtosMonofasicosFiltradosPaginados = useMemo(() => {
     const start = (pageMonofasico - 1) * pageSizeMonofasico
-    return produtosMonofasicosFiltrados.slice(start, start + pageSizeMonofasico)
-  }, [produtosMonofasicosFiltrados, pageMonofasico, pageSizeMonofasico])
+    return monofasicosFiltradosOrdenados.slice(start, start + pageSizeMonofasico)
+  }, [monofasicosFiltradosOrdenados, pageMonofasico, pageSizeMonofasico])
 
   // Fatiamento Paginado - Monofásicos Agrupado (NCM/Produto)
   const produtosMonofasicosAgrupadosPaginados = useMemo(() => {
     const start = (pageMonofasico - 1) * pageSizeMonofasico
-    return produtosMonofasicosAgrupados.slice(start, start + pageSizeMonofasico)
-  }, [produtosMonofasicosAgrupados, pageMonofasico, pageSizeMonofasico])
+    return monofasicosAgrupadosOrdenados.slice(start, start + pageSizeMonofasico)
+  }, [monofasicosAgrupadosOrdenados, pageMonofasico, pageSizeMonofasico])
 
   // Função Específica para Exportação de Monofásicos com os Filtros e Agrupamentos Ativos
   const handleExportarMonofasicosPersonalizado = (formato: FormatoExportacao) => {
@@ -1408,22 +1476,95 @@ export default function RelatoriosPage() {
                 
                 /* TABELA MODO 1: ANALÍTICO POR CUPOM */
                 <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
-                  <table className="w-full text-left border-collapse">
+                  <table className="w-full text-left border-collapse" style={{ tableLayout: 'fixed' }}>
                     <thead>
                       <tr className="bg-slate-100/80 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
-                        <th className="p-3.5">Cupom / Nota Fiscal</th>
-                        <th className="p-3.5">Produto</th>
-                        <th className="p-3.5">NCM & Classificação</th>
-                        <th className="p-3.5">CFOP & CST</th>
-                        <th className="p-3.5 text-right">Qtd</th>
-                        <th className="p-3.5 text-right">Vlr Unit</th>
-                        <th className="p-3.5 text-right">Total Monofásico</th>
+                        <ResizableSortableTh
+                          columnId="cupom"
+                          label="Cupom / Nota Fiscal"
+                          sortKey="cupom"
+                          currentSortKey={sortKeyMonoCupom}
+                          currentSortDirection={sortDirMonoCupom}
+                          onSort={handleSortMonoCupom}
+                          width={colWidthsMonoCupom.cupom}
+                          onResize={handleResizeMonoCupom}
+                          minWidth={140}
+                        />
+                        <ResizableSortableTh
+                          columnId="produto"
+                          label="Produto"
+                          sortKey="produto"
+                          currentSortKey={sortKeyMonoCupom}
+                          currentSortDirection={sortDirMonoCupom}
+                          onSort={handleSortMonoCupom}
+                          width={colWidthsMonoCupom.produto}
+                          onResize={handleResizeMonoCupom}
+                          minWidth={180}
+                        />
+                        <ResizableSortableTh
+                          columnId="ncm"
+                          label="NCM & Classificação"
+                          sortKey="ncm"
+                          currentSortKey={sortKeyMonoCupom}
+                          currentSortDirection={sortDirMonoCupom}
+                          onSort={handleSortMonoCupom}
+                          width={colWidthsMonoCupom.ncm}
+                          onResize={handleResizeMonoCupom}
+                          minWidth={160}
+                        />
+                        <ResizableSortableTh
+                          columnId="cfopCst"
+                          label="CFOP & CST"
+                          sortKey="cfopCst"
+                          currentSortKey={sortKeyMonoCupom}
+                          currentSortDirection={sortDirMonoCupom}
+                          onSort={handleSortMonoCupom}
+                          width={colWidthsMonoCupom.cfopCst}
+                          onResize={handleResizeMonoCupom}
+                          minWidth={120}
+                        />
+                        <ResizableSortableTh
+                          columnId="qtd"
+                          label="Qtd"
+                          sortKey="qtd"
+                          currentSortKey={sortKeyMonoCupom}
+                          currentSortDirection={sortDirMonoCupom}
+                          onSort={handleSortMonoCupom}
+                          width={colWidthsMonoCupom.qtd}
+                          onResize={handleResizeMonoCupom}
+                          minWidth={80}
+                          align="right"
+                        />
+                        <ResizableSortableTh
+                          columnId="vlrUnit"
+                          label="Vlr Unit"
+                          sortKey="vlrUnit"
+                          currentSortKey={sortKeyMonoCupom}
+                          currentSortDirection={sortDirMonoCupom}
+                          onSort={handleSortMonoCupom}
+                          width={colWidthsMonoCupom.vlrUnit}
+                          onResize={handleResizeMonoCupom}
+                          minWidth={95}
+                          align="right"
+                        />
+                        <ResizableSortableTh
+                          columnId="total"
+                          label="Total Monofásico"
+                          sortKey="total"
+                          currentSortKey={sortKeyMonoCupom}
+                          currentSortDirection={sortDirMonoCupom}
+                          onSort={handleSortMonoCupom}
+                          width={colWidthsMonoCupom.total}
+                          onResize={handleResizeMonoCupom}
+                          minWidth={120}
+                          align="right"
+                        />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-sm bg-white">
                       {produtosMonofasicosFiltradosPaginados.map((item: any) => (
                         <tr key={item.id} className="hover:bg-amber-50/30 transition">
-                          <td className="p-3.5 whitespace-nowrap">
+                          <td className="p-3.5 whitespace-nowrap truncate">
                             <div className="flex items-center gap-2">
                               <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-extrabold rounded-md">
                                 {item.modelo === '65' ? 'NFC-e' : 'NF-e'} Nº {item.cupom_numero}
@@ -1434,12 +1575,12 @@ export default function RelatoriosPage() {
                             </div>
                           </td>
 
-                          <td className="p-3.5">
-                            <span className="font-bold text-slate-900 block">{item.xProd}</span>
+                          <td className="p-3.5 truncate">
+                            <span className="font-bold text-slate-900 block truncate">{item.xProd}</span>
                             <span className="text-[11px] text-slate-400 font-mono">Cód: {item.cProd}</span>
                           </td>
 
-                          <td className="p-3.5 whitespace-nowrap">
+                          <td className="p-3.5 whitespace-nowrap truncate">
                             <span className="font-mono text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200/60 px-2 py-0.5 rounded-md">
                               {item.ncm_formatado}
                             </span>
@@ -1448,25 +1589,25 @@ export default function RelatoriosPage() {
                             </span>
                           </td>
 
-                          <td className="p-3.5 whitespace-nowrap">
+                          <td className="p-3.5 whitespace-nowrap truncate">
                             <span className="text-xs text-slate-600 font-mono font-medium block">CFOP: {item.cfop}</span>
                             <span className="text-[11px] text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded font-bold">
                               CST: {item.cst} (Alíq. Zero)
                             </span>
                           </td>
 
-                          <td className="p-3.5 text-right whitespace-nowrap">
+                          <td className="p-3.5 text-right whitespace-nowrap truncate">
                             <span className="font-semibold text-slate-800">
                               {Number(item.qCom || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </span>
                             <span className="text-xs text-slate-400 ml-1">{item.uCom}</span>
                           </td>
 
-                          <td className="p-3.5 text-right whitespace-nowrap text-slate-600 text-xs">
+                          <td className="p-3.5 text-right whitespace-nowrap text-slate-600 text-xs truncate">
                             R$ {Number(item.vUnCom || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </td>
 
-                          <td className="p-3.5 text-right whitespace-nowrap">
+                          <td className="p-3.5 text-right whitespace-nowrap truncate">
                             <span className="font-bold text-amber-700 text-base">
                               R$ {Number(item.vProd || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </span>
@@ -1491,59 +1632,134 @@ export default function RelatoriosPage() {
 
                 /* TABELA MODO 2: AGRUPADO POR PRODUTO / NCM */
                 <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
-                  <table className="w-full text-left border-collapse">
+                  <table className="w-full text-left border-collapse" style={{ tableLayout: 'fixed' }}>
                     <thead>
                       <tr className="bg-slate-100/80 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
-                        <th className="p-3.5">NCM & Classificação</th>
-                        <th className="p-3.5">Produto</th>
-                        <th className="p-3.5 text-center">Cupons</th>
-                        <th className="p-3.5 text-right">Qtd Total</th>
-                        <th className="p-3.5 text-right">Preço Médio</th>
-                        <th className="p-3.5 text-right">Total Monofásico</th>
-                        <th className="p-3.5 text-right">% do Total</th>
+                        <ResizableSortableTh
+                          columnId="ncm"
+                          label="NCM & Classificação"
+                          sortKey="ncm"
+                          currentSortKey={sortKeyMonoNcm}
+                          currentSortDirection={sortDirMonoNcm}
+                          onSort={handleSortMonoNcm}
+                          width={colWidthsMonoNcm.ncm}
+                          onResize={handleResizeMonoNcm}
+                          minWidth={160}
+                        />
+                        <ResizableSortableTh
+                          columnId="produto"
+                          label="Produto"
+                          sortKey="produto"
+                          currentSortKey={sortKeyMonoNcm}
+                          currentSortDirection={sortDirMonoNcm}
+                          onSort={handleSortMonoNcm}
+                          width={colWidthsMonoNcm.produto}
+                          onResize={handleResizeMonoNcm}
+                          minWidth={180}
+                        />
+                        <ResizableSortableTh
+                          columnId="cupons"
+                          label="Cupons"
+                          sortKey="cupons"
+                          currentSortKey={sortKeyMonoNcm}
+                          currentSortDirection={sortDirMonoNcm}
+                          onSort={handleSortMonoNcm}
+                          width={colWidthsMonoNcm.cupons}
+                          onResize={handleResizeMonoNcm}
+                          minWidth={95}
+                          align="center"
+                        />
+                        <ResizableSortableTh
+                          columnId="qtdTotal"
+                          label="Qtd Total"
+                          sortKey="qtdTotal"
+                          currentSortKey={sortKeyMonoNcm}
+                          currentSortDirection={sortDirMonoNcm}
+                          onSort={handleSortMonoNcm}
+                          width={colWidthsMonoNcm.qtdTotal}
+                          onResize={handleResizeMonoNcm}
+                          minWidth={95}
+                          align="right"
+                        />
+                        <ResizableSortableTh
+                          columnId="precoMedio"
+                          label="Preço Médio"
+                          sortKey="precoMedio"
+                          currentSortKey={sortKeyMonoNcm}
+                          currentSortDirection={sortDirMonoNcm}
+                          onSort={handleSortMonoNcm}
+                          width={colWidthsMonoNcm.precoMedio}
+                          onResize={handleResizeMonoNcm}
+                          minWidth={110}
+                          align="right"
+                        />
+                        <ResizableSortableTh
+                          columnId="total"
+                          label="Total Monofásico"
+                          sortKey="total"
+                          currentSortKey={sortKeyMonoNcm}
+                          currentSortDirection={sortDirMonoNcm}
+                          onSort={handleSortMonoNcm}
+                          width={colWidthsMonoNcm.total}
+                          onResize={handleResizeMonoNcm}
+                          minWidth={130}
+                          align="right"
+                        />
+                        <ResizableSortableTh
+                          columnId="percentual"
+                          label="% do Total"
+                          sortKey="percentual"
+                          currentSortKey={sortKeyMonoNcm}
+                          currentSortDirection={sortDirMonoNcm}
+                          onSort={handleSortMonoNcm}
+                          width={colWidthsMonoNcm.percentual}
+                          onResize={handleResizeMonoNcm}
+                          minWidth={100}
+                          align="right"
+                        />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-sm bg-white">
                       {produtosMonofasicosAgrupadosPaginados.map((item: any, idx: number) => (
                         <tr key={idx} className="hover:bg-amber-50/30 transition">
-                          <td className="p-3.5 whitespace-nowrap">
+                          <td className="p-3.5 whitespace-nowrap truncate">
                             <span className="font-mono text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200/60 px-2 py-0.5 rounded-md">
                               {item.ncm_formatado}
                             </span>
-                            <span className="text-xs text-slate-600 block mt-1 font-medium">
+                            <span className="text-xs text-slate-600 block mt-1 font-medium truncate" title={item.descricao_ncm}>
                               {item.descricao_ncm} ({item.categoria})
                             </span>
                           </td>
 
-                          <td className="p-3.5">
-                            <span className="font-bold text-slate-900 block">{item.xProd}</span>
+                          <td className="p-3.5 truncate">
+                            <span className="font-bold text-slate-900 block truncate">{item.xProd}</span>
                             <span className="text-[11px] text-slate-400 font-mono">Cód: {item.cProd}</span>
                           </td>
 
-                          <td className="p-3.5 text-center whitespace-nowrap">
+                          <td className="p-3.5 text-center whitespace-nowrap truncate">
                             <span className="px-2.5 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg border border-blue-200/50">
                               {item.qtd_cupons} cupom(ns)
                             </span>
                           </td>
 
-                          <td className="p-3.5 text-right whitespace-nowrap">
+                          <td className="p-3.5 text-right whitespace-nowrap truncate">
                             <span className="font-bold text-slate-800">
                               {Number(item.qtd_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </span>
                             <span className="text-xs text-slate-400 ml-1">{item.uCom}</span>
                           </td>
 
-                          <td className="p-3.5 text-right whitespace-nowrap text-slate-600 text-xs">
+                          <td className="p-3.5 text-right whitespace-nowrap text-slate-600 text-xs truncate">
                             R$ {Number(item.preco_medio || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </td>
 
-                          <td className="p-3.5 text-right whitespace-nowrap">
+                          <td className="p-3.5 text-right whitespace-nowrap truncate">
                             <span className="font-bold text-amber-700 text-base">
                               R$ {Number(item.valor_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </span>
                           </td>
 
-                          <td className="p-3.5 text-right whitespace-nowrap">
+                          <td className="p-3.5 text-right whitespace-nowrap truncate">
                             <div className="flex items-center justify-end gap-2">
                               <span className="text-xs font-bold text-slate-700">
                                 {Number(item.percentual || 0).toFixed(1)}%

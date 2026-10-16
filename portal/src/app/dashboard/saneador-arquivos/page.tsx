@@ -27,6 +27,8 @@ import toast from 'react-hot-toast';
 import { createClient } from '@/utils/supabase/client';
 import { ArquivoInspecionado, MapeamentoColunas, ItemSaneadoRetorno } from '@/utils/tributario/fileParsers';
 import { limparDocumento } from '@/utils/cnpjAlfanumerico';
+import { useTableFeatures } from '@/hooks/useTableFeatures';
+import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh';
 
 interface ClienteOption {
   id: string;
@@ -366,6 +368,41 @@ export default function SaneadorArquivosPage() {
     }
 
     return true;
+  });
+
+  const {
+    sortedData: itensOrdenados,
+    sortKey,
+    sortDirection,
+    handleSort,
+    columnWidths,
+    handleResizeColumn
+  } = useTableFeatures({
+    data: itensFiltrados,
+    tableId: 'tabela_saneador_arquivos',
+    defaultSortKey: 'descricao',
+    defaultSortDirection: 'asc',
+    initialWidths: {
+      codigo: 110,
+      descricao: 260,
+      ncm: 180,
+      cest: 110,
+      cfopCsosn: 120,
+      reforma: 130,
+      ivaDual: 100,
+      motor: 150,
+      acao: 90
+    },
+    customExtractors: {
+      codigo: (i: any) => i.codigoOriginal || '',
+      descricao: (i: any) => i.descricaoOriginal || '',
+      ncm: (i: any) => i.ncmSugerido || i.ncmOriginal || '',
+      cest: (i: any) => i.cestSugerido || '',
+      cfopCsosn: (i: any) => `${i.cfopSugerido || ''}/${i.csosnSugerido || ''}`,
+      reforma: (i: any) => `${i.ibsAliq || 0}/${i.cbsAliq || 0}`,
+      ivaDual: (i: any) => Number(i.ivaDual || 0),
+      motor: (i: any) => i.provedorIa || ''
+    }
   });
 
   return (
@@ -993,29 +1030,117 @@ export default function SaneadorArquivosPage() {
 
             {/* Grid da Tabela */}
             <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
+              <table className="w-full text-xs text-left" style={{ tableLayout: 'fixed' }}>
                 <thead className="bg-slate-50 text-slate-500 font-semibold uppercase tracking-wider text-[10px] border-b border-slate-200">
                   <tr>
-                    <th className="px-4 py-3">Código</th>
-                    <th className="px-4 py-3">Descrição do Produto</th>
-                    <th className="px-4 py-3">NCM (Orig → Sugerido)</th>
-                    <th className="px-4 py-3">CEST</th>
-                    <th className="px-4 py-3">CFOP / CSOSN</th>
-                    <th className="px-4 py-3">Reforma: IBS / CBS</th>
-                    <th className="px-4 py-3">IVA Dual</th>
-                    <th className="px-4 py-3">Motor / Confiança</th>
-                    <th className="px-4 py-3 text-right">Ação</th>
+                    <ResizableSortableTh
+                      columnId="codigo"
+                      label="Código"
+                      sortKey="codigo"
+                      currentSortKey={sortKey}
+                      currentSortDirection={sortDirection}
+                      onSort={handleSort}
+                      width={columnWidths.codigo}
+                      onResize={handleResizeColumn}
+                      minWidth={80}
+                    />
+                    <ResizableSortableTh
+                      columnId="descricao"
+                      label="Descrição do Produto"
+                      sortKey="descricao"
+                      currentSortKey={sortKey}
+                      currentSortDirection={sortDirection}
+                      onSort={handleSort}
+                      width={columnWidths.descricao}
+                      onResize={handleResizeColumn}
+                      minWidth={160}
+                    />
+                    <ResizableSortableTh
+                      columnId="ncm"
+                      label="NCM (Orig → Sugerido)"
+                      sortKey="ncm"
+                      currentSortKey={sortKey}
+                      currentSortDirection={sortDirection}
+                      onSort={handleSort}
+                      width={columnWidths.ncm}
+                      onResize={handleResizeColumn}
+                      minWidth={130}
+                    />
+                    <ResizableSortableTh
+                      columnId="cest"
+                      label="CEST"
+                      sortKey="cest"
+                      currentSortKey={sortKey}
+                      currentSortDirection={sortDirection}
+                      onSort={handleSort}
+                      width={columnWidths.cest}
+                      onResize={handleResizeColumn}
+                      minWidth={90}
+                    />
+                    <ResizableSortableTh
+                      columnId="cfopCsosn"
+                      label="CFOP / CSOSN"
+                      sortKey="cfopCsosn"
+                      currentSortKey={sortKey}
+                      currentSortDirection={sortDirection}
+                      onSort={handleSort}
+                      width={columnWidths.cfopCsosn}
+                      onResize={handleResizeColumn}
+                      minWidth={100}
+                    />
+                    <ResizableSortableTh
+                      columnId="reforma"
+                      label="Reforma: IBS / CBS"
+                      sortKey="reforma"
+                      currentSortKey={sortKey}
+                      currentSortDirection={sortDirection}
+                      onSort={handleSort}
+                      width={columnWidths.reforma}
+                      onResize={handleResizeColumn}
+                      minWidth={110}
+                    />
+                    <ResizableSortableTh
+                      columnId="ivaDual"
+                      label="IVA Dual"
+                      sortKey="ivaDual"
+                      currentSortKey={sortKey}
+                      currentSortDirection={sortDirection}
+                      onSort={handleSort}
+                      width={columnWidths.ivaDual}
+                      onResize={handleResizeColumn}
+                      minWidth={85}
+                    />
+                    <ResizableSortableTh
+                      columnId="motor"
+                      label="Motor / Confiança"
+                      sortKey="motor"
+                      currentSortKey={sortKey}
+                      currentSortDirection={sortDirection}
+                      onSort={handleSort}
+                      width={columnWidths.motor}
+                      onResize={handleResizeColumn}
+                      minWidth={120}
+                    />
+                    <ResizableSortableTh
+                      columnId="acao"
+                      label="Ação"
+                      disableSort
+                      width={columnWidths.acao}
+                      onResize={handleResizeColumn}
+                      minWidth={80}
+                      align="right"
+                    />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
-                  {itensFiltrados.length === 0 ? (
+                  {itensOrdenados.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
                         Nenhum produto encontrado com o filtro selecionado.
                       </td>
                     </tr>
                   ) : (
-                    itensFiltrados.map((item, idx) => {
+                    itensOrdenados.map((item, idx) => {
                       const ncmMudou = item.ncmOriginal && item.ncmOriginal.replace(/\D/g, '') !== item.ncmSugerido.replace(/\D/g, '');
                       return (
                         <tr key={idx} className="hover:bg-slate-50/80 transition-colors">

@@ -12,13 +12,14 @@ import toast from 'react-hot-toast'
 import Link from 'next/link'
 import Pagination from '@/components/Pagination'
 import { useNotasFiscaisFilters } from './NotasFiscaisFilterContext'
-import { 
-  formatarDataBrasil, 
+import { formatarDataBrasil, 
   formatarHoraBrasil, 
   extrairCompetenciaBrasil, 
   extrairDataIsoBrasil 
 } from '@/utils/dateBrasil'
 import { limparDocumento, formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
+import { useTableFeatures } from '@/hooks/useTableFeatures'
+import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
 
 export default function TabelaCorrecao() {
   const supabase = createClient()
@@ -241,11 +242,43 @@ export default function TabelaCorrecao() {
     setCurrentPage(1)
   }, [filtroMes, dataInicio, dataFim, buscaNumero, buscaGeral, selectedCliente, pageSize])
 
-  // Paginação dos registros filtrados
+  // Hook de Ordenação e Redimensionamento de Colunas
+  const {
+    sortedData: notasOrdenadas,
+    sortKey,
+    sortDirection,
+    handleSort,
+    columnWidths,
+    handleResizeColumn
+  } = useTableFeatures({
+    data: notasFiltradas,
+    tableId: 'tabela_correcao',
+    defaultSortKey: 'emissao',
+    defaultSortDirection: 'desc',
+    initialWidths: {
+      tipo: 110,
+      numero: 140,
+      chave: 320,
+      valor: 130,
+      emissao: 130,
+      diagnostico: 240,
+      acoes: 220
+    },
+    customExtractors: {
+      tipo: (n: any) => n._tipo || '',
+      numero: (n: any) => Number(n.numero || 0),
+      chave: (n: any) => n.chave || '',
+      valor: (n: any) => Number(n.valor || 0),
+      emissao: (n: any) => n.data_emissao || '',
+      diagnostico: (n: any) => (!n.tem_assinatura ? 'Sem Assinatura' : !n.is_autorizada ? 'Sem Protocolo' : n.cstat || '')
+    }
+  })
+
+  // Paginação dos registros filtrados e ordenados
   const notasPaginadas = useMemo(() => {
     const start = (currentPage - 1) * pageSize
-    return notasFiltradas.slice(start, start + pageSize)
-  }, [notasFiltradas, currentPage, pageSize])
+    return notasOrdenadas.slice(start, start + pageSize)
+  }, [notasOrdenadas, currentPage, pageSize])
 
   const syncInfo = formatRelativeSync(ultimaSincronizacaoHub)
 
@@ -744,16 +777,84 @@ export default function TabelaCorrecao() {
         </div>
       ) : (
         <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-          <table className="w-full text-left text-sm text-slate-600">
+          <table className="w-full text-left text-sm text-slate-600" style={{ tableLayout: 'fixed' }}>
             <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
               <tr>
-                <th className="p-4">Tipo</th>
-                <th className="p-4">Número / Série</th>
-                <th className="p-4">Chave de Acesso</th>
-                <th className="p-4">Valor (R$)</th>
-                <th className="p-4">Emissão</th>
-                <th className="p-4">Diagnóstico da Pendência</th>
-                <th className="p-4 text-center">Ações de Correção</th>
+                <ResizableSortableTh
+                  columnId="tipo"
+                  label="Tipo"
+                  sortKey="tipo"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.tipo}
+                  onResize={handleResizeColumn}
+                  minWidth={90}
+                />
+                <ResizableSortableTh
+                  columnId="numero"
+                  label="Número / Série"
+                  sortKey="numero"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.numero}
+                  onResize={handleResizeColumn}
+                  minWidth={120}
+                />
+                <ResizableSortableTh
+                  columnId="chave"
+                  label="Chave de Acesso"
+                  sortKey="chave"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.chave}
+                  onResize={handleResizeColumn}
+                  minWidth={200}
+                />
+                <ResizableSortableTh
+                  columnId="valor"
+                  label="Valor (R$)"
+                  sortKey="valor"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.valor}
+                  onResize={handleResizeColumn}
+                  minWidth={110}
+                />
+                <ResizableSortableTh
+                  columnId="emissao"
+                  label="Emissão"
+                  sortKey="emissao"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.emissao}
+                  onResize={handleResizeColumn}
+                  minWidth={110}
+                />
+                <ResizableSortableTh
+                  columnId="diagnostico"
+                  label="Diagnóstico da Pendência"
+                  sortKey="diagnostico"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.diagnostico}
+                  onResize={handleResizeColumn}
+                  minWidth={180}
+                />
+                <ResizableSortableTh
+                  columnId="acoes"
+                  label="Ações de Correção"
+                  disableSort
+                  width={columnWidths.acoes}
+                  onResize={handleResizeColumn}
+                  minWidth={180}
+                  align="center"
+                />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -761,21 +862,21 @@ export default function TabelaCorrecao() {
                 const isCorrigindo = corrigindoId === n.id
                 return (
                   <tr key={n.id} className="hover:bg-amber-50/40 transition">
-                    <td className="p-4 font-bold text-slate-800 text-xs">
+                    <td className="p-4 font-bold text-slate-800 text-xs truncate">
                       <span className="px-2 py-1 bg-slate-100 rounded-md border border-slate-200">
                         {n._tipo}
                       </span>
                     </td>
-                    <td className="p-4 font-mono font-bold text-slate-900">
+                    <td className="p-4 font-mono font-bold text-slate-900 truncate">
                       Nº {n.numero || 'S/N'} <span className="text-slate-400 font-normal text-xs">(Série {n.serie || 1})</span>
                     </td>
-                    <td className="p-4 font-mono text-xs text-slate-600 select-all">
+                    <td className="p-4 font-mono text-xs text-slate-600 select-all truncate" title={n.chave}>
                       {n.chave}
                     </td>
-                    <td className="p-4 font-semibold text-slate-900">
+                    <td className="p-4 font-semibold text-slate-900 truncate">
                       R$ {Number(n.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="p-4 text-xs">
+                    <td className="p-4 text-xs truncate">
                       <div className="font-semibold text-slate-800">{formatarDataBrasil(n.data_emissao)}</div>
                       {n.data_emissao && (
                         <div className="text-[11px] text-slate-400 font-mono mt-0.5" title="Horário Oficial de Brasília / MG">
@@ -783,7 +884,7 @@ export default function TabelaCorrecao() {
                         </div>
                       )}
                     </td>
-                    <td className="p-4">
+                    <td className="p-4 truncate">
                       <div className="flex flex-col gap-1 text-xs">
                         {!n.tem_assinatura && (
                           <span className="inline-flex items-center gap-1 text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-md font-medium w-fit">

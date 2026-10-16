@@ -11,6 +11,8 @@ import toast from 'react-hot-toast'
 import { useNotasFiscaisFilters } from './NotasFiscaisFilterContext'
 import { formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
 import { JUSTIFICATIVAS_INUTILIZACAO } from '@/utils/justificativasInutilizacao'
+import ResizableSortableTh from '@/components/ui/ResizableSortableTh'
+import { useTableFeatures } from '@/hooks/useTableFeatures'
 
 interface GapItem {
   id: string
@@ -585,6 +587,104 @@ export default function TabelaInutilizacao() {
     return historico.filter(h => ['102', '204', '563'].includes(h.status_sefaz))
   }, [historico])
 
+  // Hook de Ordenação e Redimensionamento - Quebras de Sequência
+  const {
+    sortedData: gapsOrdenados,
+    sortKey: sortKeyGaps,
+    sortDirection: sortDirGaps,
+    handleSort: handleSortGaps,
+    columnWidths: colWidthsGaps,
+    handleResizeColumn: handleResizeGaps
+  } = useTableFeatures({
+    data: gapsFiltrados,
+    tableId: 'inut_gaps',
+    defaultSortKey: 'nNFIni',
+    defaultSortDirection: 'desc',
+    initialWidths: {
+      select: 45,
+      modelo: 110,
+      serie: 90,
+      faixa: 180,
+      quantidade: 80,
+      ano: 80,
+      diagnostico: 280,
+      acoes: 140
+    },
+    customExtractors: {
+      modelo: (g: any) => g.modelo,
+      serie: (g: any) => Number(g.serie),
+      nNFIni: (g: any) => g.nNFIni,
+      quantidade: (g: any) => g.quantidade,
+      ano: (g: any) => g.ano,
+      diagnostico: (g: any) => g.status
+    }
+  })
+
+  // Hook de Ordenação e Redimensionamento - Histórico Homologado
+  const {
+    sortedData: historicoOrdenado,
+    sortKey: sortKeyHist,
+    sortDirection: sortDirHist,
+    handleSort: handleSortHist,
+    columnWidths: colWidthsHist,
+    handleResizeColumn: handleResizeHist
+  } = useTableFeatures({
+    data: historicoHomologado,
+    tableId: 'inut_historico',
+    defaultSortKey: 'data_hora',
+    defaultSortDirection: 'desc',
+    initialWidths: {
+      data_hora: 160,
+      modelo: 90,
+      serie: 80,
+      faixa: 150,
+      status: 140,
+      protocolo: 160,
+      motivo: 260
+    },
+    customExtractors: {
+      data_hora: (h: any) => h.data_hora || h.created_at || '',
+      modelo: (h: any) => h.modelo,
+      serie: (h: any) => Number(h.serie),
+      faixa: (h: any) => h.numero_inicial,
+      status: (h: any) => h.status_sefaz,
+      protocolo: (h: any) => h.protocolo || '',
+      motivo: (h: any) => h.motivo_sefaz || ''
+    }
+  })
+
+  // Hook de Ordenação e Redimensionamento - Erros e Ocorrências
+  const {
+    sortedData: errosOrdenados,
+    sortKey: sortKeyErros,
+    sortDirection: sortDirErros,
+    handleSort: handleSortErros,
+    columnWidths: colWidthsErros,
+    handleResizeColumn: handleResizeErros
+  } = useTableFeatures({
+    data: errosProcessamento,
+    tableId: 'inut_erros',
+    defaultSortKey: 'dataHora',
+    defaultSortDirection: 'desc',
+    initialWidths: {
+      dataHora: 160,
+      modelo: 90,
+      serie: 80,
+      numeracao: 150,
+      codigo: 120,
+      motivo: 280,
+      acoes: 140
+    },
+    customExtractors: {
+      dataHora: (e: any) => e.dataHora,
+      modelo: (e: any) => e.modelo,
+      serie: (e: any) => Number(e.serie),
+      numeracao: (e: any) => e.nNFIni,
+      codigo: (e: any) => e.codigo,
+      motivo: (e: any) => e.motivo
+    }
+  })
+
   return (
     <div className="space-y-6">
       {/* Cabeçalho da Seção */}
@@ -914,34 +1014,111 @@ export default function TabelaInutilizacao() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-600">
+              <table className="w-full text-left text-xs text-slate-600" style={{ tableLayout: 'fixed' }}>
                 <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
                   <tr>
-                    <th className="py-3 px-3 text-center w-10">
-                      <button
-                        type="button"
-                        onClick={handleToggleSelectAll}
-                        title={todosSelecionados ? "Desmarcar todas" : "Marcar todas as pendentes"}
-                        className="text-slate-400 hover:text-slate-700 flex items-center justify-center mx-auto"
-                      >
-                        {todosSelecionados ? (
-                          <CheckSquare size={16} className="text-rose-600" />
-                        ) : (
-                          <Square size={16} />
-                        )}
-                      </button>
-                    </th>
-                    <th className="py-3 px-4">Modelo</th>
-                    <th className="py-3 px-4">Série</th>
-                    <th className="py-3 px-4">Faixa Faltante</th>
-                    <th className="py-3 px-4 text-center">Qtd</th>
-                    <th className="py-3 px-4">Ano</th>
-                    <th className="py-3 px-4">Diagnóstico / Situação SEFAZ</th>
-                    <th className="py-3 px-4 text-right">Ação</th>
+                    <ResizableSortableTh
+                      columnId="select"
+                      label={
+                        <button
+                          type="button"
+                          onClick={handleToggleSelectAll}
+                          title={todosSelecionados ? "Desmarcar todas" : "Marcar todas as pendentes"}
+                          className="text-slate-400 hover:text-slate-700 flex items-center justify-center mx-auto"
+                        >
+                          {todosSelecionados ? (
+                            <CheckSquare size={16} className="text-rose-600" />
+                          ) : (
+                            <Square size={16} />
+                          )}
+                        </button>
+                      }
+                      disableSort
+                      width={colWidthsGaps.select}
+                      onResize={handleResizeGaps}
+                      minWidth={45}
+                      align="center"
+                    />
+                    <ResizableSortableTh
+                      columnId="modelo"
+                      label="Modelo"
+                      sortKey="modelo"
+                      currentSortKey={sortKeyGaps}
+                      currentSortDirection={sortDirGaps}
+                      onSort={handleSortGaps}
+                      width={colWidthsGaps.modelo}
+                      onResize={handleResizeGaps}
+                      minWidth={90}
+                    />
+                    <ResizableSortableTh
+                      columnId="serie"
+                      label="Série"
+                      sortKey="serie"
+                      currentSortKey={sortKeyGaps}
+                      currentSortDirection={sortDirGaps}
+                      onSort={handleSortGaps}
+                      width={colWidthsGaps.serie}
+                      onResize={handleResizeGaps}
+                      minWidth={75}
+                    />
+                    <ResizableSortableTh
+                      columnId="faixa"
+                      label="Faixa Faltante"
+                      sortKey="nNFIni"
+                      currentSortKey={sortKeyGaps}
+                      currentSortDirection={sortDirGaps}
+                      onSort={handleSortGaps}
+                      width={colWidthsGaps.faixa}
+                      onResize={handleResizeGaps}
+                      minWidth={140}
+                    />
+                    <ResizableSortableTh
+                      columnId="quantidade"
+                      label="Qtd"
+                      sortKey="quantidade"
+                      currentSortKey={sortKeyGaps}
+                      currentSortDirection={sortDirGaps}
+                      onSort={handleSortGaps}
+                      width={colWidthsGaps.quantidade}
+                      onResize={handleResizeGaps}
+                      minWidth={65}
+                      align="center"
+                    />
+                    <ResizableSortableTh
+                      columnId="ano"
+                      label="Ano"
+                      sortKey="ano"
+                      currentSortKey={sortKeyGaps}
+                      currentSortDirection={sortDirGaps}
+                      onSort={handleSortGaps}
+                      width={colWidthsGaps.ano}
+                      onResize={handleResizeGaps}
+                      minWidth={65}
+                    />
+                    <ResizableSortableTh
+                      columnId="diagnostico"
+                      label="Diagnóstico / Situação SEFAZ"
+                      sortKey="diagnostico"
+                      currentSortKey={sortKeyGaps}
+                      currentSortDirection={sortDirGaps}
+                      onSort={handleSortGaps}
+                      width={colWidthsGaps.diagnostico}
+                      onResize={handleResizeGaps}
+                      minWidth={180}
+                    />
+                    <ResizableSortableTh
+                      columnId="acoes"
+                      label="Ação"
+                      disableSort
+                      width={colWidthsGaps.acoes}
+                      onResize={handleResizeGaps}
+                      minWidth={130}
+                      align="right"
+                    />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {gapsFiltrados.map((gap) => {
+                  {gapsOrdenados.map((gap) => {
                     const isSelected = selectedGapIds.includes(gap.id)
                     const isPendente = gap.status === 'PENDENTE'
 
@@ -1081,42 +1258,112 @@ export default function TabelaInutilizacao() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-600">
+              <table className="w-full text-left text-xs text-slate-600" style={{ tableLayout: 'fixed' }}>
                 <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
                   <tr>
-                    <th className="py-3 px-4">Data/Hora</th>
-                    <th className="py-3 px-4">Modelo</th>
-                    <th className="py-3 px-4">Série</th>
-                    <th className="py-3 px-4">Faixa</th>
-                    <th className="py-3 px-4">Status SEFAZ</th>
-                    <th className="py-3 px-4">Protocolo</th>
-                    <th className="py-3 px-4">Motivo / Retorno</th>
+                    <ResizableSortableTh
+                      columnId="data_hora"
+                      label="Data/Hora"
+                      sortKey="data_hora"
+                      currentSortKey={sortKeyHist}
+                      currentSortDirection={sortDirHist}
+                      onSort={handleSortHist}
+                      width={colWidthsHist.data_hora}
+                      onResize={handleResizeHist}
+                      minWidth={130}
+                    />
+                    <ResizableSortableTh
+                      columnId="modelo"
+                      label="Modelo"
+                      sortKey="modelo"
+                      currentSortKey={sortKeyHist}
+                      currentSortDirection={sortDirHist}
+                      onSort={handleSortHist}
+                      width={colWidthsHist.modelo}
+                      onResize={handleResizeHist}
+                      minWidth={80}
+                    />
+                    <ResizableSortableTh
+                      columnId="serie"
+                      label="Série"
+                      sortKey="serie"
+                      currentSortKey={sortKeyHist}
+                      currentSortDirection={sortDirHist}
+                      onSort={handleSortHist}
+                      width={colWidthsHist.serie}
+                      onResize={handleResizeHist}
+                      minWidth={75}
+                    />
+                    <ResizableSortableTh
+                      columnId="faixa"
+                      label="Faixa"
+                      sortKey="faixa"
+                      currentSortKey={sortKeyHist}
+                      currentSortDirection={sortDirHist}
+                      onSort={handleSortHist}
+                      width={colWidthsHist.faixa}
+                      onResize={handleResizeHist}
+                      minWidth={120}
+                    />
+                    <ResizableSortableTh
+                      columnId="status"
+                      label="Status SEFAZ"
+                      sortKey="status"
+                      currentSortKey={sortKeyHist}
+                      currentSortDirection={sortDirHist}
+                      onSort={handleSortHist}
+                      width={colWidthsHist.status}
+                      onResize={handleResizeHist}
+                      minWidth={120}
+                    />
+                    <ResizableSortableTh
+                      columnId="protocolo"
+                      label="Protocolo"
+                      sortKey="protocolo"
+                      currentSortKey={sortKeyHist}
+                      currentSortDirection={sortDirHist}
+                      onSort={handleSortHist}
+                      width={colWidthsHist.protocolo}
+                      onResize={handleResizeHist}
+                      minWidth={130}
+                    />
+                    <ResizableSortableTh
+                      columnId="motivo"
+                      label="Motivo / Retorno"
+                      sortKey="motivo"
+                      currentSortKey={sortKeyHist}
+                      currentSortDirection={sortDirHist}
+                      onSort={handleSortHist}
+                      width={colWidthsHist.motivo}
+                      onResize={handleResizeHist}
+                      minWidth={160}
+                    />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-mono">
-                  {historicoHomologado.map((item) => (
+                  {historicoOrdenado.map((item) => (
                     <tr key={item.id} className="hover:bg-slate-50/70">
-                      <td className="py-3 px-4 whitespace-nowrap text-slate-500">
+                      <td className="py-3 px-4 whitespace-nowrap text-slate-500 truncate" title={new Date(item.data_hora || item.created_at).toLocaleString('pt-BR')}>
                         {new Date(item.data_hora || item.created_at).toLocaleString('pt-BR')}
                       </td>
-                      <td className="py-3 px-4 font-bold">
+                      <td className="py-3 px-4 font-bold truncate">
                         {item.modelo === '55' ? 'NF-e' : 'NFC-e'}
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-4 truncate">
                         Série {item.serie}
                       </td>
-                      <td className="py-3 px-4 font-bold text-slate-900">
+                      <td className="py-3 px-4 font-bold text-slate-900 truncate">
                         {item.numero_inicial} a {item.numero_final}
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-4 truncate">
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
                           {item.status_sefaz} - {item.status_sefaz === '102' ? 'HOMOLOGADO' : 'JÁ INUTILIZADO'}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-emerald-700 font-bold">
+                      <td className="py-3 px-4 text-emerald-700 font-bold truncate" title={item.protocolo || ''}>
                         {item.protocolo || '-'}
                       </td>
-                      <td className="py-3 px-4 font-sans text-slate-600 max-w-xs truncate" title={item.motivo_sefaz || ''}>
+                      <td className="py-3 px-4 font-sans text-slate-600 truncate" title={item.motivo_sefaz || ''}>
                         {item.motivo_sefaz || '-'}
                       </td>
                     </tr>
@@ -1155,39 +1402,107 @@ export default function TabelaInutilizacao() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-600">
+              <table className="w-full text-left text-xs text-slate-600" style={{ tableLayout: 'fixed' }}>
                 <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
                   <tr>
-                    <th className="py-3 px-4">Data/Hora</th>
-                    <th className="py-3 px-4">Modelo</th>
-                    <th className="py-3 px-4">Série</th>
-                    <th className="py-3 px-4">Numeração</th>
-                    <th className="py-3 px-4">Código SEFAZ</th>
-                    <th className="py-3 px-4">Motivo / Rejeição</th>
-                    <th className="py-3 px-4 text-right">Ações</th>
+                    <ResizableSortableTh
+                      columnId="dataHora"
+                      label="Data/Hora"
+                      sortKey="dataHora"
+                      currentSortKey={sortKeyErros}
+                      currentSortDirection={sortDirErros}
+                      onSort={handleSortErros}
+                      width={colWidthsErros.dataHora}
+                      onResize={handleResizeErros}
+                      minWidth={130}
+                    />
+                    <ResizableSortableTh
+                      columnId="modelo"
+                      label="Modelo"
+                      sortKey="modelo"
+                      currentSortKey={sortKeyErros}
+                      currentSortDirection={sortDirErros}
+                      onSort={handleSortErros}
+                      width={colWidthsErros.modelo}
+                      onResize={handleResizeErros}
+                      minWidth={80}
+                    />
+                    <ResizableSortableTh
+                      columnId="serie"
+                      label="Série"
+                      sortKey="serie"
+                      currentSortKey={sortKeyErros}
+                      currentSortDirection={sortDirErros}
+                      onSort={handleSortErros}
+                      width={colWidthsErros.serie}
+                      onResize={handleResizeErros}
+                      minWidth={75}
+                    />
+                    <ResizableSortableTh
+                      columnId="numeracao"
+                      label="Numeração"
+                      sortKey="numeracao"
+                      currentSortKey={sortKeyErros}
+                      currentSortDirection={sortDirErros}
+                      onSort={handleSortErros}
+                      width={colWidthsErros.numeracao}
+                      onResize={handleResizeErros}
+                      minWidth={120}
+                    />
+                    <ResizableSortableTh
+                      columnId="codigo"
+                      label="Código SEFAZ"
+                      sortKey="codigo"
+                      currentSortKey={sortKeyErros}
+                      currentSortDirection={sortDirErros}
+                      onSort={handleSortErros}
+                      width={colWidthsErros.codigo}
+                      onResize={handleResizeErros}
+                      minWidth={100}
+                    />
+                    <ResizableSortableTh
+                      columnId="motivo"
+                      label="Motivo / Rejeição"
+                      sortKey="motivo"
+                      currentSortKey={sortKeyErros}
+                      currentSortDirection={sortDirErros}
+                      onSort={handleSortErros}
+                      width={colWidthsErros.motivo}
+                      onResize={handleResizeErros}
+                      minWidth={180}
+                    />
+                    <ResizableSortableTh
+                      columnId="acoes"
+                      label="Ações"
+                      disableSort
+                      width={colWidthsErros.acoes}
+                      onResize={handleResizeErros}
+                      minWidth={140}
+                      align="right"
+                    />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {errosProcessamento.map((item) => (
+                  {errosOrdenados.map((item) => (
                     <tr key={item.id} className="hover:bg-red-50/30">
-                      <td className="py-3 px-4 text-slate-500 whitespace-nowrap font-mono">
+                      <td className="py-3 px-4 text-slate-500 whitespace-nowrap font-mono truncate">
                         {new Date(item.dataHora).toLocaleTimeString('pt-BR')} - {new Date(item.dataHora).toLocaleDateString('pt-BR')}
                       </td>
-                      <td className="py-3 px-4 font-bold">
+                      <td className="py-3 px-4 font-bold truncate">
                         {item.modelo === '55' ? 'NF-e' : 'NFC-e'}
                       </td>
-                      <td className="py-3 px-4 font-mono">
+                      <td className="py-3 px-4 font-mono truncate">
                         Série {item.serie}
                       </td>
-                      <td className="py-3 px-4 font-mono font-bold text-slate-900">
+                      <td className="py-3 px-4 font-mono font-bold text-slate-900 truncate">
                         {item.nNFIni === item.nNFFin ? `Nº ${item.nNFIni}` : `Nº ${item.nNFIni} a ${item.nNFFin}`}
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-4 truncate">
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 font-mono">
                           {item.codigo}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-red-800 max-w-md font-sans">
+                      <td className="py-3 px-4 text-red-800 font-sans truncate" title={item.motivo}>
                         {item.motivo}
                       </td>
                       <td className="py-3 px-4 text-right whitespace-nowrap space-x-1.5">

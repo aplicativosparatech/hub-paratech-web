@@ -6,6 +6,8 @@ import { Plus, Pencil, Trash2, X, Users, Building2, Upload } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import ImportadorLoteModal from '@/components/ImportadorLoteModal'
+import { useTableFeatures } from '@/hooks/useTableFeatures'
+import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
 
 export default function ContabilidadesPage() {
   const [contabilidades, setContabilidades] = useState<any[]>([])
@@ -14,6 +16,38 @@ export default function ContabilidadesPage() {
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const supabase = createClient()
+
+  const {
+    sortedData: contabilidadesOrdenadas,
+    sortKey,
+    sortDirection,
+    handleSort,
+    columnWidths,
+    handleResizeColumn
+  } = useTableFeatures({
+    data: contabilidades,
+    tableId: 'tabela_contabilidades',
+    defaultSortKey: 'razao_social',
+    defaultSortDirection: 'asc',
+    initialWidths: {
+      logo: 70,
+      escritorio: 260,
+      clientes: 150,
+      cnpj: 160,
+      contato: 190,
+      contador: 170,
+      login: 180,
+      acoes: 100
+    },
+    customExtractors: {
+      escritorio: (c: any) => c.razao_social || '',
+      clientes: (c: any) => Number(c.total_clientes || 0),
+      cnpj: (c: any) => c.cnpj || '',
+      contato: (c: any) => c.whatsapp || c.telefone || '',
+      contador: (c: any) => c.nome_responsavel || '',
+      login: (c: any) => c.login_email || ''
+    }
+  })
 
   async function fetchContabilidades() {
     try {
@@ -109,81 +143,158 @@ export default function ContabilidadesPage() {
       </header>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-slate-50 border-b border-slate-200">
-              <th className="p-4 font-semibold text-slate-600 text-sm">Logo</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">Escritório / Fantasia</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm text-center">Clientes Atribuídos</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">CNPJ</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">Contato / WhatsApp</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">Contador / CRC</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm">Login de Acesso</th>
-              <th className="p-4 font-semibold text-slate-600 text-sm text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={8} className="p-8 text-center text-slate-500">Carregando contabilidades e contagem de clientes...</td></tr>
-            ) : contabilidades.length === 0 ? (
-              <tr><td colSpan={8} className="p-8 text-center text-slate-500">Nenhuma contabilidade cadastrada ainda.</td></tr>
-            ) : (
-              contabilidades.map(c => (
-                <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="p-4">
-                    {c.logo_url ? (
-                      <img src={c.logo_url} alt="Logo" className="w-10 h-10 rounded-full object-cover border border-slate-200" />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-400 text-xs font-bold">
-                        {c.razao_social?.charAt(0)}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse" style={{ tableLayout: 'fixed' }}>
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <ResizableSortableTh
+                  columnId="logo"
+                  label="Logo"
+                  disableSort
+                  width={columnWidths.logo}
+                  onResize={handleResizeColumn}
+                  minWidth={60}
+                />
+                <ResizableSortableTh
+                  columnId="escritorio"
+                  label="Escritório / Fantasia"
+                  sortKey="escritorio"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.escritorio}
+                  onResize={handleResizeColumn}
+                  minWidth={180}
+                />
+                <ResizableSortableTh
+                  columnId="clientes"
+                  label="Clientes Atribuídos"
+                  sortKey="clientes"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.clientes}
+                  onResize={handleResizeColumn}
+                  minWidth={130}
+                  align="center"
+                />
+                <ResizableSortableTh
+                  columnId="cnpj"
+                  label="CNPJ"
+                  sortKey="cnpj"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.cnpj}
+                  onResize={handleResizeColumn}
+                  minWidth={130}
+                />
+                <ResizableSortableTh
+                  columnId="contato"
+                  label="Contato / WhatsApp"
+                  sortKey="contato"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.contato}
+                  onResize={handleResizeColumn}
+                  minWidth={140}
+                />
+                <ResizableSortableTh
+                  columnId="contador"
+                  label="Contador / CRC"
+                  sortKey="contador"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.contador}
+                  onResize={handleResizeColumn}
+                  minWidth={130}
+                />
+                <ResizableSortableTh
+                  columnId="login"
+                  label="Login de Acesso"
+                  sortKey="login"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.login}
+                  onResize={handleResizeColumn}
+                  minWidth={140}
+                />
+                <ResizableSortableTh
+                  columnId="acoes"
+                  label="Ações"
+                  disableSort
+                  width={columnWidths.acoes}
+                  onResize={handleResizeColumn}
+                  minWidth={90}
+                  align="right"
+                />
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={8} className="p-8 text-center text-slate-500">Carregando contabilidades e contagem de clientes...</td></tr>
+              ) : contabilidadesOrdenadas.length === 0 ? (
+                <tr><td colSpan={8} className="p-8 text-center text-slate-500">Nenhuma contabilidade cadastrada ainda.</td></tr>
+              ) : (
+                contabilidadesOrdenadas.map(c => (
+                  <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="p-4 truncate">
+                      {c.logo_url ? (
+                        <img src={c.logo_url} alt="Logo" className="w-10 h-10 rounded-full object-cover border border-slate-200" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-400 text-xs font-bold">
+                          {c.razao_social?.charAt(0)}
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-4 text-slate-800 truncate">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-slate-900 truncate">{c.razao_social}</span>
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                          (c.total_clientes || 0) > 0
+                            ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                            : 'bg-slate-100 text-slate-500 border border-slate-200'
+                        }`}>
+                          <Users size={11} />
+                          {c.total_clientes || 0} {c.total_clientes === 1 ? 'cliente' : 'clientes'}
+                        </span>
                       </div>
-                    )}
-                  </td>
-                  <td className="p-4 text-slate-800">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-slate-900">{c.razao_social}</span>
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold ${
-                        (c.total_clientes || 0) > 0
-                          ? 'bg-blue-100 text-blue-700 border border-blue-200'
-                          : 'bg-slate-100 text-slate-500 border border-slate-200'
-                      }`}>
-                        <Users size={11} />
-                        {c.total_clientes || 0} {c.total_clientes === 1 ? 'cliente' : 'clientes'}
-                      </span>
-                    </div>
-                    <div className="text-xs text-slate-500 mt-0.5">{c.nome_fantasia || '—'}</div>
-                  </td>
+                      <div className="text-xs text-slate-500 mt-0.5 truncate">{c.nome_fantasia || '—'}</div>
+                    </td>
 
-                  {/* Coluna de Clientes Atribuídos com Badge em Destaque */}
-                  <td className="p-4 text-center">
-                    <Link
-                      href={`/dashboard/clientes?busca=${encodeURIComponent(c.razao_social)}`}
-                      className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition border ${
-                        (c.total_clientes || 0) > 0
-                          ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 shadow-xs'
-                          : 'bg-slate-50 hover:bg-slate-100 text-slate-500 border-slate-200'
-                      }`}
-                      title={`Ver clientes atendidos por ${c.razao_social}`}
-                    >
-                      <Users size={14} className={c.total_clientes > 0 ? 'text-blue-600' : 'text-slate-400'} />
-                      <span>{c.total_clientes || 0}</span>
-                      <span className="text-[10px] font-semibold text-slate-400">
-                        {c.total_clientes === 1 ? 'cliente' : 'clientes'}
-                      </span>
-                    </Link>
-                  </td>
+                    {/* Coluna de Clientes Atribuídos com Badge em Destaque */}
+                    <td className="p-4 text-center truncate">
+                      <Link
+                        href={`/dashboard/clientes?busca=${encodeURIComponent(c.razao_social)}`}
+                        className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition border ${
+                          (c.total_clientes || 0) > 0
+                            ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 shadow-xs'
+                            : 'bg-slate-50 hover:bg-slate-100 text-slate-500 border-slate-200'
+                        }`}
+                        title={`Ver clientes atendidos por ${c.razao_social}`}
+                      >
+                        <Users size={14} className={c.total_clientes > 0 ? 'text-blue-600' : 'text-slate-400'} />
+                        <span>{c.total_clientes || 0}</span>
+                        <span className="text-[10px] font-semibold text-slate-400">
+                          {c.total_clientes === 1 ? 'cliente' : 'clientes'}
+                        </span>
+                      </Link>
+                    </td>
 
-                  <td className="p-4 text-slate-700 font-mono text-xs">{c.cnpj || '—'}</td>
-                  <td className="p-4 text-slate-600 text-xs">
-                    <div>{c.whatsapp || c.telefone || '—'}</div>
-                    <div className="text-slate-400">{c.email_contato}</div>
-                  </td>
-                  <td className="p-4 text-slate-600 text-xs">
-                    <div className="font-medium text-slate-800">{c.nome_responsavel || '—'}</div>
-                    {c.crc && <div className="text-emerald-700 font-semibold">{c.crc}</div>}
-                  </td>
-                  <td className="p-4 text-slate-600 text-xs font-mono">{c.login_email || '—'}</td>
-                  <td className="p-4 text-right">
+                    <td className="p-4 text-slate-700 font-mono text-xs truncate">{c.cnpj || '—'}</td>
+                    <td className="p-4 text-slate-600 text-xs truncate">
+                      <div>{c.whatsapp || c.telefone || '—'}</div>
+                      <div className="text-slate-400 truncate">{c.email_contato}</div>
+                    </td>
+                    <td className="p-4 text-slate-600 text-xs truncate">
+                      <div className="font-medium text-slate-800 truncate">{c.nome_responsavel || '—'}</div>
+                      {c.crc && <div className="text-emerald-700 font-semibold truncate">{c.crc}</div>}
+                    </td>
+                    <td className="p-4 text-slate-600 text-xs font-mono truncate">{c.login_email || '—'}</td>
+                    <td className="p-4 text-right whitespace-nowrap">
                     <div className="flex gap-2 justify-end">
                       <Link href={`/dashboard/contabilidades/${c.id}/editar`} className="p-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition" title="Editar">
                         <Pencil size={16} />
@@ -199,6 +310,7 @@ export default function ContabilidadesPage() {
           </tbody>
         </table>
       </div>
+    </div>
 
       {/* Modal de Confirmação de Exclusão */}
       {deleteModal.open && (

@@ -11,6 +11,8 @@ import toast from 'react-hot-toast'
 import JSZip from 'jszip'
 import { createClient } from '@/utils/supabase/client'
 import { formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
+import ResizableSortableTh from '@/components/ui/ResizableSortableTh'
+import { useTableFeatures } from '@/hooks/useTableFeatures'
 
 interface Cliente {
   id: string
@@ -225,6 +227,39 @@ export default function DistribuicaoDfePage() {
       return true
     })
   }, [notas, filtroSituacao, termoBusca])
+
+  // Hook de Ordenação Inteligente e Redimensionamento de Colunas
+  const {
+    sortedData: notasDestinadasOrdenadas,
+    sortKey,
+    sortDirection,
+    handleSort,
+    columnWidths,
+    handleResizeColumn
+  } = useTableFeatures({
+    data: notasFiltradas,
+    tableId: 'distribuicao_dfe',
+    defaultSortKey: 'numero',
+    defaultSortDirection: 'desc',
+    initialWidths: {
+      select: 50,
+      doc: 280,
+      fornecedor: 280,
+      emissao: 130,
+      valor: 130,
+      situacao: 140,
+      manifestacao: 150,
+      acoes: 140
+    },
+    customExtractors: {
+      numero: (n: any) => Number(String(n.numero || '0').replace(/\D/g, '')),
+      fornecedor: (n: any) => n.emitente_nome || n.emitente_cnpj || '',
+      emissao: (n: any) => n.data_emissao || '',
+      valor: (n: any) => Number(n.valor || 0),
+      situacao: (n: any) => n.situacao_nfe || '',
+      manifestacao: (n: any) => n.tipo_manifestacao || ''
+    }
+  })
 
   // Copiar chave de acesso
   const handleCopiarChave = (chave: string) => {
@@ -664,19 +699,95 @@ export default function DistribuicaoDfePage() {
           {/* Tabela de Notas Fiscais Destinadas */}
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full text-left text-xs border-collapse" style={{ tableLayout: 'fixed' }}>
                 <thead>
                   <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
-                    <th className="p-3.5 w-10 text-center">
-                      <span className="sr-only">Seleção</span>
-                    </th>
-                    <th className="p-3.5">Documento Fiscal</th>
-                    <th className="p-3.5">Fornecedor / Emitente</th>
-                    <th className="p-3.5">Emissão</th>
-                    <th className="p-3.5">Valor (R$)</th>
-                    <th className="p-3.5 text-center">Situação SEFAZ</th>
-                    <th className="p-3.5 text-center">Manifestação</th>
-                    <th className="p-3.5 text-right">Ações Rápidas</th>
+                    <ResizableSortableTh
+                      columnId="select"
+                      label=""
+                      disableSort
+                      width={columnWidths.select}
+                      onResize={handleResizeColumn}
+                      minWidth={45}
+                      align="center"
+                    />
+                    <ResizableSortableTh
+                      columnId="doc"
+                      label="Documento Fiscal"
+                      sortKey="numero"
+                      currentSortKey={sortKey}
+                      currentSortDirection={sortDirection}
+                      onSort={handleSort}
+                      width={columnWidths.doc}
+                      onResize={handleResizeColumn}
+                      minWidth={160}
+                    />
+                    <ResizableSortableTh
+                      columnId="fornecedor"
+                      label="Fornecedor / Emitente"
+                      sortKey="fornecedor"
+                      currentSortKey={sortKey}
+                      currentSortDirection={sortDirection}
+                      onSort={handleSort}
+                      width={columnWidths.fornecedor}
+                      onResize={handleResizeColumn}
+                      minWidth={160}
+                    />
+                    <ResizableSortableTh
+                      columnId="emissao"
+                      label="Emissão"
+                      sortKey="emissao"
+                      currentSortKey={sortKey}
+                      currentSortDirection={sortDirection}
+                      onSort={handleSort}
+                      width={columnWidths.emissao}
+                      onResize={handleResizeColumn}
+                      minWidth={100}
+                    />
+                    <ResizableSortableTh
+                      columnId="valor"
+                      label="Valor (R$)"
+                      sortKey="valor"
+                      currentSortKey={sortKey}
+                      currentSortDirection={sortDirection}
+                      onSort={handleSort}
+                      width={columnWidths.valor}
+                      onResize={handleResizeColumn}
+                      minWidth={100}
+                    />
+                    <ResizableSortableTh
+                      columnId="situacao"
+                      label="Situação SEFAZ"
+                      sortKey="situacao"
+                      currentSortKey={sortKey}
+                      currentSortDirection={sortDirection}
+                      onSort={handleSort}
+                      width={columnWidths.situacao}
+                      onResize={handleResizeColumn}
+                      minWidth={110}
+                      align="center"
+                    />
+                    <ResizableSortableTh
+                      columnId="manifestacao"
+                      label="Manifestação"
+                      sortKey="manifestacao"
+                      currentSortKey={sortKey}
+                      currentSortDirection={sortDirection}
+                      onSort={handleSort}
+                      width={columnWidths.manifestacao}
+                      onResize={handleResizeColumn}
+                      minWidth={110}
+                      align="center"
+                    />
+                    <ResizableSortableTh
+                      columnId="acoes"
+                      label="Ações Rápidas"
+                      disableSort
+                      width={columnWidths.acoes}
+                      onResize={handleResizeColumn}
+                      minWidth={130}
+                      align="right"
+                    />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -690,7 +801,7 @@ export default function DistribuicaoDfePage() {
                         </div>
                       </td>
                     </tr>
-                  ) : notasFiltradas.length === 0 ? (
+                  ) : notasDestinadasOrdenadas.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="p-12 text-center text-slate-500">
                         <div className="flex flex-col items-center justify-center gap-2">
@@ -707,7 +818,7 @@ export default function DistribuicaoDfePage() {
                       </td>
                     </tr>
                   ) : (
-                    notasFiltradas.map((n) => {
+                    notasDestinadasOrdenadas.map((n) => {
                       const isSelected = selectedChaves.includes(n.chave)
                       return (
                         <tr 
@@ -729,19 +840,19 @@ export default function DistribuicaoDfePage() {
                           </td>
 
                           {/* Documento */}
-                          <td className="p-3.5">
+                          <td className="p-3.5 overflow-hidden">
                             <div className="flex items-center gap-1.5 font-bold text-slate-900 font-mono text-xs">
                               <span>NF-e #{n.numero}</span>
                               <span className="text-[10px] text-slate-400 font-sans font-normal">Série {n.serie}</span>
                             </div>
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <span className="font-mono text-[10px] text-slate-500 truncate max-w-[180px]" title={n.chave}>
+                            <div className="flex items-center gap-1 mt-0.5 overflow-hidden">
+                              <span className="font-mono text-[10px] text-slate-500 truncate max-w-full select-all" title={n.chave}>
                                 {n.chave}
                               </span>
                               <button
                                 type="button"
                                 onClick={() => handleCopiarChave(n.chave)}
-                                className="text-slate-400 hover:text-indigo-600"
+                                className="text-slate-400 hover:text-indigo-600 shrink-0"
                                 title="Copiar chave de acesso"
                               >
                                 {chaveCopiada === n.chave ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
@@ -750,11 +861,11 @@ export default function DistribuicaoDfePage() {
                           </td>
 
                           {/* Fornecedor */}
-                          <td className="p-3.5">
-                            <div className="font-bold text-slate-800 truncate max-w-[220px]" title={n.emitente_nome}>
+                          <td className="p-3.5 overflow-hidden">
+                            <div className="font-bold text-slate-800 truncate max-w-full" title={n.emitente_nome}>
                               {n.emitente_nome}
                             </div>
-                            <div className="text-[10px] font-mono text-slate-500 mt-0.5">
+                            <div className="text-[10px] font-mono text-slate-500 mt-0.5 truncate">
                               CNPJ: {formatarCnpjCpf(n.emitente_cnpj)}
                             </div>
                           </td>

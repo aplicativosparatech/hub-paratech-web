@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { PlugZap, CreditCard, MessageCircle, Save, Send, Calendar, Sliders, Bell, FileText, CheckCircle2, AlertTriangle, Cpu, Sparkles, Bot, ExternalLink, RefreshCw, Check, ShieldCheck, Zap, Server, Database, Building2, Layers, FileSpreadsheet } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { createClient } from '@/utils/supabase/client'
+import { useTableFeatures } from '@/hooks/useTableFeatures'
+import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
 
 type Integracao = {
   id: string;
@@ -26,6 +28,36 @@ export default function IntegracoesPage() {
   const [resultadoTesteAlterdata, setResultadoTesteAlterdata] = useState<any>(null)
   const [logsAlterdata, setLogsAlterdata] = useState<any[]>([])
   const [loadingLogsAlterdata, setLoadingLogsAlterdata] = useState(false)
+
+  const {
+    sortedData: logsAlterdataOrdenados,
+    sortKey: sortKeyLogs,
+    sortDirection: sortDirLogs,
+    handleSort: handleSortLogs,
+    columnWidths: colWidthsLogs,
+    handleResizeColumn: handleResizeLogs
+  } = useTableFeatures({
+    data: logsAlterdata,
+    tableId: 'tabela_logs_alterdata',
+    defaultSortKey: 'dataHora',
+    defaultSortDirection: 'desc',
+    initialWidths: {
+      dataHora: 160,
+      operacao: 140,
+      status: 100,
+      identificador: 200,
+      detalhes: 280,
+      duracao: 90
+    },
+    customExtractors: {
+      dataHora: (l: any) => l.created_at || '',
+      operacao: (l: any) => l.tipo_operacao || '',
+      status: (l: any) => l.status || '',
+      identificador: (l: any) => l.identificador_externo || '',
+      detalhes: (l: any) => l.mensagem_retorno || '',
+      duracao: (l: any) => Number(l.duracao_ms || 0)
+    }
+  })
 
   const handleTestWhatsApp = async () => {
     if (!testPhone) {
@@ -1751,30 +1783,91 @@ export default function IntegracoesPage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-slate-600">
+                <table className="w-full text-left text-xs text-slate-600" style={{ tableLayout: 'fixed' }}>
                   <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
                     <tr>
-                      <th className="py-2.5 px-3">Data/Hora</th>
-                      <th className="py-2.5 px-3">Operação</th>
-                      <th className="py-2.5 px-3">Status</th>
-                      <th className="py-2.5 px-3">Identificador / Documento</th>
-                      <th className="py-2.5 px-3">Retorno / Detalhes</th>
-                      <th className="py-2.5 px-3 text-right">Duração</th>
+                      <ResizableSortableTh
+                        columnId="dataHora"
+                        label="Data/Hora"
+                        sortKey="dataHora"
+                        currentSortKey={sortKeyLogs}
+                        currentSortDirection={sortDirLogs}
+                        onSort={handleSortLogs}
+                        width={colWidthsLogs.dataHora}
+                        onResize={handleResizeLogs}
+                        minWidth={130}
+                      />
+                      <ResizableSortableTh
+                        columnId="operacao"
+                        label="Operação"
+                        sortKey="operacao"
+                        currentSortKey={sortKeyLogs}
+                        currentSortDirection={sortDirLogs}
+                        onSort={handleSortLogs}
+                        width={colWidthsLogs.operacao}
+                        onResize={handleResizeLogs}
+                        minWidth={120}
+                      />
+                      <ResizableSortableTh
+                        columnId="status"
+                        label="Status"
+                        sortKey="status"
+                        currentSortKey={sortKeyLogs}
+                        currentSortDirection={sortDirLogs}
+                        onSort={handleSortLogs}
+                        width={colWidthsLogs.status}
+                        onResize={handleResizeLogs}
+                        minWidth={90}
+                      />
+                      <ResizableSortableTh
+                        columnId="identificador"
+                        label="Identificador / Documento"
+                        sortKey="identificador"
+                        currentSortKey={sortKeyLogs}
+                        currentSortDirection={sortDirLogs}
+                        onSort={handleSortLogs}
+                        width={colWidthsLogs.identificador}
+                        onResize={handleResizeLogs}
+                        minWidth={150}
+                      />
+                      <ResizableSortableTh
+                        columnId="detalhes"
+                        label="Retorno / Detalhes"
+                        sortKey="detalhes"
+                        currentSortKey={sortKeyLogs}
+                        currentSortDirection={sortDirLogs}
+                        onSort={handleSortLogs}
+                        width={colWidthsLogs.detalhes}
+                        onResize={handleResizeLogs}
+                        minWidth={180}
+                      />
+                      <ResizableSortableTh
+                        columnId="duracao"
+                        label="Duração"
+                        sortKey="duracao"
+                        currentSortKey={sortKeyLogs}
+                        currentSortDirection={sortDirLogs}
+                        onSort={handleSortLogs}
+                        width={colWidthsLogs.duracao}
+                        onResize={handleResizeLogs}
+                        minWidth={80}
+                        align="right"
+                      />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-mono">
-                    {logsAlterdata.map(log => (
+                    {logsAlterdataOrdenados.map(log => (
                       <tr key={log.id} className="hover:bg-slate-50/50">
-                        <td className="py-2.5 px-3 whitespace-nowrap">{new Date(log.created_at).toLocaleString('pt-BR')}</td>
-                        <td className="py-2.5 px-3 font-semibold text-slate-800">{log.tipo_operacao}</td>
-                        <td className="py-2.5 px-3">
+                        <td className="py-2.5 px-3 whitespace-nowrap truncate">{new Date(log.created_at).toLocaleString('pt-BR')}</td>
+                        <td className="py-2.5 px-3 font-semibold text-slate-800 truncate">{log.tipo_operacao}</td>
+                        <td className="py-2.5 px-3 truncate">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${log.status === 'SUCESSO' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                             {log.status}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 max-w-[200px] truncate" title={log.identificador_externo || ''}>{log.identificador_externo || '-'}</td>
-                        <td className="py-2.5 px-3 max-w-[300px] truncate font-sans text-slate-500" title={log.mensagem_retorno || ''}>{log.mensagem_retorno || '-'}</td>
-                        <td className="py-2.5 px-3 text-right">{log.duracao_ms ? `${log.duracao_ms}ms` : '-'}</td>
+                        <td className="py-2.5 px-3 truncate" title={log.identificador_externo || ''}>{log.identificador_externo || '-'}</td>
+                        <td className="py-2.5 px-3 truncate font-sans text-slate-500" title={log.mensagem_retorno || ''}>{log.mensagem_retorno || '-'}</td>
+                        <td className="py-2.5 px-3 text-right truncate">{log.duracao_ms ? `${log.duracao_ms}ms` : '-'}</td>
                       </tr>
                     ))}
                   </tbody>

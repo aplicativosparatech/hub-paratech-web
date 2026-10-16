@@ -5,12 +5,41 @@ import { createClient } from '@/utils/supabase/client'
 import Link from 'next/link'
 import { FileDown } from 'lucide-react'
 import CertificadoAlertaBanner from '@/components/CertificadoAlertaBanner'
+import { useTableFeatures } from '@/hooks/useTableFeatures'
+import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
 
 export default function MeusClientesPage() {
   const supabase = createClient()
   const [clientes, setClientes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [certAlerta, setCertAlerta] = useState<any>(null)
+
+  const {
+    sortedData: clientesOrdenados,
+    sortKey,
+    sortDirection,
+    handleSort,
+    columnWidths,
+    handleResizeColumn
+  } = useTableFeatures({
+    data: clientes,
+    tableId: 'tabela_meus_clientes',
+    defaultSortKey: 'nome_fantasia',
+    defaultSortDirection: 'asc',
+    initialWidths: {
+      nome_fantasia: 240,
+      razao_social: 260,
+      cnpj: 180,
+      login_email: 220,
+      acoes: 180
+    },
+    customExtractors: {
+      nome_fantasia: (c: any) => c.nome_fantasia || '',
+      razao_social: (c: any) => c.razao_social || '',
+      cnpj: (c: any) => c.cnpj || '',
+      login_email: (c: any) => c.login_email || ''
+    }
+  })
 
   useEffect(() => {
     async function load() {
@@ -72,37 +101,87 @@ export default function MeusClientesPage() {
       </header>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <table className="w-full text-left text-sm text-slate-600">
-          <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
-            <tr>
-              <th className="p-4">Empresa (Nome Fantasia)</th>
-              <th className="p-4">Razão Social</th>
-              <th className="p-4">CNPJ / CPF</th>
-              <th className="p-4">Login (E-mail)</th>
-              <th className="p-4 text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {clientes.length === 0 ? (
-              <tr><td colSpan={5} className="p-8 text-center text-slate-400">Nenhum cliente vinculado à sua contabilidade.</td></tr>
-            ) : clientes.map(c => (
-              <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
-                <td className="p-4 font-medium text-slate-900">{c.nome_fantasia}</td>
-                <td className="p-4">{c.razao_social || '—'}</td>
-                <td className="p-4">{c.cnpj || '—'}</td>
-                <td className="p-4">{c.login_email || '—'}</td>
-                <td className="p-4 text-right">
-                  <Link
-                    href={`/dashboard/notas-fiscais?cliente_id=${c.id}`}
-                    className="inline-flex items-center gap-1.5 text-xs bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition font-medium"
-                  >
-                    <FileDown size={14} /> Ver Notas Fiscais
-                  </Link>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm text-slate-600" style={{ tableLayout: 'fixed' }}>
+            <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
+              <tr>
+                <ResizableSortableTh
+                  columnId="nome_fantasia"
+                  label="Empresa (Nome Fantasia)"
+                  sortKey="nome_fantasia"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.nome_fantasia}
+                  onResize={handleResizeColumn}
+                  minWidth={160}
+                />
+                <ResizableSortableTh
+                  columnId="razao_social"
+                  label="Razão Social"
+                  sortKey="razao_social"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.razao_social}
+                  onResize={handleResizeColumn}
+                  minWidth={160}
+                />
+                <ResizableSortableTh
+                  columnId="cnpj"
+                  label="CNPJ / CPF"
+                  sortKey="cnpj"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.cnpj}
+                  onResize={handleResizeColumn}
+                  minWidth={130}
+                />
+                <ResizableSortableTh
+                  columnId="login_email"
+                  label="Login (E-mail)"
+                  sortKey="login_email"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.login_email}
+                  onResize={handleResizeColumn}
+                  minWidth={150}
+                />
+                <ResizableSortableTh
+                  columnId="acoes"
+                  label="Ações"
+                  disableSort
+                  width={columnWidths.acoes}
+                  onResize={handleResizeColumn}
+                  minWidth={150}
+                  align="right"
+                />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {clientesOrdenados.length === 0 ? (
+                <tr><td colSpan={5} className="p-8 text-center text-slate-400">Nenhum cliente vinculado à sua contabilidade.</td></tr>
+              ) : clientesOrdenados.map(c => (
+                <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
+                  <td className="p-4 font-medium text-slate-900 truncate" title={c.nome_fantasia}>{c.nome_fantasia}</td>
+                  <td className="p-4 truncate" title={c.razao_social || ''}>{c.razao_social || '—'}</td>
+                  <td className="p-4 font-mono text-xs truncate">{c.cnpj || '—'}</td>
+                  <td className="p-4 truncate" title={c.login_email || ''}>{c.login_email || '—'}</td>
+                  <td className="p-4 text-right whitespace-nowrap">
+                    <Link
+                      href={`/dashboard/notas-fiscais?cliente_id=${c.id}`}
+                      className="inline-flex items-center gap-1.5 text-xs bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition font-medium"
+                    >
+                      <FileDown size={14} /> Ver Notas Fiscais
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )
