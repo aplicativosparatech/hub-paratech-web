@@ -142,9 +142,11 @@ export async function GET(request: Request) {
 
           if (inutMatch) {
             dataRegistro = inutMatch.data_hora || inutMatch.created_at
-            if (inutMatch.status_sefaz === '102' || inutMatch.status_sefaz === '204') {
+            if (['102', '204', '563'].includes(inutMatch.status_sefaz)) {
               status = 'HOMOLOGADO'
-              motivo = inutMatch.motivo_sefaz || 'Inutilização homologada pela SEFAZ'
+              motivo = inutMatch.status_sefaz === '102'
+                ? (inutMatch.motivo_sefaz || 'Inutilização homologada pela SEFAZ')
+                : `Confirmado na SEFAZ: Já se encontrava inutilizado (Cód. ${inutMatch.status_sefaz})`
               protocolo = inutMatch.protocolo || undefined
             } else if (['206', '256', '241'].includes(inutMatch.status_sefaz)) {
               status = 'UTILIZADA_SEFAZ'

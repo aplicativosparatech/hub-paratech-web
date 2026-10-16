@@ -5,11 +5,12 @@ import {
   AlertTriangle, CheckCircle2, RefreshCw, Zap, ShieldAlert, 
   Search, Filter, Check, Clock, FileText, ExternalLink, HelpCircle,
   FileCheck, ShieldCheck, ChevronRight, X, Play, CheckSquare, Square,
-  AlertOctagon, ArrowRight
+  AlertOctagon, ArrowRight, Copy, CheckCheck
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useNotasFiscaisFilters } from './NotasFiscaisFilterContext'
 import { formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
+import { JUSTIFICATIVAS_INUTILIZACAO } from '@/utils/justificativasInutilizacao'
 
 interface GapItem {
   id: string
@@ -81,7 +82,7 @@ export default function TabelaInutilizacao() {
   }>({
     open: false,
     gap: null,
-    justificativa: 'Quebra de sequencia numerica do sistema emissor'
+    justificativa: 'Erro de comunicacao com os servidores da SEFAZ durante a emissao'
   })
 
   const [modalMassa, setModalMassa] = useState<{
@@ -89,8 +90,27 @@ export default function TabelaInutilizacao() {
     justificativa: string
   }>({
     open: false,
-    justificativa: 'Quebra de sequencia numerica do sistema emissor'
+    justificativa: 'Erro de comunicacao com os servidores da SEFAZ durante a emissao'
   })
+
+  // Modal Elegante de Retorno da SEFAZ
+  const [modalResultado, setModalResultado] = useState<{
+    open: boolean
+    tipo: 'sucesso' | 'ja_inutilizado' | 'utilizada' | 'erro'
+    titulo: string
+    mensagem: string
+    protocolo?: string
+    cStat?: string
+    dhRecbto?: string
+    faixaTexto?: string
+  }>({
+    open: false,
+    tipo: 'sucesso',
+    titulo: '',
+    mensagem: ''
+  })
+
+  const [protocoloCopiado, setProtocoloCopiado] = useState(false)
 
   const [modalAjudaSefaz, setModalAjudaSefaz] = useState<{
     open: boolean
@@ -132,10 +152,10 @@ export default function TabelaInutilizacao() {
       setResumo(data.resumo || { totalGaps: 0, totalNumerosFaltantes: 0, pendentes: 0, homologadas: 0, utilizadasSefaz: 0 })
       setClienteInfo(data.cliente || null)
 
-      // Identifica erros históricos anteriores gravados no banco
+      // Identifica ocorrências anteriores registradas no histórico
       if (data.historicoInutilizacoes) {
         const errosBd: ErroProcessamentoItem[] = data.historicoInutilizacoes
-          .filter((h: any) => h.status_sefaz && !['102', '204'].includes(h.status_sefaz))
+          .filter((h: any) => h.status_sefaz && !['102', '204', '563'].includes(h.status_sefaz))
           .map((h: any) => ({
             id: h.id,
             modelo: h.modelo,
@@ -147,7 +167,6 @@ export default function TabelaInutilizacao() {
             dataHora: h.data_hora || h.created_at
           }))
         
-        // Mescla sem duplicar
         setErrosProcessamento(prev => {
           const map = new Map<string, ErroProcessamentoItem>()
           errosBd.forEach(e => map.set(`${e.modelo}_${e.serie}_${e.nNFIni}`, e))
@@ -170,10 +189,20 @@ export default function TabelaInutilizacao() {
     }
   }, [clienteAtualId, filtroModelo])
 
+  // Copiar protocolo com feedback
+  const handleCopiarProtocolo = (prot: string) => {
+    if (!prot) return
+    navigator.clipboard.writeText(prot)
+    setProtocoloCopiado(true)
+    toast.success('Protocolo copiado para a área de transferência!')
+    setTimeout(() => setProtocoloCopiado(false), 2500)
+  }
+
   // Ação: Inutilizar individualmente na SEFAZ
   async function handleExecutarInutilizacao(gap: GapItem, justificativaTexto: string) {
     if (!clienteAtualId) return
     setProcessandoId(gap.id)
+    setModalInutilizar(prev => ({ ...prev, open: false }))
     const toastId = toast.loading(`Enviando pedido de inutilização da faixa ${gap.nNFIni} a ${gap.nNFFin} para a SEFAZ...`)
 
     try {
@@ -192,19 +221,51 @@ export default function TabelaInutilizacao() {
       })
 
       const data = await res.json()
+      toast.dismiss(toastId)
 
-      if (!res.ok && !data.cStat) {
-        throw new Error(data.error || 'Falha ao conectar com o serviço de inutilização.')
-      }
+      const labelFaixa = `${gap.modelo === '55' ? 'NF-e (Mod 55)' : 'NFC-e (Mod 65)'} - Série ${gap.serie} - Nº ${gap.nNFIni}${gap.nNFIni !== gap.nNFFin ? ` a ${gap.nNFFin}` : ''}`
 
       if (data.isHomologada) {
-        toast.success(`Inutilização HOMOLOGADA pela SEFAZ! Protocolo: ${data.nProt}`, { id: toastId, duration: 6000 })
+        setModalResultado({
+          open: true,
+          tipo: 'sucesso',
+          titulo: 'Inutilização Homologada com Sucesso!',
+          mensagem: 'A SEFAZ autorizou a inutilização da numeração e gerou o protocolo oficial de homologação.',
+          protocolo: data.nProt,
+          cStat: data.cStat || '102',
+          dhRecbto: data.dhRecbto,
+          faixaTexto: labelFaixa
+        })
       } else if (data.isJaInutilizado) {
-        toast.success(`Confirmado pela SEFAZ: Este número JÁ SE ENCONTRAVA INUTILIZADO (Código 204)!`, { id: toastId, duration: 6000 })
+        setModalResultado({
+          open: true,
+          tipo: 'ja_inutilizado',
+          titulo: 'Numeração Já Inutilizada na SEFAZ!',
+          mensagem: `A SEFAZ confirmou que este número já se encontrava homologado e inutilizado no Fisco (Código ${data.cStat}). O HUB atualizou o status para regularizado!`,
+          protocolo: data.nProt,
+          cStat: data.cStat || '204',
+          dhRecbto: data.dhRecbto,
+          faixaTexto: labelFaixa
+        })
       } else if (data.isUtilizadaNaSefaz) {
-        toast.error(`⚠️ ATENÇÃO: Esta numeração CONSTA COMO UTILIZADA na SEFAZ (${data.cStat}: ${data.xMotivo}). O XML foi emitido no PDV mas não está no HUB!`, { id: toastId, duration: 8000 })
+        setModalResultado({
+          open: true,
+          tipo: 'utilizada',
+          titulo: 'Nota Emitida na SEFAZ (Falta XML no HUB)',
+          mensagem: `A SEFAZ informou que o número já foi utilizado em uma nota fiscal autorizada (${data.cStat}: ${data.xMotivo}). O XML foi emitido no PDV local mas não subiu para a nuvem.`,
+          cStat: data.cStat,
+          faixaTexto: labelFaixa
+        })
       } else {
-        toast.error(`Rejeição da SEFAZ (${data.cStat}): ${data.xMotivo}`, { id: toastId, duration: 6000 })
+        setModalResultado({
+          open: true,
+          tipo: 'erro',
+          titulo: `Retorno da SEFAZ (Código ${data.cStat || 'ERRO'})`,
+          mensagem: data.xMotivo || data.error || 'A SEFAZ recusou a solicitação de inutilização.',
+          cStat: data.cStat,
+          faixaTexto: labelFaixa
+        })
+
         // Adiciona à aba de erros
         setErrosProcessamento(prev => [
           {
@@ -224,10 +285,10 @@ export default function TabelaInutilizacao() {
       // Recarrega lista atualizada
       await carregarGaps()
     } catch (err: any) {
-      toast.error('Erro ao processar na SEFAZ: ' + (err.message || ''), { id: toastId })
+      toast.dismiss(toastId)
+      toast.error('Erro ao processar na SEFAZ: ' + (err.message || ''))
     } finally {
       setProcessandoId(null)
-      setModalInutilizar({ open: false, gap: null, justificativa: 'Quebra de sequencia numerica do sistema emissor' })
     }
   }
 
@@ -280,7 +341,6 @@ export default function TabelaInutilizacao() {
 
         if (data.isHomologada) {
           homologadasCount++
-          // Desmarca da seleção com sucesso
           setSelectedGapIds(prev => prev.filter(id => id !== gap.id))
         } else if (data.isJaInutilizado) {
           jaInutilizadasCount++
@@ -311,7 +371,7 @@ export default function TabelaInutilizacao() {
           })
         }
       } catch (err: any) {
-        // Erro de rede ou comunicação: registra e passa para a próxima nota!
+        // Erro de rede ou comunicação: registra e passa para a próxima nota sem travar!
         novosErros.push({
           id: `${gap.id}_${Date.now()}`,
           modelo: gap.modelo,
@@ -319,7 +379,7 @@ export default function TabelaInutilizacao() {
           nNFIni: gap.nNFIni,
           nNFFin: gap.nNFFin,
           codigo: 'TIMEOUT/REDE',
-          motivo: err.message || 'Falha de comunicação',
+          motivo: err.message || 'Falha de comunicação com a SEFAZ',
           dataHora: new Date().toISOString()
         })
       }
@@ -340,7 +400,7 @@ export default function TabelaInutilizacao() {
     const totalRegularizados = homologadasCount + jaInutilizadasCount
     if (novosErros.length > 0) {
       toast(
-        `Fila concluída!\n✅ ${totalRegularizados} regularizadas com sucesso.\n⚠️ ${novosErros.length} notas com erro/aviso incluídas na aba "Erros / Ocorrências".`,
+        `Fila concluída!\n✅ ${totalRegularizados} regularizadas na SEFAZ.\n⚠️ ${novosErros.length} notas com erro/aviso incluídas na aba "Erros / Ocorrências".`,
         { icon: '⚠️', duration: 9000 }
       )
     } else {
@@ -379,10 +439,8 @@ export default function TabelaInutilizacao() {
 
   const handleToggleSelectAll = () => {
     if (todosSelecionados) {
-      // Desmarca as visíveis
       setSelectedGapIds(prev => prev.filter(id => !pendentesVisiveis.some(g => g.id === id)))
     } else {
-      // Marca todas as visíveis
       const idsToAdd = pendentesVisiveis.map(g => g.id)
       setSelectedGapIds(prev => Array.from(new Set([...prev, ...idsToAdd])))
     }
@@ -406,7 +464,7 @@ export default function TabelaInutilizacao() {
             <h2 className="text-xl font-bold text-slate-900">Quebras de Sequência e Inutilização SEFAZ</h2>
           </div>
           <p className="text-xs text-slate-500 mt-1 max-w-2xl">
-            Detecção automática de numerações puladas/faltantes de NF-e e NFC-e. Marque as notas desejadas com checkboxes para inutilização sequencial em massa com a mesma justificativa.
+            Detecção automática de numerações puladas/faltantes de NF-e e NFC-e. Marque as notas desejadas com checkboxes para inutilização sequencial em massa com justificativa padronizada.
           </p>
         </div>
 
@@ -424,7 +482,7 @@ export default function TabelaInutilizacao() {
 
           <button
             type="button"
-            onClick={() => setModalMassa({ open: true, justificativa: 'Quebra de sequencia numerica do sistema emissor' })}
+            onClick={() => setModalMassa({ open: true, justificativa: 'Erro de comunicacao com os servidores da SEFAZ durante a emissao' })}
             disabled={processandoLote || loading || selectedGapIds.length === 0}
             className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-md shadow-rose-600/20 transition disabled:opacity-40"
           >
@@ -535,7 +593,7 @@ export default function TabelaInutilizacao() {
             </button>
             <button
               type="button"
-              onClick={() => setModalMassa({ open: true, justificativa: 'Quebra de sequencia numerica do sistema emissor' })}
+              onClick={() => setModalMassa({ open: true, justificativa: 'Erro de comunicacao com os servidores da SEFAZ durante a emissao' })}
               disabled={processandoLote}
               className="flex items-center gap-1.5 px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shadow-sm transition"
             >
@@ -734,15 +792,15 @@ export default function TabelaInutilizacao() {
                             <div className="flex items-center gap-1.5 text-emerald-700">
                               <CheckCircle2 size={14} className="text-emerald-600 flex-shrink-0" />
                               <span className="font-bold">
-                                {gap.motivo?.includes('204') ? 'Já Inutilizada no PDV/SEFAZ' : 'Inutilizada na SEFAZ'}
+                                {gap.motivo?.includes('204') || gap.motivo?.includes('563') ? 'Já Inutilizada no PDV/SEFAZ' : 'Inutilizada na SEFAZ'}
                               </span>
                               {gap.protocolo ? (
                                 <span className="text-[10px] font-mono text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded ml-1">
                                   Prot: {gap.protocolo}
                                 </span>
-                              ) : gap.motivo?.includes('204') ? (
+                              ) : (gap.motivo?.includes('204') || gap.motivo?.includes('563')) ? (
                                 <span className="text-[10px] font-mono text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded ml-1">
-                                  Cód. 204
+                                  Confirmado SEFAZ
                                 </span>
                               ) : null}
                             </div>
@@ -785,7 +843,7 @@ export default function TabelaInutilizacao() {
                               onClick={() => setModalInutilizar({
                                 open: true,
                                 gap,
-                                justificativa: 'Quebra de sequencia numerica do sistema emissor'
+                                justificativa: 'Erro de comunicacao com os servidores da SEFAZ durante a emissao'
                               })}
                               disabled={processandoId === gap.id || processandoLote}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-semibold text-xs transition shadow-sm disabled:opacity-50"
@@ -841,11 +899,11 @@ export default function TabelaInutilizacao() {
                       </td>
                       <td className="py-3 px-4">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          item.status_sefaz === '102' || item.status_sefaz === '204'
+                          item.status_sefaz === '102' || item.status_sefaz === '204' || item.status_sefaz === '563'
                             ? 'bg-emerald-100 text-emerald-800'
                             : 'bg-red-100 text-red-800'
                         }`}>
-                          {item.status_sefaz} - {item.status_sefaz === '102' ? 'HOMOLOGADO' : item.status_sefaz === '204' ? 'JÁ INUTILIZADO' : 'RECUSADO'}
+                          {item.status_sefaz} - {item.status_sefaz === '102' ? 'HOMOLOGADO' : ['204', '563'].includes(item.status_sefaz) ? 'JÁ INUTILIZADO' : 'RECUSADO'}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-emerald-700 font-bold">
@@ -934,7 +992,7 @@ export default function TabelaInutilizacao() {
                               setModalInutilizar({
                                 open: true,
                                 gap: gapAlvo,
-                                justificativa: 'Quebra de sequencia numerica do sistema emissor'
+                                justificativa: 'Erro de comunicacao com os servidores da SEFAZ durante a emissao'
                               })
                             } else {
                               toast.error('Esta numeração já foi resolvida ou atualizada.')
@@ -954,7 +1012,7 @@ export default function TabelaInutilizacao() {
         </div>
       )}
 
-      {/* Modal de Inutilização Individual */}
+      {/* Modal de Inutilização Individual com Combobox de 30 Justificativas */}
       {modalInutilizar.open && modalInutilizar.gap && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-200">
@@ -996,22 +1054,54 @@ export default function TabelaInutilizacao() {
                 </div>
               </div>
 
+              {/* Seletor Combobox de Justificativas */}
               <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Justificativa Oficial (mínimo de 15 caracteres):
+                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Justificativa da Inutilização:</span>
+                  <span className="text-[11px] font-normal text-slate-400">Escolha da lista ou digite abaixo</span>
                 </label>
+
+                <div className="mb-2">
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        setModalInutilizar(prev => ({ ...prev, justificativa: e.target.value }))
+                      }
+                    }}
+                    className="w-full border border-slate-300 bg-slate-50 text-slate-800 rounded-xl p-2.5 text-xs focus:ring-2 focus:ring-rose-500 outline-none font-medium"
+                    defaultValue=""
+                  >
+                    <option value="" disabled>
+                      ⚡ Escolha uma das 30 justificativas mais aceitas pela SEFAZ...
+                    </option>
+                    {JUSTIFICATIVAS_INUTILIZACAO.map((just, idx) => (
+                      <option key={idx} value={just}>
+                        {idx + 1}. {just}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <textarea
                   rows={3}
                   value={modalInutilizar.justificativa}
                   onChange={(e) => setModalInutilizar(prev => ({ ...prev, justificativa: e.target.value }))}
                   className="w-full border border-slate-300 rounded-xl p-2.5 text-xs focus:ring-2 focus:ring-rose-500 outline-none"
-                  placeholder="Informe o motivo da quebra na sequência..."
+                  placeholder="Você também pode personalizar ou escrever outra justificativa aqui..."
                 />
-                <span className={`text-[11px] font-medium ${
-                  modalInutilizar.justificativa.trim().length >= 15 ? 'text-emerald-600' : 'text-red-500'
-                }`}>
-                  {modalInutilizar.justificativa.trim().length} / 255 caracteres (mínimo 15)
-                </span>
+
+                <div className="flex items-center justify-between mt-1">
+                  <span className={`text-[11px] font-medium ${
+                    modalInutilizar.justificativa.trim().length >= 15 ? 'text-emerald-600' : 'text-red-500'
+                  }`}>
+                    {modalInutilizar.justificativa.trim().length} / 255 caracteres (mínimo 15)
+                  </span>
+                  {modalInutilizar.justificativa.trim().length >= 15 && (
+                    <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+                      <Check size={12} /> Tamanho válido para a SEFAZ
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-[11px] leading-relaxed">
@@ -1040,7 +1130,7 @@ export default function TabelaInutilizacao() {
         </div>
       )}
 
-      {/* Modal de Inutilização em Massa (Mesma Justificativa) */}
+      {/* Modal de Inutilização em Massa (Com Combobox de 30 Justificativas) */}
       {modalMassa.open && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-200">
@@ -1069,9 +1159,32 @@ export default function TabelaInutilizacao() {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Justificativa Unificada para o Lote (mínimo de 15 caracteres):
+                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Justificativa Unificada para o Lote:</span>
+                  <span className="text-[11px] font-normal text-slate-400">Escolha da lista ou digite abaixo</span>
                 </label>
+
+                <div className="mb-2">
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        setModalMassa(prev => ({ ...prev, justificativa: e.target.value }))
+                      }
+                    }}
+                    className="w-full border border-slate-300 bg-slate-50 text-slate-800 rounded-xl p-2.5 text-xs focus:ring-2 focus:ring-rose-500 outline-none font-medium"
+                    defaultValue=""
+                  >
+                    <option value="" disabled>
+                      ⚡ Escolha uma das 30 justificativas mais aceitas pela SEFAZ...
+                    </option>
+                    {JUSTIFICATIVAS_INUTILIZACAO.map((just, idx) => (
+                      <option key={idx} value={just}>
+                        {idx + 1}. {just}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <textarea
                   rows={3}
                   value={modalMassa.justificativa}
@@ -1079,11 +1192,19 @@ export default function TabelaInutilizacao() {
                   className="w-full border border-slate-300 rounded-xl p-2.5 text-xs focus:ring-2 focus:ring-rose-500 outline-none"
                   placeholder="Informe a justificativa que será aplicada a todas as numerações..."
                 />
-                <span className={`text-[11px] font-medium ${
-                  modalMassa.justificativa.trim().length >= 15 ? 'text-emerald-600' : 'text-red-500'
-                }`}>
-                  {modalMassa.justificativa.trim().length} / 255 caracteres (mínimo 15)
-                </span>
+
+                <div className="flex items-center justify-between mt-1">
+                  <span className={`text-[11px] font-medium ${
+                    modalMassa.justificativa.trim().length >= 15 ? 'text-emerald-600' : 'text-red-500'
+                  }`}>
+                    {modalMassa.justificativa.trim().length} / 255 caracteres (mínimo 15)
+                  </span>
+                  {modalMassa.justificativa.trim().length >= 15 && (
+                    <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+                      <Check size={12} /> Tamanho válido para a SEFAZ
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-500 text-[11px] leading-relaxed">
@@ -1106,6 +1227,122 @@ export default function TabelaInutilizacao() {
                 className="px-5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-md shadow-rose-600/20 transition disabled:opacity-50"
               >
                 Iniciar Inutilização em Massa ({selectedGapIds.length})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL NOVO: Resposta Elegante da SEFAZ com Protocolo e Cópia */}
+      {modalResultado.open && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2.5">
+                {modalResultado.tipo === 'sucesso' && (
+                  <div className="p-2 bg-emerald-100 text-emerald-700 rounded-xl">
+                    <CheckCircle2 size={22} />
+                  </div>
+                )}
+                {modalResultado.tipo === 'ja_inutilizado' && (
+                  <div className="p-2 bg-blue-100 text-blue-700 rounded-xl">
+                    <ShieldCheck size={22} />
+                  </div>
+                )}
+                {modalResultado.tipo === 'utilizada' && (
+                  <div className="p-2 bg-amber-100 text-amber-700 rounded-xl">
+                    <AlertTriangle size={22} />
+                  </div>
+                )}
+                {modalResultado.tipo === 'erro' && (
+                  <div className="p-2 bg-red-100 text-red-700 rounded-xl">
+                    <AlertOctagon size={22} />
+                  </div>
+                )}
+
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base leading-tight">
+                    {modalResultado.titulo}
+                  </h3>
+                  <span className="text-[11px] font-semibold text-slate-400">
+                    Retorno Oficial da Fazenda de Minas Gerais (MG)
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setModalResultado(prev => ({ ...prev, open: false }))}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              {/* Detalhes do Documento */}
+              {modalResultado.faixaTexto && (
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between text-slate-700 font-mono">
+                  <span className="text-slate-500 font-sans">Documento:</span>
+                  <span className="font-bold">{modalResultado.faixaTexto}</span>
+                </div>
+              )}
+
+              {/* Protocolo Oficial SEFAZ com Botão de Copiar */}
+              {modalResultado.protocolo && (
+                <div className="p-4 bg-emerald-50/70 border border-emerald-200/80 rounded-xl flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block mb-0.5">
+                      Número do Protocolo SEFAZ
+                    </span>
+                    <span className="text-base font-black font-mono text-emerald-950 tracking-wide">
+                      {modalResultado.protocolo}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleCopiarProtocolo(modalResultado.protocolo!)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold text-xs shadow-sm transition"
+                  >
+                    {protocoloCopiado ? <CheckCheck size={14} /> : <Copy size={14} />}
+                    {protocoloCopiado ? 'Copiado!' : 'Copiar'}
+                  </button>
+                </div>
+              )}
+
+              {/* Mensagem explicativa */}
+              <div className={`p-3.5 rounded-xl border ${
+                modalResultado.tipo === 'sucesso' || modalResultado.tipo === 'ja_inutilizado'
+                  ? 'bg-slate-50 border-slate-200 text-slate-700'
+                  : modalResultado.tipo === 'utilizada'
+                    ? 'bg-amber-50 border-amber-200 text-amber-900'
+                    : 'bg-red-50 border-red-200 text-red-900'
+              }`}>
+                <div className="flex items-start gap-2">
+                  <div className="mt-0.5 font-bold font-mono text-[11px] px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-800">
+                    Cód. {modalResultado.cStat}
+                  </div>
+                  <p className="leading-relaxed text-xs">
+                    {modalResultado.mensagem}
+                  </p>
+                </div>
+              </div>
+
+              {modalResultado.dhRecbto && (
+                <p className="text-[11px] text-slate-400 text-right">
+                  Recebido pela SEFAZ em: {new Date(modalResultado.dhRecbto).toLocaleString('pt-BR')}
+                </p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setModalResultado(prev => ({ ...prev, open: false }))}
+                className="px-6 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition"
+              >
+                Fechar
               </button>
             </div>
           </div>

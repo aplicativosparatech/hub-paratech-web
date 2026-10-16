@@ -234,24 +234,43 @@ export async function executarInutilizacaoSefaz(params: {
     }
 
     const cStat = extractTag(responseXml, 'cStat')
-    const xMotivo = extractTag(responseXml, 'xMotivo')
-    const nProt = extractTag(responseXml, 'nProt')
+    let xMotivo = extractTag(responseXml, 'xMotivo')
+    let nProt = extractTag(responseXml, 'nProt')
     const dhRecbto = extractTag(responseXml, 'dhRecbto')
+
+    // Se o protocolo estiver embutido no texto da SEFAZ (ex: código 563 com "nProt: 131262498609951")
+    if (!nProt && xMotivo) {
+      const matchProt = xMotivo.match(/nProt:\s*(\d+)/i)
+      if (matchProt) {
+        nProt = matchProt[1]
+      }
+    }
 
     // Análise de códigos de retorno da SEFAZ
     const isHomologada = cStat === '102' // 102: Inutilização de número homologado
-    const isJaInutilizado = cStat === '204' // 204: Duplicidade de NF-e do número já inutilizado
-    // 206: Número de NF-e já está utilizado
+    // 204 ou 563: Já existe pedido de Inutilização homologado na SEFAZ para esta faixa!
+    const isJaInutilizado = cStat === '204' || cStat === '563'
+    // 206: Número de NF-e já está utilizado em venda
     // 256: Uma numeração de NF-e a ser inutilizada já está na Base de Dados da SEFAZ
     // 241: Um número da faixa já foi utilizado
     const isUtilizadaNaSefaz = ['206', '256', '241'].includes(cStat)
+
+    // Formata mensagem elegante e amigável para o usuário
+    let motivoLimpo = xMotivo || 'Sem retorno de motivo da SEFAZ'
+    if (isJaInutilizado) {
+      motivoLimpo = `Confirmado pela SEFAZ: Numeração já se encontra homologada e inutilizada${nProt ? ` (Protocolo: ${nProt})` : ''}`
+    } else if (isHomologada) {
+      motivoLimpo = `Inutilização homologada com sucesso pela SEFAZ${nProt ? ` (Protocolo: ${nProt})` : ''}`
+    } else if (motivoLimpo.startsWith('Rejeição:')) {
+      motivoLimpo = motivoLimpo.replace(/^Rejeição:\s*/i, '').trim()
+    }
 
     const success = isHomologada || isJaInutilizado
 
     return {
       success,
       cStat: cStat || 'DESCONHECIDO',
-      xMotivo: xMotivo || 'Sem retorno de motivo da SEFAZ',
+      xMotivo: motivoLimpo,
       nProt: nProt || undefined,
       dhRecbto: dhRecbto || undefined,
       xmlPedido: signedXml,

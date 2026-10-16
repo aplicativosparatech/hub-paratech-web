@@ -86,7 +86,7 @@ export async function POST(request: Request) {
     // 5. Registra o histórico na tabela inutilizacoes_saidas
     let statusBanco = resultado.cStat
     if (resultado.isHomologada) statusBanco = '102'
-    else if (resultado.isJaInutilizado) statusBanco = '204'
+    else if (resultado.isJaInutilizado) statusBanco = resultado.cStat || '204'
     else if (resultado.isUtilizadaNaSefaz) statusBanco = resultado.cStat
 
     try {
