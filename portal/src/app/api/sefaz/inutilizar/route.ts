@@ -28,6 +28,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Faixa de numeração inválida (nNFIni deve ser menor ou igual a nNFFin e maior que zero).' }, { status: 400 })
     }
 
+    // Regra SEFAZ G008 / DP08: O tamanho máximo da faixa não pode exceder 10.000 notas por pedido
+    if (numFin - numIni + 1 > 10000) {
+      return NextResponse.json({
+        success: false,
+        cStat: '201',
+        xMotivo: `Rejeição: O número máximo de numeração a inutilizar (${(numFin - numIni + 1).toLocaleString('pt-BR')}) ultrapassou o limite máximo da SEFAZ (10.000 notas). Se esta empresa já emitia notas fiscais antes de usar o HUB, não tente inutilizar: basta configurar o Ponto de Partida Fiscal (Número Inicial) no cadastro do cliente.`,
+        isHomologada: false,
+        isJaInutilizado: false,
+        isUtilizadaNaSefaz: false
+      })
+    }
+
     // 1. Busca dados do cliente e certificado digital
     const { data: cliente, error: cliErr } = await supabaseAdmin
       .from('clientes')

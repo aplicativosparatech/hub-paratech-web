@@ -1241,6 +1241,21 @@ export default function TabelaInutilizacao() {
                 </div>
               </div>
 
+              {/* Aviso Preventivo se a faixa for maior que 1.000 notas */}
+              {modalInutilizar.gap && modalInutilizar.gap.quantidade > 1000 && (
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-300 text-amber-950 text-xs flex items-start gap-2.5">
+                  <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block mb-0.5">
+                      Atenção: Faixa extensa ({modalInutilizar.gap.quantidade.toLocaleString('pt-BR')} numerações)!
+                    </span>
+                    <p className="text-[11px] leading-relaxed text-amber-800">
+                      A SEFAZ rejeita pedidos de inutilização com mais de 10.000 números (Rejeição 201). Se essas notas pertencem ao histórico anterior da empresa, <strong>não inutilize</strong>. Basta fechar este modal e clicar no botão <strong>"Ajustar"</strong> no topo da página para definir o Ponto de Partida Fiscal.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-[11px] leading-relaxed">
                 ℹ️ <strong>Importante:</strong> Esta ação assina o pedido de inutilização digitalmente com o Certificado Digital A1 do cliente e submete diretamente ao WebService oficial da SEFAZ de Minas Gerais.
               </div>
@@ -1294,6 +1309,21 @@ export default function TabelaInutilizacao() {
                   A aplicação enviará as notas uma a uma com a mesma justificativa abaixo. Se alguma retornar rejeição ou erro, ela será automaticamente enviada para a aba <strong>Erros / Ocorrências</strong> e o sistema continuará o fluxo imediatamente sem interrupção.
                 </p>
               </div>
+
+              {/* Aviso se o lote selecionado contiver faixas maiores que 1.000 notas */}
+              {gaps.filter(g => selectedGapIds.includes(g.id) && g.quantidade > 1000).length > 0 && (
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-300 text-amber-950 text-xs flex items-start gap-2.5">
+                  <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block mb-0.5">
+                      Atenção: O lote possui {gaps.filter(g => selectedGapIds.includes(g.id) && g.quantidade > 1000).length} faixa(s) com mais de 1.000 notas!
+                    </span>
+                    <p className="text-[11px] leading-relaxed text-amber-800">
+                      A SEFAZ rejeita faixas extensas com o Código 201 (limite ultrapassado). Se forem numerações antigas anteriores ao HUB, desmarque-as e ajuste o <strong>Ponto de Partida Fiscal</strong> no topo da página.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
@@ -1465,6 +1495,41 @@ export default function TabelaInutilizacao() {
                   </p>
                 </div>
               </div>
+
+              {/* Alerta Inteligente para Rejeição 201 (Limite de Numeração Ultrapassado) */}
+              {(modalResultado.cStat === '201' || String(modalResultado.mensagem).toLowerCase().includes('ultrapassou o limite')) && (
+                <div className="p-4 bg-indigo-50/90 border border-indigo-200 rounded-xl text-indigo-950 space-y-2.5">
+                  <div className="flex items-center gap-2 font-bold text-xs text-indigo-900">
+                    <SlidersHorizontal size={15} className="text-indigo-600" />
+                    <span>Por que a SEFAZ rejeitou com o Código 201?</span>
+                  </div>
+                  <p className="text-xs leading-relaxed text-indigo-900">
+                    A SEFAZ possui uma regra rígida (MOC DP08) que <strong>limita a quantidade de números por pedido de inutilização (máximo de 10.000 notas)</strong>. Pedidos com faixas muito extensas são rejeitados para evitar que notas já vendidas sejam perdidas por engano.
+                  </p>
+                  <div className="p-3 bg-white rounded-lg border border-indigo-100 text-xs leading-relaxed text-slate-800 space-y-2 shadow-xs">
+                    <p className="font-bold text-indigo-700">💡 Como regularizar corretamente sem dar erro na SEFAZ:</p>
+                    <p>
+                      Essas notas anteriores ao início do HUB são vendas reais já feitas pelo cliente. <strong>Você não precisa inutilizá-las</strong>.
+                    </p>
+                    <p>
+                      Basta clicar no botão abaixo para definir o <strong>Ponto de Partida Fiscal</strong> deste cliente. Ao informar a numeração inicial correta, esse falso gap desaparecerá instantaneamente!
+                    </p>
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setModalResultado(prev => ({ ...prev, open: false }))
+                          handleAbrirModalPontoPartida()
+                        }}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition shadow-sm"
+                      >
+                        <SlidersHorizontal size={14} />
+                        Configurar Ponto de Partida Fiscal Agora
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {modalResultado.dhRecbto && (
                 <p className="text-[11px] text-slate-400 text-right">
