@@ -19,7 +19,7 @@ export default function EditarClientePage() {
   const [saving, setSaving] = useState(false)
   const [searchingCnpj, setSearchingCnpj] = useState(false)
   const [searchingCep, setSearchingCep] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
+  const [showPassword, setShowPassword] = useState(true)
   const [showCertPassword, setShowCertPassword] = useState(false)
   const [contabilidades, setContabilidades] = useState<any[]>([])
   const [sistemasSugeridos, setSistemasSugeridos] = useState<string[]>(ERP_PADRAO)
@@ -140,7 +140,7 @@ export default function EditarClientePage() {
           custo: d.custo !== undefined && d.custo !== null ? String(d.custo) : '',
           dia_vencimento: d.dia_vencimento ? String(d.dia_vencimento) : '10',
           login_email: d.login_email || '',
-          login_senha: '',
+          login_senha: d.login_senha || '',
           is_ativo: d.is_ativo !== undefined ? d.is_ativo : true,
           logo_url: d.logo_url || ''
         })
@@ -457,7 +457,9 @@ export default function EditarClientePage() {
       contabilidade_id: clienteData.contabilidade_id || null,
       certificado_validade: clienteData.certificado_validade || null,
       certificado_url: finalCertUrl,
-      logo_url: finalLogoUrl
+      logo_url: finalLogoUrl,
+      login_email: login_email && login_email.trim() !== '' ? login_email.trim() : null,
+      login_senha: login_senha && login_senha.trim() !== '' ? login_senha.trim() : null
     }
 
     const { error } = await supabase.from('clientes').update(payload).eq('id', params.id)

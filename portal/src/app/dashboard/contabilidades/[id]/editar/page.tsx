@@ -15,7 +15,7 @@ export default function EditarContabilidadePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [searchingCnpj, setSearchingCnpj] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
+  const [showPassword, setShowPassword] = useState(true)
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [currentLogo, setCurrentLogo] = useState('')
 
@@ -63,7 +63,7 @@ export default function EditarContabilidadePage() {
           cidade: data.cidade || '',
           uf: data.uf || '',
           login_email: data.login_email || '',
-          login_senha: '',
+          login_senha: data.login_senha || '',
           logo_url: data.logo_url || ''
         })
         if (data.logo_url) setCurrentLogo(data.logo_url)
@@ -157,7 +157,9 @@ export default function EditarContabilidadePage() {
 
     const payload = {
       ...contabData,
-      logo_url: finalLogoUrl
+      logo_url: finalLogoUrl,
+      login_email: login_email && login_email.trim() !== '' ? login_email.trim() : null,
+      login_senha: login_senha && login_senha.trim() !== '' ? login_senha.trim() : null
     }
 
     const { error } = await supabase.from('contabilidades').update(payload).eq('id', params.id)

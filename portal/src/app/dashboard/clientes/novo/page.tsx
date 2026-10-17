@@ -16,7 +16,7 @@ export default function NovoClientePage() {
   const [loading, setLoading] = useState(false)
   const [searchingCnpj, setSearchingCnpj] = useState(false)
   const [searchingCep, setSearchingCep] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
+  const [showPassword, setShowPassword] = useState(true)
   const [showCertPassword, setShowCertPassword] = useState(false)
   const [contabilidades, setContabilidades] = useState<any[]>([])
   const [sistemasSugeridos, setSistemasSugeridos] = useState<string[]>(ERP_PADRAO)
@@ -439,7 +439,9 @@ export default function NovoClientePage() {
       contabilidade_id: clienteData.contabilidade_id || null,
       certificado_validade: clienteData.certificado_validade || null,
       certificado_url: finalCertUrl,
-      logo_url: finalLogoUrl
+      logo_url: finalLogoUrl,
+      login_email: login_email && login_email.trim() !== '' ? login_email.trim() : null,
+      login_senha: login_senha && login_senha.trim() !== '' ? login_senha.trim() : null
     }
 
     // 1. Criar o Cliente no banco

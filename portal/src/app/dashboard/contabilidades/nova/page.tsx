@@ -13,7 +13,7 @@ export default function NovaContabilidadePage() {
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
   const [searchingCnpj, setSearchingCnpj] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
+  const [showPassword, setShowPassword] = useState(true)
 
   const [formData, setFormData] = useState({
     razao_social: '',
@@ -122,7 +122,9 @@ export default function NovaContabilidadePage() {
     
     const payload = {
       ...contabData,
-      logo_url: finalLogoUrl
+      logo_url: finalLogoUrl,
+      login_email: login_email && login_email.trim() !== '' ? login_email.trim() : null,
+      login_senha: login_senha && login_senha.trim() !== '' ? login_senha.trim() : null
     }
 
     // 1. Criar a Contabilidade no banco

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Trash2, X, Users, Building2, Upload } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Users, Building2, Upload, Eye, EyeOff, KeyRound } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import ImportadorLoteModal from '@/components/ImportadorLoteModal'
@@ -15,7 +15,15 @@ export default function ContabilidadesPage() {
   const [deleteModal, setDeleteModal] = useState<{ open: boolean; id: string; nome: string }>({ open: false, id: '', nome: '' })
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({})
   const supabase = createClient()
+
+  const togglePasswordVisibility = (id: string) => {
+    setVisiblePasswords(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }))
+  }
 
   const {
     sortedData: contabilidadesOrdenadas,
@@ -293,7 +301,34 @@ export default function ContabilidadesPage() {
                       <div className="font-medium text-slate-800 truncate">{c.nome_responsavel || '—'}</div>
                       {c.crc && <div className="text-emerald-700 font-semibold truncate">{c.crc}</div>}
                     </td>
-                    <td className="p-4 text-slate-600 text-xs font-mono truncate">{c.login_email || '—'}</td>
+                    <td className="p-4 text-slate-600 text-xs">
+                      {c.login_email ? (
+                        <div className="space-y-1">
+                          <div className="font-mono text-slate-800 font-medium truncate flex items-center gap-1" title={c.login_email}>
+                            <KeyRound size={11} className="text-blue-600 shrink-0" />
+                            <span className="truncate">{c.login_email}</span>
+                          </div>
+                          {c.login_senha && (
+                            <div className="flex items-center gap-1.5 text-[10px] text-slate-600 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-lg w-fit">
+                              <span className="text-slate-400 uppercase font-semibold">Senha:</span>
+                              <span className="font-mono font-bold text-slate-800">
+                                {visiblePasswords[c.id] ? c.login_senha : '••••••'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => togglePasswordVisibility(c.id)}
+                                className="text-slate-400 hover:text-blue-600 p-0.5 ml-1"
+                                title={visiblePasswords[c.id] ? 'Ocultar senha' : 'Ver senha'}
+                              >
+                                {visiblePasswords[c.id] ? <EyeOff size={11} /> : <Eye size={11} />}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 font-mono">—</span>
+                      )}
+                    </td>
                     <td className="p-4 text-right whitespace-nowrap">
                     <div className="flex gap-2 justify-end">
                       <Link href={`/dashboard/contabilidades/${c.id}/editar`} className="p-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition" title="Editar">

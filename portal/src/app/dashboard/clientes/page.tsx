@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Trash2, X, Copy, RefreshCw, Search, Upload, DollarSign, TrendingDown, TrendingUp, Eye, EyeOff } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Copy, RefreshCw, Search, Upload, DollarSign, TrendingDown, TrendingUp, Eye, EyeOff, KeyRound } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { limparDocumento, formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
@@ -561,6 +561,32 @@ export default function ClientesPage() {
                     <td className="p-4 text-slate-600 text-xs">
                       <div className="font-mono font-medium text-slate-800">{formatarCnpjCpf(c.cnpj) || c.cnpj}</div>
                       {c.nome_contato && <div className="text-slate-400 mt-0.5">{c.nome_contato}</div>}
+
+                      {/* Informações de Login Visíveis no Cadastro */}
+                      {c.login_email && (
+                        <div className="mt-1.5 p-1.5 bg-blue-50/70 border border-blue-200/60 rounded-lg text-[11px] leading-tight space-y-1">
+                          <div className="text-blue-900 font-semibold truncate flex items-center gap-1" title={`E-mail de Login: ${c.login_email}`}>
+                            <KeyRound size={11} className="text-blue-600 shrink-0" />
+                            <span className="truncate">{c.login_email}</span>
+                          </div>
+                          {c.login_senha && (
+                            <div className="flex items-center justify-between gap-1 text-[10px] text-slate-600 pt-0.5 border-t border-blue-200/40">
+                              <span className="text-slate-400 font-medium">Senha:</span>
+                              <span className="font-mono font-bold text-slate-800">
+                                {visiblePasswords[`login_${c.id}`] ? c.login_senha : '••••••'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => togglePasswordVisibility(`login_${c.id}`)}
+                                className="text-slate-400 hover:text-blue-600 p-0.5 transition cursor-pointer"
+                                title={visiblePasswords[`login_${c.id}`] ? 'Ocultar senha de login' : 'Ver senha de login'}
+                              >
+                                {visiblePasswords[`login_${c.id}`] ? <EyeOff size={11} /> : <Eye size={11} />}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className="p-4">{getRegimeBadge(c.regime_tributario)}</td>
                     {userRole === 'admin' && (
