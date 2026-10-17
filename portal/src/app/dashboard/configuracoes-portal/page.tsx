@@ -43,6 +43,10 @@ export default function ConfiguracoesPortalPage() {
   // Preferência de exibição do Nome Fantasia como título principal
   const [priorizarNomeFantasia, setPriorizarNomeFantasia] = useState(false)
 
+  // Controle de Alternância de Interface (Clean vs Clássico)
+  const [permitirTrocaInterface, setPermitirTrocaInterface] = useState(true)
+  const [modoPadraoInterface, setModoPadraoInterface] = useState<'clean' | 'classico'>('clean')
+
   // Carrega permissões e empresas disponíveis
   useEffect(() => {
     async function init() {
@@ -127,6 +131,26 @@ export default function ConfiguracoesPortalPage() {
           })
         }
       }
+
+      // Carregar permissão de troca de interface e modo padrão
+      try {
+        const { data: permTroca } = await supabase
+          .from('permissoes_modulos')
+          .select('permitido_cliente, permitido_contabilidade')
+          .eq('modulo_chave', 'troca_modo_interface')
+          .maybeSingle()
+        if (permTroca) {
+          setPermitirTrocaInterface(Boolean(permTroca.permitido_cliente && permTroca.permitido_contabilidade))
+        } else {
+          const savedPermitir = localStorage.getItem('hub_permitir_troca_interface')
+          if (savedPermitir !== null) setPermitirTrocaInterface(savedPermitir === 'true')
+        }
+      } catch (errP) {
+        console.warn('Erro ao carregar troca_modo_interface:', errP)
+      }
+
+      const savedModoPadrao = (localStorage.getItem('hub_interface_mode_default') as 'clean' | 'classico') || 'clean'
+      setModoPadraoInterface(savedModoPadrao)
 
       setLoading(false)
     }
@@ -223,6 +247,27 @@ export default function ConfiguracoesPortalPage() {
       if (errFicticio) {
         console.error('Erro ao salvar preferências gerais:', errFicticio)
       }
+
+      // Salva permissão de alternância de interface para cliente e contabilidade
+      try {
+        await supabase
+          .from('permissoes_modulos')
+          .update({
+            permitido_cliente: permitirTrocaInterface,
+            permitido_contabilidade: permitirTrocaInterface,
+            updated_at: new Date().toISOString()
+          })
+          .eq('modulo_chave', 'troca_modo_interface')
+      } catch (errP) {
+        console.error('Erro ao salvar permissão de interface:', errP)
+      }
+
+      localStorage.setItem('hub_permitir_troca_interface', String(permitirTrocaInterface))
+      localStorage.setItem('hub_interface_mode_default', modoPadraoInterface)
+      if (!permitirTrocaInterface) {
+        localStorage.setItem('hub_interface_mode', modoPadraoInterface)
+      }
+      window.dispatchEvent(new Event('hub_settings_changed'))
     }
 
     const { error } = await supabase
@@ -587,6 +632,111 @@ export default function ConfiguracoesPortalPage() {
               </label>
             </div>
           </div>
+
+          {/* Controle de Alternância e Modos de Interface (Clean vs Clássico) - Exclusivo Super Admin */}
+          {userRole === 'admin' && (
+            <div className="mt-8 pt-8 border-t border-slate-200">
+              <div className="flex items-center gap-3 pb-4 border-b border-slate-100 mb-6">
+                <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+                  <LayoutDashboard size={24} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold text-slate-900">Modo de Interface & Controle de Alternância</h3>
+                    <span className="text-[10px] uppercase font-bold tracking-wider bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-md border border-indigo-200">
+                      Exclusivo Admin
+                    </span>
+                  </div>
+                  <p className="text-slate-500 text-xs">
+                    Defina se clientes e contabilidades podem alternar livremente entre o Modo Clean e o Modo Clássico ou se o portal deve operar em um modo padrão fixo.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {/* Switch de Habilitar / Desabilitar Mudança de Interface */}
+                <div className="flex items-start gap-3.5 p-5 bg-slate-50 rounded-2xl border border-slate-200 hover:border-slate-300 transition">
+                  <input 
+                    type="checkbox" 
+                    id="permitir_troca_interface"
+                    checked={permitirTrocaInterface}
+                    onChange={e => setPermitirTrocaInterface(e.target.checked)}
+                    className="mt-1 h-5 w-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  />
+                  <label htmlFor="permitir_troca_interface" className="cursor-pointer select-none flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-bold text-slate-900 block text-base">
+                        Permitir que Usuários Alternem entre Modo Clean e Modo Clássico
+                      </span>
+                      <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-md ${
+                        permitirTrocaInterface ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                      }`}>
+                        {permitirTrocaInterface ? 'Habilitado' : 'Desabilitado'}
+                      </span>
+                    </div>
+                    <span className="text-slate-600 text-sm leading-relaxed block">
+                      Exibe o botão de alternância de interface na barra superior e no menu lateral para usuários do tipo <strong>Contabilidade</strong> e <strong>Cliente</strong>.
+                    </span>
+                    <span className="text-slate-600 text-sm leading-relaxed block mt-2">
+                      • <strong>Se marcado (Habilitado):</strong> Todos os usuários podem escolher livremente entre o visual Clean (moderno, sem poluição) e o visual Clássico (banners e cartões tradicionais).<br />
+                      • <strong>Se desmarcado (Desabilitado):</strong> Usuários comuns (Contabilidade e Clientes) não verão o botão de alternância e ficarão fixados no <strong>Modo Padrão</strong> selecionado abaixo. Apenas Administradores mantêm acesso à troca para supervisão e testes.
+                    </span>
+                  </label>
+                </div>
+
+                {/* Seletor do Modo Padrão */}
+                <div className="p-5 bg-white rounded-2xl border border-slate-200 space-y-3">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Modo Padrão da Interface do Portal:
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setModoPadraoInterface('clean')}
+                      className={`p-4 rounded-xl border text-left transition flex items-start gap-3 cursor-pointer ${
+                        modoPadraoInterface === 'clean'
+                          ? 'border-blue-600 bg-blue-50/60 ring-2 ring-blue-500/20'
+                          : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                      }`}
+                    >
+                      <div className={`p-2 rounded-lg shrink-0 ${modoPadraoInterface === 'clean' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                        <Sparkles size={18} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-slate-900">Modo Clean</span>
+                          <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded">Recomendado</span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                          Design minimalista, foco total nos dados fiscais, sem caixas repetitivas de empresa. Busca de clientes inteligente e unificada na barra superior.
+                        </p>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setModoPadraoInterface('classico')}
+                      className={`p-4 rounded-xl border text-left transition flex items-start gap-3 cursor-pointer ${
+                        modoPadraoInterface === 'classico'
+                          ? 'border-amber-600 bg-amber-50/60 ring-2 ring-amber-500/20'
+                          : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                      }`}
+                    >
+                      <div className={`p-2 rounded-lg shrink-0 ${modoPadraoInterface === 'classico' ? 'bg-amber-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                        <LayoutDashboard size={18} />
+                      </div>
+                      <div>
+                        <span className="text-sm font-bold text-slate-900">Modo Clássico</span>
+                        <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                          Layout visual tradicional com banners ilustrados coloridos, cards com gradientes em cada tela e seletores individuais em cada módulo.
+                        </p>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Controle de Visibilidade de Certificados A1 - Exclusivo do Super Admin */}
           {userRole === 'admin' && (

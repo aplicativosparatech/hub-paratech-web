@@ -28,6 +28,8 @@ interface GlobalClientContextType {
   interfaceMode: InterfaceMode
   setInterfaceMode: (mode: InterfaceMode) => void
   toggleInterfaceMode: () => void
+  permitirTrocaInterface: boolean
+  modoPadraoInterface: InterfaceMode
 
   // Usuário e Permissão
   userRole: 'admin' | 'contabilidade' | 'cliente' | null
@@ -58,6 +60,8 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
 
   // 1. Modo de Interface ('classico' ou 'clean') - Padrão 'clean'
   const [interfaceMode, _setInterfaceMode] = useState<InterfaceMode>('clean')
+  const [permitirTrocaInterface, setPermitirTrocaInterface] = useState(true)
+  const [modoPadraoInterface, setModoPadraoInterface] = useState<InterfaceMode>('clean')
 
   // 2. Papel do Usuário
   const [userRole, setUserRole] = useState<'admin' | 'contabilidade' | 'cliente' | null>(null)
@@ -75,8 +79,16 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
 
   // Inicialização no Client
   useEffect(() => {
-    // Carrega modo de interface salvo (padrão 'clean')
-    const savedMode = (localStorage.getItem(INTERFACE_MODE_STORAGE_KEY) as InterfaceMode) || 'clean'
+    // Carrega permissão e modo padrão de interface
+    const savedPermitir = localStorage.getItem('hub_permitir_troca_interface')
+    if (savedPermitir !== null) {
+      setPermitirTrocaInterface(savedPermitir === 'true')
+    }
+    const savedPadrao = (localStorage.getItem('hub_interface_mode_default') as InterfaceMode) || 'clean'
+    setModoPadraoInterface(savedPadrao)
+
+    // Carrega modo de interface salvo (se bloqueado para usuário comum, adota o padrão)
+    const savedMode = (localStorage.getItem(INTERFACE_MODE_STORAGE_KEY) as InterfaceMode) || savedPadrao
     _setInterfaceMode(savedMode)
 
     // Carrega preferência de nome fantasia
@@ -93,7 +105,14 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
   // Listener para eventos de configuração externa
   useEffect(() => {
     const handleSettingsChanged = () => {
-      const mode = (localStorage.getItem(INTERFACE_MODE_STORAGE_KEY) as InterfaceMode) || 'clean'
+      const savedPermitir = localStorage.getItem('hub_permitir_troca_interface')
+      if (savedPermitir !== null) {
+        setPermitirTrocaInterface(savedPermitir === 'true')
+      }
+      const savedPadrao = (localStorage.getItem('hub_interface_mode_default') as InterfaceMode) || 'clean'
+      setModoPadraoInterface(savedPadrao)
+
+      const mode = (localStorage.getItem(INTERFACE_MODE_STORAGE_KEY) as InterfaceMode) || savedPadrao
       _setInterfaceMode(mode)
 
       const pref = localStorage.getItem('hub_priorizar_nome_fantasia') === 'true'
@@ -103,6 +122,12 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
     const handleStorage = (e: StorageEvent) => {
       if (e.key === INTERFACE_MODE_STORAGE_KEY && e.newValue) {
         _setInterfaceMode(e.newValue as InterfaceMode)
+      }
+      if (e.key === 'hub_permitir_troca_interface') {
+        setPermitirTrocaInterface(e.newValue === 'true')
+      }
+      if (e.key === 'hub_interface_mode_default' && e.newValue) {
+        setModoPadraoInterface(e.newValue as InterfaceMode)
       }
       if (e.key === GLOBAL_CLIENT_STORAGE_KEY) {
         _setSelectedClienteId(e.newValue || '')
@@ -213,6 +238,32 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
 
       setClientes(clisData)
 
+      // Carrega permissão de alternância de interface
+      try {
+        const { data: permTroca } = await supabase
+          .from('permissoes_modulos')
+          .select('permitido_cliente, permitido_contabilidade')
+          .eq('modulo_chave', 'troca_modo_interface')
+          .maybeSingle()
+
+        if (permTroca) {
+          const canSwitch = role === 'admin'
+            ? true
+            : role === 'cliente'
+              ? Boolean(permTroca.permitido_cliente)
+              : Boolean(permTroca.permitido_contabilidade)
+
+          setPermitirTrocaInterface(canSwitch)
+
+          if (!canSwitch && role !== 'admin') {
+            const defMode = (localStorage.getItem('hub_interface_mode_default') as InterfaceMode) || 'clean'
+            _setInterfaceMode(defMode)
+          }
+        }
+      } catch (errPerm) {
+        console.warn('Erro ao carregar permissão troca_modo_interface:', errPerm)
+      }
+
       // Se havia um cliente salvo, verificar se ele ainda existe na lista
       _setSelectedClienteId(prev => {
         if (role === 'cliente' && clisData.length > 0) {
@@ -243,6 +294,10 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
   }, [])
 
   const toggleInterfaceMode = useCallback(() => {
+    if (userRole !== 'admin' && !permitirTrocaInterface) {
+      toast.error('A alternância de modos de interface foi desabilitada pelo administrador.')
+      return
+    }
     setInterfaceMode(interfaceMode === 'clean' ? 'classico' : 'clean')
     toast(
       interfaceMode === 'clean' 
@@ -250,7 +305,7 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
         : 'Alternado para o Modo Clean (foco em dados e busca global)', 
       { icon: interfaceMode === 'clean' ? '🏛️' : '✨' }
     )
-  }, [interfaceMode, setInterfaceMode])
+  }, [interfaceMode, setInterfaceMode, userRole, permitirTrocaInterface])
 
   const setSelectedClienteId = useCallback((id: string | null) => {
     const finalId = id || ''
@@ -282,6 +337,8 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
     interfaceMode,
     setInterfaceMode,
     toggleInterfaceMode,
+    permitirTrocaInterface,
+    modoPadraoInterface,
     userRole,
     loadingRole,
     clientes,
@@ -296,6 +353,8 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
     interfaceMode,
     setInterfaceMode,
     toggleInterfaceMode,
+    permitirTrocaInterface,
+    modoPadraoInterface,
     userRole,
     loadingRole,
     clientes,

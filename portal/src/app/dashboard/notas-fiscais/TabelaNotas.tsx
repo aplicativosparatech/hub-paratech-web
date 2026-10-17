@@ -90,15 +90,14 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     setUltimaConsultaHora(agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
     loadUltimaSincronizacao()
 
-    const targetClienteId = selectedCliente || (clientes?.length > 0 ? clientes[0].id : null)
+    const targetClienteId = selectedCliente || null
 
-    if (!targetClienteId) {
-      setNotas([])
-      setLoading(false)
-      return
+    let query = supabase.from(tabela).select('*').order('data_emissao', { ascending: false })
+    if (targetClienteId) {
+      query = query.eq('cliente_id', targetClienteId)
+    } else {
+      query = query.limit(200)
     }
-
-    let query = supabase.from(tabela).select('*').eq('cliente_id', targetClienteId).order('data_emissao', { ascending: false })
 
     const { data } = await query
     setNotas(data || [])

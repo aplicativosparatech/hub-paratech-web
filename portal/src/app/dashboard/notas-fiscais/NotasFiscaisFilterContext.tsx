@@ -214,32 +214,26 @@ export function NotasFiscaisFilterProvider({ children }: { children: React.React
 
       setClientes(clisData)
 
-      // Regra de Seleção: prioriza URL, cliente ativo em memória, filtro global salvo ou sessão
+      // Regra de Seleção: prioriza papel de cliente, URL, cliente ativo em memória ou filtro global salvo
       if (clisData.length > 0) {
         _setSelectedCliente(prev => {
+          if (role === 'cliente') {
+            return clisData[0].id
+          }
           if (clienteIdUrl && clisData.some(c => c.id === clienteIdUrl)) {
             setSessionValue('cliente', clienteIdUrl)
             return clienteIdUrl
-          }
-          if (prev && clisData.some(c => c.id === prev)) {
-            return prev
           }
           const globalSaved = typeof window !== 'undefined' ? localStorage.getItem('hub_paratech_global_cliente') : null
           if (globalSaved && clisData.some(c => c.id === globalSaved)) {
             setSessionValue('cliente', globalSaved)
             return globalSaved
           }
-          const savedSession = getSessionValue('cliente', '')
-          if (savedSession && clisData.some(c => c.id === savedSession)) {
-            return savedSession
+          if (prev && clisData.some(c => c.id === prev)) {
+            return prev
           }
-          const mode = typeof window !== 'undefined' ? localStorage.getItem('hub_interface_mode') || 'clean' : 'clean'
-          if (mode === 'clean' && !globalSaved && !prev) {
-            return ''
-          }
-          const defaultId = clisData[0].id
-          setSessionValue('cliente', defaultId)
-          return defaultId
+          // Padrão: sem cliente ativo no filtro global = Todos os Clientes ('')
+          return ''
         })
       }
     } catch (e) {
@@ -260,10 +254,10 @@ export function NotasFiscaisFilterProvider({ children }: { children: React.React
     }
   }, [clienteIdUrl, selectedCliente, setSelectedCliente])
 
-  // Objeto completo da empresa selecionada em análise
+  // Objeto completo da empresa selecionada em análise (null se nenhum selecionado)
   const clienteAtual = useMemo(() => {
-    if (!selectedCliente) return clientes.length > 0 ? clientes[0] : null
-    return clientes.find(c => c.id === selectedCliente) || (clientes.length > 0 ? clientes[0] : null)
+    if (!selectedCliente) return null
+    return clientes.find(c => c.id === selectedCliente) || null
   }, [clientes, selectedCliente])
 
   // Limpa apenas os filtros de dados (mantém a empresa ativa)

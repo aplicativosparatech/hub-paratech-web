@@ -11,12 +11,17 @@ export default function InterfaceModeToggle({
   variant?: 'topbar' | 'sidebar'
   isCollapsed?: boolean 
 }) {
-  const { interfaceMode, toggleInterfaceMode, setInterfaceMode } = useGlobalClient()
+  const { interfaceMode, toggleInterfaceMode, setInterfaceMode, userRole, permitirTrocaInterface } = useGlobalClient()
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // Se o usuário não for admin e a alternância estiver desabilitada pelo administrador, oculta o controle
+  if (userRole !== 'admin' && !permitirTrocaInterface) {
+    return null
+  }
 
   if (!mounted) {
     return (

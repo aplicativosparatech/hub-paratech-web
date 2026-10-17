@@ -18,8 +18,10 @@ import Pagination from '@/components/Pagination'
 import { limparDocumento, formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
 import { useTableFeatures } from '@/hooks/useTableFeatures'
 import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
+import { useGlobalClient } from '@/components/GlobalClientContext'
 
 export default function RelatoriosPage() {
+  const { interfaceMode } = useGlobalClient()
   const supabase = createClient()
   const [loading, setLoading] = useState(true)
   const [loadingAudit, setLoadingAudit] = useState(false)
@@ -133,15 +135,18 @@ export default function RelatoriosPage() {
             const urlParams = new URLSearchParams(window.location.search)
             const paramClienteId = urlParams.get('cliente_id')
             const globalSaved = localStorage.getItem('hub_paratech_global_cliente')
+            const mode = localStorage.getItem('hub_interface_mode') || 'clean'
             if (paramClienteId && mapped.some(c => c.id === paramClienteId)) {
               setSelectedCliente(paramClienteId)
             } else if (globalSaved && mapped.some(c => c.id === globalSaved)) {
               setSelectedCliente(globalSaved)
-            } else {
+            } else if (role === 'cliente') {
               setSelectedCliente(mapped[0].id)
+            } else {
+              setSelectedCliente(mode === 'clean' ? '' : mapped[0].id)
             }
           } else {
-            setSelectedCliente(mapped[0].id)
+            setSelectedCliente(role === 'cliente' ? mapped[0].id : '')
           }
         } else {
           setClientes([])
@@ -158,14 +163,12 @@ export default function RelatoriosPage() {
   // Sincronização reativa com o Filtro Global do Topo
   useEffect(() => {
     const handleGlobalChange = (e: any) => {
-      const newId = e.detail?.clienteId
-      if (newId && clientes.some(c => c.id === newId)) {
-        setSelectedCliente(newId)
-      }
+      const newId = e.detail?.clienteId ?? (typeof window !== 'undefined' ? localStorage.getItem('hub_paratech_global_cliente') || '' : '')
+      setSelectedCliente(newId)
     }
     window.addEventListener('hub_global_cliente_changed', handleGlobalChange)
     return () => window.removeEventListener('hub_global_cliente_changed', handleGlobalChange)
-  }, [clientes])
+  }, [])
 
   // Atualização bidirecional de cliente
   const handleSelectCliente = (id: string) => {
@@ -688,8 +691,8 @@ export default function RelatoriosPage() {
       {/* Barra de Filtros (Cliente + Mês) */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         
-        {/* Seletor e Localizador de Cliente */}
-        {userRole !== 'cliente' && clientes.length > 0 && (
+        {/* Seletor e Localizador de Cliente (No Modo Clean, a busca no cabeçalho é a fonte única para toda a aplicação) */}
+        {interfaceMode === 'classico' && userRole !== 'cliente' && clientes.length > 0 && (
           <div className="flex-1 max-w-xl space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
