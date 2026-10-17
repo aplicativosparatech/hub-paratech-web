@@ -914,7 +914,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
           
           {/* 1. Barra Superior com Logo, Status SEFAZ e Controles de Sistema */}
           <div className="h-14 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 sm:gap-6 border-b border-slate-100 dark:border-slate-800/80">
-            {/* Lado Esquerdo: Botão Mobile + Logo HubParatech */}
+            {/* Lado Esquerdo: Botão Mobile + Logo Oficial Paratech */}
             <div className="flex items-center gap-3 shrink-0">
               <button
                 onClick={() => setMobileMenuOpen(true)}
@@ -924,19 +924,13 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                 <Menu size={20} />
               </button>
 
-              <Link href="/dashboard" className="flex items-center gap-2 group">
-                <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white font-black text-sm shadow-sm group-hover:scale-105 transition-transform">
-                  <Sparkles size={16} />
-                </div>
-                <span className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-                  Hub<span className="text-blue-600 font-extrabold">Paratech</span>
-                </span>
+              <Link href="/dashboard" className="flex items-center gap-2 group transition-transform hover:scale-[1.01]" title="Paratech Soluções & Sistemas">
+                <img 
+                  src="/logo-paratech-horizontal.png" 
+                  alt="Paratech Soluções & Sistemas" 
+                  className="h-8 sm:h-9 w-auto max-w-[200px] sm:max-w-[240px] object-contain block drop-shadow-xs"
+                />
               </Link>
-            </div>
-
-            {/* Centro: Status do Servidor SEFAZ */}
-            <div className="hidden md:flex items-center">
-              <SefazStatusBadge />
             </div>
 
             {/* Lado Direito: Notificações, Modo Toggle, Tema, Kiosk, Perfil */}
@@ -1100,11 +1094,6 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                   )
                 })}
               </nav>
-
-              {/* Status SEFAZ Discreto na Sub-Navbar */}
-              <div className="hidden lg:flex items-center gap-2">
-                <SefazStatusBadge />
-              </div>
             </div>
           </div>
         </header>
