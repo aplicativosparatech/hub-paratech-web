@@ -31,6 +31,7 @@ function AssinaturaChip({ ok }: { ok: boolean }) {
 
 function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
   const supabase = createClient()
+  const isSaida = tabela.includes('saida') || tabela.startsWith('nfce_') || tabela === 'nfe_saidas'
   const {
     userRole,
     clientes,
@@ -263,7 +264,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     defaultSortDirection: 'desc',
     initialWidths: {
       numero: 110,
-      chave: 320,
+      chave: isSaida ? 380 : 320,
       emitente: 220,
       valor: 120,
       emissao: 130,
@@ -627,17 +628,19 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                   onResize={handleResizeColumn}
                   minWidth={160}
                 />
-                <ResizableSortableTh
-                  columnId="emitente"
-                  label="Emitente (CNPJ / CPF)"
-                  sortKey="emitente"
-                  currentSortKey={sortKey}
-                  currentSortDirection={sortDirection}
-                  onSort={handleSort}
-                  width={columnWidths.emitente}
-                  onResize={handleResizeColumn}
-                  minWidth={150}
-                />
+                {!isSaida && (
+                  <ResizableSortableTh
+                    columnId="emitente"
+                    label="Emitente (CNPJ / CPF)"
+                    sortKey="emitente"
+                    currentSortKey={sortKey}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    width={columnWidths.emitente}
+                    onResize={handleResizeColumn}
+                    minWidth={150}
+                  />
+                )}
                 <ResizableSortableTh
                   columnId="valor"
                   label="Valor (R$)"
@@ -697,7 +700,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
             <tbody>
               {notasFiltradas.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-400">
+                  <td colSpan={isSaida ? 7 : 8} className="p-8 text-center text-slate-400">
                     {temFiltroAtivo 
                       ? 'Nenhuma nota encontrada com os filtros selecionados. Tente ajustar os parâmetros ou limpar os filtros.' 
                       : 'Nenhuma nota encontrada. O Hub ainda não enviou dados para esta seção.'}
@@ -747,16 +750,18 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                         )}
                       </div>
                     </td>
-                    <td className="p-3.5 font-mono text-xs overflow-hidden">
-                      <div className={`truncate ${isDivergente ? 'text-red-700 font-bold' : 'text-slate-800'}`} title={formatDoc(emitenteDoc)}>
-                        {formatDoc(emitenteDoc)}
-                      </div>
-                      {isDivergente && (
-                        <div className="text-[10px] text-red-600 mt-0.5 font-sans truncate" title={n.motivo_divergencia || 'Emitente diverge da empresa atual'}>
-                          {n.motivo_divergencia || `CNPJ diverge da empresa`}
+                    {!isSaida && (
+                      <td className="p-3.5 font-mono text-xs overflow-hidden">
+                        <div className={`truncate ${isDivergente ? 'text-red-700 font-bold' : 'text-slate-800'}`} title={formatDoc(emitenteDoc)}>
+                          {formatDoc(emitenteDoc)}
                         </div>
-                      )}
-                    </td>
+                        {isDivergente && (
+                          <div className="text-[10px] text-red-600 mt-0.5 font-sans truncate" title={n.motivo_divergencia || 'Emitente diverge da empresa atual'}>
+                            {n.motivo_divergencia || `CNPJ diverge da empresa`}
+                          </div>
+                        )}
+                      </td>
+                    )}
                     <td className="p-3.5 font-medium overflow-hidden whitespace-nowrap">
                       R$ {Number(n.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
