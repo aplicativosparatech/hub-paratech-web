@@ -526,106 +526,108 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen flex flex-col bg-[#F8FAFC] dark:bg-[#06090F] font-sans transition-colors duration-200 text-slate-900 dark:text-slate-100">
         
-        {/* 1. TOPBAR MODERNA E ULTRA-CLEAN (CONFORME MOCKUP 1) */}
-        <header className="h-16 bg-white dark:bg-[#0B1120] border-b border-slate-200/80 dark:border-slate-800/80 px-4 sm:px-6 lg:px-8 flex items-center justify-between sticky top-0 z-40 transition-colors gap-3 sm:gap-6">
+        {/* CABEÇALHO FIXO UNIFICADO (STICKY TOP-0 Z-40) */}
+        <header className="sticky top-0 z-40 bg-white dark:bg-[#0B1120] border-b border-slate-200/80 dark:border-slate-800 shadow-md transition-colors">
           
-          {/* Lado Esquerdo: Botão Mobile + Logo Mockup 1 */}
-          <div className="flex items-center gap-3 shrink-0">
-            <button
-              onClick={() => setMobileMenuOpen(true)}
-              className="lg:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-              aria-label="Abrir Navegação Completa"
-            >
-              <Menu size={20} />
-            </button>
-
-            <Link href="/dashboard" className="flex items-center gap-2 group">
-              {/* Ícone de 4 esferas / nós estilizados (Estilo Mockup 1) */}
-              <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white font-black text-sm shadow-sm group-hover:scale-105 transition-transform">
-                <Sparkles size={16} />
-              </div>
-              <span className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-                Hub<span className="text-blue-600 font-extrabold">Paratech</span>
-              </span>
-            </Link>
-          </div>
-
-          {/* Centro: Seletor Global de Cliente Omnichannel (Mockup 1 & 2) */}
-          <div className="flex-1 flex justify-center max-w-2xl px-1">
-            <GlobalClientSelector />
-          </div>
-
-          {/* Lado Direito: Notificações, Modo Toggle, Tema, Kiosk, Perfil */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            
-            {/* Ícone de Notificações conforme Mockup 1 */}
-            <button
-              type="button"
-              title="Notificações do Hub"
-              onClick={() => toast('Nenhuma notificação crítica pendente.', { icon: '🔔' })}
-              className="p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-800 transition cursor-pointer shadow-2xs"
-            >
-              <Bell size={17} />
-            </button>
-
-            {/* Alternador de Modo de Interface (Modo Clean vs Modo Clássico) */}
-            <InterfaceModeToggle />
-
-            {/* Alternador de Tema Claro / Escuro */}
-            <div className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-800/80 p-0.5 rounded-xl border border-slate-200/80 dark:border-slate-700 text-xs">
+          {/* 1. Barra Superior com Logo, Status SEFAZ e Controles de Sistema */}
+          <div className="h-14 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 sm:gap-6 border-b border-slate-100 dark:border-slate-800/80">
+            {/* Lado Esquerdo: Botão Mobile + Logo HubParatech */}
+            <div className="flex items-center gap-3 shrink-0">
               <button
-                type="button"
-                onClick={() => handleSetTheme('light')}
-                className={`p-1.5 rounded-lg transition cursor-pointer ${theme === 'light' ? 'bg-white text-amber-600 shadow-xs' : 'text-slate-400 hover:text-slate-700'}`}
-                title="Tema Claro"
+                onClick={() => setMobileMenuOpen(true)}
+                className="lg:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                aria-label="Abrir Navegação Completa"
               >
-                <Sun size={14} className={theme === 'light' ? 'fill-amber-400/30' : ''} />
+                <Menu size={20} />
               </button>
-              <button
-                type="button"
-                onClick={() => handleSetTheme('dark')}
-                className={`p-1.5 rounded-lg transition cursor-pointer ${theme === 'dark' ? 'bg-slate-900 text-indigo-400 shadow-xs' : 'text-slate-400 hover:text-slate-200'}`}
-                title="Tema Escuro"
-              >
-                <Moon size={14} className={theme === 'dark' ? 'fill-indigo-400/30' : ''} />
-              </button>
+
+              <Link href="/dashboard" className="flex items-center gap-2 group">
+                <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white font-black text-sm shadow-sm group-hover:scale-105 transition-transform">
+                  <Sparkles size={16} />
+                </div>
+                <span className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+                  Hub<span className="text-blue-600 font-extrabold">Paratech</span>
+                </span>
+              </Link>
             </div>
 
-            {/* Botão Kiosk / Tela Cheia */}
-            <button
-              type="button"
-              onClick={toggleFullscreen}
-              className="hidden md:flex p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-800 transition cursor-pointer shadow-2xs"
-              title={isFullscreen ? "Sair da Tela Cheia (F11)" : "Modo Tela Cheia (F11)"}
-            >
-              {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-            </button>
-
-            {/* Avatar do Usuário conforme Mockup 1 */}
-            <div className="flex items-center gap-2 pl-1">
-              <div 
-                className="w-8 h-8 rounded-full bg-slate-900 dark:bg-blue-600 text-white font-bold text-xs flex items-center justify-center uppercase shadow-sm border border-slate-200 dark:border-slate-700 cursor-pointer"
-                title={`Perfil Conectado: ${role}`}
-              >
-                {role?.charAt(0) || 'U'}
-              </div>
-              <button
-                type="button"
-                onClick={handleLogout}
-                title="Encerrar Sessão"
-                className="hidden xl:flex text-slate-400 hover:text-red-500 p-1.5 rounded-lg transition"
-              >
-                <LogOut size={16} />
-              </button>
+            {/* Centro: Status do Servidor SEFAZ */}
+            <div className="hidden md:flex items-center">
+              <SefazStatusBadge />
             </div>
 
-          </div>
-        </header>
+            {/* Lado Direito: Notificações, Modo Toggle, Tema, Kiosk, Perfil */}
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              <button
+                type="button"
+                title="Notificações do Hub"
+                onClick={() => toast('Nenhuma notificação crítica pendente.', { icon: '🔔' })}
+                className="p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-800 transition cursor-pointer shadow-2xs"
+              >
+                <Bell size={17} />
+              </button>
 
-        {/* 2. SUB-NAVBAR COM ABAS HORIZONTAIS (ESTRITAMENTE CONFORME MOCKUP 1) */}
-        <div className="bg-white dark:bg-[#0B1120] border-b border-slate-200/80 dark:border-slate-800 px-4 sm:px-6 lg:px-8 flex items-center justify-between sticky top-16 z-30 shadow-2xs">
-          
-          <nav className="flex items-center gap-6 sm:gap-8 overflow-x-auto no-scrollbar py-0.5">
+              {/* Alternador de Modo de Interface (Modo Clean vs Modo Clássico) */}
+              <InterfaceModeToggle />
+
+              {/* Alternador de Tema Claro / Escuro */}
+              <div className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-800/80 p-0.5 rounded-xl border border-slate-200/80 dark:border-slate-700 text-xs">
+                <button
+                  type="button"
+                  onClick={() => handleSetTheme('light')}
+                  className={`p-1.5 rounded-lg transition cursor-pointer ${theme === 'light' ? 'bg-white text-amber-600 shadow-xs' : 'text-slate-400 hover:text-slate-700'}`}
+                  title="Tema Claro"
+                >
+                  <Sun size={14} className={theme === 'light' ? 'fill-amber-400/30' : ''} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetTheme('dark')}
+                  className={`p-1.5 rounded-lg transition cursor-pointer ${theme === 'dark' ? 'bg-slate-900 text-indigo-400 shadow-xs' : 'text-slate-400 hover:text-slate-200'}`}
+                  title="Tema Escuro"
+                >
+                  <Moon size={14} className={theme === 'dark' ? 'fill-indigo-400/30' : ''} />
+                </button>
+              </div>
+
+              {/* Botão Kiosk / Tela Cheia */}
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className="hidden md:flex p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-800 transition cursor-pointer shadow-2xs"
+                title={isFullscreen ? "Sair da Tela Cheia (F11)" : "Modo Tela Cheia (F11)"}
+              >
+                {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+              </button>
+
+              {/* Avatar do Usuário */}
+              <div className="flex items-center gap-2 pl-1">
+                <div 
+                  className="w-8 h-8 rounded-full bg-slate-900 dark:bg-blue-600 text-white font-bold text-xs flex items-center justify-center uppercase shadow-sm border border-slate-200 dark:border-slate-700 cursor-pointer"
+                  title={`Perfil Conectado: ${role}`}
+                >
+                  {role?.charAt(0) || 'U'}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  title="Encerrar Sessão"
+                  className="hidden xl:flex text-slate-400 hover:text-red-500 p-1.5 rounded-lg transition"
+                >
+                  <LogOut size={16} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Card Escuro com Dados Cadastrais da Empresa Selecionada e Botão Trocar Empresa Ctrl+K (Imagem 2) */}
+          <div className="px-4 sm:px-6 lg:px-8 py-2 bg-[#060B14] dark:bg-[#060B14] border-b border-slate-800/80">
+            <GlobalCompanyActiveCard variant="header" />
+          </div>
+
+          {/* 3. Sub-Navbar com Abas Horizontais */}
+          <div className="bg-white dark:bg-[#0B1120] px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+            <nav className="flex items-center gap-6 sm:gap-8 overflow-x-auto no-scrollbar py-0.5">
             {cleanNavTabs.map(tab => {
               const isTabActive = tab.href === '/dashboard' 
                 ? pathname === '/dashboard'
@@ -734,12 +736,12 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             <SefazStatusBadge />
           </div>
         </div>
+      </header>
 
-        {/* 3. CONTEÚDO PRINCIPAL (EXPANDIDO 100% DA LARGURA) */}
-        <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 pb-20">
-          <GlobalCompanyActiveCard />
-          {children}
-        </main>
+      {/* 3. CONTEÚDO PRINCIPAL (EXPANDIDO 100% DA LARGURA) */}
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 pb-20">
+        {children}
+      </main>
 
         {/* 4. DRAWER MOBILE (Para o Modo Clean no Celular) */}
         {mobileMenuOpen && (
@@ -818,100 +820,115 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
 
         {/* 3. Main Content (Totalmente expandido em 100% da tela) */}
         <main className="flex-1 flex flex-col h-full overflow-y-auto bg-[#F8FAFC] dark:bg-[#06090F] transition-colors duration-200">
-          {/* Topbar clássica, responsiva */}
-          <header className="h-16 bg-white/80 dark:bg-[#0B1120]/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-3 sm:px-6 lg:px-8 sticky top-0 z-20 shadow-xs flex-shrink-0 transition-colors duration-200 gap-2 sm:gap-4">
-            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-              {/* Botão Hambúrguer Mobile */}
-              <button 
-                onClick={() => setMobileMenuOpen(true)}
-                className="md:hidden p-2 rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 focus:outline-none cursor-pointer"
-                aria-label="Abrir Menu"
-              >
-                <Menu size={22} />
-              </button>
-              {/* Botão Toggle Desktop no Topo */}
-              <button 
-                onClick={toggleSidebar}
-                className="hidden md:flex p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800 focus:outline-none cursor-pointer transition-colors"
-                title={isCollapsed ? 'Expandir Menu Lateral' : 'Recolher Menu Lateral'}
-                aria-label="Alternar Menu Lateral"
-              >
-                {isCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
-              </button>
-              <h1 className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100 capitalize truncate max-w-[110px] sm:max-w-none">
-                {pathname.split('/').pop()?.replace('-', ' ') || 'Visão Geral'}
-              </h1>
-            </div>
-
-            {/* Seletor Global de Clientes Inteligente (Omnichannel Search com atalho Ctrl+K) */}
-            <div className="flex-1 flex justify-center max-w-xl px-1 sm:px-2">
-              <GlobalClientSelector />
-            </div>
-
-            <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-              {/* Botão de Alternância de Interface (Modo Clean vs Modo Clássico) */}
-              <InterfaceModeToggle />
-
-              {/* Seletor com Opções de Tema Claro e Tema Escuro */}
-              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/80 dark:border-slate-700 text-xs shadow-xs">
-                <button
-                  type="button"
-                  onClick={() => handleSetTheme('light')}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
-                    theme === 'light'
-                      ? 'bg-white text-amber-600 shadow-xs'
-                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-                  }`}
-                  title="Ativar Tema Claro"
+          {/* Topbar clássica, responsiva E FIXA */}
+          <header className="bg-[#0B1120] border-b border-slate-800 sticky top-0 z-20 shadow-md flex-shrink-0 transition-colors duration-200">
+            {/* Linha 1: Controles de navegação, modo, tema, tela cheia e perfil */}
+            <div className="h-14 flex items-center justify-between px-3 sm:px-6 lg:px-8 border-b border-slate-800/80 gap-2 sm:gap-4">
+              <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                {/* Botão Hambúrguer Mobile */}
+                <button 
+                  onClick={() => setMobileMenuOpen(true)}
+                  className="md:hidden p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 focus:outline-none cursor-pointer"
+                  aria-label="Abrir Menu"
                 >
-                  <Sun size={14} className={theme === 'light' ? 'text-amber-500 fill-amber-400/30' : ''} />
-                  <span className="hidden sm:inline">Tema Claro</span>
+                  <Menu size={22} />
                 </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleSetTheme('dark')}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
-                    theme === 'dark'
-                      ? 'bg-slate-900 text-indigo-400 shadow-xs border border-slate-700/80'
-                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-                  }`}
-                  title="Ativar Tema Escuro"
+                {/* Botão Toggle Desktop no Topo */}
+                <button 
+                  onClick={toggleSidebar}
+                  className="hidden md:flex p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 focus:outline-none cursor-pointer transition-colors"
+                  title={isCollapsed ? 'Expandir Menu Lateral' : 'Recolher Menu Lateral'}
+                  aria-label="Alternar Menu Lateral"
                 >
-                  <Moon size={14} className={theme === 'dark' ? 'text-indigo-400 fill-indigo-400/30' : ''} />
-                  <span className="hidden sm:inline">Tema Escuro</span>
+                  {isCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
                 </button>
+                <h1 className="text-sm sm:text-base font-bold text-white capitalize truncate max-w-[150px] sm:max-w-none">
+                  {pathname.split('/').pop()?.replace('-', ' ') || 'Visão Geral'}
+                </h1>
               </div>
 
-              {/* Botão Modo Kiosk / Tela Inteira (F11) */}
-              <button
-                type="button"
-                onClick={toggleFullscreen}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition border border-slate-200/80 dark:border-slate-700 shadow-xs cursor-pointer"
-                title={isFullscreen ? "Sair da Tela Cheia (F11)" : "Modo Tela Inteira / Kiosk (F11)"}
-              >
-                {isFullscreen ? (
-                  <>
-                    <Minimize2 size={14} className="text-blue-600 dark:text-blue-400" />
-                    <span className="hidden sm:inline">Sair Tela Cheia</span>
-                  </>
-                ) : (
-                  <>
-                    <Maximize2 size={14} className="text-slate-600 dark:text-slate-400" />
-                    <span className="hidden sm:inline">Tela Inteira</span>
-                  </>
-                )}
-              </button>
+              <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                {/* Alternador de Modo de Interface (Modo Clean vs Modo Clássico) */}
+                <InterfaceModeToggle />
 
-              <span className="hidden sm:inline-block px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800 capitalize">
-                {role}
-              </span>
+                {/* Seletor com Opções de Tema Claro e Tema Escuro */}
+                <div className="flex items-center bg-slate-900/80 p-0.5 rounded-xl border border-slate-700/80 text-xs shadow-xs">
+                  <button
+                    type="button"
+                    onClick={() => handleSetTheme('light')}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                      theme === 'light'
+                        ? 'bg-white text-amber-600 shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                    title="Ativar Tema Claro"
+                  >
+                    <Sun size={14} className={theme === 'light' ? 'text-amber-500 fill-amber-400/30' : ''} />
+                    <span className="hidden sm:inline">Claro</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSetTheme('dark')}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                      theme === 'dark'
+                        ? 'bg-slate-800 text-indigo-400 shadow-xs border border-slate-700/80'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                    title="Ativar Tema Escuro"
+                  >
+                    <Moon size={14} className={theme === 'dark' ? 'text-indigo-400 fill-indigo-400/30' : ''} />
+                    <span className="hidden sm:inline">Escuro</span>
+                  </button>
+                </div>
+
+                {/* Botão Modo Kiosk / Tela Inteira (F11) */}
+                <button
+                  type="button"
+                  onClick={toggleFullscreen}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800/80 hover:bg-slate-700 text-slate-200 transition border border-slate-700 shadow-xs cursor-pointer"
+                  title={isFullscreen ? "Sair da Tela Cheia (F11)" : "Modo Tela Inteira / Kiosk (F11)"}
+                >
+                  {isFullscreen ? (
+                    <>
+                      <Minimize2 size={14} className="text-blue-400" />
+                      <span className="hidden sm:inline text-xs">Sair F11</span>
+                    </>
+                  ) : (
+                    <>
+                      <Maximize2 size={14} className="text-slate-300" />
+                      <span className="hidden sm:inline text-xs">F11</span>
+                    </>
+                  )}
+                </button>
+
+                <div className="flex items-center gap-2 pl-1">
+                  <div 
+                    className="w-7 h-7 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center uppercase shadow-sm border border-blue-500 cursor-pointer"
+                    title={`Perfil Conectado: ${role}`}
+                  >
+                    {role?.charAt(0) || 'U'}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    title="Encerrar Sessão"
+                    className="hidden xl:flex text-slate-400 hover:text-red-400 p-1.5 rounded-lg transition"
+                  >
+                    <LogOut size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Linha 2: O Card Escuro com Dados Cadastrais da Empresa e Trocar Empresa Ctrl+K (Imagem 2) */}
+            <div className="px-3 sm:px-6 py-2 bg-[#060B14]">
+              <GlobalCompanyActiveCard variant="header" />
             </div>
           </header>
           
           {/* Área de conteúdo EXPANDIDA com padding inferior para o rodapé fixo */}
           <div className="p-4 sm:p-6 lg:p-8 w-full flex-1 pb-16">
-            <GlobalCompanyActiveCard />
             {children}
           </div>
 

@@ -21,6 +21,7 @@ import {
 import { limparDocumento, formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
 import ResizableSortableTh from '@/components/ui/ResizableSortableTh'
 import { useTableFeatures } from '@/hooks/useTableFeatures'
+import CompetenciaSelector from '@/components/CompetenciaSelector'
 
 function AssinaturaChip({ ok }: { ok: boolean }) {
   return ok
@@ -516,28 +517,17 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-          {/* 1. Mês de Competência */}
+          {/* 1. Mês de Competência com Busca Inteligente */}
           <div>
-            <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+            <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1">
               Mês de Competência:
             </label>
-            <div className="flex items-center gap-1">
-              <input
-                type="month"
-                value={filtroMes}
-                onChange={e => setFiltroMes(e.target.value)}
-                className="w-full bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-              />
-              {filtroMes && (
-                <button
-                  onClick={() => setFiltroMes('')}
-                  title="Remover filtro de mês"
-                  className="p-1.5 text-slate-400 hover:text-slate-600 bg-white rounded-lg border border-slate-200"
-                >
-                  <X size={12} />
-                </button>
-              )}
-            </div>
+            <CompetenciaSelector
+              value={filtroMes}
+              onChange={setFiltroMes}
+              notas={notasOficiaisValidas}
+              placeholder="Buscar mês (ex: Outubro, 10/2026)..."
+            />
           </div>
 
           {/* 2. Data de Emissão (De/Até) */}

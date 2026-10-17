@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import Image from 'next/image'
 import { 
   Building2, ShieldCheck, AlertTriangle, CheckCircle2, 
@@ -9,7 +9,11 @@ import {
 import { useGlobalClient, ClienteItem } from './GlobalClientContext'
 import { formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
 
-export default function GlobalCompanyActiveCard() {
+interface GlobalCompanyActiveCardProps {
+  variant?: 'default' | 'header'
+}
+
+export default function GlobalCompanyActiveCard({ variant = 'default' }: GlobalCompanyActiveCardProps) {
   const { 
     selectedCliente, 
     userRole, 
@@ -20,6 +24,24 @@ export default function GlobalCompanyActiveCard() {
 
   const [modalBuscaOpen, setModalBuscaOpen] = useState(false)
   const [termoBusca, setTermoBusca] = useState('')
+
+  // Suporte ao Atalho Global de Teclado (Ctrl+K ou Cmd+K)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        // Se já estiver em um input de formulário comum, não bloqueia a menos que queira trocar empresa
+        e.preventDefault()
+        if (userRole !== 'cliente') {
+          setModalBuscaOpen(prev => !prev)
+        }
+      } else if (e.key === 'Escape' && modalBuscaOpen) {
+        setModalBuscaOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [userRole, modalBuscaOpen])
 
   // Formatação do Regime Tributário conforme Imagem 4
   const formatRegime = (regime?: string | null) => {
@@ -112,20 +134,20 @@ export default function GlobalCompanyActiveCard() {
   // Se o usuário for Admin ou Contabilidade e não houver nenhuma empresa selecionada:
   if (!selectedCliente) {
     return (
-      <div className="w-full mb-6">
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-4 sm:p-5 shadow-lg border border-indigo-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className={`w-full ${variant === 'header' ? 'mb-0' : 'mb-6'}`}>
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-3 sm:p-4 shadow-lg border border-indigo-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-600/30 border border-blue-500/40 flex items-center justify-center text-blue-400 shrink-0">
-              <Building2 size={22} />
+            <div className="w-9 h-9 rounded-xl bg-blue-600/30 border border-blue-500/40 flex items-center justify-center text-blue-400 shrink-0">
+              <Building2 size={20} />
             </div>
             <div>
-              <h4 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+              <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
                 <span>Nenhuma Empresa Selecionada</span>
                 <span className="text-[10px] font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded">
                   Aguardando Seleção
                 </span>
               </h4>
-              <p className="text-xs text-slate-300 mt-0.5">
+              <p className="text-[11px] text-slate-300">
                 Selecione uma empresa para carregar notas fiscais, apuração de impostos e relatórios em todas as abas.
               </p>
             </div>
@@ -135,9 +157,9 @@ export default function GlobalCompanyActiveCard() {
             <button
               type="button"
               onClick={() => setModalBuscaOpen(true)}
-              className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow transition active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+              className="flex items-center justify-center gap-2 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow transition active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
             >
-              <Search size={14} />
+              <Search size={13} />
               <span>Selecionar Empresa (Ctrl+K)</span>
             </button>
           )}
@@ -147,34 +169,34 @@ export default function GlobalCompanyActiveCard() {
   }
 
   // =========================================================================
-  // CARD COMPLETO CONFORME A IMAGEM 4 (DADOS CADASTRAIS DA EMPRESA SELECIONADA)
+  // CARD COMPLETO CONFORME A IMAGEM 2 & 4 (DADOS CADASTRAIS DA EMPRESA SELECIONADA)
   // =========================================================================
   return (
     <section 
       aria-label="Dados Cadastrais da Empresa Selecionada"
-      className="w-full mb-6 animate-in fade-in duration-200"
+      className={`w-full ${variant === 'header' ? 'mb-0' : 'mb-6'} animate-in fade-in duration-200`}
     >
-      <div className="bg-gradient-to-r from-slate-900 via-[#0B1528] to-blue-950 text-white rounded-2xl p-4 sm:p-5 shadow-xl border border-blue-900/40">
+      <div className="bg-gradient-to-r from-slate-950 via-[#0B1528] to-slate-950 text-white rounded-2xl p-3 sm:p-4 shadow-xl border border-blue-900/40">
         
         {/* TOPO DO CARD: TÍTULO + STATUS CERTIFICADO + BOTÃO TROCAR EMPRESA */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 mb-3 border-b border-slate-800/80">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 pb-2.5 mb-2.5 border-b border-slate-800/80">
           
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
-              <Building2 size={15} />
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-5 h-5 rounded-md bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+              <Building2 size={13} />
             </div>
-            <span className="text-xs font-bold uppercase tracking-wider text-blue-400">
+            <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-blue-400 truncate">
               Dados Cadastrais da Empresa Selecionada (Conferência Fiscal)
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             {/* Badge de Validade do Certificado Digital A1 */}
             <div 
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold border shadow-xs ${certStatus.corBadge}`}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] sm:text-[11px] font-bold border shadow-xs ${certStatus.corBadge}`}
               title={certStatus.texto}
             >
-              <ShieldCheck size={14} className="shrink-0" />
+              <ShieldCheck size={13} className="shrink-0" />
               <span>{certStatus.texto}</span>
             </div>
 
@@ -186,7 +208,7 @@ export default function GlobalCompanyActiveCard() {
                 className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-blue-600/30 hover:bg-blue-600/50 text-blue-200 border border-blue-500/40 text-xs font-semibold shadow-2xs hover:text-white transition cursor-pointer"
                 title="Trocar empresa de referência (Atalho: Ctrl+K)"
               >
-                <Search size={13} />
+                <Search size={12} />
                 <span>Trocar Empresa</span>
                 <kbd className="hidden sm:inline text-[9px] font-mono bg-blue-950/80 px-1 py-0.2 rounded border border-blue-700/60 text-blue-300">
                   Ctrl+K
@@ -197,13 +219,13 @@ export default function GlobalCompanyActiveCard() {
 
         </div>
 
-        {/* CORPO DO CARD CONFORME IMAGEM 4 (LOGO + 6 COLUNAS DE INFORMAÇÕES) */}
-        <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4 lg:gap-6">
+        {/* CORPO DO CARD CONFORME IMAGEM 2 & 4 (LOGO + 6 COLUNAS DE INFORMAÇÕES) */}
+        <div className="flex flex-col lg:flex-row items-start lg:items-center gap-3.5 lg:gap-5">
           
           {/* Logo do Cliente ou Monograma Visual */}
           <div className="shrink-0">
             {selectedCliente.logo_url ? (
-              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/95 p-1.5 border border-white/20 shadow-md flex items-center justify-center overflow-hidden">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white/95 p-1 border border-white/20 shadow-md flex items-center justify-center overflow-hidden">
                 <img 
                   src={selectedCliente.logo_url} 
                   alt={selectedCliente.nome_fantasia || selectedCliente.razao_social} 
@@ -212,25 +234,25 @@ export default function GlobalCompanyActiveCard() {
               </div>
             ) : (
               <div 
-                className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-slate-900 border border-blue-400/30 shadow-md flex flex-col items-center justify-center text-white font-extrabold text-lg tracking-wider"
+                className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-slate-900 border border-blue-400/30 shadow-md flex flex-col items-center justify-center text-white font-extrabold text-base tracking-wider"
                 title={selectedCliente.nome_fantasia || selectedCliente.razao_social}
               >
                 <span>{iniciaisCliente}</span>
-                <span className="text-[9px] font-normal text-blue-200 uppercase -mt-0.5">Empresa</span>
+                <span className="text-[8px] font-normal text-blue-200 uppercase -mt-0.5">Empresa</span>
               </div>
             )}
           </div>
 
-          {/* Grid de Informações Cadastrais (Estrutura idêntica à Imagem 4) */}
-          <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3.5 sm:gap-4 w-full">
+          {/* Grid de Informações Cadastrais (Estrutura idêntica à Imagem 2 & 4) */}
+          <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-3.5 w-full">
             
             {/* Coluna 1: Razão Social */}
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
+              <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
                 Razão Social
               </p>
               <p 
-                className="text-xs sm:text-sm font-bold text-slate-100 truncate" 
+                className="text-xs sm:text-[13px] font-bold text-slate-100 truncate" 
                 title={selectedCliente.razao_social}
               >
                 {selectedCliente.razao_social || '—'}
@@ -239,11 +261,11 @@ export default function GlobalCompanyActiveCard() {
 
             {/* Coluna 2: Nome Fantasia */}
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
+              <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
                 Nome Fantasia
               </p>
               <p 
-                className="text-xs sm:text-sm font-bold text-slate-100 truncate" 
+                className="text-xs sm:text-[13px] font-bold text-slate-100 truncate" 
                 title={selectedCliente.nome_fantasia || 'Não informado'}
               >
                 {selectedCliente.nome_fantasia || '—'}
@@ -252,27 +274,27 @@ export default function GlobalCompanyActiveCard() {
 
             {/* Coluna 3: CNPJ / CPF */}
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
+              <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
                 CNPJ / CPF
               </p>
-              <p className="text-xs sm:text-sm font-bold font-mono text-blue-300 truncate">
+              <p className="text-xs sm:text-[13px] font-bold font-mono text-blue-300 truncate">
                 {formatarCnpjCpf(selectedCliente.cnpj)}
               </p>
             </div>
 
             {/* Coluna 4: Regime Tributário */}
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
+              <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
                 Regime Tributário
               </p>
-              <p className="text-xs sm:text-sm font-bold text-amber-300 truncate">
+              <p className="text-xs sm:text-[13px] font-bold text-amber-300 truncate">
                 {formatRegime(selectedCliente.regime_tributario)}
               </p>
             </div>
 
             {/* Coluna 5: WhatsApp / Contato */}
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
+              <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
                 WhatsApp / Contato
               </p>
               {selectedCliente.whatsapp || selectedCliente.telefone ? (
@@ -280,14 +302,14 @@ export default function GlobalCompanyActiveCard() {
                   href={`https://wa.me/55${(selectedCliente.whatsapp || selectedCliente.telefone || '').replace(/\D/g, '')}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs sm:text-sm font-medium text-slate-200 hover:text-emerald-400 flex items-center gap-1.5 transition truncate"
+                  className="text-xs sm:text-[13px] font-medium text-slate-200 hover:text-emerald-400 flex items-center gap-1.5 transition truncate"
                   title="Clique para abrir conversa no WhatsApp"
                 >
                   <MessageCircle size={13} className="text-emerald-400 shrink-0" />
                   <span className="truncate">{selectedCliente.whatsapp || selectedCliente.telefone}</span>
                 </a>
               ) : (
-                <p className="text-xs sm:text-sm text-slate-400 font-medium">
+                <p className="text-xs sm:text-[13px] text-slate-400 font-medium">
                   Não informado
                 </p>
               )}
@@ -295,11 +317,11 @@ export default function GlobalCompanyActiveCard() {
 
             {/* Coluna 6: Contabilidade */}
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
+              <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
                 Contabilidade
               </p>
               <p 
-                className="text-xs sm:text-sm font-bold text-emerald-400 truncate"
+                className="text-xs sm:text-[13px] font-bold text-emerald-400 truncate"
                 title={selectedCliente.contabilidade_nome || 'Não vinculada'}
               >
                 {selectedCliente.contabilidade_nome || 'MASSIMA CONTABILIDADE LTDA'}
@@ -342,6 +364,14 @@ export default function GlobalCompanyActiveCard() {
                   type="text"
                   value={termoBusca}
                   onChange={(e) => setTermoBusca(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && clientesFiltrados.length > 0) {
+                      setSelectedClienteId(clientesFiltrados[0].id)
+                      setModalBuscaOpen(false)
+                    } else if (e.key === 'Escape') {
+                      setModalBuscaOpen(false)
+                    }
+                  }}
                   placeholder="Buscar por Razão Social, Nome Fantasia, CNPJ ou Celular..."
                   className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
                   autoFocus
@@ -350,7 +380,7 @@ export default function GlobalCompanyActiveCard() {
             </div>
 
             {/* Lista de Empresas */}
-            <div className="max-h-80 overflow-y-auto p-2 divide-y divide-slate-100 dark:divide-slate-800/60">
+            <div className="max-h-80 overflow-y-auto p-2 divide-y divide-slate-100 dark:divide-slate-800/60 custom-scrollbar">
               {clientesFiltrados.length === 0 ? (
                 <div className="py-8 text-center text-xs text-slate-400">
                   Nenhuma empresa encontrada com os termos informados.
@@ -390,6 +420,14 @@ export default function GlobalCompanyActiveCard() {
                   )
                 })
               )}
+            </div>
+
+            {/* Rodapé do Modal */}
+            <div className="p-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/50 flex items-center justify-between text-[11px] text-slate-400 px-4">
+              <span>Selecione a empresa para alterar em todas as páginas</span>
+              <kbd className="font-mono bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-[10px]">
+                ESC para fechar
+              </kbd>
             </div>
 
           </div>
