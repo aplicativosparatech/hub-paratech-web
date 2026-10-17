@@ -75,8 +75,12 @@ export function NotasFiscaisFilterProvider({ children }: { children: React.React
   const [clientes, setClientes] = useState<any[]>([])
   const [loadingClientes, setLoadingClientes] = useState(true)
 
-  // Estados de Filtro inicializados a partir de sessionStorage
+  // Estados de Filtro inicializados a partir de sessionStorage ou GlobalClient
   const [selectedCliente, _setSelectedCliente] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const globalSaved = localStorage.getItem('hub_paratech_global_cliente')
+      if (globalSaved) return globalSaved
+    }
     return clienteIdUrl || getSessionValue('cliente', '')
   })
   const [clientSearchTerm, _setClientSearchTerm] = useState<string>(() => getSessionValue('client_search', ''))
@@ -91,10 +95,30 @@ export function NotasFiscaisFilterProvider({ children }: { children: React.React
     return isNaN(parsed) ? 25 : parsed
   })
 
-  // Setters com persistência em sessionStorage
+  // Sincronização Reativa com o Filtro Global do Topo
+  useEffect(() => {
+    const handleGlobalChange = (e: any) => {
+      const newId = e.detail?.clienteId ?? (typeof window !== 'undefined' ? localStorage.getItem('hub_paratech_global_cliente') || '' : '')
+      _setSelectedCliente(newId)
+      setSessionValue('cliente', newId)
+    }
+
+    window.addEventListener('hub_global_cliente_changed', handleGlobalChange)
+    return () => window.removeEventListener('hub_global_cliente_changed', handleGlobalChange)
+  }, [])
+
+  // Setters com persistência em sessionStorage e sincronização bidirecional global
   const setSelectedCliente = useCallback((id: string) => {
     _setSelectedCliente(id)
     setSessionValue('cliente', id)
+    if (typeof window !== 'undefined') {
+      if (id) {
+        localStorage.setItem('hub_paratech_global_cliente', id)
+      } else {
+        localStorage.removeItem('hub_paratech_global_cliente')
+      }
+      window.dispatchEvent(new CustomEvent('hub_global_cliente_changed', { detail: { clienteId: id } }))
+    }
   }, [])
 
   const setClientSearchTerm = useCallback((term: string) => {
@@ -190,8 +214,7 @@ export function NotasFiscaisFilterProvider({ children }: { children: React.React
 
       setClientes(clisData)
 
-      // Regra Fundamental de Segurança: SEMPRE seleciona uma empresa específica
-      // Jamais deixa selectedCliente vazio para não misturar XMLs de empresas diferentes
+      // Regra de Seleção: prioriza URL, cliente ativo em memória, filtro global salvo ou sessão
       if (clisData.length > 0) {
         _setSelectedCliente(prev => {
           if (clienteIdUrl && clisData.some(c => c.id === clienteIdUrl)) {
@@ -201,9 +224,18 @@ export function NotasFiscaisFilterProvider({ children }: { children: React.React
           if (prev && clisData.some(c => c.id === prev)) {
             return prev
           }
+          const globalSaved = typeof window !== 'undefined' ? localStorage.getItem('hub_paratech_global_cliente') : null
+          if (globalSaved && clisData.some(c => c.id === globalSaved)) {
+            setSessionValue('cliente', globalSaved)
+            return globalSaved
+          }
           const savedSession = getSessionValue('cliente', '')
           if (savedSession && clisData.some(c => c.id === savedSession)) {
             return savedSession
+          }
+          const mode = typeof window !== 'undefined' ? localStorage.getItem('hub_interface_mode') || 'clean' : 'clean'
+          if (mode === 'clean' && !globalSaved && !prev) {
+            return ''
           }
           const defaultId = clisData[0].id
           setSessionValue('cliente', defaultId)

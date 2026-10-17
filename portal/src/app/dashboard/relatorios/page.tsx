@@ -128,12 +128,15 @@ export default function RelatoriosPage() {
 
           setClientes(mapped)
 
-          // Se tiver cliente_id nos parâmetros da URL, prioriza ele
+          // Se tiver cliente_id nos parâmetros da URL ou no filtro global, prioriza ele
           if (typeof window !== 'undefined') {
             const urlParams = new URLSearchParams(window.location.search)
             const paramClienteId = urlParams.get('cliente_id')
+            const globalSaved = localStorage.getItem('hub_paratech_global_cliente')
             if (paramClienteId && mapped.some(c => c.id === paramClienteId)) {
               setSelectedCliente(paramClienteId)
+            } else if (globalSaved && mapped.some(c => c.id === globalSaved)) {
+              setSelectedCliente(globalSaved)
             } else {
               setSelectedCliente(mapped[0].id)
             }
@@ -152,7 +155,30 @@ export default function RelatoriosPage() {
     init()
   }, [])
 
-  // Carrega permissões de configuração do Hub para a empresa selecionada
+  // Sincronização reativa com o Filtro Global do Topo
+  useEffect(() => {
+    const handleGlobalChange = (e: any) => {
+      const newId = e.detail?.clienteId
+      if (newId && clientes.some(c => c.id === newId)) {
+        setSelectedCliente(newId)
+      }
+    }
+    window.addEventListener('hub_global_cliente_changed', handleGlobalChange)
+    return () => window.removeEventListener('hub_global_cliente_changed', handleGlobalChange)
+  }, [clientes])
+
+  // Atualização bidirecional de cliente
+  const handleSelectCliente = (id: string) => {
+    setSelectedCliente(id)
+    if (typeof window !== 'undefined') {
+      if (id) {
+        localStorage.setItem('hub_paratech_global_cliente', id)
+      } else {
+        localStorage.removeItem('hub_paratech_global_cliente')
+      }
+      window.dispatchEvent(new CustomEvent('hub_global_cliente_changed', { detail: { clienteId: id } }))
+    }
+  }
   useEffect(() => {
     async function loadConfigHub() {
       if (!selectedCliente) {
@@ -697,7 +723,7 @@ export default function RelatoriosPage() {
                       )
                     })
                     if (match && match.id !== selectedCliente) {
-                      setSelectedCliente(match.id)
+                      handleSelectCliente(match.id)
                     }
                   }
                 }}
@@ -707,7 +733,7 @@ export default function RelatoriosPage() {
               {/* Select filtrado */}
               <select
                 value={selectedCliente}
-                onChange={e => setSelectedCliente(e.target.value)}
+                onChange={e => handleSelectCliente(e.target.value)}
                 className="w-full sm:w-1/2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
               >
                 {clientes

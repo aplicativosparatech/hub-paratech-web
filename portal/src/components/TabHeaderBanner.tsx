@@ -33,14 +33,21 @@ export default function TabHeaderBanner() {
   useEffect(() => {
     setMounted(true)
     const checkSetting = () => {
+      const mode = localStorage.getItem('hub_interface_mode') || 'clean'
+      // No Modo Clean, banners ilustrados pesados no topo ficam ocultos para máxima limpeza visual
+      if (mode === 'clean') {
+        setShowBanner(false)
+        return
+      }
+
+      // No Modo Clássico, segue a preferência salva (padrão ativado)
       const stored = localStorage.getItem('hub_show_header_banners')
-      // Padrão é true (ativado)
       setShowBanner(stored !== 'false')
     }
 
     checkSetting()
 
-    // Ouve alterações feitas na aba Aparência
+    // Ouve alterações feitas na aba Aparência ou no botão de Modo
     window.addEventListener('storage', checkSetting)
     window.addEventListener('hub_settings_changed', checkSetting)
 

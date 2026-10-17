@@ -16,6 +16,9 @@ import { PermissoesMap } from '@/utils/permissoes'
 import { APP_VERSION } from '@/utils/version'
 import TabHeaderBanner from '@/components/TabHeaderBanner'
 import SefazStatusBadge from '@/components/SefazStatusBadge'
+import { GlobalClientProvider } from '@/components/GlobalClientContext'
+import GlobalClientSelector from '@/components/GlobalClientSelector'
+import InterfaceModeToggle from '@/components/InterfaceModeToggle'
 
 type Role = 'admin' | 'cliente' | 'contabilidade'
 
@@ -403,6 +406,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         )}
       </nav>
 
+      {/* Seletor Visual de Modo de Interface no Menu Lateral */}
+      <div className={`px-3 ${isCollapsed ? 'px-2' : 'lg:px-4'} pb-1`}>
+        <InterfaceModeToggle variant="sidebar" isCollapsed={isCollapsed} />
+      </div>
+
       {/* User Card Inferior e Botão Toggle (Recolher Menu) perto do botão Sair */}
       <div className={`p-3 ${isCollapsed ? 'p-2' : 'lg:p-4'} border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 mt-auto`}>
         {!isCollapsed ? (
@@ -466,90 +474,99 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   )
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 font-sans transition-colors duration-200">
-      
-      {/* 0. Banner Ilustrado Panorâmico no Topo (100% de largura) */}
-      <TabHeaderBanner />
+    <GlobalClientProvider>
+      <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 font-sans transition-colors duration-200">
+        
+        {/* 0. Banner Ilustrado Panorâmico no Topo (100% de largura - Visível apenas no Modo Clássico) */}
+        <TabHeaderBanner />
 
-      <div className="flex-1 flex overflow-hidden relative">
-        {/* 1. Sidebar Desktop (Fixa na esquerda, com suporte a recolher) */}
-        <aside className={`hidden md:flex ${isCollapsed ? 'w-20' : 'w-64 lg:w-72'} bg-white dark:bg-[#0B1120] border-r border-slate-200 dark:border-slate-800 flex-col shadow-xs relative z-10 flex-shrink-0 transition-all duration-300 ease-in-out`}>
-          <SidebarContent />
-        </aside>
+        <div className="flex-1 flex overflow-hidden relative">
+          {/* 1. Sidebar Desktop (Fixa na esquerda, com suporte a recolher) */}
+          <aside className={`hidden md:flex ${isCollapsed ? 'w-20' : 'w-64 lg:w-72'} bg-white dark:bg-[#0B1120] border-r border-slate-200 dark:border-slate-800 flex-col shadow-xs relative z-10 flex-shrink-0 transition-all duration-300 ease-in-out`}>
+            <SidebarContent />
+          </aside>
 
-        {/* 2. Sidebar Mobile (Drawer com Overlay) */}
-        {mobileMenuOpen && (
-          <div className="fixed inset-0 z-50 md:hidden flex">
-            {/* Backdrop escuro com clique para fechar */}
-            <div 
-              className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity" 
-              onClick={() => setMobileMenuOpen(false)} 
-            />
-            {/* Menu Drawer Deslizante */}
-            <div className="relative w-72 max-w-[85vw] bg-white dark:bg-[#0B1120] h-full flex flex-col shadow-2xl z-10 transition-colors duration-200">
-              <SidebarContent />
+          {/* 2. Sidebar Mobile (Drawer com Overlay) */}
+          {mobileMenuOpen && (
+            <div className="fixed inset-0 z-50 md:hidden flex">
+              {/* Backdrop escuro com clique para fechar */}
+              <div 
+                className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity" 
+                onClick={() => setMobileMenuOpen(false)} 
+              />
+              {/* Menu Drawer Deslizante */}
+              <div className="relative w-72 max-w-[85vw] bg-white dark:bg-[#0B1120] h-full flex flex-col shadow-2xl z-10 transition-colors duration-200">
+                <SidebarContent />
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* 3. Main Content (Totalmente expandido em 100% da tela) */}
-        <main className="flex-1 flex flex-col h-full overflow-y-auto bg-[#F8FAFC] dark:bg-[#06090F] transition-colors duration-200">
-        {/* Topbar moderna e responsiva */}
-        <header className="h-16 bg-white/80 dark:bg-[#0B1120]/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 sm:px-6 lg:px-8 sticky top-0 z-20 shadow-xs flex-shrink-0 transition-colors duration-200">
-          <div className="flex items-center gap-3">
-            {/* Botão Hambúrguer Mobile */}
-            <button 
-              onClick={() => setMobileMenuOpen(true)}
-              className="md:hidden p-2 rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 focus:outline-none cursor-pointer"
-              aria-label="Abrir Menu"
-            >
-              <Menu size={22} />
-            </button>
-            {/* Botão Toggle Desktop no Topo */}
-            <button 
-              onClick={toggleSidebar}
-              className="hidden md:flex p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800 focus:outline-none cursor-pointer transition-colors"
-              title={isCollapsed ? 'Expandir Menu Lateral' : 'Recolher Menu Lateral'}
-              aria-label="Alternar Menu Lateral"
-            >
-              {isCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
-            </button>
-            <h1 className="text-lg font-bold text-slate-800 dark:text-slate-100 capitalize">
-              {pathname.split('/').pop()?.replace('-', ' ') || 'Visão Geral'}
-            </h1>
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Seletor com Opções de Tema Claro e Tema Escuro */}
-            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/80 dark:border-slate-700 text-xs shadow-xs">
-              <button
-                type="button"
-                onClick={() => handleSetTheme('light')}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
-                  theme === 'light'
-                    ? 'bg-white text-amber-600 shadow-xs'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
-                title="Ativar Tema Claro"
+          {/* 3. Main Content (Totalmente expandido em 100% da tela) */}
+          <main className="flex-1 flex flex-col h-full overflow-y-auto bg-[#F8FAFC] dark:bg-[#06090F] transition-colors duration-200">
+          {/* Topbar moderna, limpa e responsiva */}
+          <header className="h-16 bg-white/80 dark:bg-[#0B1120]/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-3 sm:px-6 lg:px-8 sticky top-0 z-20 shadow-xs flex-shrink-0 transition-colors duration-200 gap-2 sm:gap-4">
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              {/* Botão Hambúrguer Mobile */}
+              <button 
+                onClick={() => setMobileMenuOpen(true)}
+                className="md:hidden p-2 rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 focus:outline-none cursor-pointer"
+                aria-label="Abrir Menu"
               >
-                <Sun size={14} className={theme === 'light' ? 'text-amber-500 fill-amber-400/30' : ''} />
-                <span className="hidden sm:inline">Tema Claro</span>
+                <Menu size={22} />
               </button>
-
-              <button
-                type="button"
-                onClick={() => handleSetTheme('dark')}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
-                  theme === 'dark'
-                    ? 'bg-slate-900 text-indigo-400 shadow-xs border border-slate-700/80'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
-                title="Ativar Tema Escuro"
+              {/* Botão Toggle Desktop no Topo */}
+              <button 
+                onClick={toggleSidebar}
+                className="hidden md:flex p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800 focus:outline-none cursor-pointer transition-colors"
+                title={isCollapsed ? 'Expandir Menu Lateral' : 'Recolher Menu Lateral'}
+                aria-label="Alternar Menu Lateral"
               >
-                <Moon size={14} className={theme === 'dark' ? 'text-indigo-400 fill-indigo-400/30' : ''} />
-                <span className="hidden sm:inline">Tema Escuro</span>
+                {isCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
               </button>
+              <h1 className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100 capitalize truncate max-w-[110px] sm:max-w-none">
+                {pathname.split('/').pop()?.replace('-', ' ') || 'Visão Geral'}
+              </h1>
             </div>
+
+            {/* Seletor Global de Clientes Inteligente (Omnichannel Search com atalho Ctrl+K) */}
+            <div className="flex-1 flex justify-center max-w-xl px-1 sm:px-2">
+              <GlobalClientSelector />
+            </div>
+
+            <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+              {/* Botão de Alternância de Interface (Modo Clean vs Modo Clássico) */}
+              <InterfaceModeToggle />
+
+              {/* Seletor com Opções de Tema Claro e Tema Escuro */}
+              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/80 dark:border-slate-700 text-xs shadow-xs">
+                <button
+                  type="button"
+                  onClick={() => handleSetTheme('light')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                    theme === 'light'
+                      ? 'bg-white text-amber-600 shadow-xs'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                  title="Ativar Tema Claro"
+                >
+                  <Sun size={14} className={theme === 'light' ? 'text-amber-500 fill-amber-400/30' : ''} />
+                  <span className="hidden sm:inline">Tema Claro</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSetTheme('dark')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                    theme === 'dark'
+                      ? 'bg-slate-900 text-indigo-400 shadow-xs border border-slate-700/80'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                  title="Ativar Tema Escuro"
+                >
+                  <Moon size={14} className={theme === 'dark' ? 'text-indigo-400 fill-indigo-400/30' : ''} />
+                  <span className="hidden sm:inline">Tema Escuro</span>
+                </button>
+              </div>
 
             {/* Botão Modo Kiosk / Tela Inteira (F11) */}
             <button
@@ -613,5 +630,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </main>
       </div>
     </div>
+    </GlobalClientProvider>
   )
 }

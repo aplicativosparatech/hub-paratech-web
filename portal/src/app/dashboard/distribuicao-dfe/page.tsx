@@ -117,6 +117,30 @@ export default function DistribuicaoDfePage() {
   const [observacaoSalvar, setObservacaoSalvar] = useState('')
   const [salvandoConsulta, setSalvandoConsulta] = useState(false)
 
+  // Sincronização com o Filtro Global do Topo
+  useEffect(() => {
+    const handleGlobalChange = (e: any) => {
+      const newId = e.detail?.clienteId
+      if (newId && clientes.some(c => c.id === newId)) {
+        setSelectedClienteId(newId)
+      }
+    }
+    window.addEventListener('hub_global_cliente_changed', handleGlobalChange)
+    return () => window.removeEventListener('hub_global_cliente_changed', handleGlobalChange)
+  }, [clientes])
+
+  const handleSelectCliente = (id: string) => {
+    setSelectedClienteId(id)
+    if (typeof window !== 'undefined') {
+      if (id) {
+        localStorage.setItem('hub_paratech_global_cliente', id)
+      } else {
+        localStorage.removeItem('hub_paratech_global_cliente')
+      }
+      window.dispatchEvent(new CustomEvent('hub_global_cliente_changed', { detail: { clienteId: id } }))
+    }
+  }
+
   // Carrega clientes
   useEffect(() => {
     async function loadClientes() {
@@ -130,7 +154,12 @@ export default function DistribuicaoDfePage() {
         if (error) throw error
         setClientes(data || [])
         if (data && data.length > 0) {
-          setSelectedClienteId(data[0].id)
+          const globalSaved = typeof window !== 'undefined' ? localStorage.getItem('hub_paratech_global_cliente') : null
+          if (globalSaved && data.some(c => c.id === globalSaved)) {
+            setSelectedClienteId(globalSaved)
+          } else {
+            setSelectedClienteId(data[0].id)
+          }
         }
       } catch (err: any) {
         toast.error('Erro ao listar empresas: ' + (err.message || ''))
@@ -590,7 +619,7 @@ export default function DistribuicaoDfePage() {
                 </label>
                 <select
                   value={selectedClienteId}
-                  onChange={(e) => setSelectedClienteId(e.target.value)}
+                  onChange={(e) => handleSelectCliente(e.target.value)}
                   disabled={loadingClientes || loadingConsulta}
                   className="w-full text-xs font-semibold text-slate-800 bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none transition"
                 >

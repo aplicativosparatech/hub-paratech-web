@@ -9,6 +9,7 @@ import toast from 'react-hot-toast'
 
 export default function AparenciaPage() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
+  const [interfaceMode, setInterfaceMode] = useState<'classico' | 'clean'>('clean')
   const [displayMode, setDisplayMode] = useState<'window' | 'fullscreen'>('window')
   const [showHeaderBanners, setShowHeaderBanners] = useState<boolean>(true)
   const [priorizarNomeFantasia, setPriorizarNomeFantasia] = useState<boolean>(false)
@@ -19,15 +20,29 @@ export default function AparenciaPage() {
   useEffect(() => {
     setMounted(true)
     const savedTheme = (localStorage.getItem('hub_theme') as 'light' | 'dark') || 'light'
+    const savedInterfaceMode = (localStorage.getItem('hub_interface_mode') as 'classico' | 'clean') || 'clean'
     const savedMode = (localStorage.getItem('hub_display_mode') as 'window' | 'fullscreen') || 'window'
     const savedBanners = localStorage.getItem('hub_show_header_banners') !== 'false'
     const savedPriorizar = localStorage.getItem('hub_priorizar_nome_fantasia') === 'true'
 
     setTheme(savedTheme)
+    setInterfaceMode(savedInterfaceMode)
     setDisplayMode(savedMode)
     setShowHeaderBanners(savedBanners)
     setPriorizarNomeFantasia(savedPriorizar)
   }, [])
+
+  const handleInterfaceModeChange = (newMode: 'classico' | 'clean') => {
+    setInterfaceMode(newMode)
+    localStorage.setItem('hub_interface_mode', newMode)
+    window.dispatchEvent(new Event('hub_settings_changed'))
+    toast.success(
+      newMode === 'clean'
+        ? 'Modo Clean ativado! Filtro global no topo e foco máximo nos dados.'
+        : 'Modo Clássico ativado! Cabeçalhos ilustrados e visão tradicional restaurados.',
+      { icon: newMode === 'clean' ? '✨' : '🏛️' }
+    )
+  }
 
   const handleThemeChange = (newTheme: 'light' | 'dark') => {
     setTheme(newTheme)
@@ -82,6 +97,7 @@ export default function AparenciaPage() {
   const handleSaveAll = () => {
     setSaving(true)
     localStorage.setItem('hub_theme', theme)
+    localStorage.setItem('hub_interface_mode', interfaceMode)
     localStorage.setItem('hub_display_mode', displayMode)
     localStorage.setItem('hub_show_header_banners', showHeaderBanners ? 'true' : 'false')
     localStorage.setItem('hub_priorizar_nome_fantasia', priorizarNomeFantasia ? 'true' : 'false')
@@ -112,7 +128,7 @@ export default function AparenciaPage() {
               Personalização & Aparência
             </h1>
             <p className="text-slate-300 text-sm max-w-2xl leading-relaxed">
-              Defina a experiência visual do ecossistema: escolha o tema padrão, configure o modo de tela cheia automática e gerencie a exibição de cabeçalhos ilustrados temáticos em todas as abas.
+              Defina a experiência visual do ecossistema: escolha entre o <strong>Modo Clean</strong> (novo com busca global) e o <strong>Modo Clássico</strong>, configure o tema padrão e gerencie a interface para todos os perfis.
             </p>
           </div>
 
@@ -124,6 +140,138 @@ export default function AparenciaPage() {
           >
             <Save size={16} />
             <span>{saving ? 'Aplicando...' : 'Salvar Preferências'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* CARD 0: ESTILO DA INTERFACE (MODO CLEAN VS MODO CLÁSSICO) */}
+      <div className="bg-white dark:bg-[#0B1120] rounded-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-xs transition-colors">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-start gap-3.5">
+            <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center border border-blue-200/60 dark:border-blue-800 flex-shrink-0">
+              <Sparkles size={24} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-slate-800 dark:text-white text-lg">Estilo da Interface (Modo de Visualização)</h3>
+                <span className="px-2.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 text-[11px] font-bold uppercase tracking-wider">
+                  Admin • Contabilidade • Clientes
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
+                Escolha a forma como você prefere navegar e visualizar os dados no HubParatech. Você pode alternar a qualquer momento sem perder nenhuma funcionalidade ou configuração.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-6">
+          {/* Opção 1: Modo Clean (Novo Padrão) */}
+          <button
+            type="button"
+            onClick={() => handleInterfaceModeChange('clean')}
+            className={`p-5 rounded-2xl border-2 text-left transition-all cursor-pointer relative flex flex-col justify-between ${
+              interfaceMode === 'clean'
+                ? 'border-blue-600 bg-blue-50/40 dark:bg-blue-950/30 shadow-md ring-2 ring-blue-500/20'
+                : 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700'
+            }`}
+          >
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold ${
+                    interfaceMode === 'clean' ? 'bg-blue-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                  }`}>
+                    <Sparkles size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                      Modo Clean
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-800">
+                        Recomendado
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Minimalista, rápido e moderno</p>
+                  </div>
+                </div>
+
+                {interfaceMode === 'clean' && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/80 px-2.5 py-1 rounded-full">
+                    <Check size={12} /> Ativo
+                  </span>
+                )}
+              </div>
+
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-4">
+                Traz o <strong>Filtro Global Inteligente no topo</strong> (pesquisa instantânea por Razão, Fantasia, CNPJ ou Celular com atalho <code>Ctrl+K</code>). Uma vez escolhido, o cliente fica ativo para todas as abas. Remove cabeçalhos pesados e maximiza a área de dados.
+              </p>
+
+              <div className="flex flex-wrap gap-1.5 pt-2 border-t border-slate-200/60 dark:border-slate-800">
+                <span className="text-[10px] font-semibold bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
+                  🔍 Busca Multi-Campos
+                </span>
+                <span className="text-[10px] font-semibold bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
+                  📌 Cliente Fixo Entre Abas
+                </span>
+                <span className="text-[10px] font-semibold bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
+                  ⚡ 100% Espaço Útil
+                </span>
+              </div>
+            </div>
+          </button>
+
+          {/* Opção 2: Modo Clássico */}
+          <button
+            type="button"
+            onClick={() => handleInterfaceModeChange('classico')}
+            className={`p-5 rounded-2xl border-2 text-left transition-all cursor-pointer relative flex flex-col justify-between ${
+              interfaceMode === 'classico'
+                ? 'border-amber-600 bg-amber-50/40 dark:bg-amber-950/30 shadow-md ring-2 ring-amber-500/20'
+                : 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700'
+            }`}
+          >
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold ${
+                    interfaceMode === 'classico' ? 'bg-amber-600 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                  }`}>
+                    <Layout size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                      Modo Clássico
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        Tradicional
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Layout original com banners panorâmicos</p>
+                  </div>
+                </div>
+
+                {interfaceMode === 'classico' && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/80 px-2.5 py-1 rounded-full">
+                    <Check size={12} /> Ativo
+                  </span>
+                )}
+              </div>
+
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-4">
+                Mantém a experiência visual clássica com <strong>banners ilustrados no topo de cada página</strong> e caixas de seleção de empresas independentes dentro de cada módulo do sistema.
+              </p>
+
+              <div className="flex flex-wrap gap-1.5 pt-2 border-t border-slate-200/60 dark:border-slate-800">
+                <span className="text-[10px] font-semibold bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
+                  🖼️ Banners Ilustrados
+                </span>
+                <span className="text-[10px] font-semibold bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
+                  📑 Controles por Página
+                </span>
+                <span className="text-[10px] font-semibold bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
+                  🏛️ Padrão Histórico
+                </span>
+              </div>
+            </div>
           </button>
         </div>
       </div>

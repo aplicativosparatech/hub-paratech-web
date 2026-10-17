@@ -4,6 +4,7 @@ import React from 'react'
 import { Building2, ShieldCheck, Calendar, MapPin, Award, CheckCircle2, AlertTriangle, ChevronDown } from 'lucide-react'
 import { useNotasFiscaisFilters } from './NotasFiscaisFilterContext'
 import { formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
+import { useGlobalClient } from '@/components/GlobalClientContext'
 
 const MESES = [
   'JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO',
@@ -34,6 +35,8 @@ export default function NotasFiscaisCompanyHeader() {
     setSelectedCliente
   } = useNotasFiscaisFilters()
 
+  const { interfaceMode, priorizarNomeFantasia } = useGlobalClient()
+
   if (loadingClientes && clientes.length === 0) {
     return (
       <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-6 animate-pulse flex items-center justify-between">
@@ -44,6 +47,107 @@ export default function NotasFiscaisCompanyHeader() {
   }
 
   const isClienteRole = userRole === 'cliente'
+
+  // ===== MODO CLEAN: CABEÇALHO COMPACTO E ELEGANTE (FOCO TOTAL NOS DADOS) =====
+  if (interfaceMode === 'clean') {
+    if (!clienteAtual) {
+      return (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 mb-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold shrink-0">
+              <Building2 size={20} />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                Nenhuma empresa selecionada no filtro global
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Utilize o campo de busca no topo da tela (ou atalho <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-mono">Ctrl + K</kbd>) para selecionar uma empresa e visualizar suas notas fiscais.
+              </p>
+            </div>
+          </div>
+          {clientes.length > 0 && !isClienteRole && (
+            <div className="flex items-center gap-2 shrink-0">
+              <select
+                value={selectedCliente}
+                onChange={(e) => setSelectedCliente(e.target.value)}
+                className="bg-slate-50 dark:bg-slate-800 text-xs font-semibold px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none"
+              >
+                <option value="">Escolher empresa rápida...</option>
+                {clientes.map(cli => (
+                  <option key={cli.id} value={cli.id}>
+                    {cli.razao_social}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    const nomePrincipal = priorizarNomeFantasia && clienteAtual.nome_fantasia ? clienteAtual.nome_fantasia : clienteAtual.razao_social
+    const nomeSecundario = priorizarNomeFantasia && clienteAtual.nome_fantasia ? clienteAtual.razao_social : (clienteAtual.nome_fantasia || null)
+
+    return (
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-xl px-4 py-2.5 mb-5 shadow-2xs flex flex-wrap items-center justify-between gap-3 transition-colors">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-2xs">
+            <Building2 size={16} />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                {nomePrincipal}
+              </span>
+              {clienteAtual.regime_tributario && (
+                <span className="text-[10px] uppercase font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/40 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800 shrink-0">
+                  {clienteAtual.regime_tributario.replace('_', ' ')}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+              <span>CNPJ: <strong className="text-slate-700 dark:text-slate-300">{formatarCnpjCpf(clienteAtual.cnpj)}</strong></span>
+              {(clienteAtual.cidade || clienteAtual.uf) && (
+                <>
+                  <span>•</span>
+                  <span>{clienteAtual.cidade ? `${clienteAtual.cidade}/` : ''}{clienteAtual.uf || 'MG'}</span>
+                </>
+              )}
+              {nomeSecundario && (
+                <>
+                  <span>•</span>
+                  <span className="truncate max-w-[200px] text-slate-400">{nomeSecundario}</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs">
+          {/* Status do Certificado A1 */}
+          {clienteAtual.certificado_url ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800">
+              <CheckCircle2 size={13} className="text-emerald-600 dark:text-emerald-400" />
+              Certificado A1 OK
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800">
+              <AlertTriangle size={13} className="text-amber-600 dark:text-amber-400" />
+              Sem Certificado A1
+            </span>
+          )}
+
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/50 px-2.5 py-1 rounded-lg border border-blue-200 dark:border-blue-800">
+            <ShieldCheck size={13} />
+            Isolamento Ativo
+          </span>
+        </div>
+      </div>
+    )
+  }
+
+  // ===== MODO CLÁSSICO: CABEÇALHO ORIGINAL COM GRADIENTE E COMBOBOX =====
 
   return (
     <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white rounded-2xl p-5 mb-6 shadow-md border border-slate-700/60 transition-all">
