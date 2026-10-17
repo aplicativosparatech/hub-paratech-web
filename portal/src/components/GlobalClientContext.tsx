@@ -12,13 +12,12 @@ export interface ClienteItem {
   nome_fantasia?: string | null
   cnpj: string
   whatsapp?: string | null
-  celular?: string | null
   telefone?: string | null
   uf?: string | null
   cidade?: string | null
   regime_tributario?: string | null
   certificado_url?: string | null
-  certificado_vencimento?: string | null
+  certificado_validade?: string | null
   logo_url?: string | null
   contabilidade_id?: string | null
   is_ativo?: boolean
@@ -153,35 +152,63 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
       setUserRole(role)
       setLoadingRole(false)
 
-      const camposSelect = 'id, razao_social, nome_fantasia, cnpj, whatsapp, celular, telefone, uf, cidade, regime_tributario, certificado_url, certificado_vencimento, logo_url, contabilidade_id, is_ativo'
+      const camposSelect = 'id, razao_social, nome_fantasia, cnpj, whatsapp, telefone, uf, cidade, regime_tributario, certificado_url, certificado_validade, logo_url, contabilidade_id, is_ativo'
       let clisData: ClienteItem[] = []
 
       if (role === 'cliente' && roleData?.cliente_id) {
-        const { data: cli } = await supabase
+        const { data: cli, error: errCli } = await supabase
           .from('clientes')
           .select(camposSelect)
           .eq('id', roleData.cliente_id)
           .maybeSingle()
-        if (cli) {
+        if (errCli) {
+          console.warn('Erro ao carregar cliente, tentando fallback simplificado:', errCli)
+          const { data: fbCli } = await supabase
+            .from('clientes')
+            .select('id, razao_social, nome_fantasia, cnpj, whatsapp, telefone, uf, cidade')
+            .eq('id', roleData.cliente_id)
+            .maybeSingle()
+          if (fbCli) clisData = [fbCli as any]
+        } else if (cli) {
           clisData = [cli]
-          // Cliente fica sempre fixo na própria empresa
-          _setSelectedClienteId(cli.id)
-          localStorage.setItem(GLOBAL_CLIENT_STORAGE_KEY, cli.id)
+        }
+        if (clisData.length > 0) {
+          _setSelectedClienteId(clisData[0].id)
+          localStorage.setItem(GLOBAL_CLIENT_STORAGE_KEY, clisData[0].id)
         }
       } else if (role === 'contabilidade' && roleData?.contabilidade_id) {
-        const { data: clis } = await supabase
+        const { data: clis, error: errClis } = await supabase
           .from('clientes')
           .select(camposSelect)
           .eq('contabilidade_id', roleData.contabilidade_id)
           .order('razao_social')
-        if (clis) clisData = clis
+        if (errClis) {
+          console.warn('Erro ao carregar clientes da contabilidade, tentando fallback:', errClis)
+          const { data: fbClis } = await supabase
+            .from('clientes')
+            .select('id, razao_social, nome_fantasia, cnpj, whatsapp, telefone, uf, cidade')
+            .eq('contabilidade_id', roleData.contabilidade_id)
+            .order('razao_social')
+          if (fbClis) clisData = fbClis as any[]
+        } else if (clis) {
+          clisData = clis
+        }
       } else {
         // Admin: busca todas as empresas
-        const { data: clis } = await supabase
+        const { data: clis, error: errClis } = await supabase
           .from('clientes')
           .select(camposSelect)
           .order('razao_social')
-        if (clis) clisData = clis
+        if (errClis) {
+          console.warn('Erro ao carregar clientes do admin, tentando fallback:', errClis)
+          const { data: fbClis } = await supabase
+            .from('clientes')
+            .select('id, razao_social, nome_fantasia, cnpj, whatsapp, telefone, uf, cidade')
+            .order('razao_social')
+          if (fbClis) clisData = fbClis as any[]
+        } else if (clis) {
+          clisData = clis
+        }
       }
 
       setClientes(clisData)

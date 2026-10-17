@@ -58,32 +58,41 @@ export default function GlobalClientSelector() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  // Normalização de texto: remove acentos e caracteres especiais para busca instantânea e precisa
+  const normalizar = (texto?: string | null) => {
+    if (!texto) return ''
+    return texto
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+  }
+
   // Filtragem inteligente multi-campo (Omnichannel)
   const clientesFiltrados = useMemo(() => {
     if (!searchTerm.trim()) return clientes
 
-    const termo = searchTerm.toLowerCase().trim()
-    const termoLimpo = limparDocumento(termo)
+    const termo = normalizar(searchTerm)
+    const termoLimpo = limparDocumento(searchTerm)
 
     return clientes.filter(cli => {
-      const razao = (cli.razao_social || '').toLowerCase()
-      const fantasia = (cli.nome_fantasia || '').toLowerCase()
+      const razao = normalizar(cli.razao_social)
+      const fantasia = normalizar(cli.nome_fantasia)
       const cnpjRaw = (cli.cnpj || '').toLowerCase()
       const cnpjLimpo = limparDocumento(cli.cnpj || '')
       const whatsLimpo = limparDocumento(cli.whatsapp || '')
-      const celLimpo = limparDocumento(cli.celular || '')
       const telLimpo = limparDocumento(cli.telefone || '')
-      const cidade = (cli.cidade || '').toLowerCase()
-      const uf = (cli.uf || '').toLowerCase()
+      const cidade = normalizar(cli.cidade)
+      const uf = normalizar(cli.uf)
 
-      // 1. Busca por Razão Social ou Nome Fantasia
+      // 1. Busca por Razão Social ou Nome Fantasia (inclusive sem acentos)
       if (razao.includes(termo) || fantasia.includes(termo)) return true
 
       // 2. Busca por CNPJ (formatado ou apenas dígitos)
       if (cnpjRaw.includes(termo) || (termoLimpo && cnpjLimpo.includes(termoLimpo))) return true
 
-      // 3. Busca por Telefone / Celular / WhatsApp
-      if (termoLimpo && (whatsLimpo.includes(termoLimpo) || celLimpo.includes(termoLimpo) || telLimpo.includes(termoLimpo))) return true
+      // 3. Busca por Telefone / WhatsApp
+      if (termoLimpo && (whatsLimpo.includes(termoLimpo) || telLimpo.includes(termoLimpo))) return true
 
       // 4. Busca por Cidade ou Estado
       if (cidade.includes(termo) || uf.includes(termo)) return true
@@ -315,11 +324,11 @@ export default function GlobalClientSelector() {
                         )}
                       </div>
 
-                      {/* Telefone/Celular conforme Mockup 2 */}
-                      {(cli.whatsapp || cli.celular || cli.telefone) && (
+                      {/* Telefone/WhatsApp conforme Mockup 2 */}
+                      {(cli.whatsapp || cli.telefone) && (
                         <div className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400 mt-1.5 font-medium">
                           <Phone size={11} className="text-emerald-600 dark:text-emerald-400" />
-                          <span>{cli.whatsapp || cli.celular || cli.telefone}</span>
+                          <span>{cli.whatsapp || cli.telefone}</span>
                         </div>
                       )}
                     </div>

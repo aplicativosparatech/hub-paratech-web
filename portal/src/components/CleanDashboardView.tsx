@@ -99,12 +99,12 @@ export default function CleanDashboardView({
         dias: Math.ceil((new Date(certAlerta.validade).getTime() - new Date().getTime()) / (1000 * 3600 * 24))
       }
     }
-    if (selectedCliente?.certificado_vencimento) {
-      const ano = new Date(selectedCliente.certificado_vencimento).getFullYear()
+    if (selectedCliente?.certificado_validade) {
+      const ano = new Date(selectedCliente.certificado_validade).getFullYear()
       return {
         ativo: true,
         texto: `Válido até ${ano}`,
-        dias: Math.ceil((new Date(selectedCliente.certificado_vencimento).getTime() - new Date().getTime()) / (1000 * 3600 * 24))
+        dias: Math.ceil((new Date(selectedCliente.certificado_validade).getTime() - new Date().getTime()) / (1000 * 3600 * 24))
       }
     }
     return {
