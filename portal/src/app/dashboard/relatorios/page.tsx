@@ -19,6 +19,7 @@ import { limparDocumento, formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
 import { useTableFeatures } from '@/hooks/useTableFeatures'
 import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
 import { useGlobalClient } from '@/components/GlobalClientContext'
+import CompetenciaSelector from '@/components/CompetenciaSelector'
 
 export default function RelatoriosPage() {
   const { interfaceMode, selectedClienteId: globalClienteId } = useGlobalClient()
@@ -707,17 +708,16 @@ export default function RelatoriosPage() {
           <p className="text-xs text-slate-500">Selecione o mês para cálculo e auditoria dos arquivos fiscais da empresa ativa.</p>
         </div>
 
-        {/* Seletor de Competência (Mês/Ano) */}
+        {/* Seletor de Competência (Mês/Ano) com Busca Inteligente */}
         <div className="flex items-center gap-3 flex-wrap">
-          <div>
+          <div className="min-w-[240px]">
             <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-              Mês / Ano
+              Mês de Competência:
             </label>
-            <input
-              type="month"
+            <CompetenciaSelector
               value={selectedMonth}
-              onChange={e => setSelectedMonth(e.target.value)}
-              className="bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+              onChange={setSelectedMonth}
+              placeholder="Buscar mês de competência..."
             />
           </div>
 

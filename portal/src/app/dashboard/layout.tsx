@@ -267,6 +267,17 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
 
   const isClean = interfaceMode === 'clean'
 
+  // Define se o card da empresa ativa deve ser exibido no cabeçalho
+  // Conforme regra de negócio: apenas o Dashboard (Visão Geral) e o bloco SISTEMA possuem vínculo com a empresa escolhida
+  const shouldShowCompanyCard = (currentPath: string): boolean => {
+    if (currentPath === '/dashboard') return true
+    if (currentPath.startsWith('/dashboard/notas-fiscais')) return true
+    if (currentPath.startsWith('/dashboard/distribuicao-dfe')) return true
+    if (currentPath.startsWith('/dashboard/relatorios')) return true
+    if (currentPath.startsWith('/dashboard/corretor-tributario')) return true
+    return false
+  }
+
   // Componente de Link Customizado para o Menu Lateral Clássico
   const NavItem = ({ href, icon: Icon, label }: { href: string, icon: any, label: string }) => {
     const isActive = pathname === href || pathname.startsWith(href + '/')
@@ -341,8 +352,9 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
       </div>
       
       <nav className={`flex-1 ${isCollapsed ? 'px-2' : 'px-3 lg:px-4'} space-y-1 mt-2 overflow-y-auto custom-scrollbar`}>
+        {/* TÓPICO 1: VISÃO GERAL */}
         {!isCollapsed ? (
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-3 mt-2">Visão Geral</div>
+          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-2">Visão Geral</div>
         ) : (
           <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
         )}
@@ -351,31 +363,54 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         {/* ===== MENUS DO ADMIN ===== */}
         {role === 'admin' && (
           <>
+            {/* TÓPICO 2: GESTÃO */}
             {!isCollapsed ? (
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-3 mt-4">Gestão</div>
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Gestão</div>
             ) : (
               <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
             )}
             <NavItem href="/dashboard/contabilidades" icon={Building2} label="Contabilidades" />
             <NavItem href="/dashboard/clientes" icon={Users} label="Clientes" />
             <NavItem href="/dashboard/faturas" icon={Receipt} label="Faturas" />
-            <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Notas Fiscais" />
-            <NavItem href="/dashboard/distribuicao-dfe" icon={Inbox} label="Distribuição de DF-e" />
-            
+
+            {/* TÓPICO 3: SISTEMA */}
             {!isCollapsed ? (
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-3 mt-4">Sistema</div>
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Sistema</div>
             ) : (
               <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
             )}
+            <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Notas Fiscais" />
+            <NavItem href="/dashboard/distribuicao-dfe" icon={Inbox} label="Distribuição de DF-e" />
             <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
             <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Analisador Tributário" />
+
+            {/* TÓPICO 4: EXTRAS */}
+            {!isCollapsed ? (
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Extras</div>
+            ) : (
+              <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+            )}
             <NavItem href="/dashboard/saneador-arquivos" icon={Database} label="Saneador de Arquivos" />
             <NavItem href="/dashboard/sugestor-tributario" icon={ScanText} label="Sugestor Tributário" />
-            <NavItem href="/dashboard/integracoes" icon={PlugZap} label="Integrações (APIs)" />
+
+            {/* TÓPICO 5: ÁREA TÉCNICA */}
+            {!isCollapsed ? (
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Área Técnica</div>
+            ) : (
+              <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+            )}
             <NavItem href="/dashboard/permissoes" icon={ShieldCheck} label="Permissões" />
             <NavItem href="/dashboard/aparencia" icon={Palette} label="Aparência" />
             <NavItem href="/dashboard/configuracoes-portal" icon={Sliders} label="Configurações do Portal" />
             <NavItem href="/dashboard/configuracoes" icon={Settings} label="Configurações Hub" />
+            <NavItem href="/dashboard/integracoes" icon={PlugZap} label="Integrações & APIs" />
+
+            {/* TÓPICO 6: AJUDA */}
+            {!isCollapsed ? (
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Ajuda</div>
+            ) : (
+              <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+            )}
             <NavItem href="/dashboard/tutorial" icon={GraduationCap} label="Tutorial & Tour IA" />
           </>
         )}
@@ -383,24 +418,69 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         {/* ===== MENUS DO CLIENTE ===== */}
         {role === 'cliente' && (
           <>
+            {/* TÓPICO 2: GESTÃO */}
+            {canAccess('faturas') && (
+              <>
+                {!isCollapsed ? (
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Gestão</div>
+                ) : (
+                  <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+                )}
+                <NavItem href="/dashboard/minhas-faturas" icon={Receipt} label="Minhas Faturas" />
+              </>
+            )}
+
+            {/* TÓPICO 3: SISTEMA */}
+            {(canAccess('notas_fiscais') || canAccess('distribuicao_dfe') || canAccess('relatorios') || canAccess('corretor_tributario')) && (
+              <>
+                {!isCollapsed ? (
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Sistema</div>
+                ) : (
+                  <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+                )}
+                {canAccess('notas_fiscais') && <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Minhas Notas Fiscais" />}
+                {canAccess('distribuicao_dfe') && <NavItem href="/dashboard/distribuicao-dfe" icon={Inbox} label="Distribuição de DF-e" />}
+                {(canAccess('relatorios') || canAccess('relatorios_resumo') || canAccess('relatorios_monofasicos') || canAccess('relatorios_auditoria')) && (
+                  <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
+                )}
+                {canAccess('corretor_tributario') && <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Analisador Tributário" />}
+              </>
+            )}
+
+            {/* TÓPICO 4: EXTRAS */}
+            {(canAccess('saneador_arquivos') || canAccess('sugestor_tributario')) && (
+              <>
+                {!isCollapsed ? (
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Extras</div>
+                ) : (
+                  <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+                )}
+                {canAccess('saneador_arquivos') && <NavItem href="/dashboard/saneador-arquivos" icon={Database} label="Saneador de Arquivos" />}
+                {canAccess('sugestor_tributario') && <NavItem href="/dashboard/sugestor-tributario" icon={ScanText} label="Sugestor Tributário" />}
+              </>
+            )}
+
+            {/* TÓPICO 5: ÁREA TÉCNICA */}
+            {(canAccess('aparencia') || canAccess('configuracoes_hub') || canAccess('integracoes') || canAccess('meu_perfil')) && (
+              <>
+                {!isCollapsed ? (
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Área Técnica</div>
+                ) : (
+                  <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+                )}
+                {canAccess('aparencia') && <NavItem href="/dashboard/aparencia" icon={Palette} label="Aparência" />}
+                {canAccess('configuracoes_hub') && <NavItem href="/dashboard/configuracoes" icon={Settings} label="Configurações Hub" />}
+                {canAccess('integracoes') && <NavItem href="/dashboard/integracoes" icon={PlugZap} label="Integrações (APIs)" />}
+                {canAccess('meu_perfil') && <NavItem href="/dashboard/meu-perfil" icon={UserCircle} label="Meu Perfil" />}
+              </>
+            )}
+
+            {/* TÓPICO 6: AJUDA */}
             {!isCollapsed ? (
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-3 mt-4">Meu Espaço</div>
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Ajuda</div>
             ) : (
               <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
             )}
-            {canAccess('faturas') && <NavItem href="/dashboard/minhas-faturas" icon={Receipt} label="Minhas Faturas" />}
-            {canAccess('notas_fiscais') && <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Minhas Notas Fiscais" />}
-            {canAccess('distribuicao_dfe') && <NavItem href="/dashboard/distribuicao-dfe" icon={Inbox} label="Distribuição de DF-e" />}
-            {(canAccess('relatorios') || canAccess('relatorios_resumo') || canAccess('relatorios_monofasicos') || canAccess('relatorios_auditoria')) && (
-              <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
-            )}
-            {canAccess('corretor_tributario') && <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Analisador Tributário" />}
-            {canAccess('saneador_arquivos') && <NavItem href="/dashboard/saneador-arquivos" icon={Database} label="Saneador de Arquivos" />}
-            {canAccess('sugestor_tributario') && <NavItem href="/dashboard/sugestor-tributario" icon={ScanText} label="Sugestor Tributário" />}
-            {canAccess('aparencia') && <NavItem href="/dashboard/aparencia" icon={Palette} label="Aparência" />}
-            {canAccess('configuracoes_hub') && <NavItem href="/dashboard/configuracoes" icon={Settings} label="Configurações Hub" />}
-            {canAccess('integracoes') && <NavItem href="/dashboard/integracoes" icon={PlugZap} label="Integrações (APIs)" />}
-            {canAccess('meu_perfil') && <NavItem href="/dashboard/meu-perfil" icon={UserCircle} label="Meu Perfil" />}
             <NavItem href="/dashboard/tutorial" icon={GraduationCap} label="Tutorial & Tour IA" />
           </>
         )}
@@ -408,24 +488,69 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         {/* ===== MENUS DA CONTABILIDADE ===== */}
         {role === 'contabilidade' && (
           <>
+            {/* TÓPICO 2: GESTÃO */}
+            {canAccess('contabilidade_meus_clientes') && (
+              <>
+                {!isCollapsed ? (
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Gestão</div>
+                ) : (
+                  <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+                )}
+                <NavItem href="/dashboard/meus-clientes" icon={Users} label="Meus Clientes" />
+              </>
+            )}
+
+            {/* TÓPICO 3: SISTEMA */}
+            {(canAccess('notas_fiscais') || canAccess('distribuicao_dfe') || canAccess('relatorios') || canAccess('corretor_tributario')) && (
+              <>
+                {!isCollapsed ? (
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Sistema</div>
+                ) : (
+                  <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+                )}
+                {canAccess('notas_fiscais') && <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Notas Fiscais (XMLs)" />}
+                {canAccess('distribuicao_dfe') && <NavItem href="/dashboard/distribuicao-dfe" icon={Inbox} label="Distribuição de DF-e" />}
+                {(canAccess('relatorios') || canAccess('relatorios_resumo') || canAccess('relatorios_monofasicos') || canAccess('relatorios_auditoria')) && (
+                  <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
+                )}
+                {canAccess('corretor_tributario') && <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Analisador Tributário" />}
+              </>
+            )}
+
+            {/* TÓPICO 4: EXTRAS */}
+            {(canAccess('saneador_arquivos') || canAccess('sugestor_tributario')) && (
+              <>
+                {!isCollapsed ? (
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Extras</div>
+                ) : (
+                  <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+                )}
+                {canAccess('saneador_arquivos') && <NavItem href="/dashboard/saneador-arquivos" icon={Database} label="Saneador de Arquivos" />}
+                {canAccess('sugestor_tributario') && <NavItem href="/dashboard/sugestor-tributario" icon={ScanText} label="Sugestor Tributário" />}
+              </>
+            )}
+
+            {/* TÓPICO 5: ÁREA TÉCNICA */}
+            {(canAccess('aparencia') || canAccess('configuracoes_hub') || canAccess('integracoes') || canAccess('meu_perfil')) && (
+              <>
+                {!isCollapsed ? (
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Área Técnica</div>
+                ) : (
+                  <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+                )}
+                {canAccess('aparencia') && <NavItem href="/dashboard/aparencia" icon={Palette} label="Aparência" />}
+                {canAccess('configuracoes_hub') && <NavItem href="/dashboard/configuracoes" icon={Settings} label="Configurações Hub" />}
+                {canAccess('integracoes') && <NavItem href="/dashboard/integracoes" icon={PlugZap} label="Integrações & APIs" />}
+                {canAccess('meu_perfil') && <NavItem href="/dashboard/meu-perfil" icon={Building2} label="Perfil do Escritório" />}
+              </>
+            )}
+
+            {/* TÓPICO 6: AJUDA */}
             {!isCollapsed ? (
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-3 mt-4">Escritório</div>
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Ajuda</div>
             ) : (
               <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
             )}
-            {canAccess('contabilidade_meus_clientes') && <NavItem href="/dashboard/meus-clientes" icon={Users} label="Meus Clientes" />}
-            {canAccess('notas_fiscais') && <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Notas Fiscais (XMLs)" />}
-            {canAccess('distribuicao_dfe') && <NavItem href="/dashboard/distribuicao-dfe" icon={Inbox} label="Distribuição de DF-e" />}
-            {(canAccess('relatorios') || canAccess('relatorios_resumo') || canAccess('relatorios_monofasicos') || canAccess('relatorios_auditoria')) && (
-              <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
-            )}
-            {canAccess('corretor_tributario') && <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Analisador Tributário" />}
-            {canAccess('saneador_arquivos') && <NavItem href="/dashboard/saneador-arquivos" icon={Database} label="Saneador de Arquivos" />}
-            {canAccess('sugestor_tributario') && <NavItem href="/dashboard/sugestor-tributario" icon={ScanText} label="Sugestor Tributário" />}
-            {canAccess('aparencia') && <NavItem href="/dashboard/aparencia" icon={Palette} label="Aparência" />}
-            {canAccess('configuracoes_hub') && <NavItem href="/dashboard/configuracoes" icon={Settings} label="Configurações Hub" />}
-            {canAccess('integracoes') && <NavItem href="/dashboard/integracoes" icon={PlugZap} label="Integrações (APIs)" />}
-            {canAccess('meu_perfil') && <NavItem href="/dashboard/meu-perfil" icon={Building2} label="Perfil do Escritório" />}
             <NavItem href="/dashboard/tutorial" icon={GraduationCap} label="Tutorial & Tour IA" />
           </>
         )}
@@ -621,9 +746,11 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
           </div>
 
           {/* 2. Card Escuro com Dados Cadastrais da Empresa Selecionada e Botão Trocar Empresa Ctrl+K (Imagem 2) */}
-          <div className="px-4 sm:px-6 lg:px-8 py-2 bg-[#060B14] dark:bg-[#060B14] border-b border-slate-800/80">
-            <GlobalCompanyActiveCard variant="header" />
-          </div>
+          {shouldShowCompanyCard(pathname) && (
+            <div className="px-4 sm:px-6 lg:px-8 py-2 bg-[#060B14] dark:bg-[#060B14] border-b border-slate-800/80">
+              <GlobalCompanyActiveCard variant="header" />
+            </div>
+          )}
 
           {/* 3. Sub-Navbar com Abas Horizontais */}
           <div className="bg-white dark:bg-[#0B1120] px-4 sm:px-6 lg:px-8 flex items-center justify-between">
@@ -922,9 +1049,11 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             </div>
 
             {/* Linha 2: O Card Escuro com Dados Cadastrais da Empresa e Trocar Empresa Ctrl+K (Imagem 2) */}
-            <div className="px-3 sm:px-6 py-2 bg-[#060B14]">
-              <GlobalCompanyActiveCard variant="header" />
-            </div>
+            {shouldShowCompanyCard(pathname) && (
+              <div className="px-3 sm:px-6 py-2 bg-[#060B14]">
+                <GlobalCompanyActiveCard variant="header" />
+              </div>
+            )}
           </header>
           
           {/* Área de conteúdo EXPANDIDA com padding inferior para o rodapé fixo */}

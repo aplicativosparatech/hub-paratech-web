@@ -15,16 +15,21 @@ import * as XLSX from 'xlsx'
 import { DiagnosticoItem } from '@/utils/tributario/auditorEngine'
 import { useTableFeatures } from '@/hooks/useTableFeatures'
 import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
+import { useGlobalClient } from '@/components/GlobalClientContext'
+import CompetenciaSelector from '@/components/CompetenciaSelector'
 
 export default function CorretorTributarioPage() {
   const router = useRouter()
   const supabase = createClient()
+  const { selectedClienteId, setSelectedClienteId, selectedCliente: globalClienteObj, clientes: globalClientes } = useGlobalClient()
 
   const [loadingUser, setLoadingUser] = useState(true)
   const [loadingAuditoria, setLoadingAuditoria] = useState(false)
   const [userRole, setUserRole] = useState<'admin' | 'contabilidade' | 'cliente'>('admin')
   const [clientes, setClientes] = useState<any[]>([])
-  const [selectedCliente, setSelectedCliente] = useState<string>('')
+  
+  // Utiliza a empresa selecionada globalmente no cabeçalho
+  const selectedCliente = selectedClienteId
 
   // Filtros de Execução da Auditoria
   const [tipoFiltro, setTipoFiltro] = useState<'mes' | 'periodo' | 'numeracao'>('mes')
@@ -114,7 +119,9 @@ export default function CorretorTributarioPage() {
         }
 
         setClientes(clisData)
-        if (clisData.length > 0) setSelectedCliente(clisData[0].id)
+        if (clisData.length > 0 && !selectedClienteId) {
+          setSelectedClienteId(clisData[0].id)
+        }
       } catch (err: any) {
         toast.error('Erro ao carregar dados: ' + err.message)
       } finally {
@@ -498,26 +505,8 @@ export default function CorretorTributarioPage() {
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           
-          {/* Seleção de Empresa */}
-          <div>
-            <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5">
-              Empresa / Cliente:
-            </label>
-            <select
-              value={selectedCliente}
-              onChange={(e) => setSelectedCliente(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-800 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-            >
-              {clientes.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.razao_social} {c.cnpj ? `(${c.cnpj})` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-
           {/* Tipo de Filtro */}
           <div>
             <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5">
@@ -540,11 +529,10 @@ export default function CorretorTributarioPage() {
               <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5">
                 Mês de Competência:
               </label>
-              <input
-                type="month"
+              <CompetenciaSelector
                 value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-800 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                onChange={setSelectedMonth}
+                placeholder="Buscar mês de competência..."
               />
             </div>
           )}
@@ -612,7 +600,6 @@ export default function CorretorTributarioPage() {
               <option value="55">NF-e (Modelo 55 - Mercantil)</option>
             </select>
           </div>
-
         </div>
 
         {/* 2.1 Contagem Prévia de XMLs Prontos para Análise */}
