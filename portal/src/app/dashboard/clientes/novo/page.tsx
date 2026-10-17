@@ -22,6 +22,7 @@ export default function NovoClientePage() {
   const [sistemasSugeridos, setSistemasSugeridos] = useState<string[]>(ERP_PADRAO)
   const [clienteExistente, setClienteExistente] = useState<{ id: string; razao_social: string; nome_fantasia?: string; cnpj: string } | null>(null)
   const [checkingDuplicidade, setCheckingDuplicidade] = useState(false)
+  const [userRole, setUserRole] = useState<'admin' | 'contabilidade' | 'cliente'>('admin')
 
   const [formData, setFormData] = useState({
     razao_social: '',
@@ -104,6 +105,27 @@ export default function NovoClientePage() {
 
   useEffect(() => {
     async function fetchData() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        router.push('/login')
+        return
+      }
+
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      const role = (roleData?.role as 'admin' | 'contabilidade' | 'cliente') || 'admin'
+      setUserRole(role)
+
+      if (role !== 'admin') {
+        toast.error('Apenas administradores podem cadastrar novos clientes.')
+        router.push('/dashboard/clientes')
+        return
+      }
+
       const [contasRes, sistemasRes] = await Promise.all([
         supabase.from('contabilidades').select('id, razao_social'),
         supabase.from('clientes').select('nome_sistema_utilizado').not('nome_sistema_utilizado', 'is', null)
@@ -637,54 +659,57 @@ export default function NovoClientePage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Valor da Mensalidade (R$)</label>
-                <input 
-                  type="number" 
-                  step="0.01"
-                  min="0"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-semibold"
-                  placeholder="0.00"
-                  value={formData.valor_mensalidade} 
-                  onChange={e => setFormData({...formData, valor_mensalidade: e.target.value})} 
-                />
-              </div>
+              {userRole === 'admin' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Valor da Mensalidade (R$)</label>
+                    <input 
+                      type="number" 
+                      step="0.01"
+                      min="0"
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-semibold"
+                      placeholder="0.00"
+                      value={formData.valor_mensalidade} 
+                      onChange={e => setFormData({...formData, valor_mensalidade: e.target.value})} 
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Custo do Cliente (R$)</label>
-                <input 
-                  type="number" 
-                  step="0.01"
-                  min="0"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500 bg-slate-50/50 font-semibold text-rose-700"
-                  placeholder="0.00"
-                  value={formData.custo} 
-                  onChange={e => setFormData({...formData, custo: e.target.value})} 
-                />
-                <div className="flex items-center justify-between text-[11px] mt-1">
-                  <span className="text-slate-500">Custo operacional / licença</span>
-                  {(formData.valor_mensalidade || formData.custo) && (
-                    <span className="font-semibold text-blue-700 font-mono">
-                      Lucro: {((parseFloat(String(formData.valor_mensalidade || 0).replace(',', '.')) || 0) - (parseFloat(String(formData.custo || 0).replace(',', '.')) || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                    </span>
-                  )}
-                </div>
-              </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Custo do Cliente (R$)</label>
+                    <input 
+                      type="number" 
+                      step="0.01"
+                      min="0"
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500 bg-slate-50/50 font-semibold text-rose-700"
+                      placeholder="0.00"
+                      value={formData.custo} 
+                      onChange={e => setFormData({...formData, custo: e.target.value})} 
+                    />
+                    <div className="flex items-center justify-between text-[11px] mt-1">
+                      <span className="text-slate-500">Custo operacional / licença</span>
+                      {(formData.valor_mensalidade || formData.custo) && (
+                        <span className="font-semibold text-blue-700 font-mono">
+                          Lucro: {((parseFloat(String(formData.valor_mensalidade || 0).replace(',', '.')) || 0) - (parseFloat(String(formData.custo || 0).replace(',', '.')) || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Dia de Vencimento da Fatura</label>
-                <input 
-                  type="number" 
-                  min="1"
-                  max="31"
-                  required
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-semibold"
-                  placeholder="10"
-                  value={formData.dia_vencimento} 
-                  onChange={e => setFormData({...formData, dia_vencimento: e.target.value})} 
-                />
-                <p className="text-[11px] text-slate-500 mt-1">Gera fatura automática todo dia 01</p>
-              </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Dia de Vencimento da Fatura</label>
+                    <input 
+                      type="number" 
+                      min="1" 
+                      max="31"
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-semibold"
+                      placeholder="10"
+                      value={formData.dia_vencimento} 
+                      onChange={e => setFormData({...formData, dia_vencimento: e.target.value})} 
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">Gera fatura automática todo dia 01</p>
+                  </div>
+                </>
+              )}
 
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Status no Sistema</label>
