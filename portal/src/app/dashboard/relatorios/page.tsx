@@ -1379,8 +1379,8 @@ export default function RelatoriosPage() {
               ) : modoAgrupamentoMonofasico === 'cupom' ? (
                 
                 /* TABELA MODO 1: ANALÍTICO POR CUPOM */
-                <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-320px)] border border-slate-200 rounded-2xl shadow-2xs custom-scrollbar">
-                  <table className="w-full text-left border-collapse" style={{ tableLayout: 'fixed' }}>
+                <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xs custom-scrollbar w-full">
+                  <table className="w-full text-left border-collapse min-w-[950px]">
                     <thead className="sticky top-0 z-10 bg-slate-100/95 backdrop-blur-xs border-b border-slate-200 shadow-2xs">
                       <tr className="bg-slate-100/80 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
                         <ResizableSortableTh
@@ -1535,8 +1535,8 @@ export default function RelatoriosPage() {
               ) : (
 
                 /* TABELA MODO 2: AGRUPADO POR PRODUTO / NCM */
-                <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-320px)] border border-slate-200 rounded-2xl shadow-2xs custom-scrollbar">
-                  <table className="w-full text-left border-collapse" style={{ tableLayout: 'fixed' }}>
+                <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xs custom-scrollbar w-full">
+                  <table className="w-full text-left border-collapse min-w-[950px]">
                     <thead className="sticky top-0 z-10 bg-slate-100/95 backdrop-blur-xs border-b border-slate-200 shadow-2xs">
                       <tr className="bg-slate-100/80 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
                         <ResizableSortableTh

@@ -871,9 +871,9 @@ export default function CorretorTributarioPage() {
           </div>
 
           {/* 5. Tabela de Diagnóstico Comparativo */}
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-320px)] custom-scrollbar">
-              <table className="w-full text-left text-xs text-slate-600" style={{ tableLayout: 'fixed' }}>
+          <div className="bg-white dark:bg-[#0B1120] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden w-full">
+            <div className="overflow-x-auto custom-scrollbar w-full">
+              <table className="w-full text-left text-xs text-slate-600 dark:text-slate-300 min-w-[1000px]">
                 <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px] shadow-2xs">
                   <tr>
                     <ResizableSortableTh

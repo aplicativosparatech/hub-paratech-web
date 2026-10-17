@@ -100,10 +100,10 @@ export default function MeusClientesPage() {
         <p className="text-slate-500 mt-1">Empresas vinculadas ao seu escritório de contabilidade.</p>
       </header>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-270px)] custom-scrollbar">
-          <table className="w-full text-left text-sm text-slate-600" style={{ tableLayout: 'fixed' }}>
-            <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500 font-medium border-b border-slate-200 shadow-2xs">
+      <div className="bg-white dark:bg-[#0B1120] rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden w-full">
+        <div className="overflow-x-auto custom-scrollbar w-full">
+          <table className="w-full text-left text-sm text-slate-600 dark:text-slate-300 min-w-[900px]">
+            <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 shadow-2xs">
               <tr>
                 <ResizableSortableTh
                   columnId="nome_fantasia"

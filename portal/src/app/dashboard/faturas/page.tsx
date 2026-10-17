@@ -241,8 +241,8 @@ export default function FaturasPage() {
         </div>
       </header>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto overflow-y-auto max-h-[calc(100vh-270px)] custom-scrollbar">
-        <table className="w-full text-left border-collapse min-w-[900px]" style={{ tableLayout: 'fixed' }}>
+      <div className="bg-white dark:bg-[#0B1120] rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-x-auto custom-scrollbar w-full">
+        <table className="w-full text-left border-collapse min-w-[900px]">
           <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 shadow-2xs">
             <tr className="bg-slate-50 border-b border-slate-200">
               <ResizableSortableTh

@@ -39,12 +39,12 @@ export default function ContabilidadesPage() {
     defaultSortDirection: 'asc',
     initialWidths: {
       logo: 70,
-      escritorio: 260,
-      clientes: 150,
-      cnpj: 160,
-      contato: 190,
-      contador: 170,
-      login: 180,
+      escritorio: 320,
+      clientes: 160,
+      cnpj: 180,
+      contato: 210,
+      contador: 180,
+      login: 220,
       acoes: 100
     },
     customExtractors: {
@@ -150,9 +150,9 @@ export default function ContabilidadesPage() {
         </div>
       </header>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-270px)] custom-scrollbar">
-          <table className="w-full text-left border-collapse" style={{ tableLayout: 'fixed' }}>
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden w-full">
+        <div className="overflow-x-auto w-full custom-scrollbar">
+          <table className="w-full text-left border-collapse min-w-[1050px]">
             <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 shadow-2xs">
               <tr className="bg-slate-50 border-b border-slate-200">
                 <ResizableSortableTh

@@ -1050,9 +1050,9 @@ export default function DistribuicaoDfePage() {
           )}
 
           {/* Tabela de Notas Fiscais Destinadas */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-            <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-320px)] custom-scrollbar">
-              <table className="w-full text-left text-xs border-collapse" style={{ tableLayout: 'fixed' }}>
+          <div className="bg-white dark:bg-[#0B1120] rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs overflow-hidden w-full">
+            <div className="overflow-x-auto custom-scrollbar w-full">
+              <table className="w-full text-left text-xs border-collapse min-w-[1050px]">
                 <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 shadow-2xs">
                   <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
                     <ResizableSortableTh

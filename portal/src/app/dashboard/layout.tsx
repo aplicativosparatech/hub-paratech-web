@@ -1099,7 +1099,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         </header>
 
       {/* 3. CONTEÚDO PRINCIPAL (EXPANDIDO 100% DA LARGURA) */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 pb-20">
+      <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-6 pb-20">
         {children}
       </main>
 

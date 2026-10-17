@@ -601,9 +601,9 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
       {loading ? (
         <div className="text-slate-400 py-8 text-center animate-pulse">Carregando notas...</div>
       ) : (
-        <div className="border border-slate-200 rounded-2xl shadow-2xs bg-white overflow-hidden flex flex-col">
-          <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-290px)] custom-scrollbar">
-            <table className="w-full text-left text-sm text-slate-600 min-w-[1000px]" style={{ tableLayout: 'fixed' }}>
+        <div className="border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xs bg-white dark:bg-[#0B1120] overflow-hidden flex flex-col w-full">
+          <div className="overflow-x-auto w-full custom-scrollbar">
+            <table className="w-full text-left text-sm text-slate-600 dark:text-slate-300 min-w-[1000px]">
               <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500 font-medium border-b border-slate-200 shadow-2xs">
                 <tr>
                 <ResizableSortableTh

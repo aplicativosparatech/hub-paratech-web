@@ -77,8 +77,8 @@ export default function MinhasFaturasPage() {
       </header>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-270px)] custom-scrollbar">
-          <table className="w-full text-left text-sm text-slate-600" style={{ tableLayout: 'fixed' }}>
+        <div className="overflow-x-auto custom-scrollbar w-full">
+          <table className="w-full text-left text-sm text-slate-600 dark:text-slate-300 min-w-[700px]">
             <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500 font-medium border-b border-slate-200 shadow-2xs">
               <tr>
                 <ResizableSortableTh
