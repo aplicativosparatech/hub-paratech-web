@@ -497,6 +497,8 @@ export default function EditarClientePage() {
     }
 
     toast.success('Cliente atualizado com sucesso!')
+    window.dispatchEvent(new CustomEvent('hub_client_updated', { detail: { id: params.id } }))
+    window.dispatchEvent(new Event('hub_settings_changed'))
     router.push('/dashboard/clientes')
   }
 

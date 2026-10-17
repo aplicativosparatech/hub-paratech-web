@@ -30,7 +30,11 @@ export const ESTADOS_POR_AUTORIZADOR: Record<string, { nome: string; ufs: string
   'SVC-RS': { nome: 'Contingência SVC-RS', ufs: ['AM', 'BA', 'GO', 'MA', 'MS', 'MT', 'PA', 'PE', 'PI', 'PR'], descricao: 'Servidor Virtual de Contingência RS' }
 }
 
-export default function SefazStatusBadge() {
+interface SefazStatusBadgeProps {
+  variant?: 'sidebar' | 'header'
+}
+
+export default function SefazStatusBadge({ variant = 'sidebar' }: SefazStatusBadgeProps) {
   const [statusData, setStatusData] = useState<SefazStatusGeralResponse | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
   const [refreshing, setRefreshing] = useState<boolean>(false)
@@ -172,36 +176,62 @@ export default function SefazStatusBadge() {
 
   return (
     <>
-      {/* BADGE COMPACTO E ELEGANTE NA SIDEBAR (EMBAIXO DO NOME HUBPARATECH) */}
-      <button
-        type="button"
-        onClick={() => setModalOpen(true)}
-        className={`w-full text-left p-2.5 rounded-xl border transition-all duration-200 group flex items-center justify-between cursor-pointer select-none ${cfg.bg} ${cfg.border} hover:scale-[1.01]`}
-        title="Clique para ver o status detalhado de todos os servidores da SEFAZ"
-      >
-        <div className="flex items-center gap-2.5 min-w-0">
-          {/* Ponto Pulsante de Status em Tempo Real */}
-          <div className="relative flex items-center justify-center w-3 h-3 flex-shrink-0">
+      {variant === 'header' ? (
+        <button
+          type="button"
+          onClick={() => setModalOpen(true)}
+          className={`flex items-center gap-2.5 px-3 py-1.5 sm:py-2 rounded-xl border transition-all duration-200 group cursor-pointer select-none ${cfg.bg} ${cfg.border} hover:scale-[1.02] shadow-2xs shrink-0`}
+          title="Clique para ver o status detalhado dos servidores da SEFAZ"
+        >
+          <div className="relative flex items-center justify-center w-2.5 h-2.5 shrink-0">
             <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${cfg.ping}`} />
             <span className={`relative inline-flex rounded-full h-2 w-2 ${cfg.dot}`} />
           </div>
 
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <span className={`text-[12px] font-black tracking-tight leading-none ${cfg.text}`}>
+          <div className="text-left">
+            <div className="flex items-center gap-1.5 leading-none">
+              <span className={`text-[11px] sm:text-xs font-black tracking-tight ${cfg.text}`}>
                 {cfg.label}
               </span>
+              <ChevronRight size={12} className="text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 transition-colors" />
             </div>
-            <div className="text-[10px] text-slate-400 dark:text-slate-400 font-medium truncate mt-0.5">
+            <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate mt-0.5">
               {cfg.sublabel}
             </div>
           </div>
-        </div>
+        </button>
+      ) : (
+        /* BADGE COMPACTO E ELEGANTE NA SIDEBAR (EMBAIXO DO NOME HUBPARATECH) */
+        <button
+          type="button"
+          onClick={() => setModalOpen(true)}
+          className={`w-full text-left p-2.5 rounded-xl border transition-all duration-200 group flex items-center justify-between cursor-pointer select-none ${cfg.bg} ${cfg.border} hover:scale-[1.01]`}
+          title="Clique para ver o status detalhado de todos os servidores da SEFAZ"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            {/* Ponto Pulsante de Status em Tempo Real */}
+            <div className="relative flex items-center justify-center w-3 h-3 flex-shrink-0">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${cfg.ping}`} />
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${cfg.dot}`} />
+            </div>
 
-        <div className="flex items-center text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 transition-colors ml-1">
-          <ChevronRight size={15} />
-        </div>
-      </button>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className={`text-[12px] font-black tracking-tight leading-none ${cfg.text}`}>
+                  {cfg.label}
+                </span>
+              </div>
+              <div className="text-[10px] text-slate-400 dark:text-slate-400 font-medium truncate mt-0.5">
+                {cfg.sublabel}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 transition-colors ml-1">
+            <ChevronRight size={15} />
+          </div>
+        </button>
+      )}
 
       {/* MODAL DETALHADO DE DISPONIBILIDADE DA SEFAZ */}
       {modalOpen && (

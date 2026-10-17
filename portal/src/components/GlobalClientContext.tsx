@@ -21,6 +21,7 @@ export interface ClienteItem {
   logo_url?: string | null
   contabilidade_id?: string | null
   contabilidade_nome?: string | null
+  ultima_sincronizacao_hub?: string | null
   is_ativo?: boolean
 }
 
@@ -239,14 +240,26 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
 
       // Enriquecer clientes com os nomes das contabilidades vinculadas
       try {
-        const { data: contabs } = await supabase.from('contabilidades').select('id, razao_social, nome')
-        const contabMap = new Map((contabs || []).map(c => [c.id, c.nome || c.razao_social]))
+        const { data: contabs } = await supabase.from('contabilidades').select('id, razao_social, nome_fantasia')
+        const contabMap = new Map((contabs || []).map(c => [c.id, c.nome_fantasia || c.razao_social]))
         clisData = clisData.map(c => ({
           ...c,
           contabilidade_nome: c.contabilidade_id ? (contabMap.get(c.contabilidade_id) || 'Não vinculada') : 'Não vinculada'
         }))
       } catch (errContabs) {
         console.warn('Erro ao mapear nomes de contabilidades:', errContabs)
+      }
+
+      // Enriquecer clientes com a última sincronização do Hub Paratech
+      try {
+        const { data: hubConfigs } = await supabase.from('configuracoes_hub').select('cliente_id, ultima_sincronizacao')
+        const hubMap = new Map((hubConfigs || []).map(h => [h.cliente_id, h.ultima_sincronizacao]))
+        clisData = clisData.map(c => ({
+          ...c,
+          ultima_sincronizacao_hub: hubMap.get(c.id) || null
+        }))
+      } catch (errHub) {
+        console.warn('Erro ao mapear última sincronização do Hub:', errHub)
       }
 
       setClientes(clisData)
@@ -309,6 +322,14 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     loadUserAndClients()
+
+    const handleClientUpdated = () => {
+      loadUserAndClients()
+    }
+    window.addEventListener('hub_client_updated', handleClientUpdated)
+    return () => {
+      window.removeEventListener('hub_client_updated', handleClientUpdated)
+    }
   }, [loadUserAndClients])
 
   // Setters

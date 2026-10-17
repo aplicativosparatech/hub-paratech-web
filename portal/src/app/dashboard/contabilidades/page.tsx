@@ -38,7 +38,7 @@ export default function ContabilidadesPage() {
     defaultSortKey: 'razao_social',
     defaultSortDirection: 'asc',
     initialWidths: {
-      logo: 70,
+      logo: 84,
       escritorio: 320,
       clientes: 160,
       cnpj: 180,
@@ -161,7 +161,8 @@ export default function ContabilidadesPage() {
                   disableSort
                   width={columnWidths.logo}
                   onResize={handleResizeColumn}
-                  minWidth={60}
+                  minWidth={80}
+                  align="center"
                 />
                 <ResizableSortableTh
                   columnId="escritorio"
@@ -249,14 +250,20 @@ export default function ContabilidadesPage() {
               ) : (
                 contabilidadesOrdenadas.map(c => (
                   <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="p-4 truncate">
-                      {c.logo_url ? (
-                        <img src={c.logo_url} alt="Logo" className="w-10 h-10 rounded-full object-cover border border-slate-200" />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-400 text-xs font-bold">
-                          {c.razao_social?.charAt(0)}
-                        </div>
-                      )}
+                    <td className="p-2.5 text-center">
+                      <div className="w-12 h-12 mx-auto rounded-xl bg-white p-1 border border-slate-200/90 shadow-2xs flex items-center justify-center overflow-hidden">
+                        {c.logo_url ? (
+                          <img 
+                            src={c.logo_url} 
+                            alt={c.razao_social || 'Logo Contabilidade'} 
+                            className="w-full h-full object-contain" 
+                          />
+                        ) : (
+                          <div className="w-full h-full rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 text-xs font-black">
+                            {c.razao_social?.charAt(0) || 'C'}
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="p-4 text-slate-800 truncate">
                       <div className="flex items-center gap-2 flex-wrap">

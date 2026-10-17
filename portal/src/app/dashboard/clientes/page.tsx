@@ -366,7 +366,8 @@ export default function ClientesPage() {
                 disableSort
                 width={columnWidths.logo}
                 onResize={handleResizeColumn}
-                minWidth={60}
+                minWidth={80}
+                align="center"
               />
               <ResizableSortableTh
                 columnId="razao_social"
@@ -523,14 +524,20 @@ export default function ClientesPage() {
 
                 return (
                   <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="p-4">
-                      {c.logo_url ? (
-                        <img src={c.logo_url} alt="Logo" className="w-10 h-10 rounded-full object-cover border border-slate-200" />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-400 text-xs font-bold">
-                          {((priorizarNomeFantasia && c.nome_fantasia) ? c.nome_fantasia : c.razao_social)?.charAt(0)}
-                        </div>
-                      )}
+                    <td className="p-2.5 text-center">
+                      <div className="w-12 h-12 mx-auto rounded-xl bg-white p-1 border border-slate-200/90 shadow-2xs flex items-center justify-center overflow-hidden">
+                        {c.logo_url ? (
+                          <img 
+                            src={c.logo_url} 
+                            alt={c.razao_social || 'Logo'} 
+                            className="w-full h-full object-contain" 
+                          />
+                        ) : (
+                          <div className="w-full h-full rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 text-xs font-black">
+                            {((priorizarNomeFantasia && c.nome_fantasia) ? c.nome_fantasia : c.razao_social)?.charAt(0) || 'E'}
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="p-4 text-slate-800">
                       {priorizarNomeFantasia ? (

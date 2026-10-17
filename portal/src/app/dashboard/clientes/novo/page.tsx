@@ -484,6 +484,8 @@ export default function NovoClientePage() {
     }
 
     toast.success('Cliente cadastrado com sucesso!')
+    window.dispatchEvent(new CustomEvent('hub_client_updated', { detail: { id: clienteResult.id } }))
+    window.dispatchEvent(new Event('hub_settings_changed'))
     router.push('/dashboard/clientes')
   }
 

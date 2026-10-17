@@ -912,25 +912,28 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         {/* CABEÇALHO FIXO UNIFICADO (STICKY TOP-0 Z-40) */}
         <header className="sticky top-0 z-40 bg-white dark:bg-[#0B1120] border-b border-slate-200/80 dark:border-slate-800 shadow-md transition-colors">
           
-          {/* 1. Barra Superior com Logo, Status SEFAZ e Controles de Sistema */}
-          <div className="h-14 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 sm:gap-6 border-b border-slate-100 dark:border-slate-800/80">
-            {/* Lado Esquerdo: Botão Mobile + Logo Oficial Paratech */}
-            <div className="flex items-center gap-3 shrink-0">
+          {/* 1. Barra Superior com Logo (80% maior), Status SEFAZ à frente e Controles de Sistema */}
+          <div className="min-h-[72px] sm:min-h-[80px] py-2 sm:py-3 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 sm:gap-6 border-b border-slate-100 dark:border-slate-800/80">
+            {/* Lado Esquerdo: Botão Mobile + Logo Oficial Paratech (80% maior) + Card SEFAZ à frente */}
+            <div className="flex items-center gap-3 sm:gap-5 shrink-0">
               <button
                 onClick={() => setMobileMenuOpen(true)}
                 className="lg:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
                 aria-label="Abrir Navegação Completa"
               >
-                <Menu size={20} />
+                <Menu size={22} />
               </button>
 
               <Link href="/dashboard" className="flex items-center gap-2 group transition-transform hover:scale-[1.01]" title="Paratech Soluções & Sistemas">
                 <img 
                   src="/logo-paratech-horizontal.png" 
                   alt="Paratech Soluções & Sistemas" 
-                  className="h-8 sm:h-9 w-auto max-w-[200px] sm:max-w-[240px] object-contain block drop-shadow-xs"
+                  className="h-14 sm:h-16 w-auto max-w-[340px] sm:max-w-[420px] object-contain block drop-shadow-sm"
                 />
               </Link>
+
+              {/* Card Informativo dos Servidores da SEFAZ à frente da logomarca */}
+              <SefazStatusBadge variant="header" />
             </div>
 
             {/* Lado Direito: Notificações, Modo Toggle, Tema, Kiosk, Perfil */}

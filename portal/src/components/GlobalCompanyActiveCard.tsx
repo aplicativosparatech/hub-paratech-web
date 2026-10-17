@@ -8,12 +8,14 @@ import {
 } from 'lucide-react'
 import { useGlobalClient, ClienteItem } from './GlobalClientContext'
 import { formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
+import { createClient } from '@/utils/supabase/client'
 
 interface GlobalCompanyActiveCardProps {
   variant?: 'default' | 'header'
 }
 
 export default function GlobalCompanyActiveCard({ variant = 'default' }: GlobalCompanyActiveCardProps) {
+  const supabase = useMemo(() => createClient(), [])
   const { 
     selectedCliente, 
     userRole, 
@@ -24,6 +26,18 @@ export default function GlobalCompanyActiveCard({ variant = 'default' }: GlobalC
 
   const [modalBuscaOpen, setModalBuscaOpen] = useState(false)
   const [termoBusca, setTermoBusca] = useState('')
+  const [contabilidadeNome, setContabilidadeNome] = useState<string>('')
+  const [hubStatus, setHubStatus] = useState<{
+    online: boolean
+    texto: string
+    detalhe: string
+    corBadge: string
+  }>({
+    online: false,
+    texto: 'Verificando Hub...',
+    detalhe: 'Aguardando telemetria do Hub Paratech',
+    corBadge: 'bg-slate-900/80 text-slate-400 border-slate-700/80'
+  })
 
   // Suporte ao Atalho Global de Teclado (Ctrl+K ou Cmd+K)
   useEffect(() => {
@@ -42,6 +56,108 @@ export default function GlobalCompanyActiveCard({ variant = 'default' }: GlobalC
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [userRole, modalBuscaOpen])
+
+  // Busca em tempo real e resiliente da Contabilidade Vinculada (Imagens 3 e 4)
+  useEffect(() => {
+    if (!selectedCliente) {
+      setContabilidadeNome('')
+      return
+    }
+
+    if (selectedCliente.contabilidade_nome && selectedCliente.contabilidade_nome !== 'Não vinculada') {
+      setContabilidadeNome(selectedCliente.contabilidade_nome)
+      return
+    }
+
+    if (selectedCliente.contabilidade_id) {
+      supabase
+        .from('contabilidades')
+        .select('razao_social, nome_fantasia')
+        .eq('id', selectedCliente.contabilidade_id)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data) {
+            setContabilidadeNome(data.nome_fantasia || data.razao_social)
+          } else {
+            setContabilidadeNome('Não vinculada')
+          }
+        })
+    } else {
+      setContabilidadeNome('Não vinculada')
+    }
+  }, [selectedCliente, selectedCliente?.contabilidade_id, selectedCliente?.contabilidade_nome, supabase])
+
+  // Monitoramento do Status do HUB com Data e Hora da Última Sincronização
+  useEffect(() => {
+    if (!selectedCliente?.id) {
+      setHubStatus({
+        online: false,
+        texto: 'Hub: Aguardando seleção',
+        detalhe: 'Nenhuma empresa selecionada',
+        corBadge: 'bg-slate-900/80 text-slate-400 border-slate-700/80'
+      })
+      return
+    }
+
+    const checkHub = async () => {
+      try {
+        const { data } = await supabase
+          .from('configuracoes_hub')
+          .select('ultima_sincronizacao')
+          .eq('cliente_id', selectedCliente.id)
+          .maybeSingle()
+
+        const ultimaSync = data?.ultima_sincronizacao || selectedCliente.ultima_sincronizacao_hub
+
+        if (!ultimaSync) {
+          setHubStatus({
+            online: false,
+            texto: 'Hub: Sem sincronização',
+            detalhe: 'Nenhuma sincronização recente registrada para esta empresa.',
+            corBadge: 'bg-slate-900/90 text-slate-400 border-slate-800'
+          })
+          return
+        }
+
+        const syncDate = new Date(ultimaSync)
+        const diffMs = Date.now() - syncDate.getTime()
+        const diffMin = Math.floor(diffMs / (1000 * 60))
+        const diffHoras = Math.floor(diffMs / (1000 * 60 * 60))
+
+        const diaMes = syncDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+        const horaMin = syncDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+
+        if (diffMin <= 10) {
+          setHubStatus({
+            online: true,
+            texto: `Hub Online: ${horaMin}`,
+            detalhe: `Hub Paratech comunicando em tempo real (último sync: ${diaMes} às ${horaMin})`,
+            corBadge: 'bg-emerald-950/80 text-emerald-300 border-emerald-600/60 shadow-xs'
+          })
+        } else if (diffHoras < 24) {
+          setHubStatus({
+            online: false,
+            texto: `Hub Sync: Hoje às ${horaMin}`,
+            detalhe: `Última sincronização realizada hoje às ${horaMin} (há ${diffHoras}h)`,
+            corBadge: 'bg-amber-950/80 text-amber-300 border-amber-600/60 shadow-xs'
+          })
+        } else {
+          setHubStatus({
+            online: false,
+            texto: `Hub Sync: ${diaMes} às ${horaMin}`,
+            detalhe: `Última sincronização registrada em ${diaMes} às ${horaMin}`,
+            corBadge: 'bg-slate-900/90 text-slate-300 border-slate-700/80 shadow-xs'
+          })
+        }
+      } catch (err) {
+        console.warn('Erro ao checar status do Hub:', err)
+      }
+    }
+
+    checkHub()
+    const interval = setInterval(checkHub, 30000)
+    return () => clearInterval(interval)
+  }, [selectedCliente?.id, selectedCliente?.ultima_sincronizacao_hub, supabase])
 
   // Formatação do Regime Tributário conforme Imagem 4
   const formatRegime = (regime?: string | null) => {
@@ -191,6 +307,20 @@ export default function GlobalCompanyActiveCard({ variant = 'default' }: GlobalC
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {/* Badge de Status do HUB Paratech com Data e Hora da Última Sincronização */}
+            <div 
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] sm:text-[11px] font-bold border shadow-xs transition-all ${hubStatus.corBadge}`}
+              title={hubStatus.detalhe}
+            >
+              <span className="relative flex h-2 w-2 shrink-0">
+                {hubStatus.online && (
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                )}
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${hubStatus.online ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+              </span>
+              <span>{hubStatus.texto}</span>
+            </div>
+
             {/* Badge de Validade do Certificado Digital A1 */}
             <div 
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] sm:text-[11px] font-bold border shadow-xs ${certStatus.corBadge}`}
@@ -222,14 +352,14 @@ export default function GlobalCompanyActiveCard({ variant = 'default' }: GlobalC
         {/* CORPO DO CARD CONFORME IMAGEM 2 & 4 (LOGO + 6 COLUNAS DE INFORMAÇÕES) */}
         <div className="flex flex-col lg:flex-row items-start lg:items-center gap-3.5 lg:gap-5">
           
-          {/* Logo do Cliente ou Monograma Visual */}
+          {/* Logo do Cliente com Autoajuste sem Áreas Brancas */}
           <div className="shrink-0">
             {selectedCliente.logo_url ? (
-              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white/95 p-1 border border-white/20 shadow-md flex items-center justify-center overflow-hidden">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl border border-slate-700/80 shadow-md flex items-center justify-center overflow-hidden bg-slate-900/80">
                 <img 
                   src={selectedCliente.logo_url} 
                   alt={selectedCliente.nome_fantasia || selectedCliente.razao_social} 
-                  className="w-full h-full object-contain"
+                  className="w-full h-full object-cover rounded-2xl"
                 />
               </div>
             ) : (
@@ -315,16 +445,16 @@ export default function GlobalCompanyActiveCard({ variant = 'default' }: GlobalC
               )}
             </div>
 
-            {/* Coluna 6: Contabilidade */}
+            {/* Coluna 6: Contabilidade Real Vinculada */}
             <div className="min-w-0">
               <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
                 Contabilidade
               </p>
               <p 
                 className="text-xs sm:text-[13px] font-bold text-emerald-400 truncate"
-                title={selectedCliente.contabilidade_nome || 'Não vinculada'}
+                title={contabilidadeNome || selectedCliente.contabilidade_nome || 'Não vinculada'}
               >
-                {selectedCliente.contabilidade_nome || 'MASSIMA CONTABILIDADE LTDA'}
+                {contabilidadeNome || selectedCliente.contabilidade_nome || 'Não vinculada'}
               </p>
             </div>
 
