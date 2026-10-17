@@ -50,6 +50,39 @@ interface CleanDashboardViewProps {
   isFechamentoModalOpen: boolean
   setIsFechamentoModalOpen: React.Dispatch<React.SetStateAction<boolean>>
   mesesOpcoes: Array<{ valor: string; label: string }>
+  evolucaoMensal?: Array<{ mesAno: string; label: string; mesAbreviado: string; valor: number }>
+  documentosRecentes?: Array<{
+    id: string
+    tipo: 'nfe' | 'nfce'
+    numero: string
+    valor: number
+    data_emissao: string
+    created_at: string
+    motivo_sefaz?: string
+    is_autorizada?: boolean
+    chave?: string
+  }>
+}
+
+function formatTempoRelativo(dateStr?: string) {
+  if (!dateStr) return 'Recente'
+  try {
+    const data = new Date(dateStr)
+    const agora = new Date()
+    const diffMs = agora.getTime() - data.getTime()
+    const diffMin = Math.floor(diffMs / (1000 * 60))
+    const diffHoras = Math.floor(diffMs / (1000 * 60 * 60))
+    const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+    if (diffMin < 1) return 'Agora mesmo'
+    if (diffMin < 60) return `${diffMin} min atrás`
+    if (diffHoras < 24 && data.getDate() === agora.getDate()) return `${diffHoras}h atrás`
+    if (diffDias === 1 || (diffHoras < 48 && data.getDate() === agora.getDate() - 1)) return 'Ontem'
+    if (diffDias < 7) return `${diffDias} dias atrás`
+    return data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+  } catch {
+    return 'Recente'
+  }
 }
 
 export default function CleanDashboardView({
@@ -62,7 +95,9 @@ export default function CleanDashboardView({
   setMesCompetencia,
   isFechamentoModalOpen,
   setIsFechamentoModalOpen,
-  mesesOpcoes
+  mesesOpcoes,
+  evolucaoMensal = [],
+  documentosRecentes = []
 }: CleanDashboardViewProps) {
   const { selectedCliente, userRole, priorizarNomeFantasia } = useGlobalClient()
   const [periodoFiltro, setPeriodoFiltro] = useState<'12m' | '6m' | 'ano'>('12m')
@@ -124,34 +159,88 @@ export default function CleanDashboardView({
     }
   }, [certAlerta, selectedCliente])
 
-  // Dados dos 12 meses para o Gráfico de Área Curva (Mockup 1)
-  const chartPoints = useMemo(() => {
-    const basePoints = [
-      { mes: 'jan', valor: 38000, y: 260 },
-      { mes: 'fev', valor: 62000, y: 200 },
-      { mes: 'mar', valor: 98000, y: 140 },
-      { mes: 'abr', valor: 74000, y: 190 },
-      { mes: 'mai', valor: 89000, y: 160 },
-      { mes: 'jun', valor: 92000, y: 155 },
-      { mes: 'jul', valor: 114000, y: 110 },
-      { mes: 'ago', valor: 106000, y: 130 },
-      { mes: 'set', valor: 122000, y: 95 },
-      { mes: 'out', valor: 118000, y: 105 },
-      { mes: 'nov', valor: 134000, y: 75 },
-      { mes: 'dez', valor: 148920, y: 40 }
-    ]
+  // Dados filtrados de acordo com o período selecionado
+  const dadosPeriodo = useMemo(() => {
+    let base = [...evolucaoMensal]
+    if (base.length === 0) {
+      const mesesAbrev = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+      base = mesesAbrev.map((m, i) => ({
+        mesAno: `2026-${String(i + 1).padStart(2, '0')}`,
+        label: `${m}/26`,
+        mesAbreviado: m,
+        valor: 0
+      }))
+    }
 
-    // Ajusta coordenadas SVG (width 720, height 280)
-    const xStep = 720 / 11
-    return basePoints.map((p, idx) => ({
-      ...p,
-      x: idx * xStep + 30
-    }))
-  }, [])
+    if (periodoFiltro === '6m') {
+      return base.slice(-6)
+    }
+    if (periodoFiltro === 'ano') {
+      const anoAtual = new Date().getFullYear().toString()
+      const doAno = base.filter(item => item.mesAno.startsWith(anoAtual))
+      return doAno.length > 0 ? doAno : base.slice(-12)
+    }
+    return base.slice(-12)
+  }, [evolucaoMensal, periodoFiltro])
+
+  const maxValor = useMemo(() => {
+    return Math.max(...dadosPeriodo.map(p => p.valor), 0)
+  }, [dadosPeriodo])
+
+  // Teto Y arredondado para escala limpa e legível
+  const tetoY = useMemo(() => {
+    if (maxValor <= 0) return 10000
+    const margem = maxValor * 1.25
+    if (margem > 100000) return Math.ceil(margem / 20000) * 20000
+    if (margem > 10000) return Math.ceil(margem / 5000) * 5000
+    if (margem > 1000) return Math.ceil(margem / 1000) * 1000
+    return Math.max(Math.ceil(margem / 100) * 100, 1000)
+  }, [maxValor])
+
+  // Marcadores do Eixo Y calculados dinamicamente
+  const marcadoresY = useMemo(() => {
+    const formatY = (v: number) => {
+      if (v >= 1000000) return `${(v / 1000000).toFixed(1)}M`
+      if (v >= 1000) return `${Math.round(v / 1000)}k`
+      return `${Math.round(v)}`
+    }
+    return [
+      { y: 35, valor: formatY(tetoY) },
+      { y: 88, valor: formatY(tetoY * 0.75) },
+      { y: 140, valor: formatY(tetoY * 0.50) },
+      { y: 192, valor: formatY(tetoY * 0.25) },
+      { y: 245, valor: '0' }
+    ]
+  }, [tetoY])
+
+  // Coordenadas calculadas para os pontos do gráfico (SVG viewBox 0 0 780 290)
+  const chartPoints = useMemo(() => {
+    const total = dadosPeriodo.length
+    const xInicio = 55
+    const xFim = 745
+    const xStep = total > 1 ? (xFim - xInicio) / (total - 1) : 0
+    const yBase = 245
+    const yTopo = 35
+    const yRange = yBase - yTopo // 210
+
+    return dadosPeriodo.map((p, idx) => {
+      const proporcao = tetoY > 0 ? Math.min(Math.max(p.valor / tetoY, 0), 1) : 0
+      const y = yBase - (proporcao * yRange)
+      const x = total === 1 ? (xInicio + xFim) / 2 : xInicio + (idx * xStep)
+      return {
+        mes: p.mesAbreviado,
+        label: p.label,
+        valor: p.valor,
+        x,
+        y
+      }
+    })
+  }, [dadosPeriodo, tetoY])
 
   // Gera o caminho de curva suave SVG (Cubic Bezier Spline)
   const svgCurvePath = useMemo(() => {
     if (chartPoints.length === 0) return ''
+    if (chartPoints.length === 1) return `M ${chartPoints[0].x} ${chartPoints[0].y}`
     let d = `M ${chartPoints[0].x} ${chartPoints[0].y}`
     for (let i = 0; i < chartPoints.length - 1; i++) {
       const p0 = chartPoints[i]
@@ -167,57 +256,24 @@ export default function CleanDashboardView({
     if (!svgCurvePath || chartPoints.length === 0) return ''
     const lastPoint = chartPoints[chartPoints.length - 1]
     const firstPoint = chartPoints[0]
-    return `${svgCurvePath} L ${lastPoint.x} 265 L ${firstPoint.x} 265 Z`
+    return `${svgCurvePath} L ${lastPoint.x} 245 L ${firstPoint.x} 245 Z`
   }, [svgCurvePath, chartPoints])
 
-  // Atividade fiscal recente (Feed de Documentos conforme Mockup 1)
-  const atividadesRecentes = [
-    {
-      id: '1',
-      tipo: 'nfe',
-      icone: FileText,
-      titulo: 'NF-e #1.248 emitida e autorizada',
-      detalhes: 'R$ 6.610,00 — Totalmente autorizada SEFAZ',
-      tempo: '11 min atrás',
-      corIcone: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50'
-    },
-    {
-      id: '2',
-      tipo: 'documento',
-      icone: FileDown,
-      titulo: 'Documento 1.241 NF-e sincronizado',
-      detalhes: 'R$ 1.240,50 — Processado no armazenamento',
-      tempo: '25 min atrás',
-      corIcone: 'text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800'
-    },
-    {
-      id: '3',
-      tipo: 'dfe',
-      icone: Inbox,
-      titulo: 'CNPJ NF-e 21/0001-90 recebida',
-      detalhes: 'R$ 4.310,50 — Manifestação de Fornecedor',
-      tempo: '42 min atrás',
-      corIcone: 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50'
-    },
-    {
-      id: '4',
-      tipo: 'certificado',
-      icone: ShieldCheck,
-      titulo: 'Certificado Digital A1',
-      detalhes: 'Status: Válido — Operação 100% ativa',
-      tempo: 'Hoje',
-      corIcone: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50'
-    },
-    {
-      id: '5',
-      tipo: 'fechamento',
-      icone: Receipt,
-      titulo: 'Fechamento Fiscal Mensal',
-      detalhes: 'Competência 09/2026 concluída e validada',
-      tempo: 'Ontem',
-      corIcone: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50'
+  // Resumo estatístico do gráfico real
+  const picoInfo = useMemo(() => {
+    if (dadosPeriodo.length === 0) return { texto: 'Sem dados', valor: 0 }
+    const p = dadosPeriodo.reduce((max, curr) => curr.valor > max.valor ? curr : max, dadosPeriodo[0])
+    return {
+      texto: p.label,
+      valor: p.valor
     }
-  ]
+  }, [dadosPeriodo])
+
+  const mediaMensalValor = useMemo(() => {
+    if (dadosPeriodo.length === 0) return 0
+    const total = dadosPeriodo.reduce((acc, c) => acc + c.valor, 0)
+    return total / dadosPeriodo.length
+  }, [dadosPeriodo])
 
   const nomeClienteExibicao = selectedCliente 
     ? (priorizarNomeFantasia && selectedCliente.nome_fantasia ? selectedCliente.nome_fantasia : selectedCliente.razao_social)
@@ -399,27 +455,31 @@ export default function CleanDashboardView({
                 </linearGradient>
               </defs>
 
-              {/* Linhas de Grade Horizontais e Marcadores do Eixo Y (0, 300, 600, 900, 1000) */}
+              {/* Linhas de Grade Horizontais e Marcadores do Eixo Y Dinâmicos */}
               <g className="text-slate-300 dark:text-slate-700/60" stroke="currentColor" strokeDasharray="3 3">
-                {/* 1000 */}
-                <line x1="45" y1="30" x2="760" y2="30" strokeWidth="1" opacity="0.6" />
-                <text x="10" y="34" className="text-[11px] font-medium fill-slate-400" stroke="none">1000</text>
-
-                {/* 900 */}
-                <line x1="45" y1="75" x2="760" y2="75" strokeWidth="1" opacity="0.6" />
-                <text x="15" y="79" className="text-[11px] font-medium fill-slate-400" stroke="none">900</text>
-
-                {/* 600 */}
-                <line x1="45" y1="145" x2="760" y2="145" strokeWidth="1" opacity="0.6" />
-                <text x="15" y="149" className="text-[11px] font-medium fill-slate-400" stroke="none">600</text>
-
-                {/* 300 */}
-                <line x1="45" y1="215" x2="760" y2="215" strokeWidth="1" opacity="0.6" />
-                <text x="15" y="219" className="text-[11px] font-medium fill-slate-400" stroke="none">300</text>
-
-                {/* 0 */}
-                <line x1="45" y1="265" x2="760" y2="265" strokeWidth="1" strokeDasharray="none" className="text-slate-200 dark:text-slate-800" />
-                <text x="25" y="269" className="text-[11px] font-medium fill-slate-400" stroke="none">0</text>
+                {marcadoresY.map((m, idx) => (
+                  <g key={idx}>
+                    <line 
+                      x1="45" 
+                      y1={m.y} 
+                      x2="760" 
+                      y2={m.y} 
+                      strokeWidth="1" 
+                      opacity={idx === marcadoresY.length - 1 ? "1" : "0.5"} 
+                      strokeDasharray={idx === marcadoresY.length - 1 ? "none" : "3 3"}
+                      className={idx === marcadoresY.length - 1 ? "text-slate-200 dark:text-slate-800" : ""}
+                    />
+                    <text 
+                      x="40" 
+                      y={m.y + 4} 
+                      textAnchor="end" 
+                      className="text-[10px] font-semibold fill-slate-400" 
+                      stroke="none"
+                    >
+                      {m.valor}
+                    </text>
+                  </g>
+                ))}
               </g>
 
               {/* Área Sombreada da Curva */}
@@ -441,7 +501,7 @@ export default function CleanDashboardView({
 
               {/* Pontos Interativos com Tooltip */}
               {chartPoints.map((p, idx) => (
-                <g key={p.mes} className="group cursor-pointer">
+                <g key={idx} className="group cursor-pointer">
                   <circle
                     cx={p.x}
                     cy={p.y}
@@ -453,10 +513,10 @@ export default function CleanDashboardView({
                   {hoveredIndex === idx && (
                     <g transform={`translate(${p.x}, ${p.y - 32})`}>
                       <rect 
-                        x="-45" 
-                        y="-12" 
-                        width="90" 
-                        height="24" 
+                        x="-52" 
+                        y="-13" 
+                        width="104" 
+                        height="26" 
                         rx="6" 
                         className="fill-slate-900 dark:fill-slate-800 shadow-lg" 
                       />
@@ -474,11 +534,11 @@ export default function CleanDashboardView({
               ))}
 
               {/* Labels dos Meses no Eixo X (jan, fev, mar, ...) */}
-              {chartPoints.map(p => (
+              {chartPoints.map((p, idx) => (
                 <text 
-                  key={p.mes} 
+                  key={idx} 
                   x={p.x} 
-                  y="284" 
+                  y="275" 
                   textAnchor="middle" 
                   className="text-[11px] font-semibold fill-slate-500 dark:fill-slate-400"
                 >
@@ -488,15 +548,23 @@ export default function CleanDashboardView({
             </svg>
           </div>
 
-          {/* Rodapé informativo do gráfico */}
+          {/* Rodapé informativo do gráfico com dados 100% REAIS */}
           <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-            <span>Pico Máximo: <strong className="text-slate-800 dark:text-slate-200">Dezembro (R$ 148.920,00)</strong></span>
-            <span>Média Mensal: <strong className="text-slate-800 dark:text-slate-200">R$ 104.500,00</strong></span>
+            <span>
+              Pico Máximo: <strong className="text-slate-800 dark:text-slate-200">
+                {picoInfo.valor > 0 ? `${picoInfo.texto} (${formatMoeda(picoInfo.valor)})` : 'Sem faturamento no período'}
+              </strong>
+            </span>
+            <span>
+              Média Mensal: <strong className="text-slate-800 dark:text-slate-200">
+                {formatMoeda(mediaMensalValor)}
+              </strong>
+            </span>
           </div>
 
         </div>
 
-        {/* Coluna Direita: Atividade Fiscal Recente (Feed Conforme Mockup 1) */}
+        {/* Coluna Direita: Atividade Fiscal Recente (Feed Conforme Mockup 1 com dados REAIS) */}
         <div className="lg:col-span-5 xl:col-span-4 bg-white dark:bg-[#0B1120] rounded-2xl p-5 sm:p-6 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-4">
@@ -508,31 +576,49 @@ export default function CleanDashboardView({
               </span>
             </div>
 
-            {/* Lista Vertical de Atividades conforme Mockup 1 */}
+            {/* Lista Vertical de Atividades com dados 100% REAIS */}
             <div className="space-y-4">
-              {atividadesRecentes.map((item, idx) => {
-                const Icon = item.icone
-                return (
-                  <div key={item.id} className="flex items-start gap-3 group">
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${item.corIcone}`}>
-                      <Icon size={18} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                          {item.titulo}
-                        </p>
-                        <span className="text-[10px] text-slate-400 shrink-0 font-medium">
-                          {item.tempo}
-                        </span>
+              {documentosRecentes.length === 0 ? (
+                <div className="py-8 flex flex-col items-center justify-center text-center text-slate-400">
+                  <FileText size={32} className="stroke-1 text-slate-300 dark:text-slate-600 mb-2" />
+                  <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">Nenhum documento recente</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Nenhuma NF-e ou NFC-e registrada para o filtro atual.</p>
+                </div>
+              ) : (
+                documentosRecentes.map((item) => {
+                  const isNfce = item.tipo === 'nfce'
+                  const Icon = isNfce ? Store : FileText
+                  const corIcone = isNfce 
+                    ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50'
+                    : 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50'
+                  const docLabel = isNfce ? 'NFC-e' : 'NF-e'
+                  const titulo = `${docLabel} #${item.numero} emitida e autorizada`
+                  const tempo = formatTempoRelativo(item.data_emissao || item.created_at)
+                  const statusDesc = item.motivo_sefaz || (item.is_autorizada !== false ? 'Totalmente autorizada SEFAZ' : 'Processamento Fiscal')
+                  const detalhes = `${formatMoeda(item.valor)} — ${statusDesc}`
+
+                  return (
+                    <div key={item.id} className="flex items-start gap-3 group">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${corIcone}`}>
+                        <Icon size={18} />
                       </div>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                        {item.detalhes}
-                      </p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                            {titulo}
+                          </p>
+                          <span className="text-[10px] text-slate-400 shrink-0 font-medium">
+                            {tempo}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                          {detalhes}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                )
-              })}
+                  )
+                })
+              )}
             </div>
           </div>
 

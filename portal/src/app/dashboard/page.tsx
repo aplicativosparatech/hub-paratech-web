@@ -77,6 +77,10 @@ export default function DashboardPage() {
     cidades: 0
   })
 
+  // Dados Reais para a Seção Inferior do Modo Clean
+  const [evolucaoMensalReal, setEvolucaoMensalReal] = useState<Array<{ mesAno: string; label: string; mesAbreviado: string; valor: number }>>([])
+  const [documentosRecentesReais, setDocumentosRecentesReais] = useState<Array<{ id: string; tipo: 'nfe' | 'nfce'; numero: string; valor: number; data_emissao: string; created_at: string; motivo_sefaz?: string; is_autorizada?: boolean; chave?: string }>>([])
+
   useEffect(() => {
     async function loadDashboard() {
       setLoading(true)
@@ -340,6 +344,95 @@ export default function DashboardPage() {
           cidades: totalCidades
         })
 
+        // 4. Carrega dados REAIS para a seção inferior do Modo Clean (Gráfico 12M e Top 5 Documentos)
+        try {
+          // Últimos 12 meses
+          const dataLimite12m = new Date()
+          dataLimite12m.setMonth(dataLimite12m.getMonth() - 11)
+          dataLimite12m.setDate(1)
+          dataLimite12m.setHours(0, 0, 0, 0)
+          const dataLimiteIso = dataLimite12m.toISOString()
+
+          let qNfe12m = supabase.from('nfe_saidas').select('valor, data_emissao').gte('data_emissao', dataLimiteIso)
+          let qNfce12m = supabase.from('nfce_saidas').select('valor, data_emissao').gte('data_emissao', dataLimiteIso)
+
+          // 5 Documentos mais recentes (NF-e e NFC-e)
+          let qNfeRecentes = supabase
+            .from('nfe_saidas')
+            .select('id, numero, valor, data_emissao, created_at, motivo_sefaz, is_autorizada, chave')
+            .order('data_emissao', { ascending: false })
+            .limit(5)
+
+          let qNfceRecentes = supabase
+            .from('nfce_saidas')
+            .select('id, numero, valor, data_emissao, created_at, motivo_sefaz, is_autorizada, chave')
+            .order('data_emissao', { ascending: false })
+            .limit(5)
+
+          if (clienteFiltroId) {
+            qNfe12m = qNfe12m.eq('cliente_id', clienteFiltroId)
+            qNfce12m = qNfce12m.eq('cliente_id', clienteFiltroId)
+            qNfeRecentes = qNfeRecentes.eq('cliente_id', clienteFiltroId)
+            qNfceRecentes = qNfceRecentes.eq('cliente_id', clienteFiltroId)
+          }
+
+          const [resNfe12m, resNfce12m, resNfeRecentes, resNfceRecentes] = await Promise.all([
+            qNfe12m,
+            qNfce12m,
+            qNfeRecentes,
+            qNfceRecentes
+          ])
+
+          // Agrupa totais por mês YYYY-MM
+          const mesTotais: Record<string, number> = {}
+          const somarNoMes = (lista: any[]) => {
+            (lista || []).forEach(item => {
+              if (!item.data_emissao) return
+              const ym = item.data_emissao.substring(0, 7) // '2026-09'
+              mesTotais[ym] = (mesTotais[ym] || 0) + (Number(item.valor) || 0)
+            })
+          }
+          somarNoMes(resNfe12m.data || [])
+          somarNoMes(resNfce12m.data || [])
+
+          // Gera a lista dos 12 meses cronológicos
+          const nomesMesesExtenso = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+          const nomesMesesAbrev = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+
+          const lista12m = []
+          const hoje = new Date()
+          for (let i = 11; i >= 0; i--) {
+            const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1)
+            const ano = d.getFullYear()
+            const mesIdx = d.getMonth()
+            const ym = `${ano}-${String(mesIdx + 1).padStart(2, '0')}`
+            const label = `${nomesMesesExtenso[mesIdx]}/${String(ano).slice(-2)}`
+            const mesAbreviado = nomesMesesAbrev[mesIdx]
+            lista12m.push({
+              mesAno: ym,
+              label,
+              mesAbreviado,
+              valor: mesTotais[ym] || 0
+            })
+          }
+          setEvolucaoMensalReal(lista12m)
+
+          // Documentos Recentes ordenados por data decrescente
+          const combinados = [
+            ...(resNfeRecentes.data || []).map((n: any) => ({ ...n, tipo: 'nfe' as const })),
+            ...(resNfceRecentes.data || []).map((n: any) => ({ ...n, tipo: 'nfce' as const }))
+          ]
+          combinados.sort((a, b) => {
+            const dtA = new Date(a.data_emissao || a.created_at).getTime()
+            const dtB = new Date(b.data_emissao || b.created_at).getTime()
+            return dtB - dtA
+          })
+          setDocumentosRecentesReais(combinados.slice(0, 5))
+
+        } catch (errClean) {
+          console.error('Erro ao carregar dados do Modo Clean:', errClean)
+        }
+
       } catch (err) {
         console.error('Erro ao carregar dados do dashboard:', err)
       } finally {
@@ -480,6 +573,8 @@ export default function DashboardPage() {
         isFechamentoModalOpen={isFechamentoModalOpen}
         setIsFechamentoModalOpen={setIsFechamentoModalOpen}
         mesesOpcoes={mesesOpcoes}
+        evolucaoMensal={evolucaoMensalReal}
+        documentosRecentes={documentosRecentesReais}
       />
     )
   }
