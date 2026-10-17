@@ -117,94 +117,31 @@ export default function GlobalClientSelector() {
     return cli.nome_fantasia || null
   }
 
-  // Perfil Cliente: Apenas exibe a sua empresa
+  // Perfil Cliente: sua empresa de referência já é exibida no card completo
   if (userRole === 'cliente') {
-    return (
-      <div className="flex items-center gap-2 bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 px-3 py-1.5 rounded-xl shadow-2xs">
-        <Building2 size={16} className="text-blue-600 dark:text-blue-400 shrink-0" />
-        <div className="flex flex-col min-w-0">
-          <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate max-w-[200px] sm:max-w-[280px]">
-            {selectedCliente ? getNomePrincipal(selectedCliente) : 'Minha Empresa'}
-          </span>
-          {selectedCliente?.cnpj && (
-            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-              {formatarCnpjCpf(selectedCliente.cnpj)}
-            </span>
-          )}
-        </div>
-      </div>
-    )
+    return null
   }
 
   return (
-    <div ref={containerRef} className="relative z-30 flex items-center gap-2">
-      
-      {/* 1. MOCKUP 1: ESTADO COM CLIENTE SELECIONADO */}
-      {selectedCliente ? (
-        <div className="flex items-center gap-2">
-          {/* Pílula de Cliente Ativo conforme Mockup 1 */}
-          <div className="flex items-center gap-2 bg-blue-50/90 hover:bg-blue-100/80 dark:bg-blue-950/50 dark:hover:bg-blue-900/60 border border-blue-200/90 dark:border-blue-800/80 rounded-xl px-3 py-1.5 shadow-2xs transition-all">
-            <span className="text-xs font-bold text-slate-900 dark:text-white truncate max-w-[140px] sm:max-w-[220px] md:max-w-[300px]">
-              {getNomePrincipal(selectedCliente)}
-            </span>
-            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-              • CNPJ {formatarCnpjCpf(selectedCliente.cnpj)}
-            </span>
-            {selectedCliente.regime_tributario && (
-              <span className="hidden lg:inline text-[10px] font-bold text-blue-700 dark:text-blue-300">
-                • {selectedCliente.regime_tributario.replace('_', ' ')}
-              </span>
-            )}
-            
-            {/* Botão X para desmarcar */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                clearSelectedCliente()
-              }}
-              title="Limpar filtro de cliente"
-              className="ml-1 p-0.5 text-slate-400 hover:text-red-500 rounded cursor-pointer transition-colors"
-            >
-              <X size={13} />
-            </button>
-          </div>
-
-          {/* Botão 'Trocar Cliente (Ctrl+K)' conforme Mockup 1 */}
-          <button
-            type="button"
-            onClick={() => {
-              setIsOpen(prev => !prev)
-              setTimeout(() => inputRef.current?.focus(), 50)
-            }}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 shadow-2xs cursor-pointer transition-colors"
-            title="Trocar cliente (Atalho: Ctrl+K)"
-          >
-            <Search size={13} className="text-slate-400" />
-            <span>Trocar Cliente</span>
-            <kbd className="text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-900 px-1 py-0.2 rounded border border-slate-200 dark:border-slate-700">
-              Ctrl+K
-            </kbd>
-          </button>
-        </div>
-      ) : (
-        /* 2. MOCKUP 2: ESTADO SEM CLIENTE SELECIONADO (BARRA DE BUSCA COMPLETA) */
-        <div 
-          onClick={() => {
-            setIsOpen(true)
-            setTimeout(() => inputRef.current?.focus(), 50)
-          }}
-          className="flex items-center gap-2.5 px-3.5 py-1.5 bg-white dark:bg-slate-800 border-2 border-blue-500/80 rounded-xl shadow-xs cursor-pointer min-w-[260px] sm:min-w-[340px] md:min-w-[420px] transition-all"
-        >
-          <Search size={16} className="text-slate-400 shrink-0" />
-          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate flex-1">
-            Buscar cliente por Nome, Razão Social, CNPJ ou Celular...
-          </span>
-          <kbd className="hidden sm:inline text-[10px] font-mono font-bold text-slate-400 bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 shrink-0">
-            Ctrl+K
-          </kbd>
-        </div>
-      )}
+    <div ref={containerRef} className="relative z-30 flex items-center">
+      {/* BARRA DE BUSCA RÁPIDA OMNICHANNEL NO CABEÇALHO (Atalho: Ctrl+K) */}
+      <div 
+        onClick={() => {
+          setIsOpen(true)
+          setTimeout(() => inputRef.current?.focus(), 50)
+        }}
+        className="flex items-center gap-2.5 px-3.5 py-1.5 bg-slate-100/80 hover:bg-slate-200/70 dark:bg-slate-800/80 dark:hover:bg-slate-750 border border-slate-200/80 dark:border-slate-700/80 rounded-xl shadow-2xs cursor-pointer min-w-[200px] sm:min-w-[260px] md:min-w-[320px] transition-all group"
+      >
+        <Search size={14} className="text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 shrink-0 transition-colors" />
+        <span className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate flex-1">
+          {selectedCliente 
+            ? `Empresa: ${getNomePrincipal(selectedCliente)}` 
+            : 'Buscar cliente por Nome, CNPJ ou Celular...'}
+        </span>
+        <kbd className="hidden sm:inline text-[9px] font-mono font-bold text-slate-400 bg-white dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 shrink-0">
+          Ctrl+K
+        </kbd>
+      </div>
 
       {/* 3. MOCKUP 2: DROPDOWN FLUTUANTE DE PESQUISA COM CARDS COMPLETOS */}
       {isOpen && (

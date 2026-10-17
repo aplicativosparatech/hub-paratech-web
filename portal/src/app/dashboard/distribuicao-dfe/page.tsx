@@ -13,6 +13,7 @@ import { createClient } from '@/utils/supabase/client'
 import { formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
 import ResizableSortableTh from '@/components/ui/ResizableSortableTh'
 import { useTableFeatures } from '@/hooks/useTableFeatures'
+import { useGlobalClient } from '@/components/GlobalClientContext'
 
 interface Cliente {
   id: string
@@ -74,10 +75,24 @@ interface ConsultaSalvaItem {
 
 export default function DistribuicaoDfePage() {
   const supabase = createClient()
+  const { selectedClienteId: globalClienteId } = useGlobalClient()
   const [abaAtiva, setAbaAtiva] = useState<'analise' | 'salvas'>('analise')
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loadingClientes, setLoadingClientes] = useState(true)
-  const [selectedClienteId, setSelectedClienteId] = useState<string>('')
+  const [selectedClienteId, setSelectedClienteId] = useState<string>(() => {
+    if (globalClienteId) return globalClienteId
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('hub_paratech_global_cliente') || ''
+    }
+    return ''
+  })
+
+  // Sincroniza sempre que o cliente ativo global mudar
+  useEffect(() => {
+    if (globalClienteId) {
+      setSelectedClienteId(globalClienteId)
+    }
+  }, [globalClienteId])
   
   // Mês de Competência padrão (mês atual YYYY-MM)
   const [competencia, setCompetencia] = useState<string>(() => {
@@ -607,32 +622,8 @@ export default function DistribuicaoDfePage() {
           {/* Card de Filtro e Disparo da Consulta */}
           <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-              {/* Seleção do Cliente */}
-              <div className="md:col-span-5">
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5 flex items-center justify-between">
-                  <span>Empresa / Destinatário:</span>
-                  {clienteAtual && (
-                    <span className="text-[11px] font-normal text-slate-500">
-                      UF: {clienteAtual.uf || 'MG'}
-                    </span>
-                  )}
-                </label>
-                <select
-                  value={selectedClienteId}
-                  onChange={(e) => handleSelectCliente(e.target.value)}
-                  disabled={loadingClientes || loadingConsulta}
-                  className="w-full text-xs font-semibold text-slate-800 bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none transition"
-                >
-                  {clientes.map(cli => (
-                    <option key={cli.id} value={cli.id}>
-                      {cli.razao_social} ({formatarCnpjCpf(cli.cnpj)})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
               {/* Mês de Competência */}
-              <div className="md:col-span-3">
+              <div className="md:col-span-5">
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-bold text-slate-700 uppercase">
                     Mês de Competência:
@@ -682,7 +673,7 @@ export default function DistribuicaoDfePage() {
               </div>
 
               {/* Botão Primário: Analisar */}
-              <div className="md:col-span-4 flex items-center gap-2">
+              <div className="md:col-span-7 flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {

@@ -19,6 +19,7 @@ import SefazStatusBadge from '@/components/SefazStatusBadge'
 import { GlobalClientProvider, useGlobalClient } from '@/components/GlobalClientContext'
 import GlobalClientSelector from '@/components/GlobalClientSelector'
 import InterfaceModeToggle from '@/components/InterfaceModeToggle'
+import GlobalCompanyActiveCard from '@/components/GlobalCompanyActiveCard'
 
 type Role = 'admin' | 'cliente' | 'contabilidade'
 
@@ -736,6 +737,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
 
         {/* 3. CONTEÚDO PRINCIPAL (EXPANDIDO 100% DA LARGURA) */}
         <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 pb-20">
+          <GlobalCompanyActiveCard />
           {children}
         </main>
 
@@ -909,6 +911,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
           
           {/* Área de conteúdo EXPANDIDA com padding inferior para o rodapé fixo */}
           <div className="p-4 sm:p-6 lg:p-8 w-full flex-1 pb-16">
+            <GlobalCompanyActiveCard />
             {children}
           </div>
 

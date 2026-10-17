@@ -364,8 +364,8 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
       {/* Resumo Financeiro da Empresa Selecionada */}
       {clientes.length > 0 && (
         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div className="text-xs text-slate-700 font-medium">
-            Empresa em Análise: <strong className="text-slate-900">{currentCli?.razao_social || 'Empresa'}</strong> {currentCli?.cnpj ? `(${formatarCnpjCpf(currentCli.cnpj)})` : ''}
+          <div className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
+            Totais do Período Filtrado
           </div>
 
           <div className="flex flex-col sm:items-end justify-center gap-1.5 text-right sm:self-end">

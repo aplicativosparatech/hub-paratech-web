@@ -21,7 +21,7 @@ import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
 import { useGlobalClient } from '@/components/GlobalClientContext'
 
 export default function RelatoriosPage() {
-  const { interfaceMode } = useGlobalClient()
+  const { interfaceMode, selectedClienteId: globalClienteId } = useGlobalClient()
   const supabase = createClient()
   const [loading, setLoading] = useState(true)
   const [loadingAudit, setLoadingAudit] = useState(false)
@@ -29,7 +29,19 @@ export default function RelatoriosPage() {
 
   // Dados do Usuário e Clientes
   const [clientes, setClientes] = useState<any[]>([])
-  const [selectedCliente, setSelectedCliente] = useState<string>('')
+  const [selectedCliente, setSelectedCliente] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('hub_paratech_global_cliente') || ''
+    }
+    return ''
+  })
+
+  // Sincronização automática com a empresa selecionada globalmente
+  useEffect(() => {
+    if (globalClienteId) {
+      setSelectedCliente(globalClienteId)
+    }
+  }, [globalClienteId])
   
   // Filtro de Mês/Ano (Padrão: Mês Atual)
   const today = new Date()
@@ -688,108 +700,18 @@ export default function RelatoriosPage() {
         </div>
       </div>
 
-      {/* Barra de Filtros (Cliente + Mês) */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        
-        {/* Seletor e Localizador de Cliente (No Modo Clean, a busca no cabeçalho é a fonte única para toda a aplicação) */}
-        {interfaceMode === 'classico' && userRole !== 'cliente' && clientes.length > 0 && (
-          <div className="flex-1 max-w-xl space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                {userRole === 'admin' ? '🔍 Localizar Cliente (Admin)' : '🏢 Empresa Selecionada (Contabilidade)'}
-              </label>
-              <span className="text-[11px] text-blue-600 font-medium">
-                {clientes.length} {clientes.length === 1 ? 'empresa' : 'empresas'}
-              </span>
-            </div>
-            
-            <div className="flex flex-col sm:flex-row gap-2">
-              {/* Campo de Busca Rápida por Nome, CNPJ ou CPF */}
-              <input
-                type="text"
-                placeholder="Filtrar por nome, CNPJ ou CPF..."
-                value={clientSearchTerm}
-                onChange={e => {
-                  const term = e.target.value
-                  setClientSearchTerm(term)
-                  if (term.trim()) {
-                    const t = term.toLowerCase().trim()
-                    const ct = limparDocumento(t)
-                    const match = clientes.find(c => {
-                      const doc = (c.cnpj || '').toLowerCase()
-                      const cleanDoc = limparDocumento(doc)
-                      return (
-                        (c.razao_social && c.razao_social.toLowerCase().includes(t)) ||
-                        (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(t)) ||
-                        doc.includes(t) ||
-                        (ct && cleanDoc.includes(ct))
-                      )
-                    })
-                    if (match && match.id !== selectedCliente) {
-                      handleSelectCliente(match.id)
-                    }
-                  }
-                }}
-                className="w-full sm:w-1/2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-
-              {/* Select filtrado */}
-              <select
-                value={selectedCliente}
-                onChange={e => handleSelectCliente(e.target.value)}
-                className="w-full sm:w-1/2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-              >
-                {clientes
-                  .filter(c => {
-                    if (!clientSearchTerm) return true
-                    const term = clientSearchTerm.toLowerCase().trim()
-                    const cleanTerm = limparDocumento(term)
-                    const doc = (c.cnpj || '').toLowerCase()
-                    const cleanDoc = limparDocumento(doc)
-                    return (
-                      (c.razao_social && c.razao_social.toLowerCase().includes(term)) ||
-                      (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(term)) ||
-                      doc.includes(term) ||
-                      (cleanTerm && cleanDoc.includes(cleanTerm))
-                    )
-                  })
-                  .map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.razao_social} {c.nome_fantasia ? `(${c.nome_fantasia})` : ''} {c.cnpj ? `— ${formatarCnpjCpf(c.cnpj)}` : ''}
-                    </option>
-                  ))}
-              </select>
-            </div>
-          </div>
-        )}
-
-        {/* Exibição para o Cliente logado (apenas visualização da própria titularidade) */}
-        {userRole === 'cliente' && clientes.length > 0 && (
-          <div className="flex-1 max-w-md">
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-              🏢 Sua Empresa Titular
-            </label>
-            <div className="px-4 py-2.5 bg-blue-50/60 rounded-xl text-sm font-bold text-slate-900 border border-blue-200 flex items-center justify-between">
-              <span>{clientes[0].razao_social}</span>
-              <span className="text-xs font-mono font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-md">
-                {clientes[0].cnpj}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Caso nenhuma empresa seja encontrada */}
-        {clientes.length === 0 && (
-          <div className="flex-1 p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-xs font-medium">
-            ⚠️ Nenhuma empresa vinculada encontrada para este usuário.
-          </div>
-        )}
+      {/* Barra de Filtros (Competência Mês/Ano) */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h3 className="text-sm font-bold text-slate-800">Competência de Análise</h3>
+          <p className="text-xs text-slate-500">Selecione o mês para cálculo e auditoria dos arquivos fiscais da empresa ativa.</p>
+        </div>
 
         {/* Seletor de Competência (Mês/Ano) */}
         <div className="flex items-center gap-3 flex-wrap">
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-              Competência (Mês/Ano)
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+              Mês / Ano
             </label>
             <input
               type="month"
@@ -815,53 +737,6 @@ export default function RelatoriosPage() {
           </div>
         </div>
       </div>
-
-      {/* Card de Detalhes da Empresa Selecionada */}
-      {(() => {
-        const currentCli = clientes.find(c => c.id === selectedCliente)
-        if (!currentCli) return null
-        const contabNome = currentCli.contabilidade_nome || 'Não vinculada'
-        return (
-          <div className="bg-gradient-to-r from-slate-900 to-blue-950 text-white rounded-2xl p-5 shadow-sm border border-slate-800">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-blue-400 mb-3">
-              <Building2 size={16} /> Dados Cadastrais da Empresa Selecionada (Conferência Fiscal)
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 text-sm">
-              <div>
-                <p className="text-slate-400 text-xs">Razão Social</p>
-                <p className="font-semibold text-slate-100 truncate" title={currentCli.razao_social}>{currentCli.razao_social || '—'}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 text-xs">Nome Fantasia</p>
-                <p className="font-semibold text-slate-100 truncate" title={currentCli.nome_fantasia}>{currentCli.nome_fantasia || '—'}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 text-xs">CNPJ / CPF</p>
-                <p className="font-semibold font-mono text-blue-300">{currentCli.cnpj || '—'}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 text-xs">Regime Tributário</p>
-                <p className="font-semibold text-amber-300">
-                  {currentCli.regime_tributario === 'simples_nacional' && 'Simples Nacional'}
-                  {currentCli.regime_tributario === 'simples_nacional_excesso' && 'Simples (Excesso)'}
-                  {currentCli.regime_tributario === 'lucro_presumido' && 'Lucro Presumido'}
-                  {currentCli.regime_tributario === 'lucro_real' && 'Lucro Real'}
-                  {currentCli.regime_tributario === 'mei' && 'MEI'}
-                  {!currentCli.regime_tributario && 'Simples Nacional'}
-                </p>
-              </div>
-              <div>
-                <p className="text-slate-400 text-xs">WhatsApp / Contato</p>
-                <p className="font-semibold text-slate-100">{currentCli.whatsapp || '—'}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 text-xs">Contabilidade</p>
-                <p className="font-semibold text-emerald-400 truncate" title={contabNome}>{contabNome}</p>
-              </div>
-            </div>
-          </div>
-        )
-      })()}
 
       {/* CARDS DE RESUMO DE FATURAMENTO CONSOLIDADO */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

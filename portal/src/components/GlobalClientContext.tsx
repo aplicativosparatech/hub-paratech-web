@@ -20,6 +20,7 @@ export interface ClienteItem {
   certificado_validade?: string | null
   logo_url?: string | null
   contabilidade_id?: string | null
+  contabilidade_nome?: string | null
   is_ativo?: boolean
 }
 
@@ -236,6 +237,18 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
         }
       }
 
+      // Enriquecer clientes com os nomes das contabilidades vinculadas
+      try {
+        const { data: contabs } = await supabase.from('contabilidades').select('id, razao_social, nome')
+        const contabMap = new Map((contabs || []).map(c => [c.id, c.nome || c.razao_social]))
+        clisData = clisData.map(c => ({
+          ...c,
+          contabilidade_nome: c.contabilidade_id ? (contabMap.get(c.contabilidade_id) || 'Não vinculada') : 'Não vinculada'
+        }))
+      } catch (errContabs) {
+        console.warn('Erro ao mapear nomes de contabilidades:', errContabs)
+      }
+
       setClientes(clisData)
 
       // Carrega permissão de alternância de interface
@@ -264,7 +277,8 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
         console.warn('Erro ao carregar permissão troca_modo_interface:', errPerm)
       }
 
-      // Se havia um cliente salvo, verificar se ele ainda existe na lista
+      // Se havia um cliente salvo no localStorage/sessionStorage, mantém ele.
+      // Se não havia ou não existe mais, e há clientes disponíveis, seleciona o primeiro cliente da lista.
       _setSelectedClienteId(prev => {
         if (role === 'cliente' && clisData.length > 0) {
           return clisData[0].id
@@ -272,7 +286,18 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
         if (prev && clisData.some(c => c.id === prev)) {
           return prev
         }
-        // No modo clássico ou se for o primeiro acesso, padrão pode ser '' (nenhum/todos)
+        const saved = typeof window !== 'undefined' ? localStorage.getItem(GLOBAL_CLIENT_STORAGE_KEY) : null
+        if (saved && clisData.some(c => c.id === saved)) {
+          return saved
+        }
+        if (clisData.length > 0) {
+          const defaultId = clisData[0].id
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(GLOBAL_CLIENT_STORAGE_KEY, defaultId)
+            sessionStorage.setItem('hub_paratech_nf_filter_cliente', defaultId)
+          }
+          return defaultId
+        }
         return ''
       })
     } catch (err: any) {

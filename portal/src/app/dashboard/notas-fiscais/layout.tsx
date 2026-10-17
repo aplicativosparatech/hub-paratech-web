@@ -23,9 +23,6 @@ export default function NotasFiscaisLayout({
           <p className="text-slate-500 mt-1">Gerenciamento e download de XMLs armazenados pelos Hubs.</p>
         </header>
 
-        {/* Barra Superior Global com Identificação e Seletor da Empresa em Análise */}
-        <NotasFiscaisCompanyHeader />
-
       {/* Navegação Principal: Entradas e Saídas */}
       <div className="flex border-b border-slate-200 mb-6">
         <Link 
