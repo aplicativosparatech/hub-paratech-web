@@ -11,11 +11,20 @@ import {
 import Link from 'next/link'
 import CertificadoAlertaBanner from '@/components/CertificadoAlertaBanner'
 import FechamentoFiscalModal from '@/components/FechamentoFiscalModal'
+import { useGlobalClient } from '@/components/GlobalClientContext'
+import CleanDashboardView from '@/components/CleanDashboardView'
 
 type TipoPeriodoDashboard = 'tudo' | 'mes_atual' | 'mes_anterior' | 'personalizado'
 
 export default function DashboardPage() {
   const supabase = createClient()
+  const { 
+    interfaceMode, 
+    selectedClienteId: globalClienteId, 
+    setSelectedClienteId: setGlobalClienteId,
+    selectedCliente: globalCliente 
+  } = useGlobalClient()
+
   const [loading, setLoading] = useState(true)
   const [loadingNotas, setLoadingNotas] = useState(false)
   const [userRole, setUserRole] = useState<'admin' | 'contabilidade' | 'cliente'>('admin')
@@ -254,10 +263,11 @@ export default function DashboardPage() {
         let qNfceSaidas = supabase.from('nfce_saidas').select('id, valor, data_emissao')
         let qNfeEntradas = supabase.from('nfe_entradas').select('id, valor, data_emissao')
 
-        if (currentRole === 'cliente' && userRoleData?.cliente_id) {
-          qNfeSaidas = qNfeSaidas.eq('cliente_id', userRoleData.cliente_id)
-          qNfceSaidas = qNfceSaidas.eq('cliente_id', userRoleData.cliente_id)
-          qNfeEntradas = qNfeEntradas.eq('cliente_id', userRoleData.cliente_id)
+        const clienteFiltroId = (currentRole === 'cliente' && userRoleData?.cliente_id) || globalClienteId || selectedClienteId
+        if (clienteFiltroId) {
+          qNfeSaidas = qNfeSaidas.eq('cliente_id', clienteFiltroId)
+          qNfceSaidas = qNfceSaidas.eq('cliente_id', clienteFiltroId)
+          qNfeEntradas = qNfeEntradas.eq('cliente_id', clienteFiltroId)
         }
 
         // Aplica filtro de período
@@ -334,7 +344,7 @@ export default function DashboardPage() {
     }
 
     loadDashboard()
-  }, [filtroPeriodo, dataInicioPersonalizada, dataFimPersonalizada])
+  }, [filtroPeriodo, dataInicioPersonalizada, dataFimPersonalizada, globalClienteId])
 
   // Determina a cor do card de faturas segundo as regras solicitadas:
   // - Amarelo quando tiver >= 20% e < 50%
@@ -446,6 +456,32 @@ export default function DashboardPage() {
     return Boolean(matchNome || matchCnpj || matchTelefone)
   })
 
+  // =========================================================================
+  // MODO CLEAN: RENDERIZA O DASHBOARD MINIMALISTA ESTRITAMENTE CONFORME MOCKUP 1
+  // =========================================================================
+  if (interfaceMode === 'clean') {
+    return (
+      <CleanDashboardView
+        metrics={metrics}
+        certAlerta={certAlerta}
+        listaClientes={listaClientes}
+        selectedClienteId={globalClienteId || selectedClienteId}
+        setSelectedClienteId={(id) => {
+          setSelectedClienteId(id)
+          setGlobalClienteId(id)
+        }}
+        mesCompetencia={mesCompetencia}
+        setMesCompetencia={setMesCompetencia}
+        isFechamentoModalOpen={isFechamentoModalOpen}
+        setIsFechamentoModalOpen={setIsFechamentoModalOpen}
+        mesesOpcoes={mesesOpcoes}
+      />
+    )
+  }
+
+  // =========================================================================
+  // MODO CLÁSSICO: RENDERIZA O DASHBOARD ORIGINAL COM TODOS OS 8 CARDS & SANFONA
+  // =========================================================================
   return (
     <div className="p-6 sm:p-8 space-y-6">
       

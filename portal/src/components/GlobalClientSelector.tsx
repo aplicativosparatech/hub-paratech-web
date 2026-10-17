@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { 
   Building2, Search, X, Check, ChevronDown, 
-  Phone, ShieldCheck, AlertCircle, Sparkles, Building
+  Phone, ShieldCheck, AlertCircle, Sparkles, Building, Store
 } from 'lucide-react'
 import { useGlobalClient, ClienteItem } from './GlobalClientContext'
 import { formatarCnpjCpf, limparDocumento } from '@/utils/cnpjAlfanumerico'
@@ -108,7 +108,7 @@ export default function GlobalClientSelector() {
     return cli.nome_fantasia || null
   }
 
-  // Perfil Cliente: Apenas exibe o nome da sua própria empresa (travado e seguro)
+  // Perfil Cliente: Apenas exibe a sua empresa
   if (userRole === 'cliente') {
     return (
       <div className="flex items-center gap-2 bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 px-3 py-1.5 rounded-xl shadow-2xs">
@@ -128,86 +128,80 @@ export default function GlobalClientSelector() {
   }
 
   return (
-    <div ref={containerRef} className="relative z-30 flex items-center">
+    <div ref={containerRef} className="relative z-30 flex items-center gap-2">
       
-      {/* 1. ESTADO: CLIENTE SELECIONADO (PÍLULA COMPACTA E ELEGANTE) */}
+      {/* 1. MOCKUP 1: ESTADO COM CLIENTE SELECIONADO */}
       {selectedCliente ? (
-        <div className="flex items-center gap-1.5 bg-blue-50/90 hover:bg-blue-100/70 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 border border-blue-200/90 dark:border-blue-800/70 rounded-xl p-1 pl-2.5 transition-all shadow-2xs group">
+        <div className="flex items-center gap-2">
+          {/* Pílula de Cliente Ativo conforme Mockup 1 */}
+          <div className="flex items-center gap-2 bg-blue-50/90 hover:bg-blue-100/80 dark:bg-blue-950/50 dark:hover:bg-blue-900/60 border border-blue-200/90 dark:border-blue-800/80 rounded-xl px-3 py-1.5 shadow-2xs transition-all">
+            <span className="text-xs font-bold text-slate-900 dark:text-white truncate max-w-[140px] sm:max-w-[220px] md:max-w-[300px]">
+              {getNomePrincipal(selectedCliente)}
+            </span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+              • CNPJ {formatarCnpjCpf(selectedCliente.cnpj)}
+            </span>
+            {selectedCliente.regime_tributario && (
+              <span className="hidden lg:inline text-[10px] font-bold text-blue-700 dark:text-blue-300">
+                • {selectedCliente.regime_tributario.replace('_', ' ')}
+              </span>
+            )}
+            
+            {/* Botão X para desmarcar */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                clearSelectedCliente()
+              }}
+              title="Limpar filtro de cliente"
+              className="ml-1 p-0.5 text-slate-400 hover:text-red-500 rounded cursor-pointer transition-colors"
+            >
+              <X size={13} />
+            </button>
+          </div>
+
+          {/* Botão 'Trocar Cliente (Ctrl+K)' conforme Mockup 1 */}
           <button
             type="button"
             onClick={() => {
               setIsOpen(prev => !prev)
               setTimeout(() => inputRef.current?.focus(), 50)
             }}
-            className="flex items-center gap-2 text-left cursor-pointer outline-none"
-            title="Clique para trocar de empresa (ou use Ctrl+K)"
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 shadow-2xs cursor-pointer transition-colors"
+            title="Trocar cliente (Atalho: Ctrl+K)"
           >
-            <div className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
-              <Building2 size={13} />
-            </div>
-            
-            <div className="flex flex-col min-w-0 pr-1 max-w-[180px] sm:max-w-[260px] md:max-w-[320px]">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                  {getNomePrincipal(selectedCliente)}
-                </span>
-                {selectedCliente.regime_tributario && (
-                  <span className="hidden xl:inline-block text-[9px] uppercase font-bold px-1.5 py-0.2 bg-blue-200/60 dark:bg-blue-900/80 text-blue-800 dark:text-blue-300 rounded border border-blue-300/40 dark:border-blue-700/50 shrink-0">
-                    {selectedCliente.regime_tributario.replace('_', ' ')}
-                  </span>
-                )}
-              </div>
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate">
-                CNPJ: {formatarCnpjCpf(selectedCliente.cnpj)}
-              </span>
-            </div>
-
-            <ChevronDown size={14} className="text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors ml-0.5" />
-          </button>
-
-          {/* Botão Limpar Filtro (Voltar para Todos / Nenhum) */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              clearSelectedCliente()
-            }}
-            title="Limpar filtro e voltar para Todos os Clientes"
-            className="p-1 text-slate-400 hover:text-red-500 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-          >
-            <X size={14} />
+            <Search size={13} className="text-slate-400" />
+            <span>Trocar Cliente</span>
+            <kbd className="text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-900 px-1 py-0.2 rounded border border-slate-200 dark:border-slate-700">
+              Ctrl+K
+            </kbd>
           </button>
         </div>
       ) : (
-        /* 2. ESTADO: NENHUM CLIENTE SELECIONADO (BARRA DE BUSCA RÁPIDA) */
-        <button
-          type="button"
+        /* 2. MOCKUP 2: ESTADO SEM CLIENTE SELECIONADO (BARRA DE BUSCA COMPLETA) */
+        <div 
           onClick={() => {
             setIsOpen(true)
             setTimeout(() => inputRef.current?.focus(), 50)
           }}
-          className="flex items-center gap-2.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700/80 rounded-xl transition-all shadow-2xs cursor-pointer group text-xs font-medium"
-          title="Pesquise por Nome Fantasia, Razão Social, CNPJ, Telefone ou Cidade (Atalho: Ctrl + K)"
+          className="flex items-center gap-2.5 px-3.5 py-1.5 bg-white dark:bg-slate-800 border-2 border-blue-500/80 rounded-xl shadow-xs cursor-pointer min-w-[260px] sm:min-w-[340px] md:min-w-[420px] transition-all"
         >
-          <Search size={15} className="text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
-          <span className="hidden sm:inline text-slate-700 dark:text-slate-300 font-medium">
-            Filtrar Cliente <span className="text-slate-400 text-[11px] font-normal">(Razão, Fantasia, CNPJ, Celular...)</span>
+          <Search size={16} className="text-slate-400 shrink-0" />
+          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate flex-1">
+            Buscar cliente por Nome, Razão Social, CNPJ ou Celular...
           </span>
-          <span className="sm:hidden text-slate-700 dark:text-slate-300 font-medium">
-            Filtrar Cliente
-          </span>
-          
-          <kbd className="hidden md:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-bold text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded shadow-2xs">
-            Ctrl K
+          <kbd className="hidden sm:inline text-[10px] font-mono font-bold text-slate-400 bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 shrink-0">
+            Ctrl+K
           </kbd>
-        </button>
+        </div>
       )}
 
-      {/* 3. DROPDOWN FLUTUANTE DE PESQUISA RÁPIDA */}
+      {/* 3. MOCKUP 2: DROPDOWN FLUTUANTE DE PESQUISA COM CARDS COMPLETOS */}
       {isOpen && (
-        <div className="absolute top-full left-0 mt-2 w-[340px] sm:w-[480px] md:w-[540px] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute top-full left-0 mt-2 w-[340px] sm:w-[480px] md:w-[540px] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in zoom-in-95 duration-150 z-50">
           
-          {/* Header do Dropdown com Input de Pesquisa */}
+          {/* Header do Dropdown com Input de Pesquisa Rápida */}
           <div className="p-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-950/40">
             <div className="relative flex items-center">
               <Search size={16} className="absolute left-3 text-slate-400 pointer-events-none" />
@@ -216,7 +210,7 @@ export default function GlobalClientSelector() {
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar por Razão, Fantasia, CNPJ, Celular, Cidade..."
+                placeholder="Buscar por Nome, Razão Social, CNPJ, Celular..."
                 className="w-full pl-9 pr-8 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
                 autoFocus
               />
@@ -230,41 +224,29 @@ export default function GlobalClientSelector() {
                 </button>
               )}
             </div>
-            
-            <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium mt-2 px-1">
-              <span>{clientesFiltrados.length} empresas disponíveis</span>
-              <span>Pressione <kbd className="bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded text-[9px] font-bold text-slate-600 dark:text-slate-300">Esc</kbd> para fechar</span>
-            </div>
           </div>
 
-          {/* Opção Rápida: Nenhum / Todos os Clientes */}
-          <div className="p-2 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/30 dark:bg-slate-950/20">
+          {/* Opção Topo do Mockup 2: 'Todos os Clientes / Limpar Filtro' */}
+          <div className="p-2 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/40 dark:bg-slate-950/20">
             <button
               type="button"
               onClick={() => handleSelect('')}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs transition cursor-pointer ${
                 !selectedClienteId
                   ? 'bg-blue-600 text-white font-bold shadow-xs'
-                  : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                  : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold'
               }`}
             >
-              <div className="flex items-center gap-2.5">
-                <div className={`p-1.5 rounded-lg ${!selectedClienteId ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-500'}`}>
-                  <Building size={14} />
-                </div>
-                <div>
-                  <p className="font-bold">Nenhum Cliente (Visão Geral / Todos)</p>
-                  <p className={`text-[10px] ${!selectedClienteId ? 'text-blue-100' : 'text-slate-400'}`}>
-                    Exibe dados agregados de todas as empresas
-                  </p>
-                </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm">≡</span>
+                <span>Todos os Clientes / Limpar Filtro</span>
               </div>
               {!selectedClienteId && <Check size={16} className="text-white" />}
             </button>
           </div>
 
-          {/* Lista Rolável de Clientes */}
-          <div className="max-h-72 overflow-y-auto p-1.5 space-y-1 custom-scrollbar">
+          {/* Lista Rolável de Cards de Clientes (Fiel ao Mockup 2) */}
+          <div className="max-h-80 overflow-y-auto p-2 space-y-2 custom-scrollbar">
             {loadingClientes ? (
               <div className="py-8 text-center text-xs text-slate-400 flex flex-col items-center gap-2">
                 <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
@@ -287,84 +269,64 @@ export default function GlobalClientSelector() {
                     key={cli.id}
                     type="button"
                     onClick={() => handleSelect(cli.id)}
-                    className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition cursor-pointer group ${
+                    className={`w-full flex items-start gap-3 p-3 rounded-2xl text-left transition cursor-pointer border ${
                       isSelected
-                        ? 'bg-blue-50 dark:bg-blue-950/60 border border-blue-300 dark:border-blue-800'
-                        : 'hover:bg-slate-100 dark:hover:bg-slate-800/70 border border-transparent'
+                        ? 'bg-blue-50/80 dark:bg-blue-950/60 border-blue-400 dark:border-blue-700 shadow-xs'
+                        : 'bg-white dark:bg-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-800 border-slate-200/90 dark:border-slate-700 shadow-2xs'
                     }`}
                   >
-                    <div className="flex items-start gap-2.5 min-w-0 pr-2">
-                      <div className={`mt-0.5 p-1.5 rounded-lg shrink-0 ${
-                        isSelected 
-                          ? 'bg-blue-600 text-white' 
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:text-blue-600'
-                      }`}>
-                        <Building2 size={15} />
-                      </div>
-
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className={`text-xs font-bold truncate ${isSelected ? 'text-blue-900 dark:text-blue-200' : 'text-slate-900 dark:text-slate-100'}`}>
-                            {nomePrincipal}
-                          </p>
-                          {cli.uf && (
-                            <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.2 rounded shrink-0">
-                              {cli.uf}
-                            </span>
-                          )}
-                        </div>
-
-                        {nomeSecundario && (
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                            {nomeSecundario}
-                          </p>
-                        )}
-
-                        <div className="flex flex-wrap items-center gap-2 mt-1">
-                          <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700/80">
-                            {cnpjFormatado}
-                          </span>
-
-                          {cli.regime_tributario && (
-                            <span className="text-[9px] uppercase font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/40 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">
-                              {cli.regime_tributario.replace('_', ' ')}
-                            </span>
-                          )}
-
-                          {(cli.whatsapp || cli.celular || cli.telefone) && (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400">
-                              <Phone size={10} />
-                              {cli.whatsapp || cli.celular || cli.telefone}
-                            </span>
-                          )}
-
-                          {cli.certificado_url && (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-cyan-600 dark:text-cyan-400 font-medium" title="Certificado A1 Configurado">
-                              <ShieldCheck size={11} />
-                              A1
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                    {/* Ícone de Loja/Empresa conforme Mockup 2 */}
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                      isSelected 
+                        ? 'bg-blue-600 text-white border-blue-600' 
+                        : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600'
+                    }`}>
+                      <Store size={20} />
                     </div>
 
-                    {isSelected && (
-                      <div className="shrink-0 w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-xs">
-                        <Check size={14} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <h4 className="font-extrabold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
+                          {nomePrincipal}
+                        </h4>
+                        {isSelected && (
+                          <span className="text-[10px] font-bold text-blue-600 bg-blue-100 dark:bg-blue-900/60 px-2 py-0.2 rounded-full shrink-0">
+                            Selecionado
+                          </span>
+                        )}
                       </div>
-                    )}
+
+                      {nomeSecundario && (
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                          {nomeSecundario}
+                        </p>
+                      )}
+
+                      {/* Badges de CNPJ e Regime Tributário conforme Mockup 2 */}
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700/80 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-600">
+                          CNPJ: {cnpjFormatado}
+                        </span>
+
+                        {cli.regime_tributario && (
+                          <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700/80 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-600">
+                            {cli.regime_tributario.replace('_', ' ')}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Telefone/Celular conforme Mockup 2 */}
+                      {(cli.whatsapp || cli.celular || cli.telefone) && (
+                        <div className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400 mt-1.5 font-medium">
+                          <Phone size={11} className="text-emerald-600 dark:text-emerald-400" />
+                          <span>{cli.whatsapp || cli.celular || cli.telefone}</span>
+                        </div>
+                      )}
+                    </div>
                   </button>
                 )
               })
             )}
-          </div>
-
-          {/* Footer Informativo */}
-          <div className="p-2.5 bg-slate-50 dark:bg-slate-950/60 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400 px-3">
-            <span className="flex items-center gap-1">
-              <Sparkles size={12} className="text-amber-500" />
-              O cliente escolhido permanece ativo em todas as abas.
-            </span>
           </div>
         </div>
       )}

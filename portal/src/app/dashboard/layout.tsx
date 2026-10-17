@@ -7,25 +7,35 @@ import {
   LogOut, BarChart3, Receipt, FileDown, PlugZap, UserCircle,
   Menu, X, Sliders, ShieldCheck, Sparkles, Database,
   Maximize2, Minimize2, Sun, Moon, Palette, ScanText, GraduationCap, Inbox,
-  PanelLeftClose, PanelLeftOpen
+  PanelLeftClose, PanelLeftOpen, Bell, ChevronDown
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { PermissoesMap } from '@/utils/permissoes'
 import { APP_VERSION } from '@/utils/version'
 import TabHeaderBanner from '@/components/TabHeaderBanner'
 import SefazStatusBadge from '@/components/SefazStatusBadge'
-import { GlobalClientProvider } from '@/components/GlobalClientContext'
+import { GlobalClientProvider, useGlobalClient } from '@/components/GlobalClientContext'
 import GlobalClientSelector from '@/components/GlobalClientSelector'
 import InterfaceModeToggle from '@/components/InterfaceModeToggle'
 
 type Role = 'admin' | 'cliente' | 'contabilidade'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <GlobalClientProvider>
+      <DashboardLayoutContent>{children}</DashboardLayoutContent>
+    </GlobalClientProvider>
+  )
+}
+
+function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
+  const { interfaceMode, userRole: globalRole } = useGlobalClient()
+
   const [role, setRole] = useState<Role | null>(null)
   const [permissoesMap, setPermissoesMap] = useState<PermissoesMap>({})
   const [loading, setLoading] = useState(true)
@@ -33,6 +43,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [maisMenuOpen, setMaisMenuOpen] = useState(false)
+  const maisMenuRef = useRef<HTMLDivElement>(null)
+
+  // Fecha menu Mais ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (maisMenuRef.current && !maisMenuRef.current.contains(e.target as Node)) {
+        setMaisMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   // Carregar preferência salva do menu lateral recolhido
   useEffect(() => {
@@ -224,6 +247,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Fecha o menu mobile ao navegar
   useEffect(() => {
     setMobileMenuOpen(false)
+    setMaisMenuOpen(false)
   }, [pathname])
 
   const handleLogout = async () => {
@@ -240,7 +264,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     )
   }
 
-  // Componente de Link Customizado para o Menu
+  const isClean = interfaceMode === 'clean'
+
+  // Componente de Link Customizado para o Menu Lateral Clássico
   const NavItem = ({ href, icon: Icon, label }: { href: string, icon: any, label: string }) => {
     const isActive = pathname === href || pathname.startsWith(href + '/')
     return (
@@ -411,7 +437,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <InterfaceModeToggle variant="sidebar" isCollapsed={isCollapsed} />
       </div>
 
-      {/* User Card Inferior e Botão Toggle (Recolher Menu) perto do botão Sair */}
+      {/* User Card Inferior e Botão Toggle (Recolher Menu) */}
       <div className={`p-3 ${isCollapsed ? 'p-2' : 'lg:p-4'} border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 mt-auto`}>
         {!isCollapsed ? (
           <div className="flex items-center gap-3 px-3 py-2 mb-2.5 bg-white dark:bg-slate-800/80 rounded-xl shadow-2xs border border-slate-200 dark:border-slate-700">
@@ -431,7 +457,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         )}
 
-        {/* Botão Toggle para Recolher / Expandir Menu Lateral (Perto do botão Sair) */}
+        {/* Botão Toggle para Recolher / Expandir Menu Lateral */}
         <button 
           type="button"
           onClick={toggleSidebar}
@@ -473,37 +499,326 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     </>
   )
 
-  return (
-    <GlobalClientProvider>
-      <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 font-sans transition-colors duration-200">
+  // =========================================================================
+  // MODO CLEAN: LAYOUT MINIMALISTA, SEM SIDEBAR FIXA, COM ABAS HORIZONTAIS
+  // ESTRITAMENTE CONFORME O MOCKUP 1 (media_1792253996470_339c80fd.png)
+  // =========================================================================
+  if (isClean) {
+    // Links das Abas Horizontais conforme Mockup 1
+    const cleanNavTabs = [
+      { href: '/dashboard', label: 'Visão Geral' },
+      { href: '/dashboard/notas-fiscais', label: 'Notas Fiscais' },
+      { href: '/dashboard/distribuicao-dfe', label: 'Distribuição DF-e' },
+      { href: '/dashboard/relatorios?tab=monofasicos', label: 'Monofásicos' },
+      { href: '/dashboard/relatorios', label: 'Relatórios' },
+      ...(role === 'admin' ? [
+        { href: '/dashboard/clientes', label: 'Clientes' },
+        { href: '/dashboard/contabilidades', label: 'Contabilidades' },
+        { href: '/dashboard/faturas', label: 'Faturas' }
+      ] : []),
+      ...(role === 'contabilidade' ? [
+        { href: '/dashboard/meus-clientes', label: 'Meus Clientes' }
+      ] : []),
+      ...(role === 'cliente' ? [
+        { href: '/dashboard/minhas-faturas', label: 'Minhas Faturas' }
+      ] : [])
+    ]
+
+    return (
+      <div className="min-h-screen flex flex-col bg-[#F8FAFC] dark:bg-[#06090F] font-sans transition-colors duration-200 text-slate-900 dark:text-slate-100">
         
-        {/* 0. Banner Ilustrado Panorâmico no Topo (100% de largura - Visível apenas no Modo Clássico) */}
-        <TabHeaderBanner />
+        {/* 1. TOPBAR MODERNA E ULTRA-CLEAN (CONFORME MOCKUP 1) */}
+        <header className="h-16 bg-white dark:bg-[#0B1120] border-b border-slate-200/80 dark:border-slate-800/80 px-4 sm:px-6 lg:px-8 flex items-center justify-between sticky top-0 z-40 transition-colors gap-3 sm:gap-6">
+          
+          {/* Lado Esquerdo: Botão Mobile + Logo Mockup 1 */}
+          <div className="flex items-center gap-3 shrink-0">
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="lg:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              aria-label="Abrir Navegação Completa"
+            >
+              <Menu size={20} />
+            </button>
 
-        <div className="flex-1 flex overflow-hidden relative">
-          {/* 1. Sidebar Desktop (Fixa na esquerda, com suporte a recolher) */}
-          <aside className={`hidden md:flex ${isCollapsed ? 'w-20' : 'w-64 lg:w-72'} bg-white dark:bg-[#0B1120] border-r border-slate-200 dark:border-slate-800 flex-col shadow-xs relative z-10 flex-shrink-0 transition-all duration-300 ease-in-out`}>
-            <SidebarContent />
-          </aside>
-
-          {/* 2. Sidebar Mobile (Drawer com Overlay) */}
-          {mobileMenuOpen && (
-            <div className="fixed inset-0 z-50 md:hidden flex">
-              {/* Backdrop escuro com clique para fechar */}
-              <div 
-                className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity" 
-                onClick={() => setMobileMenuOpen(false)} 
-              />
-              {/* Menu Drawer Deslizante */}
-              <div className="relative w-72 max-w-[85vw] bg-white dark:bg-[#0B1120] h-full flex flex-col shadow-2xl z-10 transition-colors duration-200">
-                <SidebarContent />
+            <Link href="/dashboard" className="flex items-center gap-2 group">
+              {/* Ícone de 4 esferas / nós estilizados (Estilo Mockup 1) */}
+              <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white font-black text-sm shadow-sm group-hover:scale-105 transition-transform">
+                <Sparkles size={16} />
               </div>
-            </div>
-          )}
+              <span className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+                Hub<span className="text-blue-600 font-extrabold">Paratech</span>
+              </span>
+            </Link>
+          </div>
 
-          {/* 3. Main Content (Totalmente expandido em 100% da tela) */}
-          <main className="flex-1 flex flex-col h-full overflow-y-auto bg-[#F8FAFC] dark:bg-[#06090F] transition-colors duration-200">
-          {/* Topbar moderna, limpa e responsiva */}
+          {/* Centro: Seletor Global de Cliente Omnichannel (Mockup 1 & 2) */}
+          <div className="flex-1 flex justify-center max-w-2xl px-1">
+            <GlobalClientSelector />
+          </div>
+
+          {/* Lado Direito: Notificações, Modo Toggle, Tema, Kiosk, Perfil */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            
+            {/* Ícone de Notificações conforme Mockup 1 */}
+            <button
+              type="button"
+              title="Notificações do Hub"
+              onClick={() => toast('Nenhuma notificação crítica pendente.', { icon: '🔔' })}
+              className="p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-800 transition cursor-pointer shadow-2xs"
+            >
+              <Bell size={17} />
+            </button>
+
+            {/* Alternador de Modo de Interface (Modo Clean vs Modo Clássico) */}
+            <InterfaceModeToggle />
+
+            {/* Alternador de Tema Claro / Escuro */}
+            <div className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-800/80 p-0.5 rounded-xl border border-slate-200/80 dark:border-slate-700 text-xs">
+              <button
+                type="button"
+                onClick={() => handleSetTheme('light')}
+                className={`p-1.5 rounded-lg transition cursor-pointer ${theme === 'light' ? 'bg-white text-amber-600 shadow-xs' : 'text-slate-400 hover:text-slate-700'}`}
+                title="Tema Claro"
+              >
+                <Sun size={14} className={theme === 'light' ? 'fill-amber-400/30' : ''} />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetTheme('dark')}
+                className={`p-1.5 rounded-lg transition cursor-pointer ${theme === 'dark' ? 'bg-slate-900 text-indigo-400 shadow-xs' : 'text-slate-400 hover:text-slate-200'}`}
+                title="Tema Escuro"
+              >
+                <Moon size={14} className={theme === 'dark' ? 'fill-indigo-400/30' : ''} />
+              </button>
+            </div>
+
+            {/* Botão Kiosk / Tela Cheia */}
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              className="hidden md:flex p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-800 transition cursor-pointer shadow-2xs"
+              title={isFullscreen ? "Sair da Tela Cheia (F11)" : "Modo Tela Cheia (F11)"}
+            >
+              {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            </button>
+
+            {/* Avatar do Usuário conforme Mockup 1 */}
+            <div className="flex items-center gap-2 pl-1">
+              <div 
+                className="w-8 h-8 rounded-full bg-slate-900 dark:bg-blue-600 text-white font-bold text-xs flex items-center justify-center uppercase shadow-sm border border-slate-200 dark:border-slate-700 cursor-pointer"
+                title={`Perfil Conectado: ${role}`}
+              >
+                {role?.charAt(0) || 'U'}
+              </div>
+              <button
+                type="button"
+                onClick={handleLogout}
+                title="Encerrar Sessão"
+                className="hidden xl:flex text-slate-400 hover:text-red-500 p-1.5 rounded-lg transition"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
+
+          </div>
+        </header>
+
+        {/* 2. SUB-NAVBAR COM ABAS HORIZONTAIS (ESTRITAMENTE CONFORME MOCKUP 1) */}
+        <div className="bg-white dark:bg-[#0B1120] border-b border-slate-200/80 dark:border-slate-800 px-4 sm:px-6 lg:px-8 flex items-center justify-between sticky top-16 z-30 shadow-2xs">
+          
+          <nav className="flex items-center gap-6 sm:gap-8 overflow-x-auto no-scrollbar py-0.5">
+            {cleanNavTabs.map(tab => {
+              const isTabActive = tab.href === '/dashboard' 
+                ? pathname === '/dashboard'
+                : pathname === tab.href || pathname.startsWith(tab.href + '/')
+              
+              return (
+                <Link
+                  key={tab.href}
+                  href={tab.href}
+                  className={`text-sm font-semibold transition-all py-3 px-1 whitespace-nowrap relative ${
+                    isTabActive
+                      ? 'text-slate-900 dark:text-white font-bold after:content-[""] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2.5px] after:bg-slate-900 dark:after:bg-blue-500 after:rounded-full'
+                      : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                  }`}
+                >
+                  {tab.label}
+                </Link>
+              )
+            })}
+
+            {/* Menu Dropdown 'Mais Ferramentas' no Modo Clean */}
+            <div ref={maisMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setMaisMenuOpen(prev => !prev)}
+                className={`flex items-center gap-1.5 text-sm font-semibold py-3 px-1 transition-colors cursor-pointer ${
+                  maisMenuOpen 
+                    ? 'text-blue-600 dark:text-blue-400' 
+                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                }`}
+              >
+                <span>Mais</span>
+                <ChevronDown size={14} className={`transition-transform duration-150 ${maisMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {maisMenuOpen && (
+                <div className="absolute left-0 top-full mt-1 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1 mb-1">
+                    Ferramentas & Sistema
+                  </div>
+                  <Link
+                    href="/dashboard/corretor-tributario"
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  >
+                    <Sparkles size={15} className="text-blue-600" />
+                    <span>Analisador Tributário</span>
+                  </Link>
+                  <Link
+                    href="/dashboard/saneador-arquivos"
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  >
+                    <Database size={15} className="text-indigo-600" />
+                    <span>Saneador de Arquivos</span>
+                  </Link>
+                  <Link
+                    href="/dashboard/sugestor-tributario"
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  >
+                    <ScanText size={15} className="text-teal-600" />
+                    <span>Sugestor Tributário</span>
+                  </Link>
+                  <Link
+                    href="/dashboard/integracoes"
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  >
+                    <PlugZap size={15} className="text-amber-600" />
+                    <span>Integrações (APIs)</span>
+                  </Link>
+                  {role === 'admin' && (
+                    <Link
+                      href="/dashboard/permissoes"
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                    >
+                      <ShieldCheck size={15} className="text-emerald-600" />
+                      <span>Permissões</span>
+                    </Link>
+                  )}
+                  <Link
+                    href="/dashboard/aparencia"
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  >
+                    <Palette size={15} className="text-purple-600" />
+                    <span>Aparência & Interface</span>
+                  </Link>
+                  <Link
+                    href="/dashboard/configuracoes"
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  >
+                    <Settings size={15} className="text-slate-500" />
+                    <span>Configurações Hub</span>
+                  </Link>
+                  <Link
+                    href="/dashboard/tutorial"
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  >
+                    <GraduationCap size={15} className="text-blue-500" />
+                    <span>Tutorial & Tour IA</span>
+                  </Link>
+                </div>
+              )}
+            </div>
+          </nav>
+
+          {/* Status SEFAZ Discreto na Sub-Navbar */}
+          <div className="hidden lg:flex items-center gap-2">
+            <SefazStatusBadge />
+          </div>
+        </div>
+
+        {/* 3. CONTEÚDO PRINCIPAL (EXPANDIDO 100% DA LARGURA) */}
+        <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 pb-20">
+          {children}
+        </main>
+
+        {/* 4. DRAWER MOBILE (Para o Modo Clean no Celular) */}
+        {mobileMenuOpen && (
+          <div className="fixed inset-0 z-50 lg:hidden flex">
+            <div 
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity" 
+              onClick={() => setMobileMenuOpen(false)} 
+            />
+            <div className="relative w-72 max-w-[85vw] bg-white dark:bg-[#0B1120] h-full flex flex-col shadow-2xl z-10">
+              <SidebarContent />
+            </div>
+          </div>
+        )}
+
+        {/* 5. RODAPÉ FIXO DISCRETO */}
+        <footer className="h-9 bg-white/95 dark:bg-[#0B1120]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 fixed bottom-0 left-0 right-0 z-20 flex items-center justify-between px-4 sm:px-6 text-[11px] text-slate-500 dark:text-slate-400 shadow-xs">
+          <div className="flex items-center gap-1.5 truncate">
+            <span>Desenvolvido por <strong className="text-slate-700 dark:text-slate-200 font-semibold">Paratech Soluções e Sistemas</strong> -</span>
+            <a 
+              href="https://paratechsolucoes.com.br" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+            >
+              www.paratechsolucoes.com.br
+            </a>
+          </div>
+          <div className="flex items-center gap-1.5 text-right pl-3 truncate">
+            <span className="hidden sm:inline text-slate-400">Suporte Técnico:</span>
+            <strong className="text-slate-700 dark:text-slate-200 font-semibold">Regis Alexandre</strong>
+            <span className="text-slate-300 dark:text-slate-600">•</span>
+            <a 
+              href="https://wa.me/5537920007857?text=Ol%C3%A1%20Regis,%20contato%20atrav%C3%A9s%20do%20HubParatech" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold hover:underline"
+            >
+              <span>37 92000 - 78 57</span>
+            </a>
+          </div>
+        </footer>
+
+      </div>
+    )
+  }
+
+  // =========================================================================
+  // MODO CLÁSSICO: 100% PRESERVADO COM BANNERS ILUSTRADOS E MENU LATERAL FIXO
+  // =========================================================================
+  return (
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 font-sans transition-colors duration-200">
+      
+      {/* 0. Banner Ilustrado Panorâmico no Topo (100% de largura - Visível apenas no Modo Clássico) */}
+      <TabHeaderBanner />
+
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* 1. Sidebar Desktop (Fixa na esquerda, com suporte a recolher) */}
+        <aside className={`hidden md:flex ${isCollapsed ? 'w-20' : 'w-64 lg:w-72'} bg-white dark:bg-[#0B1120] border-r border-slate-200 dark:border-slate-800 flex-col shadow-xs relative z-10 flex-shrink-0 transition-all duration-300 ease-in-out`}>
+          <SidebarContent />
+        </aside>
+
+        {/* 2. Sidebar Mobile (Drawer com Overlay) */}
+        {mobileMenuOpen && (
+          <div className="fixed inset-0 z-50 md:hidden flex">
+            {/* Backdrop escuro com clique para fechar */}
+            <div 
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity" 
+              onClick={() => setMobileMenuOpen(false)} 
+            />
+            {/* Menu Drawer Deslizante */}
+            <div className="relative w-72 max-w-[85vw] bg-white dark:bg-[#0B1120] h-full flex flex-col shadow-2xl z-10 transition-colors duration-200">
+              <SidebarContent />
+            </div>
+          </div>
+        )}
+
+        {/* 3. Main Content (Totalmente expandido em 100% da tela) */}
+        <main className="flex-1 flex flex-col h-full overflow-y-auto bg-[#F8FAFC] dark:bg-[#06090F] transition-colors duration-200">
+          {/* Topbar clássica, responsiva */}
           <header className="h-16 bg-white/80 dark:bg-[#0B1120]/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-3 sm:px-6 lg:px-8 sticky top-0 z-20 shadow-xs flex-shrink-0 transition-colors duration-200 gap-2 sm:gap-4">
             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
               {/* Botão Hambúrguer Mobile */}
@@ -568,68 +883,67 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </button>
               </div>
 
-            {/* Botão Modo Kiosk / Tela Inteira (F11) */}
-            <button
-              type="button"
-              onClick={toggleFullscreen}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition border border-slate-200/80 dark:border-slate-700 shadow-xs cursor-pointer"
-              title={isFullscreen ? "Sair da Tela Cheia (F11)" : "Modo Tela Inteira / Kiosk (F11)"}
-            >
-              {isFullscreen ? (
-                <>
-                  <Minimize2 size={14} className="text-blue-600 dark:text-blue-400" />
-                  <span className="hidden sm:inline">Sair Tela Cheia</span>
-                </>
-              ) : (
-                <>
-                  <Maximize2 size={14} className="text-slate-600 dark:text-slate-400" />
-                  <span className="hidden sm:inline">Tela Inteira</span>
-                </>
-              )}
-            </button>
+              {/* Botão Modo Kiosk / Tela Inteira (F11) */}
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition border border-slate-200/80 dark:border-slate-700 shadow-xs cursor-pointer"
+                title={isFullscreen ? "Sair da Tela Cheia (F11)" : "Modo Tela Inteira / Kiosk (F11)"}
+              >
+                {isFullscreen ? (
+                  <>
+                    <Minimize2 size={14} className="text-blue-600 dark:text-blue-400" />
+                    <span className="hidden sm:inline">Sair Tela Cheia</span>
+                  </>
+                ) : (
+                  <>
+                    <Maximize2 size={14} className="text-slate-600 dark:text-slate-400" />
+                    <span className="hidden sm:inline">Tela Inteira</span>
+                  </>
+                )}
+              </button>
 
-            <span className="hidden sm:inline-block px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800 capitalize">
-              {role}
-            </span>
+              <span className="hidden sm:inline-block px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800 capitalize">
+                {role}
+              </span>
+            </div>
+          </header>
+          
+          {/* Área de conteúdo EXPANDIDA com padding inferior para o rodapé fixo */}
+          <div className="p-4 sm:p-6 lg:p-8 w-full flex-1 pb-16">
+            {children}
           </div>
-        </header>
-        
-        {/* Área de conteúdo EXPANDIDA com padding inferior para o rodapé fixo */}
-        <div className="p-4 sm:p-6 lg:p-8 w-full flex-1 pb-16">
-          {children}
-        </div>
 
-        {/* Rodapé Fixo e Discreto */}
-        <footer className="h-9 bg-white/95 dark:bg-[#0B1120]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 fixed bottom-0 left-0 right-0 md:left-64 lg:left-72 z-20 flex items-center justify-between px-4 sm:px-6 text-[11px] text-slate-500 dark:text-slate-400 shadow-xs transition-colors duration-200">
-          <div className="flex items-center gap-1.5 truncate">
-            <span>Desenvolvido por <strong className="text-slate-700 dark:text-slate-200 font-semibold">Paratech Soluções e Sistemas</strong> -</span>
-            <a 
-              href="https://paratechsolucoes.com.br" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 hover:underline font-medium transition-colors"
-            >
-              www.paratechsolucoes.com.br
-            </a>
-          </div>
-          <div className="flex items-center gap-1.5 text-right pl-3 truncate">
-            <span className="hidden sm:inline text-slate-400">Analista programador Responsável:</span>
-            <span className="sm:hidden text-slate-400">Resp:</span>
-            <strong className="text-slate-700 dark:text-slate-200 font-semibold">Regis Alexandre</strong>
-            <span className="text-slate-300 dark:text-slate-600">•</span>
-            <a 
-              href="https://wa.me/5537920007857?text=Ol%C3%A1%20Regis,%20contato%20atrav%C3%A9s%20do%20HubParatech" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 font-bold hover:underline transition-colors"
-            >
-              <span>37 92000 - 78 57</span>
-            </a>
-          </div>
-        </footer>
-      </main>
+          {/* Rodapé Fixo e Discreto */}
+          <footer className="h-9 bg-white/95 dark:bg-[#0B1120]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 fixed bottom-0 left-0 right-0 md:left-64 lg:left-72 z-20 flex items-center justify-between px-4 sm:px-6 text-[11px] text-slate-500 dark:text-slate-400 shadow-xs transition-colors duration-200">
+            <div className="flex items-center gap-1.5 truncate">
+              <span>Desenvolvido por <strong className="text-slate-700 dark:text-slate-200 font-semibold">Paratech Soluções e Sistemas</strong> -</span>
+              <a 
+                href="https://paratechsolucoes.com.br" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-blue-600 dark:text-blue-400 hover:text-blue-700 hover:underline font-medium transition-colors"
+              >
+                www.paratechsolucoes.com.br
+              </a>
+            </div>
+            <div className="flex items-center gap-1.5 text-right pl-3 truncate">
+              <span className="hidden sm:inline text-slate-400">Analista programador Responsável:</span>
+              <span className="sm:hidden text-slate-400">Resp:</span>
+              <strong className="text-slate-700 dark:text-slate-200 font-semibold">Regis Alexandre</strong>
+              <span className="text-slate-300 dark:text-slate-600">•</span>
+              <a 
+                href="https://wa.me/5537920007857?text=Ol%C3%A1%20Regis,%20contato%20atrav%C3%A9s%20do%20HubParatech" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 font-bold hover:underline transition-colors"
+              >
+                <span>37 92000 - 78 57</span>
+              </a>
+            </div>
+          </footer>
+        </main>
       </div>
     </div>
-    </GlobalClientProvider>
   )
 }
