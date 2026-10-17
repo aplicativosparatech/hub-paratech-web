@@ -207,7 +207,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
       { prefixo: '/dashboard/notas-fiscais/saidas/correcao', modulo: 'notas_fiscais_correcao', nome: 'Correção de Notas Fiscais' },
       { prefixo: '/dashboard/notas-fiscais', modulo: 'notas_fiscais', nome: 'Notas Fiscais' },
       { prefixo: '/dashboard/distribuicao-dfe', modulo: 'distribuicao_dfe', nome: 'Distribuição de DF-e' },
-      { prefixo: '/dashboard/configuracoes-portal', modulo: 'configuracoes_portal', nome: 'Configurações do Portal' },
+      { prefixo: '/dashboard/configuracoes-portal', modulo: '_admin_only', nome: 'Configurações do Portal' },
       { prefixo: '/dashboard/configuracoes', modulo: 'configuracoes_hub', nome: 'Configurações Hub' },
       { prefixo: '/dashboard/integracoes', modulo: 'integracoes', nome: 'Integrações (APIs)' },
       { prefixo: '/dashboard/corretor-tributario', modulo: 'corretor_tributario', nome: 'Analisador Tributário' },
@@ -397,7 +397,6 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             {canAccess('saneador_arquivos') && <NavItem href="/dashboard/saneador-arquivos" icon={Database} label="Saneador de Arquivos" />}
             {canAccess('sugestor_tributario') && <NavItem href="/dashboard/sugestor-tributario" icon={ScanText} label="Sugestor Tributário" />}
             {canAccess('aparencia') && <NavItem href="/dashboard/aparencia" icon={Palette} label="Aparência" />}
-            {canAccess('configuracoes_portal') && <NavItem href="/dashboard/configuracoes-portal" icon={Sliders} label="Configurações do Portal" />}
             {canAccess('configuracoes_hub') && <NavItem href="/dashboard/configuracoes" icon={Settings} label="Configurações Hub" />}
             {canAccess('integracoes') && <NavItem href="/dashboard/integracoes" icon={PlugZap} label="Integrações (APIs)" />}
             {canAccess('meu_perfil') && <NavItem href="/dashboard/meu-perfil" icon={UserCircle} label="Meu Perfil" />}
@@ -423,7 +422,6 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             {canAccess('saneador_arquivos') && <NavItem href="/dashboard/saneador-arquivos" icon={Database} label="Saneador de Arquivos" />}
             {canAccess('sugestor_tributario') && <NavItem href="/dashboard/sugestor-tributario" icon={ScanText} label="Sugestor Tributário" />}
             {canAccess('aparencia') && <NavItem href="/dashboard/aparencia" icon={Palette} label="Aparência" />}
-            {canAccess('configuracoes_portal') && <NavItem href="/dashboard/configuracoes-portal" icon={Sliders} label="Configurações do Portal" />}
             {canAccess('configuracoes_hub') && <NavItem href="/dashboard/configuracoes" icon={Settings} label="Configurações Hub" />}
             {canAccess('integracoes') && <NavItem href="/dashboard/integracoes" icon={PlugZap} label="Integrações (APIs)" />}
             {canAccess('meu_perfil') && <NavItem href="/dashboard/meu-perfil" icon={Building2} label="Perfil do Escritório" />}

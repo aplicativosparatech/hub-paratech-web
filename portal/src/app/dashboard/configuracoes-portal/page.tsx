@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { Sliders, ShieldAlert, CheckCircle2, Building2, Save, RefreshCw, KeyRound, BellRing, LayoutDashboard, Sparkles, MapPin, FileCheck2, DollarSign, Cpu } from 'lucide-react'
@@ -8,6 +9,7 @@ import { APP_VERSION } from '@/utils/version'
 import { limparDocumento } from '@/utils/cnpjAlfanumerico'
 
 export default function ConfiguracoesPortalPage() {
+  const router = useRouter()
   const supabase = createClient()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -51,11 +53,20 @@ export default function ConfiguracoesPortalPage() {
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user) {
+        router.push('/login')
+        return
+      }
 
       const { data: roleData } = await supabase.from('user_roles').select('*').eq('user_id', user.id).single()
       const role = (roleData?.role as any) || 'admin'
       setUserRole(role)
+
+      if (role !== 'admin') {
+        toast.error('Acesso restrito ao Administrador.')
+        router.push('/dashboard')
+        return
+      }
 
       if (role === 'cliente' && roleData?.cliente_id) {
         setSelectedCliente(roleData.cliente_id)
@@ -288,6 +299,10 @@ export default function ConfiguracoesPortalPage() {
     return <div className="p-8 text-slate-500">Carregando configurações do portal...</div>
   }
 
+  if (userRole !== 'admin') {
+    return null
+  }
+
   return (
     <div className="w-full space-y-6 animate-in fade-in duration-300">
       
@@ -307,36 +322,32 @@ export default function ConfiguracoesPortalPage() {
         </p>
       </header>
 
-      {/* Seletor de Empresa (para Admin e Contabilidade) */}
-      {userRole !== 'cliente' && clientes.length > 0 && (
+      {/* Seletor de Empresa para o Administrador */}
+      {clientes.length > 0 && (
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex-1 max-w-lg space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                {userRole === 'admin' ? '🔍 Selecionar Empresa para Configurar' : '🏢 Selecionar Cliente'}
+                🔍 Selecionar Empresa para Configurar
               </label>
-              {userRole === 'admin' && (
-                <span className="text-[11px] text-blue-600 font-medium">
-                  {clientes.length} empresas disponíveis
-                </span>
-              )}
+              <span className="text-[11px] text-blue-600 font-medium">
+                {clientes.length} empresas disponíveis
+              </span>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-2">
-              {userRole === 'admin' && (
-                <input
-                  type="text"
-                  placeholder="Filtrar empresa por nome, CNPJ ou CPF..."
-                  value={clientSearchTerm}
-                  onChange={e => setClientSearchTerm(e.target.value)}
-                  className="w-full sm:w-1/2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              )}
+              <input
+                type="text"
+                placeholder="Filtrar empresa por nome, CNPJ ou CPF..."
+                value={clientSearchTerm}
+                onChange={e => setClientSearchTerm(e.target.value)}
+                className="w-full sm:w-1/2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
 
               <select
                 value={selectedCliente}
                 onChange={e => setSelectedCliente(e.target.value)}
-                className={`w-full ${userRole === 'admin' ? 'sm:w-1/2' : ''} bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium`}
+                className="w-full sm:w-1/2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
               >
                 {clientes
                   .filter(c => {
@@ -367,19 +378,6 @@ export default function ConfiguracoesPortalPage() {
               <span className="text-sm font-mono font-bold text-slate-800">{currentCli.cnpj}</span>
             </div>
           )}
-        </div>
-      )}
-
-      {/* Identificação para o Cliente Titular */}
-      {userRole === 'cliente' && currentCli && (
-        <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-slate-400 block">Sua Empresa</span>
-            <span className="text-sm font-bold text-slate-900">{currentCli.razao_social}</span>
-          </div>
-          <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">
-            CNPJ: {currentCli.cnpj}
-          </span>
         </div>
       )}
 
