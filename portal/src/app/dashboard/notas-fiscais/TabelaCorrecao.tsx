@@ -769,10 +769,11 @@ export default function TabelaCorrecao() {
           </button>
         </div>
       ) : (
-        <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-          <table className="w-full text-left text-sm text-slate-600" style={{ tableLayout: 'fixed' }}>
-            <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
-              <tr>
+        <div className="border border-slate-200 rounded-2xl shadow-2xs bg-white overflow-hidden flex flex-col">
+          <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-290px)] custom-scrollbar">
+            <table className="w-full text-left text-sm text-slate-600 min-w-[1000px]" style={{ tableLayout: 'fixed' }}>
+              <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500 font-medium border-b border-slate-200 shadow-2xs">
+                <tr>
                 <ResizableSortableTh
                   columnId="tipo"
                   label="Tipo"
@@ -969,6 +970,7 @@ export default function TabelaCorrecao() {
               })}
             </tbody>
           </table>
+          </div>
 
           {/* Paginação de Registros */}
           <Pagination

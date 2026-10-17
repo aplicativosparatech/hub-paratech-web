@@ -1029,9 +1029,9 @@ export default function SaneadorArquivosPage() {
             </div>
 
             {/* Grid da Tabela */}
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-320px)] custom-scrollbar">
               <table className="w-full text-xs text-left" style={{ tableLayout: 'fixed' }}>
-                <thead className="bg-slate-50 text-slate-500 font-semibold uppercase tracking-wider text-[10px] border-b border-slate-200">
+                <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500 font-semibold uppercase tracking-wider text-[10px] border-b border-slate-200 shadow-2xs">
                   <tr>
                     <ResizableSortableTh
                       columnId="codigo"

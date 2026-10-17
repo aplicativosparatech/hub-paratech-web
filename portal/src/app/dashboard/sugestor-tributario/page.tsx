@@ -1596,9 +1596,9 @@ export default function SugestorTributarioPage() {
 
         {/* Tabela de Produtos */}
         <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-320px)] custom-scrollbar">
             <table className="w-full text-left text-xs" style={{ tableLayout: 'fixed' }}>
-              <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-slate-500 uppercase tracking-wider font-bold text-[10px]">
+              <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-slate-500 uppercase tracking-wider font-bold text-[10px] shadow-2xs">
                 <tr>
                   <ResizableSortableTh
                     columnId="produto"

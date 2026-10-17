@@ -309,13 +309,13 @@ export default function ClientesPage() {
         </div>
       </div>
 
-      {/* 4. Tabela com Rolagem Horizontal Suave e sem sobreposição de colunas */}
+      {/* 4. Card da Tabela com Rolagem Vertical Independente e Rolagem Horizontal Suave */}
       <div className="block md:hidden text-[11px] text-slate-400 mb-1.5 px-1 font-medium">
         👉 Deslize horizontalmente para visualizar todas as colunas
       </div>
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto custom-scrollbar">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto overflow-y-auto max-h-[calc(100vh-270px)] custom-scrollbar">
         <table className="w-full text-left border-collapse min-w-[1100px]" style={{ tableLayout: 'fixed' }}>
-          <thead>
+          <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 shadow-2xs">
             <tr className="bg-slate-50 border-b border-slate-200">
               <ResizableSortableTh
                 columnId="logo"

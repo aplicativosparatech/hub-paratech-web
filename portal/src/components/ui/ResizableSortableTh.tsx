@@ -99,7 +99,7 @@ export function ResizableSortableTh({
         minWidth: `${minWidth}px`,
         maxWidth: width ? `${width}px` : undefined
       }}
-      className={`relative group select-none py-3 px-3.5 transition-colors ${
+      className={`relative group select-none py-3 px-3.5 transition-colors sticky top-0 z-10 bg-slate-50 border-b border-slate-200 ${
         !disableSort && sortKey ? 'cursor-pointer hover:bg-slate-100/80' : ''
       } ${className}`}
       onClick={handleHeaderClick}

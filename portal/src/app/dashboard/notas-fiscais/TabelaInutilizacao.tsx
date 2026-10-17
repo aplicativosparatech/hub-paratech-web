@@ -1013,9 +1013,9 @@ export default function TabelaInutilizacao() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-320px)] custom-scrollbar">
               <table className="w-full text-left text-xs text-slate-600" style={{ tableLayout: 'fixed' }}>
-                <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+                <thead className="sticky top-0 z-10 bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 shadow-2xs">
                   <tr>
                     <ResizableSortableTh
                       columnId="select"
@@ -1257,9 +1257,9 @@ export default function TabelaInutilizacao() {
               Nenhuma inutilização homologada registrada para este cliente até o momento.
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-320px)] custom-scrollbar">
               <table className="w-full text-left text-xs text-slate-600" style={{ tableLayout: 'fixed' }}>
-                <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+                <thead className="sticky top-0 z-10 bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 shadow-2xs">
                   <tr>
                     <ResizableSortableTh
                       columnId="data_hora"
@@ -1401,9 +1401,9 @@ export default function TabelaInutilizacao() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-320px)] custom-scrollbar">
               <table className="w-full text-left text-xs text-slate-600" style={{ tableLayout: 'fixed' }}>
-                <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+                <thead className="sticky top-0 z-10 bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 shadow-2xs">
                   <tr>
                     <ResizableSortableTh
                       columnId="dataHora"

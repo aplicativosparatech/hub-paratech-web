@@ -885,9 +885,9 @@ export default function CorretorTributarioPage() {
 
           {/* 5. Tabela de Diagnóstico Comparativo */}
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-320px)] custom-scrollbar">
               <table className="w-full text-left text-xs text-slate-600" style={{ tableLayout: 'fixed' }}>
-                <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
+                <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px] shadow-2xs">
                   <tr>
                     <ResizableSortableTh
                       columnId="produto"
