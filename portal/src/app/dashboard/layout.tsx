@@ -268,8 +268,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {/* Logo Paratech Oficial */}
           <Link href="/dashboard" className="block w-full transition-transform hover:scale-[1.01]" title="HubParatech">
             {isCollapsed ? (
-              <div className="w-10 h-10 mx-auto rounded-xl bg-blue-600 flex items-center justify-center text-white font-black text-lg shadow-sm">
-                P
+              <div className="w-10 h-10 mx-auto flex items-center justify-center transition-transform hover:scale-105">
+                <img 
+                  src="/logo-paratech-icone.png" 
+                  alt="HubParatech" 
+                  className="w-10 h-10 object-contain drop-shadow-xs"
+                />
               </div>
             ) : (
               <img 
