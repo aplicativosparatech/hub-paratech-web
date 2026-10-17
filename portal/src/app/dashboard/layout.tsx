@@ -44,14 +44,14 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const [maisMenuOpen, setMaisMenuOpen] = useState(false)
-  const maisMenuRef = useRef<HTMLDivElement>(null)
+  const [cleanActiveDropdown, setCleanActiveDropdown] = useState<string | null>(null)
+  const cleanNavRef = useRef<HTMLDivElement>(null)
 
-  // Fecha menu Mais ao clicar fora
+  // Fecha qualquer submenu dropdown do modo Clean ao clicar fora
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (maisMenuRef.current && !maisMenuRef.current.contains(e.target as Node)) {
-        setMaisMenuOpen(false)
+      if (cleanNavRef.current && !cleanNavRef.current.contains(e.target as Node)) {
+        setCleanActiveDropdown(null)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -245,10 +245,10 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     }
   }, [pathname, role, permissoesMap, loading])
 
-  // Fecha o menu mobile ao navegar
+  // Fecha os menus mobile e dropdowns ao navegar
   useEffect(() => {
     setMobileMenuOpen(false)
-    setMaisMenuOpen(false)
+    setCleanActiveDropdown(null)
   }, [pathname])
 
   const handleLogout = async () => {
@@ -628,24 +628,282 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   // ESTRITAMENTE CONFORME O MOCKUP 1 (media_1792253996470_339c80fd.png)
   // =========================================================================
   if (isClean) {
-    // Links das Abas Horizontais conforme Mockup 1
-    const cleanNavTabs = [
-      { href: '/dashboard', label: 'Visão Geral' },
-      { href: '/dashboard/notas-fiscais', label: 'Notas Fiscais' },
-      { href: '/dashboard/distribuicao-dfe', label: 'Distribuição DF-e' },
-      { href: '/dashboard/relatorios?tab=monofasicos', label: 'Monofásicos' },
-      { href: '/dashboard/relatorios', label: 'Relatórios' },
-      ...(role === 'admin' ? [
-        { href: '/dashboard/clientes', label: 'Clientes' },
-        { href: '/dashboard/contabilidades', label: 'Contabilidades' },
-        { href: '/dashboard/faturas', label: 'Faturas' }
-      ] : []),
-      ...(role === 'contabilidade' ? [
-        { href: '/dashboard/meus-clientes', label: 'Meus Clientes' }
-      ] : []),
-      ...(role === 'cliente' ? [
-        { href: '/dashboard/minhas-faturas', label: 'Minhas Faturas' }
-      ] : [])
+    // Definição dos Tópicos Oficiais e Submenus do Modo Clean
+    interface CleanSubmenuItem {
+      href: string
+      label: string
+      desc: string
+      icon: any
+      iconColor: string
+      iconBg: string
+    }
+
+    interface CleanTopic {
+      id: string
+      label: string
+      href?: string
+      isActive: boolean
+      items?: CleanSubmenuItem[]
+    }
+
+    const cleanTopics: CleanTopic[] = [
+      {
+        id: 'visao_geral',
+        label: 'Visão Geral',
+        href: '/dashboard',
+        isActive: pathname === '/dashboard'
+      },
+      {
+        id: 'gestao',
+        label: 'Gestão',
+        isActive: pathname.startsWith('/dashboard/contabilidades') ||
+                  pathname.startsWith('/dashboard/clientes') ||
+                  pathname.startsWith('/dashboard/faturas') ||
+                  pathname.startsWith('/dashboard/minhas-faturas') ||
+                  pathname.startsWith('/dashboard/meus-clientes'),
+        items: [
+          ...(role === 'admin' ? [
+            {
+              href: '/dashboard/contabilidades',
+              label: 'Contabilidades',
+              desc: 'Gestão de escritórios contábeis parceiros',
+              icon: Building2,
+              iconColor: 'text-blue-600 dark:text-blue-400',
+              iconBg: 'bg-blue-50 dark:bg-blue-950/60'
+            },
+            {
+              href: '/dashboard/clientes',
+              label: 'Clientes',
+              desc: 'Empresas cadastradas e certificados digitais',
+              icon: Users,
+              iconColor: 'text-emerald-600 dark:text-emerald-400',
+              iconBg: 'bg-emerald-50 dark:bg-emerald-950/60'
+            },
+            {
+              href: '/dashboard/faturas',
+              label: 'Faturas',
+              desc: 'Controle de mensalidades e cobranças',
+              icon: Receipt,
+              iconColor: 'text-amber-600 dark:text-amber-400',
+              iconBg: 'bg-amber-50 dark:bg-amber-950/60'
+            }
+          ] : []),
+          ...(role === 'contabilidade' && canAccess('contabilidade_meus_clientes') ? [
+            {
+              href: '/dashboard/meus-clientes',
+              label: 'Meus Clientes',
+              desc: 'Carteira de empresas atendidas pelo escritório',
+              icon: Users,
+              iconColor: 'text-emerald-600 dark:text-emerald-400',
+              iconBg: 'bg-emerald-50 dark:bg-emerald-950/60'
+            }
+          ] : []),
+          ...(role === 'cliente' && canAccess('faturas') ? [
+            {
+              href: '/dashboard/minhas-faturas',
+              label: 'Minhas Faturas',
+              desc: 'Histórico de faturas e pagamentos PIX',
+              icon: Receipt,
+              iconColor: 'text-amber-600 dark:text-amber-400',
+              iconBg: 'bg-amber-50 dark:bg-amber-950/60'
+            }
+          ] : [])
+        ]
+      },
+      {
+        id: 'sistema',
+        label: 'Sistema',
+        isActive: pathname.startsWith('/dashboard/notas-fiscais') ||
+                  pathname.startsWith('/dashboard/distribuicao-dfe') ||
+                  pathname.startsWith('/dashboard/relatorios') ||
+                  pathname.startsWith('/dashboard/corretor-tributario'),
+        items: [
+          ...(canAccess('notas_fiscais') ? [{
+            href: '/dashboard/notas-fiscais',
+            label: 'Notas Fiscais',
+            desc: 'Repositório de XMLs emitidos e recebidos',
+            icon: FileDown,
+            iconColor: 'text-blue-600 dark:text-blue-400',
+            iconBg: 'bg-blue-50 dark:bg-blue-950/60'
+          }] : []),
+          ...(canAccess('distribuicao_dfe') ? [{
+            href: '/dashboard/distribuicao-dfe',
+            label: 'Distribuição de DF-e',
+            desc: 'Consulta oficial SEFAZ Nacional de DF-e',
+            icon: Inbox,
+            iconColor: 'text-indigo-600 dark:text-indigo-400',
+            iconBg: 'bg-indigo-50 dark:bg-indigo-950/60'
+          }] : []),
+          ...(canAccess('relatorios') || canAccess('relatorios_resumo') || canAccess('relatorios_monofasicos') || canAccess('relatorios_auditoria') ? [{
+            href: '/dashboard/relatorios',
+            label: 'Relatórios',
+            desc: 'Auditoria fiscal, faturamento e monofásicos',
+            icon: BarChart3,
+            iconColor: 'text-emerald-600 dark:text-emerald-400',
+            iconBg: 'bg-emerald-50 dark:bg-emerald-950/60'
+          }] : []),
+          ...(canAccess('corretor_tributario') ? [{
+            href: '/dashboard/corretor-tributario',
+            label: 'Analisador Tributário',
+            desc: 'Auditoria de NCM, CEST e Reforma Tributária',
+            icon: Sparkles,
+            iconColor: 'text-purple-600 dark:text-purple-400',
+            iconBg: 'bg-purple-50 dark:bg-purple-950/60'
+          }] : [])
+        ]
+      },
+      {
+        id: 'extras',
+        label: 'Extras',
+        isActive: pathname.startsWith('/dashboard/saneador-arquivos') ||
+                  pathname.startsWith('/dashboard/sugestor-tributario'),
+        items: [
+          ...(canAccess('saneador_arquivos') ? [{
+            href: '/dashboard/saneador-arquivos',
+            label: 'Saneador de Arquivos',
+            desc: 'Higienização e correção estrutural de XMLs',
+            icon: Database,
+            iconColor: 'text-indigo-600 dark:text-indigo-400',
+            iconBg: 'bg-indigo-50 dark:bg-indigo-950/60'
+          }] : []),
+          ...(canAccess('sugestor_tributario') ? [{
+            href: '/dashboard/sugestor-tributario',
+            label: 'Sugestor Tributário',
+            desc: 'Sugestão automática de tributação por IA',
+            icon: ScanText,
+            iconColor: 'text-teal-600 dark:text-teal-400',
+            iconBg: 'bg-teal-50 dark:bg-teal-950/60'
+          }] : [])
+        ]
+      },
+      {
+        id: 'tecnica',
+        label: 'Área Técnica',
+        isActive: pathname.startsWith('/dashboard/permissoes') ||
+                  pathname.startsWith('/dashboard/aparencia') ||
+                  pathname.startsWith('/dashboard/configuracoes-portal') ||
+                  pathname.startsWith('/dashboard/configuracoes') ||
+                  pathname.startsWith('/dashboard/integracoes') ||
+                  pathname.startsWith('/dashboard/meu-perfil'),
+        items: [
+          ...(role === 'admin' ? [
+            {
+              href: '/dashboard/permissoes',
+              label: 'Permissões',
+              desc: 'Controle de acessos e regras por perfil',
+              icon: ShieldCheck,
+              iconColor: 'text-emerald-600 dark:text-emerald-400',
+              iconBg: 'bg-emerald-50 dark:bg-emerald-950/60'
+            },
+            {
+              href: '/dashboard/aparencia',
+              label: 'Aparência',
+              desc: 'Modos de interface, cores e temas',
+              icon: Palette,
+              iconColor: 'text-purple-600 dark:text-purple-400',
+              iconBg: 'bg-purple-50 dark:bg-purple-950/60'
+            },
+            {
+              href: '/dashboard/configuracoes-portal',
+              label: 'Configurações do Portal',
+              desc: 'Regras globais e preferências do SaaS',
+              icon: Sliders,
+              iconColor: 'text-blue-600 dark:text-blue-400',
+              iconBg: 'bg-blue-50 dark:bg-blue-950/60'
+            },
+            {
+              href: '/dashboard/configuracoes',
+              label: 'Configurações Hub',
+              desc: 'Comunicação SEFAZ e agentes locais',
+              icon: Settings,
+              iconColor: 'text-slate-600 dark:text-slate-400',
+              iconBg: 'bg-slate-100 dark:bg-slate-800'
+            },
+            {
+              href: '/dashboard/integracoes',
+              label: 'Integrações & APIs',
+              desc: 'Webhooks, APIs e sincronizadores',
+              icon: PlugZap,
+              iconColor: 'text-amber-600 dark:text-amber-400',
+              iconBg: 'bg-amber-50 dark:bg-amber-950/60'
+            }
+          ] : []),
+          ...(role === 'contabilidade' ? [
+            ...(canAccess('aparencia') ? [{
+              href: '/dashboard/aparencia',
+              label: 'Aparência',
+              desc: 'Modos de interface e temas',
+              icon: Palette,
+              iconColor: 'text-purple-600 dark:text-purple-400',
+              iconBg: 'bg-purple-50 dark:bg-purple-950/60'
+            }] : []),
+            ...(canAccess('configuracoes_hub') ? [{
+              href: '/dashboard/configuracoes',
+              label: 'Configurações Hub',
+              desc: 'Comunicação SEFAZ e sincronização',
+              icon: Settings,
+              iconColor: 'text-slate-600 dark:text-slate-400',
+              iconBg: 'bg-slate-100 dark:bg-slate-800'
+            }] : []),
+            ...(canAccess('integracoes') ? [{
+              href: '/dashboard/integracoes',
+              label: 'Integrações & APIs',
+              desc: 'Webhooks e chaves de acesso',
+              icon: PlugZap,
+              iconColor: 'text-amber-600 dark:text-amber-400',
+              iconBg: 'bg-amber-50 dark:bg-amber-950/60'
+            }] : []),
+            ...(canAccess('meu_perfil') ? [{
+              href: '/dashboard/meu-perfil',
+              label: 'Perfil do Escritório',
+              desc: 'Dados cadastrais da contabilidade',
+              icon: Building2,
+              iconColor: 'text-blue-600 dark:text-blue-400',
+              iconBg: 'bg-blue-50 dark:bg-blue-950/60'
+            }] : [])
+          ] : []),
+          ...(role === 'cliente' ? [
+            ...(canAccess('aparencia') ? [{
+              href: '/dashboard/aparencia',
+              label: 'Aparência',
+              desc: 'Modos de interface e temas',
+              icon: Palette,
+              iconColor: 'text-purple-600 dark:text-purple-400',
+              iconBg: 'bg-purple-50 dark:bg-purple-950/60'
+            }] : []),
+            ...(canAccess('configuracoes_hub') ? [{
+              href: '/dashboard/configuracoes',
+              label: 'Configurações Hub',
+              desc: 'Comunicação SEFAZ e sincronização',
+              icon: Settings,
+              iconColor: 'text-slate-600 dark:text-slate-400',
+              iconBg: 'bg-slate-100 dark:bg-slate-800'
+            }] : []),
+            ...(canAccess('integracoes') ? [{
+              href: '/dashboard/integracoes',
+              label: 'Integrações (APIs)',
+              desc: 'Webhooks e integrações',
+              icon: PlugZap,
+              iconColor: 'text-amber-600 dark:text-amber-400',
+              iconBg: 'bg-amber-50 dark:bg-amber-950/60'
+            }] : []),
+            ...(canAccess('meu_perfil') ? [{
+              href: '/dashboard/meu-perfil',
+              label: 'Meu Perfil',
+              desc: 'Dados cadastrais da empresa',
+              icon: UserCircle,
+              iconColor: 'text-blue-600 dark:text-blue-400',
+              iconBg: 'bg-blue-50 dark:bg-blue-950/60'
+            }] : [])
+          ] : [])
+        ]
+      },
+      {
+        id: 'ajuda',
+        label: 'Ajuda',
+        href: '/dashboard/tutorial',
+        isActive: pathname.startsWith('/dashboard/tutorial')
+      }
     ]
 
     return (
@@ -752,118 +1010,104 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             </div>
           )}
 
-          {/* 3. Sub-Navbar com Abas Horizontais */}
-          <div className="bg-white dark:bg-[#0B1120] px-4 sm:px-6 lg:px-8 flex items-center justify-between">
-            <nav className="flex items-center gap-6 sm:gap-8 overflow-x-auto no-scrollbar py-0.5">
-            {cleanNavTabs.map(tab => {
-              const isTabActive = tab.href === '/dashboard' 
-                ? pathname === '/dashboard'
-                : pathname === tab.href || pathname.startsWith(tab.href + '/')
-              
-              return (
-                <Link
-                  key={tab.href}
-                  href={tab.href}
-                  className={`text-sm font-semibold transition-all py-3 px-1 whitespace-nowrap relative ${
-                    isTabActive
-                      ? 'text-slate-900 dark:text-white font-bold after:content-[""] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2.5px] after:bg-slate-900 dark:after:bg-blue-500 after:rounded-full'
-                      : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
-                  }`}
-                >
-                  {tab.label}
-                </Link>
-              )
-            })}
+          {/* 3. Sub-Navbar com Menus e Submenus por Tópicos Oficiais no Modo Clean */}
+          <div ref={cleanNavRef} className="bg-white dark:bg-[#0B1120] px-4 sm:px-6 lg:px-8 border-b border-slate-200/80 dark:border-slate-800 relative z-30">
+            <div className="flex items-center justify-between">
+              <nav className="flex items-center gap-1 sm:gap-3 md:gap-6 py-0.5">
+                {cleanTopics.filter(t => (t.items && t.items.length > 0) || t.href).map(topic => {
+                  if (topic.href) {
+                    return (
+                      <Link
+                        key={topic.id}
+                        href={topic.href}
+                        onClick={() => setCleanActiveDropdown(null)}
+                        className={`text-sm font-semibold transition-all py-3 px-2 sm:px-2.5 whitespace-nowrap relative ${
+                          topic.isActive
+                            ? 'text-slate-900 dark:text-white font-bold after:content-[""] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2.5px] after:bg-blue-600 dark:after:bg-blue-500 after:rounded-full'
+                            : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                        }`}
+                      >
+                        {topic.label}
+                      </Link>
+                    )
+                  }
 
-            {/* Menu Dropdown 'Mais Ferramentas' no Modo Clean */}
-            <div ref={maisMenuRef} className="relative">
-              <button
-                type="button"
-                onClick={() => setMaisMenuOpen(prev => !prev)}
-                className={`flex items-center gap-1.5 text-sm font-semibold py-3 px-1 transition-colors cursor-pointer ${
-                  maisMenuOpen 
-                    ? 'text-blue-600 dark:text-blue-400' 
-                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
-                }`}
-              >
-                <span>Mais</span>
-                <ChevronDown size={14} className={`transition-transform duration-150 ${maisMenuOpen ? 'rotate-180' : ''}`} />
-              </button>
+                  const isOpen = cleanActiveDropdown === topic.id
+                  return (
+                    <div key={topic.id} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setCleanActiveDropdown(prev => prev === topic.id ? null : topic.id)}
+                        className={`flex items-center gap-1 sm:gap-1.5 text-sm font-semibold transition-all py-3 px-2 sm:px-2.5 whitespace-nowrap relative cursor-pointer ${
+                          topic.isActive
+                            ? 'text-blue-600 dark:text-blue-400 font-bold after:content-[""] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2.5px] after:bg-blue-600 dark:after:bg-blue-500 after:rounded-full'
+                            : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                        }`}
+                      >
+                        <span>{topic.label}</span>
+                        <ChevronDown 
+                          size={14} 
+                          className={`transition-transform duration-200 ${isOpen ? 'rotate-180 text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} 
+                        />
+                      </button>
 
-              {maisMenuOpen && (
-                <div className="absolute left-0 top-full mt-1 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1 mb-1">
-                    Ferramentas & Sistema
-                  </div>
-                  <Link
-                    href="/dashboard/corretor-tributario"
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-                  >
-                    <Sparkles size={15} className="text-blue-600" />
-                    <span>Analisador Tributário</span>
-                  </Link>
-                  <Link
-                    href="/dashboard/saneador-arquivos"
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-                  >
-                    <Database size={15} className="text-indigo-600" />
-                    <span>Saneador de Arquivos</span>
-                  </Link>
-                  <Link
-                    href="/dashboard/sugestor-tributario"
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-                  >
-                    <ScanText size={15} className="text-teal-600" />
-                    <span>Sugestor Tributário</span>
-                  </Link>
-                  <Link
-                    href="/dashboard/integracoes"
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-                  >
-                    <PlugZap size={15} className="text-amber-600" />
-                    <span>Integrações (APIs)</span>
-                  </Link>
-                  {role === 'admin' && (
-                    <Link
-                      href="/dashboard/permissoes"
-                      className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-                    >
-                      <ShieldCheck size={15} className="text-emerald-600" />
-                      <span>Permissões</span>
-                    </Link>
-                  )}
-                  <Link
-                    href="/dashboard/aparencia"
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-                  >
-                    <Palette size={15} className="text-purple-600" />
-                    <span>Aparência & Interface</span>
-                  </Link>
-                  <Link
-                    href="/dashboard/configuracoes"
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-                  >
-                    <Settings size={15} className="text-slate-500" />
-                    <span>Configurações Hub</span>
-                  </Link>
-                  <Link
-                    href="/dashboard/tutorial"
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-                  >
-                    <GraduationCap size={15} className="text-blue-500" />
-                    <span>Tutorial & Tour IA</span>
-                  </Link>
-                </div>
-              )}
+                      {/* Dropdown Suspenso com Submenu */}
+                      {isOpen && (
+                        <div className="absolute left-0 top-full mt-1.5 w-72 sm:w-80 bg-white dark:bg-[#0B1120] border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 mb-1 border-b border-slate-100 dark:border-slate-800/80">
+                            {topic.label}
+                          </div>
+                          <div className="space-y-1">
+                            {topic.items?.map(item => {
+                              const isItemActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                              const IconComponent = item.icon
+                              return (
+                                <Link
+                                  key={item.href}
+                                  href={item.href}
+                                  onClick={() => setCleanActiveDropdown(null)}
+                                  className={`flex items-start gap-3 p-2.5 rounded-xl transition group ${
+                                    isItemActive
+                                      ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-semibold'
+                                      : 'hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300'
+                                  }`}
+                                >
+                                  <div className={`p-2 rounded-xl shrink-0 ${item.iconBg} ${item.iconColor} group-hover:scale-105 transition-transform`}>
+                                    <IconComponent size={18} />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between">
+                                      <p className="text-xs font-bold leading-tight truncate">
+                                        {item.label}
+                                      </p>
+                                      {isItemActive && (
+                                        <span className="text-[9px] font-extrabold bg-blue-600 text-white px-1.5 py-0.5 rounded-md uppercase">
+                                          Ativo
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-snug line-clamp-1 mt-0.5">
+                                      {item.desc}
+                                    </p>
+                                  </div>
+                                </Link>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </nav>
+
+              {/* Status SEFAZ Discreto na Sub-Navbar */}
+              <div className="hidden lg:flex items-center gap-2">
+                <SefazStatusBadge />
+              </div>
             </div>
-          </nav>
-
-          {/* Status SEFAZ Discreto na Sub-Navbar */}
-          <div className="hidden lg:flex items-center gap-2">
-            <SefazStatusBadge />
           </div>
-        </div>
-      </header>
+        </header>
 
       {/* 3. CONTEÚDO PRINCIPAL (EXPANDIDO 100% DA LARGURA) */}
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 pb-20">
