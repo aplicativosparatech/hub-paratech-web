@@ -40,6 +40,7 @@ export default function NovoClientePage() {
     regime_tributario: 'simples_nacional',
     ramo_atividade: '',
     valor_mensalidade: '',
+    custo: '',
     dia_vencimento: '10',
     is_ativo: true,
     cep: '',
@@ -406,6 +407,7 @@ export default function NovoClientePage() {
       is_ativo: formData.is_ativo,
       dia_vencimento: parseInt(String(formData.dia_vencimento)) || 10,
       valor_mensalidade: clienteData.valor_mensalidade ? parseFloat(String(clienteData.valor_mensalidade).replace(',', '.')) : 0,
+      custo: clienteData.custo ? parseFloat(String(clienteData.custo).replace(',', '.')) : 0,
       data_inicio_monitoramento: formData.data_inicio_monitoramento || null,
       numero_inicial_nfe: parseInt(String(formData.numero_inicial_nfe)) || 1,
       numero_inicial_nfce: parseInt(String(formData.numero_inicial_nfce)) || 1,
@@ -646,6 +648,27 @@ export default function NovoClientePage() {
                   value={formData.valor_mensalidade} 
                   onChange={e => setFormData({...formData, valor_mensalidade: e.target.value})} 
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Custo do Cliente (R$)</label>
+                <input 
+                  type="number" 
+                  step="0.01"
+                  min="0"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500 bg-slate-50/50 font-semibold text-rose-700"
+                  placeholder="0.00"
+                  value={formData.custo} 
+                  onChange={e => setFormData({...formData, custo: e.target.value})} 
+                />
+                <div className="flex items-center justify-between text-[11px] mt-1">
+                  <span className="text-slate-500">Custo operacional / licença</span>
+                  {(formData.valor_mensalidade || formData.custo) && (
+                    <span className="font-semibold text-blue-700 font-mono">
+                      Lucro: {((parseFloat(String(formData.valor_mensalidade || 0).replace(',', '.')) || 0) - (parseFloat(String(formData.custo || 0).replace(',', '.')) || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div>

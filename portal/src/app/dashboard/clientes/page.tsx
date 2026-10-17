@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Trash2, X, Copy, RefreshCw, Search, Upload, DollarSign } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Copy, RefreshCw, Search, Upload, DollarSign, TrendingDown, TrendingUp } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { limparDocumento, formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
@@ -101,6 +101,30 @@ export default function ClientesPage() {
     return clientesFiltrados.reduce((acc, c) => acc + (Number(c.valor_mensalidade) || 0), 0)
   }, [clientesFiltrados])
 
+  // Cálculo da Soma dos Custos das Empresas
+  const totalCustos = useMemo(() => {
+    return clientes.reduce((acc, c) => acc + (Number(c.custo) || 0), 0)
+  }, [clientes])
+
+  const totalCustosFiltrados = useMemo(() => {
+    return clientesFiltrados.reduce((acc, c) => acc + (Number(c.custo) || 0), 0)
+  }, [clientesFiltrados])
+
+  // Cálculo do Lucro (Total das Mensalidades - Total dos Custos)
+  const totalLucro = useMemo(() => {
+    return totalMensalidades - totalCustos
+  }, [totalMensalidades, totalCustos])
+
+  const totalLucroFiltrado = useMemo(() => {
+    return totalMensalidadesFiltradas - totalCustosFiltrados
+  }, [totalMensalidadesFiltradas, totalCustosFiltrados])
+
+  // Margem de lucro percentual
+  const margemLucro = useMemo(() => {
+    if (totalMensalidades <= 0) return 0
+    return Math.round((totalLucro / totalMensalidades) * 100)
+  }, [totalMensalidades, totalLucro])
+
   const {
     sortedData: clientesOrdenados,
     sortKey,
@@ -118,7 +142,7 @@ export default function ClientesPage() {
       razao_social: 250,
       cnpj: 180,
       regime: 130,
-      mensalidade: 120,
+      mensalidade: 170,
       certificado: 170,
       contabilidade: 180,
       status: 100,
@@ -135,6 +159,8 @@ export default function ClientesPage() {
       cnpj: (c: any) => c.cnpj || '',
       regime: (c: any) => c.regime_tributario || '',
       mensalidade: (c: any) => Number(c.valor_mensalidade || 0),
+      custo: (c: any) => Number(c.custo || 0),
+      lucro: (c: any) => Number(c.valor_mensalidade || 0) - Number(c.custo || 0),
       certificado: (c: any) => c.certificado_validade || '',
       contabilidade: (c: any) => c.contabilidades?.razao_social || '',
       status: (c: any) => (c.ativo ? 1 : 0),
@@ -144,34 +170,87 @@ export default function ClientesPage() {
 
   return (
     <div className="p-8">
-      <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 mb-8">
-        <div className="flex flex-wrap items-center gap-5 sm:gap-6">
+      <header className="flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-5 mb-8">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-5 xl:gap-6">
           <div>
             <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Clientes (Empresas)</h1>
             <p className="text-slate-500 mt-1 text-sm">Gerencie os clientes e os tokens de acesso ao Hub.</p>
           </div>
 
-          {/* Card com a Soma das Mensalidades das Empresas */}
-          <div className="flex items-center gap-3.5 bg-gradient-to-r from-emerald-50 via-teal-50/70 to-emerald-50 border border-emerald-200/90 rounded-2xl px-4 py-2.5 shadow-xs">
-            <div className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-xs shrink-0">
-              <DollarSign size={22} className="stroke-[2.5]" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">
-                  Soma das Mensalidades
-                </span>
-                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  MRR
-                </span>
+          {/* Cards Financeiros: Mensalidades (MRR), Custos e Lucro Líquido */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Card 1: Soma das Mensalidades (MRR) */}
+            <div className="flex items-center gap-3 bg-gradient-to-r from-emerald-50 via-teal-50/70 to-emerald-50 border border-emerald-200/90 rounded-2xl px-3.5 py-2 shadow-xs">
+              <div className="p-2 bg-emerald-600 text-white rounded-xl shadow-xs shrink-0">
+                <DollarSign size={20} className="stroke-[2.5]" />
               </div>
-              <div className="flex items-baseline gap-1.5 mt-0.5">
-                <span className="text-xl sm:text-2xl font-black text-emerald-950 font-mono">
-                  {totalMensalidades.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </span>
-                <span className="text-xs text-emerald-700 font-medium">
-                  /mês {searchTerm ? `(filtradas: ${totalMensalidadesFiltradas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : `(${clientes.length} empresas)`}
-                </span>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">
+                    Mensalidades
+                  </span>
+                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    MRR
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-1.5 mt-0.5">
+                  <span className="text-lg sm:text-xl font-black text-emerald-950 font-mono">
+                    {totalMensalidades.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </span>
+                  <span className="text-[11px] text-emerald-700 font-medium">
+                    /mês {searchTerm ? `(filtradas: ${totalMensalidadesFiltradas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : `(${clientes.length})`}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Custo Total das Empresas */}
+            <div className="flex items-center gap-3 bg-gradient-to-r from-rose-50 via-amber-50/60 to-rose-50 border border-rose-200/90 rounded-2xl px-3.5 py-2 shadow-xs">
+              <div className="p-2 bg-rose-600 text-white rounded-xl shadow-xs shrink-0">
+                <TrendingDown size={20} className="stroke-[2.5]" />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-rose-800">
+                    Custo Total
+                  </span>
+                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 border border-rose-200">
+                    GASTOS
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-1.5 mt-0.5">
+                  <span className="text-lg sm:text-xl font-black text-rose-950 font-mono">
+                    {totalCustos.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </span>
+                  <span className="text-[11px] text-rose-700 font-medium">
+                    /mês {searchTerm ? `(filtrado: ${totalCustosFiltrados.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : '(custo)'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: Lucro Líquido (Mensalidades - Custos) */}
+            <div className="flex items-center gap-3 bg-gradient-to-r from-blue-50 via-indigo-50/60 to-blue-50 border border-blue-200/90 rounded-2xl px-3.5 py-2 shadow-xs">
+              <div className="p-2 bg-blue-600 text-white rounded-xl shadow-xs shrink-0">
+                <TrendingUp size={20} className="stroke-[2.5]" />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-blue-800">
+                    Lucro Líquido
+                  </span>
+                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 border border-blue-200">
+                    {margemLucro}% MARGEM
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-1.5 mt-0.5">
+                  <span className={`text-lg sm:text-xl font-black font-mono ${totalLucro >= 0 ? 'text-blue-950' : 'text-red-700'}`}>
+                    {totalLucro.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </span>
+                  <span className="text-[11px] text-blue-700 font-medium">
+                    /mês {searchTerm ? `(filtrado: ${totalLucroFiltrado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : '(líquido)'}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -262,14 +341,14 @@ export default function ClientesPage() {
               />
               <ResizableSortableTh
                 columnId="mensalidade"
-                label="Mensalidade"
+                label="Mensalidade / Lucro"
                 sortKey="mensalidade"
                 currentSortKey={sortKey}
                 currentSortDirection={sortDirection}
                 onSort={handleSort}
                 width={columnWidths.mensalidade}
                 onResize={handleResizeColumn}
-                minWidth={100}
+                minWidth={140}
               />
               <ResizableSortableTh
                 columnId="certificado"
@@ -421,13 +500,22 @@ export default function ClientesPage() {
                     </td>
                     <td className="p-4">{getRegimeBadge(c.regime_tributario)}</td>
                     <td className="p-4">
-                      <div className="font-semibold text-slate-800 text-sm whitespace-nowrap">
+                      <div className="font-semibold text-slate-900 text-sm whitespace-nowrap">
                         {c.valor_mensalidade !== undefined && c.valor_mensalidade !== null
                           ? Number(c.valor_mensalidade).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
                           : 'R$ 0,00'}
                       </div>
+                      <div className="flex items-center gap-1.5 mt-0.5 text-[11px] whitespace-nowrap">
+                        <span className="text-rose-600 font-medium" title="Custo individual deste cliente">
+                          Custo: {Number(c.custo || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </span>
+                        <span className="text-slate-300">•</span>
+                        <span className={`font-semibold ${(Number(c.valor_mensalidade || 0) - Number(c.custo || 0)) >= 0 ? 'text-emerald-700' : 'text-red-600'}`} title="Lucro líquido deste cliente (Mensalidade - Custo)">
+                          Lucro: {(Number(c.valor_mensalidade || 0) - Number(c.custo || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </span>
+                      </div>
                       {c.dia_vencimento && (
-                        <div className="text-[11px] text-slate-500 font-medium mt-0.5 whitespace-nowrap">
+                        <div className="text-[10px] text-slate-400 font-medium mt-0.5 whitespace-nowrap">
                           Venc. dia {c.dia_vencimento}
                         </div>
                       )}

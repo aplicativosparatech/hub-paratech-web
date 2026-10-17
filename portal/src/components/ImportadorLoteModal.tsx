@@ -33,12 +33,12 @@ export interface ItemImportacao {
   nome_sistema_utilizado?: string
   dia_vencimento?: number
   valor_mensalidade?: number
+  custo?: number
   jaCadastrado?: boolean
   nomeExistente?: string
-  dadosFicticiosAplicados?: boolean
-  statusConsulta: 'pendente' | 'consultando' | 'sucesso' | 'erro' | 'manual' | 'duplicado' | 'ficticio'
+  statusConsulta: 'pendente' | 'consultando' | 'sucesso' | 'erro' | 'manual' | 'duplicado'
   mensagemErro?: string
-  origem: 'arquivo' | 'receita' | 'ficticio'
+  origem: 'arquivo' | 'receita'
 }
 
 interface ImportadorLoteModalProps {
@@ -47,67 +47,6 @@ interface ImportadorLoteModalProps {
   onSuccess: () => void
   tipo: 'contabilidade' | 'cliente'
   contabilidadesDisponiveis?: Array<{ id: string; razao_social: string }>
-}
-
-// Conjunto de dados fictícios realistas e profissionais para auto-completar campos obrigatórios
-const NOMES_FANTASIA_FICTICIOS = [
-  'SUPERMERCADO & CONVENIENCIA',
-  'RESTAURANTE & CHURRASCARIA',
-  'PADARIA & CONFEITARIA CENTRAL',
-  'AUTO POSTO & CONVENIENCIA',
-  'DISTRIBUIDORA DE BEBIDAS',
-  'DROGARIA & FARMACIA POPULAR',
-  'LOJA DE MATERIAIS DE CONSTRUCAO',
-  'BOUTIQUE & MODAS BRASIL',
-  'HAMBURGUERIA & BEER ARTESANAL',
-  'MERCADO & ACOUGUE MINAS',
-  'LANCHONETE & CAFE EXPRESSO',
-  'COMERCIAL & ATACADO REGIONAL'
-]
-
-const RAMOS_ATIVIDADE_FICTICIOS = [
-  'Comércio Varejista de Mercadorias em Geral',
-  'Restaurantes e Similares',
-  'Comércio Varejista de Bebidas',
-  'Comércio Varejista de Produtos Farmacêuticos',
-  'Comércio Varejista de Materiais de Construção',
-  'Lanchonetes, Casas de Chá e Sucos',
-  'Comércio Varejista de Carnes - Açougues',
-  'Comércio Varejista de Artigos do Vestuário e Acessórios'
-]
-
-export const gerarDadosFicticiosItem = (cnpjLimpo: string, index: number, cidadePadrao = 'Pará de Minas', ufPadrao = 'MG'): Partial<ItemImportacao> => {
-  const sufixo = cnpjLimpo.slice(-4) || String(1000 + index).slice(-4)
-  const idx = Math.abs(index) % NOMES_FANTASIA_FICTICIOS.length
-  const fantasia = `${NOMES_FANTASIA_FICTICIOS[idx]} ${sufixo}`
-  const razao = `${fantasia} LTDA`
-  const ramo = RAMOS_ATIVIDADE_FICTICIOS[idx % RAMOS_ATIVIDADE_FICTICIOS.length]
-  const telefone = `(37) 3232-${String(1000 + (index % 8999)).padStart(4, '0')}`
-  const whatsapp = `(37) 99876-${String(1000 + (index % 8999)).padStart(4, '0')}`
-  const email = `fiscal.${cnpjLimpo.slice(0, 8)}@hubparatech.com.br`
-
-  return {
-    razao_social: razao,
-    nome_fantasia: fantasia,
-    inscricao_estadual: 'ISENTO',
-    nome_sistema_utilizado: 'PARATECH ERP',
-    ramo_atividade: ramo,
-    regime_tributario: 'simples_nacional',
-    email,
-    telefone,
-    whatsapp,
-    cidade: cidadePadrao,
-    uf: ufPadrao,
-    cep: '35660-000',
-    logradouro: 'Avenida Principal do Comércio',
-    numero: String(100 + (index * 12)),
-    complemento: `Sala ${((index % 8) + 1)}`,
-    bairro: 'Centro',
-    dia_vencimento: 10,
-    valor_mensalidade: 0,
-    dadosFicticiosAplicados: true,
-    origem: 'ficticio'
-  }
 }
 
 export default function ImportadorLoteModal({
@@ -121,12 +60,9 @@ export default function ImportadorLoteModal({
   const [arquivoNome, setArquivoNome] = useState<string>('')
   const [lendoArquivo, setLendoArquivo] = useState(false)
   const [processandoReceita, setProcessandoReceita] = useState(false)
-  const [progressoReceita, setProgressoReceita] = useState<{ atual: number; total: number }>({ atual: 0, total: 0 })
+  const [progressoReceita, setProgressoReceita] = useState<{ atual: number; total: number; mensagem?: string }>({ atual: 0, total: 0 })
   const [salvandoBanco, setSalvandoBanco] = useState(false)
   const [contabilidadeSelecionada, setContabilidadeSelecionada] = useState<string>('')
-  
-  // Preferência para preenchimento de dados fictícios nos campos obrigatórios
-  const [preencherFicticios, setPreencherFicticios] = useState<boolean>(true)
   
   // Mapa de CNPJs já cadastrados no banco para BLOQUEIO DE REPETIDOS
   const [cnpjsCadastrados, setCnpjsCadastrados] = useState<Map<string, { id: string; razao_social: string; nome_fantasia?: string }>>(new Map())
@@ -174,6 +110,39 @@ export default function ImportadorLoteModal({
     })
   }
 
+  // Consulta API de dados reais da Receita Federal para um CNPJ
+  const consultarDadosReaisCnpj = async (cnpjLimpo: string): Promise<Partial<ItemImportacao> | null> => {
+    try {
+      const res = await fetch(`/api/consulta-cnpj?cnpj=${encodeURIComponent(cnpjLimpo)}`)
+      const data = await res.json()
+
+      if (res.ok && data.sucesso) {
+        return {
+          razao_social: data.razao_social || '',
+          nome_fantasia: data.nome_fantasia || data.razao_social || '',
+          email: data.email || '',
+          telefone: data.telefone || '',
+          whatsapp: data.whatsapp || (data.telefone ? data.telefone.replace(/\D/g, '') : ''),
+          cidade: data.cidade || '',
+          uf: data.uf || '',
+          cep: data.cep || '',
+          logradouro: data.logradouro || '',
+          numero: data.numero || '',
+          complemento: data.complemento || '',
+          bairro: data.bairro || '',
+          ramo_atividade: data.ramo_atividade || '',
+          regime_tributario: data.regime_tributario || 'simples_nacional',
+          inscricao_estadual: data.inscricao_estadual || '',
+          statusConsulta: 'sucesso',
+          origem: 'receita'
+        }
+      }
+    } catch (err) {
+      console.error(`Erro ao consultar CNPJ ${cnpjLimpo}:`, err)
+    }
+    return null
+  }
+
   // 1. Processamento de Arquivos (CSV, TXT, JSON, XLS, XLSX)
   const handleArquivoSelecionado = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -217,9 +186,9 @@ export default function ImportadorLoteModal({
         return true
       })
 
-      // 1.2 Cruzar com a base do Supabase para BLOQUEAR REPETIDOS e aplicar dados fictícios se solicitado
+      // 1.2 Cruzar com a base do Supabase para BLOQUEAR REPETIDOS
       let totalRepetidos = 0
-      const itensTratados = itensUnicos.map((it, idx) => {
+      const itensTratados = itensUnicos.map((it) => {
         const jaExiste = cnpjsCadastrados.get(it.cnpj)
         if (jaExiste) {
           totalRepetidos++
@@ -231,18 +200,21 @@ export default function ImportadorLoteModal({
           }
         }
 
-        // Se for novo e a opção de preencher dados fictícios estiver ativa
-        if (preencherFicticios && !it.razao_social) {
-          const ficticio = gerarDadosFicticiosItem(it.cnpj, idx)
+        // Se já veio com Razão Social preenchida na planilha, marca como manual
+        if (it.razao_social) {
           return {
             ...it,
-            ...ficticio,
-            statusConsulta: 'ficticio' as const,
-            origem: 'ficticio' as const
+            statusConsulta: 'manual' as const,
+            origem: 'arquivo' as const
           }
         }
 
-        return it
+        // Caso contrário, fica pendente para buscar dados reais na Receita Federal
+        return {
+          ...it,
+          statusConsulta: 'pendente' as const,
+          origem: 'arquivo' as const
+        }
       })
 
       setItens(itensTratados)
@@ -253,7 +225,7 @@ export default function ImportadorLoteModal({
           { id: toastId, duration: 6000 }
         )
       } else {
-        toast.success(`${itensTratados.length} registros novos extraídos com sucesso!`, { id: toastId })
+        toast.success(`${itensTratados.length} novos CNPJs extraídos! Os dados reais serão preenchidos automaticamente.`, { id: toastId })
       }
     } catch (err: any) {
       toast.error(err.message || 'Erro ao processar arquivo.', { id: toastId })
@@ -464,129 +436,55 @@ export default function ImportadorLoteModal({
     return resultado
   }
 
-  // 2. Ação Rápida: Aplicar Dados Fictícios a Todos os Itens Vazios
-  const handleAplicarDadosFicticiosEmTodos = () => {
-    if (itens.length === 0) return
-
-    let alterados = 0
-    const atualizados = itens.map((it, idx) => {
-      // Ignora os que já existem no banco
-      if (it.jaCadastrado) return it
-
-      // Se não tem razão social ou está pendente, preenche
-      if (!it.razao_social || it.statusConsulta === 'pendente' || it.statusConsulta === 'erro') {
-        alterados++
-        const ficticio = gerarDadosFicticiosItem(it.cnpj, idx)
-        return {
-          ...it,
-          ...ficticio,
-          statusConsulta: 'ficticio' as const,
-          origem: 'ficticio' as const
-        }
-      }
-      return it
-    })
-
-    setItens(atualizados)
-    toast.success(`✨ Dados fictícios preenchidos em ${alterados} empresas! Todas estão prontas para cadastro imediato.`)
-  }
-
-  // 3. Consulta Automática na Receita Federal para todos os CNPJs pendentes
+  // 2. Consulta Manual/Adiantada de Todos os CNPJs Pendentes na Receita Federal
   const handleConsultarTodosNaReceita = async () => {
     if (itens.length === 0 || processandoReceita) return
 
     setProcessandoReceita(true)
-    const toastId = toast.loading('Iniciando busca em lote na Receita Federal...')
+    const toastId = toast.loading('Buscando dados oficiais na Receita Federal...')
 
     const novosItens = [...itens]
     let concluidos = 0
     const total = novosItens.filter(it => !it.jaCadastrado).length
-    setProgressoReceita({ atual: 0, total })
+    setProgressoReceita({ atual: 0, total, mensagem: 'Consultando Receita Federal...' })
 
     for (let i = 0; i < novosItens.length; i++) {
       const item = novosItens[i]
-      
-      // Pula repetidos já existentes
       if (item.jaCadastrado) continue
 
       novosItens[i] = { ...item, statusConsulta: 'consultando' }
       setItens([...novosItens])
 
-      try {
-        const res = await fetch(`/api/consulta-cnpj?cnpj=${encodeURIComponent(item.cnpj)}`)
-        const data = await res.json()
-
-        if (res.ok && data.sucesso) {
-          novosItens[i] = {
-            ...novosItens[i],
-            razao_social: data.razao_social || item.razao_social || 'EMPRESA SEM NOME',
-            nome_fantasia: data.nome_fantasia || data.razao_social || item.nome_fantasia,
-            email: data.email || item.email,
-            telefone: data.telefone || item.telefone,
-            whatsapp: data.whatsapp || item.whatsapp,
-            cidade: data.cidade || item.cidade,
-            uf: data.uf || item.uf,
-            cep: data.cep || item.cep,
-            logradouro: data.logradouro || item.logradouro,
-            numero: data.numero || item.numero,
-            complemento: data.complemento || item.complemento,
-            bairro: data.bairro || item.bairro,
-            ramo_atividade: data.ramo_atividade || item.ramo_atividade,
-            regime_tributario: data.regime_tributario || item.regime_tributario || 'simples_nacional',
-            inscricao_estadual: data.inscricao_estadual || item.inscricao_estadual,
-            statusConsulta: 'sucesso',
-            origem: 'receita'
-          }
-        } else {
-          // Se falhou na Receita e a opção de dados fictícios está ativa, preenche dados fictícios!
-          if (preencherFicticios) {
-            const ficticio = gerarDadosFicticiosItem(item.cnpj, i)
-            novosItens[i] = {
-              ...novosItens[i],
-              ...ficticio,
-              statusConsulta: 'ficticio',
-              mensagemErro: `${data.error || 'RFB indisponível'} — Dados fictícios aplicados`
-            }
-          } else {
-            novosItens[i] = {
-              ...novosItens[i],
-              statusConsulta: 'erro',
-              mensagemErro: data.error || 'Não localizado na RFB'
-            }
-          }
+      const dadosReais = await consultarDadosReaisCnpj(item.cnpj)
+      if (dadosReais && dadosReais.razao_social) {
+        novosItens[i] = {
+          ...novosItens[i],
+          ...dadosReais,
+          statusConsulta: 'sucesso',
+          origem: 'receita'
         }
-      } catch (err: any) {
-        if (preencherFicticios) {
-          const ficticio = gerarDadosFicticiosItem(item.cnpj, i)
-          novosItens[i] = {
-            ...novosItens[i],
-            ...ficticio,
-            statusConsulta: 'ficticio',
-            mensagemErro: 'Falha na rede — Dados fictícios aplicados'
-          }
-        } else {
-          novosItens[i] = {
-            ...novosItens[i],
-            statusConsulta: 'erro',
-            mensagemErro: err.message || 'Falha na requisição'
-          }
+      } else {
+        novosItens[i] = {
+          ...novosItens[i],
+          statusConsulta: 'erro',
+          mensagemErro: 'Não localizado na RFB (será preenchido nome padrão)'
         }
       }
 
       concluidos++
-      setProgressoReceita({ atual: concluidos, total })
+      setProgressoReceita({ atual: concluidos, total, mensagem: `Consultando ${concluidos}/${total}...` })
       setItens([...novosItens])
 
       await new Promise(r => setTimeout(r, 200))
     }
 
     setProcessandoReceita(false)
-    toast.success('Consultas concluídas!', { id: toastId })
+    toast.success('Consultas na Receita Federal concluídas!', { id: toastId })
   }
 
-  // 4. Salvar Cadastros em Lote com Bloqueio de Repetidos e Dados Fictícios
+  // 3. Salvar Cadastros: SE HOUVER CNPJs SEM DADOS REAIS, BUSCA NA RECEITA AUTOMATICAMENTE ANTES DE GRAVAR!
   const handleSalvarCadastros = async () => {
-    // 4.1 Bloqueio de Repetidos: filtrar apenas empresas que NÃO estão cadastradas
+    // 3.1 Bloqueio de Repetidos: filtrar estritamente empresas inéditas
     const itensNovos = itens.filter(it => !it.jaCadastrado && !cnpjsCadastrados.has(it.cnpj))
     const repetidosCount = itens.length - itensNovos.length
 
@@ -596,66 +494,102 @@ export default function ImportadorLoteModal({
     }
 
     setSalvandoBanco(true)
-    const toastId = toast.loading(`Cadastrando ${itensNovos.length} ${tipo === 'contabilidade' ? 'escritórios' : 'clientes'} no portal...`)
+    const toastId = toast.loading(`Processando e buscando dados reais da Receita Federal...`)
 
     try {
-      if (tipo === 'contabilidade') {
-        const payloads = itensNovos.map((it, idx) => {
-          const ficticio = gerarDadosFicticiosItem(it.cnpj, idx)
-          return {
-            razao_social: it.razao_social || ficticio.razao_social || `Contabilidade ${it.cnpjFormatado}`,
-            nome_fantasia: it.nome_fantasia || it.razao_social || ficticio.nome_fantasia,
-            cnpj: it.cnpjFormatado,
-            email_contato: it.email || ficticio.email || null,
-            telefone: it.telefone || ficticio.telefone || null,
-            whatsapp: it.whatsapp || ficticio.whatsapp || null,
-            cep: it.cep || ficticio.cep || null,
-            logradouro: it.logradouro || ficticio.logradouro || null,
-            numero: it.numero || ficticio.numero || null,
-            complemento: it.complemento || ficticio.complemento || null,
-            bairro: it.bairro || ficticio.bairro || null,
-            cidade: it.cidade || ficticio.cidade || null,
-            uf: it.uf || ficticio.uf || null
+      // 3.2 Se houver itens novos que ainda não foram consultados na Receita Federal, buscar agora!
+      const itensProntos: ItemImportacao[] = []
+      let consultadosAgora = 0
+
+      for (let i = 0; i < itensNovos.length; i++) {
+        let it = itensNovos[i]
+
+        // Se ainda não tem razão social real ou está pendente
+        if (!it.razao_social || it.statusConsulta === 'pendente') {
+          consultadosAgora++
+          toast.loading(`Buscando dados na Receita Federal (${consultadosAgora}/${itensNovos.length}): ${it.cnpjFormatado}...`, { id: toastId })
+          
+          const dadosReais = await consultarDadosReaisCnpj(it.cnpj)
+          if (dadosReais && dadosReais.razao_social) {
+            it = {
+              ...it,
+              ...dadosReais,
+              statusConsulta: 'sucesso',
+              origem: 'receita'
+            }
+          } else {
+            // Fallback respeitoso apenas se a Receita falhar após todas as tentativas
+            it = {
+              ...it,
+              razao_social: it.razao_social || `EMPRESA ${it.cnpjFormatado}`,
+              nome_fantasia: it.nome_fantasia || it.razao_social || `EMPRESA ${it.cnpjFormatado}`,
+              cidade: it.cidade || 'Pará de Minas',
+              uf: it.uf || 'MG',
+              regime_tributario: it.regime_tributario || 'simples_nacional',
+              inscricao_estadual: it.inscricao_estadual || 'ISENTO',
+              origem: 'arquivo'
+            }
           }
-        })
+          await new Promise(r => setTimeout(r, 200))
+        }
+
+        itensProntos.push(it)
+      }
+
+      toast.loading(`Salvando ${itensProntos.length} novos cadastros no portal...`, { id: toastId })
+
+      if (tipo === 'contabilidade') {
+        const payloads = itensProntos.map((it) => ({
+          razao_social: it.razao_social || `Contabilidade ${it.cnpjFormatado}`,
+          nome_fantasia: it.nome_fantasia || it.razao_social,
+          cnpj: it.cnpjFormatado,
+          email_contato: it.email || null,
+          telefone: it.telefone || null,
+          whatsapp: it.whatsapp || null,
+          cep: it.cep || null,
+          logradouro: it.logradouro || null,
+          numero: it.numero || null,
+          complemento: it.complemento || null,
+          bairro: it.bairro || null,
+          cidade: it.cidade || null,
+          uf: it.uf || null
+        }))
 
         const { error } = await supabase.from('contabilidades').insert(payloads)
         if (error) throw error
 
       } else {
-        // Clientes: aplicar dados fictícios completos em todos os campos obrigatórios vazios
-        const payloads = itensNovos.map((it, idx) => {
-          const ficticio = gerarDadosFicticiosItem(it.cnpj, idx)
-          return {
-            razao_social: it.razao_social || ficticio.razao_social || `Empresa ${it.cnpjFormatado}`,
-            nome_fantasia: it.nome_fantasia || it.razao_social || ficticio.nome_fantasia,
-            cnpj: it.cnpjFormatado,
-            contabilidade_id: contabilidadeSelecionada || null,
-            email_fiscal: it.email || ficticio.email || null,
-            whatsapp: it.whatsapp || ficticio.whatsapp || null,
-            cidade: it.cidade || ficticio.cidade || 'Pará de Minas',
-            uf: it.uf || ficticio.uf || 'MG',
-            cep: it.cep || ficticio.cep || '35660-000',
-            logradouro: it.logradouro || ficticio.logradouro || 'Avenida Principal',
-            numero: it.numero || ficticio.numero || '100',
-            complemento: it.complemento || ficticio.complemento || null,
-            bairro: it.bairro || ficticio.bairro || 'Centro',
-            ramo_atividade: it.ramo_atividade || ficticio.ramo_atividade || 'Comércio Varejista em Geral',
-            regime_tributario: it.regime_tributario || ficticio.regime_tributario || 'simples_nacional',
-            inscricao_estadual: it.inscricao_estadual || ficticio.inscricao_estadual || 'ISENTO',
-            nome_sistema_utilizado: it.nome_sistema_utilizado || ficticio.nome_sistema_utilizado || 'PARATECH ERP',
-            is_ativo: true,
-            dia_vencimento: it.dia_vencimento || 10,
-            valor_mensalidade: it.valor_mensalidade !== undefined ? it.valor_mensalidade : 0,
-            data_inicio_monitoramento: new Date().toISOString().split('T')[0],
-            numero_inicial_nfe: 1,
-            numero_inicial_nfce: 1,
-            numero_inicial_nfse: 1,
-            numero_inicial_cte: 1,
-            numero_inicial_mdfe: 1,
-            hub_token: gerarTokenHub()
-          }
-        })
+        // Clientes: salva com os dados REAIS obtidos da Receita Federal
+        const payloads = itensProntos.map((it) => ({
+          razao_social: it.razao_social || `Empresa ${it.cnpjFormatado}`,
+          nome_fantasia: it.nome_fantasia || it.razao_social,
+          cnpj: it.cnpjFormatado,
+          contabilidade_id: contabilidadeSelecionada || null,
+          email_fiscal: it.email || null,
+          whatsapp: it.whatsapp || null,
+          cidade: it.cidade || 'Pará de Minas',
+          uf: it.uf || 'MG',
+          cep: it.cep || '35660-000',
+          logradouro: it.logradouro || 'Avenida Principal',
+          numero: it.numero || '100',
+          complemento: it.complemento || null,
+          bairro: it.bairro || 'Centro',
+          ramo_atividade: it.ramo_atividade || 'Comércio Varejista em Geral',
+          regime_tributario: it.regime_tributario || 'simples_nacional',
+          inscricao_estadual: it.inscricao_estadual || 'ISENTO',
+          nome_sistema_utilizado: it.nome_sistema_utilizado || 'PARATECH ERP',
+          is_ativo: true,
+          dia_vencimento: it.dia_vencimento || 10,
+          valor_mensalidade: it.valor_mensalidade !== undefined ? it.valor_mensalidade : 0,
+          custo: it.custo !== undefined ? it.custo : 0,
+          data_inicio_monitoramento: new Date().toISOString().split('T')[0],
+          numero_inicial_nfe: 1,
+          numero_inicial_nfce: 1,
+          numero_inicial_nfse: 1,
+          numero_inicial_cte: 1,
+          numero_inicial_mdfe: 1,
+          hub_token: gerarTokenHub()
+        }))
 
         const { data: insertedData, error } = await supabase
           .from('clientes')
@@ -676,8 +610,8 @@ export default function ImportadorLoteModal({
       }
 
       const mensagemSucesso = repetidosCount > 0
-        ? `🎉 ${itensNovos.length} novos clientes cadastrados com sucesso! (${repetidosCount} empresas repetidas foram bloqueadas e ignoradas).`
-        : `🎉 Todos os ${itensNovos.length} clientes foram cadastrados com sucesso!`
+        ? `🎉 ${itensProntos.length} clientes cadastrados com dados reais da Receita Federal! (${repetidosCount} empresas repetidas foram bloqueadas).`
+        : `🎉 Todos os ${itensProntos.length} clientes foram cadastrados com sucesso com os dados oficiais da Receita Federal!`
 
       toast.success(mensagemSucesso, { id: toastId, duration: 6000 })
       onSuccess()
@@ -722,8 +656,8 @@ export default function ImportadorLoteModal({
   // Contagens reativas
   const repetidosCount = itens.filter(it => it.jaCadastrado).length
   const novosCount = itens.filter(it => !it.jaCadastrado).length
-  const ficticiosCount = itens.filter(it => it.statusConsulta === 'ficticio').length
-  const prontasParaSalvar = itens.filter(it => !it.jaCadastrado && (it.razao_social || preencherFicticios)).length
+  const consultadosCount = itens.filter(it => !it.jaCadastrado && (it.statusConsulta === 'sucesso' || it.statusConsulta === 'manual')).length
+  const pendentesCount = itens.filter(it => !it.jaCadastrado && it.statusConsulta === 'pendente').length
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
@@ -745,7 +679,7 @@ export default function ImportadorLoteModal({
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Bloqueia automaticamente cadastros repetidos e preenche dados fictícios nos campos obrigatórios para importação instantânea.
+                Envie planilhas ou a lista de CNPJs. Ao salvar, o sistema busca os <strong>dados cadastrais reais</strong> diretamente na Receita Federal.
               </p>
             </div>
           </div>
@@ -806,7 +740,7 @@ export default function ImportadorLoteModal({
                   {arquivoNome ? `Arquivo carregado: ${arquivoNome}` : 'Arraste ou clique para carregar o arquivo com os CNPJs'}
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  Aceita arquivos <strong>.CSV, .TXT, .JSON, .XLS ou .XLSX</strong> contendo uma lista simples de CNPJs ou planilhas completas.
+                  Aceita arquivos <strong>.CSV, .TXT, .JSON, .XLS ou .XLSX</strong> contendo uma lista de CNPJs ou planilhas completas.
                 </p>
               </div>
 
@@ -833,45 +767,6 @@ export default function ImportadorLoteModal({
             </div>
           </div>
 
-          {/* Configuração de Dados Fictícios & Bloqueio */}
-          {itens.length > 0 && (
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 dark:from-slate-800 dark:to-slate-800 border border-emerald-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <div className="p-2 bg-emerald-600 text-white rounded-xl shadow-xs shrink-0 mt-0.5">
-                  <Sparkles size={18} />
-                </div>
-                <div>
-                  <label htmlFor="toggle_ficticios" className="text-xs font-bold text-slate-900 dark:text-white block cursor-pointer select-none">
-                    Completar Campos Obrigatórios com Dados Fictícios
-                  </label>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
-                    Gera automaticamente Razão Social, Fantasia, Inscrição Estadual (ISENTO), ERP padrão, telefone e endereço para qualquer CNPJ sem consulta à Receita Federal.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                <button
-                  type="button"
-                  onClick={handleAplicarDadosFicticiosEmTodos}
-                  className="px-3 py-1.5 bg-white dark:bg-slate-700 border border-emerald-300 dark:border-slate-600 hover:bg-emerald-50 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs"
-                  title="Aplica dados fictícios em todas as empresas sem cadastro completo"
-                >
-                  <Sparkles size={13} />
-                  <span>Preencher Fictícios Agora</span>
-                </button>
-
-                <input
-                  type="checkbox"
-                  id="toggle_ficticios"
-                  checked={preencherFicticios}
-                  onChange={e => setPreencherFicticios(e.target.checked)}
-                  className="h-5 w-5 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                />
-              </div>
-            </div>
-          )}
-
           {/* Barra de Status & Métricas do Lote */}
           {itens.length > 0 && (
             <div className="p-4 rounded-2xl bg-slate-900 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-md">
@@ -889,23 +784,23 @@ export default function ImportadorLoteModal({
                     </span>
                   )}
 
-                  {ficticiosCount > 0 && (
-                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 border border-indigo-400/40 text-indigo-300 font-bold flex items-center gap-1">
-                      <Sparkles size={12} /> {ficticiosCount} com dados fictícios
+                  {consultadosCount > 0 && (
+                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/20 border border-blue-400/40 text-blue-300 font-bold flex items-center gap-1">
+                      <Check size={12} /> {consultadosCount} com dados reais
                     </span>
                   )}
                 </div>
                 <p className="text-xs text-slate-300">
-                  {repetidosCount > 0
-                    ? `⚠️ ${repetidosCount} empresas já existem no portal e serão bloqueadas automaticamente para evitar duplicidade.`
-                    : 'Todos os CNPJs do arquivo são novos e válidos para inclusão no sistema.'}
+                  {pendentesCount > 0 
+                    ? `🔍 ${pendentesCount} empresas terão seus dados cadastrais (Razão Social, IE, Endereço e Contato) buscados na Receita Federal ao salvar.`
+                    : 'Todas as empresas já possuem dados cadastrais identificados e prontos.'}
                 </p>
               </div>
 
               <button
                 type="button"
                 onClick={handleConsultarTodosNaReceita}
-                disabled={processandoReceita || novosCount === 0}
+                disabled={processandoReceita || pendentesCount === 0}
                 className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-2 shadow-lg shrink-0"
               >
                 {processandoReceita ? (
@@ -916,7 +811,7 @@ export default function ImportadorLoteModal({
                 ) : (
                   <>
                     <Search size={16} />
-                    <span>Consultar na Receita Federal (Opcional)</span>
+                    <span>Consultar Receita Federal Agora</span>
                   </>
                 )}
               </button>
@@ -927,7 +822,7 @@ export default function ImportadorLoteModal({
           {processandoReceita && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
-                <span>Processando CNPJs na Receita Federal...</span>
+                <span>{progressoReceita.mensagem || 'Processando CNPJs na Receita Federal...'}</span>
                 <span>{progressoReceita.atual} de {progressoReceita.total} ({Math.round((progressoReceita.atual / (progressoReceita.total || 1)) * 100)}%)</span>
               </div>
               <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
@@ -939,7 +834,7 @@ export default function ImportadorLoteModal({
             </div>
           )}
 
-          {/* Tabela de Prévia dos Dados com Destaque de Bloqueio e Fictícios */}
+          {/* Tabela de Prévia dos Dados com Destaque de Bloqueio e Dados Reais */}
           {itens.length > 0 && (
             <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs">
               <div className="max-h-64 overflow-y-auto custom-scrollbar">
@@ -950,7 +845,7 @@ export default function ImportadorLoteModal({
                       <th className="p-3">CNPJ</th>
                       <th className="p-3">Razão Social / Nome Fantasia</th>
                       <th className="p-3">Município / UF</th>
-                      <th className="p-3">Contato / ERP</th>
+                      <th className="p-3">Contato / Telefone</th>
                       <th className="p-3 text-right">Ação</th>
                     </tr>
                   </thead>
@@ -969,12 +864,8 @@ export default function ImportadorLoteModal({
                             <span className="inline-flex items-center gap-1 text-red-700 dark:text-red-400 font-bold bg-red-100 dark:bg-red-900/40 px-2 py-0.5 rounded-md border border-red-200 dark:border-red-800">
                               <ShieldAlert size={12} /> Já Cadastrado (Bloqueado)
                             </span>
-                          ) : it.statusConsulta === 'ficticio' ? (
-                            <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-bold bg-emerald-100 dark:bg-emerald-900/40 px-2 py-0.5 rounded-md border border-emerald-200">
-                              <Sparkles size={12} /> Dados Fictícios
-                            </span>
                           ) : it.statusConsulta === 'sucesso' ? (
-                            <span className="inline-flex items-center gap-1 text-blue-700 dark:text-blue-400 font-bold bg-blue-100 dark:bg-blue-900/40 px-2 py-0.5 rounded-md border border-blue-200">
+                            <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-bold bg-emerald-100 dark:bg-emerald-900/40 px-2 py-0.5 rounded-md border border-emerald-200">
                               <CheckCircle2 size={12} /> Receita Federal
                             </span>
                           ) : it.statusConsulta === 'manual' ? (
@@ -986,8 +877,8 @@ export default function ImportadorLoteModal({
                               <Loader2 size={12} className="animate-spin" /> Consultando
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-amber-700 font-bold bg-amber-100 px-2 py-0.5 rounded-md border border-amber-200">
-                              <AlertCircle size={12} /> Pendente
+                            <span className="inline-flex items-center gap-1 text-amber-700 font-bold bg-amber-100 px-2 py-0.5 rounded-md border border-amber-200" title="Será buscado na Receita ao salvar">
+                              <AlertCircle size={12} /> Pendente (Busca ao Salvar)
                             </span>
                           )}
                         </td>
@@ -998,16 +889,16 @@ export default function ImportadorLoteModal({
                           {it.jaCadastrado ? (
                             <div>
                               <span className="font-bold text-red-900 dark:text-red-300 block truncate">
-                                🚫 Empresa já existente: {it.nomeExistente || it.razao_social}
+                                🚫 Já existente: {it.nomeExistente || it.razao_social}
                               </span>
-                              <span className="text-[10px] text-red-600 block">Não será importada novamente</span>
+                              <span className="text-[10px] text-red-600 block">Não será importado novamente</span>
                             </div>
                           ) : (
                             <div>
                               <span className="font-bold text-slate-900 dark:text-white block truncate">
-                                {it.razao_social || <span className="text-slate-400 italic font-normal">Pendente (será gerado fictício)</span>}
+                                {it.razao_social || <span className="text-blue-600 italic font-medium">Buscando dados na Receita Federal ao salvar...</span>}
                               </span>
-                              {it.nome_fantasia && (
+                              {it.nome_fantasia && it.nome_fantasia !== it.razao_social && (
                                 <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate">
                                   {it.nome_fantasia}
                                 </span>
@@ -1016,12 +907,14 @@ export default function ImportadorLoteModal({
                           )}
                         </td>
                         <td className="p-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                          {it.cidade ? `${it.cidade}/${it.uf}` : <span className="text-slate-400">Pará de Minas/MG</span>}
+                          {it.cidade ? `${it.cidade}/${it.uf}` : <span className="text-slate-400 italic">Receita Federal</span>}
                         </td>
                         <td className="p-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
                           <div>
-                            <span>{it.telefone || it.whatsapp || '(37) 3232-1000'}</span>
-                            <span className="text-[10px] text-slate-400 block">ERP: {it.nome_sistema_utilizado || 'PARATECH'}</span>
+                            <span>{it.telefone || it.whatsapp || <span className="text-slate-400 italic">Receita Federal</span>}</span>
+                            {it.inscricao_estadual && (
+                              <span className="text-[10px] text-slate-500 block">IE: {it.inscricao_estadual}</span>
+                            )}
                           </div>
                         </td>
                         <td className="p-3 text-right">
@@ -1076,12 +969,12 @@ export default function ImportadorLoteModal({
               {salvandoBanco ? (
                 <>
                   <Loader2 size={15} className="animate-spin" />
-                  <span>Salvando no Banco...</span>
+                  <span>Buscando Dados na RFB e Salvando...</span>
                 </>
               ) : (
                 <>
                   <CheckCircle2 size={15} />
-                  <span>Confirmar e Salvar ({novosCount}) Novos Cadastros</span>
+                  <span>Confirmar e Salvar ({novosCount}) Cadastros</span>
                 </>
               )}
             </button>
