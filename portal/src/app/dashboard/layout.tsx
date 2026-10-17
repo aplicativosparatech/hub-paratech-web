@@ -6,7 +6,8 @@ import {
   LayoutDashboard, Users, Building2, Settings, FileText, 
   LogOut, BarChart3, Receipt, FileDown, PlugZap, UserCircle,
   Menu, X, Sliders, ShieldCheck, Sparkles, Database,
-  Maximize2, Minimize2, Sun, Moon, Palette, ScanText, GraduationCap, Inbox
+  Maximize2, Minimize2, Sun, Moon, Palette, ScanText, GraduationCap, Inbox,
+  PanelLeftClose, PanelLeftOpen
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
@@ -28,6 +29,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
+  const [isCollapsed, setIsCollapsed] = useState(false)
+
+  // Carregar preferência salva do menu lateral recolhido
+  useEffect(() => {
+    const saved = localStorage.getItem('hub_sidebar_collapsed') === 'true'
+    setIsCollapsed(saved)
+  }, [])
+
+  const toggleSidebar = () => {
+    setIsCollapsed(prev => {
+      const next = !prev
+      localStorage.setItem('hub_sidebar_collapsed', String(next))
+      return next
+    })
+  }
 
   // 0. Tema Claro / Escuro
   useEffect(() => {
@@ -227,43 +243,59 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return (
       <Link 
         href={href} 
-        className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
+        title={isCollapsed ? label : undefined}
+        className={`flex items-center ${isCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-4 py-2.5'} rounded-xl transition-all duration-200 group relative ${
           isActive 
-            ? 'bg-blue-600/10 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400 font-semibold shadow-xs' 
+            ? 'bg-blue-600/10 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400 font-semibold shadow-2xs' 
             : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/70 dark:hover:text-slate-100'
         }`}
       >
-        <Icon size={20} className={isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500 group-hover:text-blue-500 transition-colors'} />
-        <span>{label}</span>
+        <Icon size={20} className={`${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500 group-hover:text-blue-500'} shrink-0 transition-colors`} />
+        {!isCollapsed && <span className="truncate text-sm">{label}</span>}
+        {isCollapsed && (
+          <div className="absolute left-full ml-3 px-2.5 py-1.5 bg-slate-900 dark:bg-slate-800 text-white text-xs font-semibold rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 whitespace-nowrap shadow-xl border border-slate-700">
+            {label}
+          </div>
+        )}
       </Link>
     )
   }
 
   const SidebarContent = () => (
     <>
-      <div className="p-5 lg:p-6 pb-4 border-b border-slate-100 dark:border-slate-800/80 flex items-start justify-between">
-        <div className="flex flex-col items-start w-full gap-2.5">
-          {/* Logo Paratech Oficial (Imagem 01) - mesma largura da junção HubParatech + versão como na imagem 2 */}
-          <Link href="/dashboard" className="block w-full transition-transform hover:scale-[1.01]">
-            <img 
-              src="/logo-paratech.webp" 
-              alt="Paratech Soluções & Sistemas" 
-              className="w-full h-auto object-contain block drop-shadow-xs"
-            />
+      <div className={`p-4 ${isCollapsed ? 'p-3 text-center' : 'lg:p-5'} pb-3 border-b border-slate-100 dark:border-slate-800/80 flex items-start justify-between`}>
+        <div className="flex flex-col items-start w-full gap-2">
+          {/* Logo Paratech Oficial */}
+          <Link href="/dashboard" className="block w-full transition-transform hover:scale-[1.01]" title="HubParatech">
+            {isCollapsed ? (
+              <div className="w-10 h-10 mx-auto rounded-xl bg-blue-600 flex items-center justify-center text-white font-black text-lg shadow-sm">
+                P
+              </div>
+            ) : (
+              <img 
+                src="/logo-paratech.webp" 
+                alt="Paratech Soluções & Sistemas" 
+                className="w-full h-auto object-contain block drop-shadow-xs"
+              />
+            )}
           </Link>
-          <div className="w-full flex items-center justify-between">
-            <h2 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-              Hub<span className="text-blue-600">Paratech</span>
-            </h2>
-            <span className="text-[11px] font-bold uppercase tracking-wider bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2.5 py-0.5 rounded-xl border border-blue-200 dark:border-blue-800">
-              {APP_VERSION}
-            </span>
-          </div>
+          {!isCollapsed && (
+            <>
+              <div className="w-full flex items-center justify-between">
+                <h2 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                  Hub<span className="text-blue-600">Paratech</span>
+                </h2>
+                <span className="text-[11px] font-bold uppercase tracking-wider bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2.5 py-0.5 rounded-xl border border-blue-200 dark:border-blue-800">
+                  {APP_VERSION}
+                </span>
+              </div>
 
-          {/* Status do Servidor SEFAZ em tempo real (Clicável para maiores detalhes) */}
-          <div className="w-full mt-1">
-            <SefazStatusBadge />
-          </div>
+              {/* Status do Servidor SEFAZ em tempo real */}
+              <div className="w-full mt-1">
+                <SefazStatusBadge />
+              </div>
+            </>
+          )}
         </div>
         {/* Botão fechar para mobile */}
         <button 
@@ -274,21 +306,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </button>
       </div>
       
-      <nav className="flex-1 px-4 lg:px-5 space-y-1.5 mt-2 overflow-y-auto custom-scrollbar">
-        <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 px-4 mt-2">Visão Geral</div>
+      <nav className={`flex-1 ${isCollapsed ? 'px-2' : 'px-3 lg:px-4'} space-y-1 mt-2 overflow-y-auto custom-scrollbar`}>
+        {!isCollapsed ? (
+          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-3 mt-2">Visão Geral</div>
+        ) : (
+          <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+        )}
         <NavItem href="/dashboard" icon={LayoutDashboard} label="Dashboard" />
 
         {/* ===== MENUS DO ADMIN ===== */}
         {role === 'admin' && (
           <>
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 px-4 mt-6">Gestão</div>
+            {!isCollapsed ? (
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-3 mt-4">Gestão</div>
+            ) : (
+              <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+            )}
             <NavItem href="/dashboard/contabilidades" icon={Building2} label="Contabilidades" />
             <NavItem href="/dashboard/clientes" icon={Users} label="Clientes" />
             <NavItem href="/dashboard/faturas" icon={Receipt} label="Faturas" />
             <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Notas Fiscais" />
             <NavItem href="/dashboard/distribuicao-dfe" icon={Inbox} label="Distribuição de DF-e" />
             
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 px-4 mt-6">Sistema</div>
+            {!isCollapsed ? (
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-3 mt-4">Sistema</div>
+            ) : (
+              <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+            )}
             <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
             <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Analisador Tributário" />
             <NavItem href="/dashboard/saneador-arquivos" icon={Database} label="Saneador de Arquivos" />
@@ -305,7 +349,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* ===== MENUS DO CLIENTE ===== */}
         {role === 'cliente' && (
           <>
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 px-4 mt-6">Meu Espaço</div>
+            {!isCollapsed ? (
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-3 mt-4">Meu Espaço</div>
+            ) : (
+              <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+            )}
             {canAccess('faturas') && <NavItem href="/dashboard/minhas-faturas" icon={Receipt} label="Minhas Faturas" />}
             {canAccess('notas_fiscais') && <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Minhas Notas Fiscais" />}
             {canAccess('distribuicao_dfe') && <NavItem href="/dashboard/distribuicao-dfe" icon={Inbox} label="Distribuição de DF-e" />}
@@ -327,7 +375,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* ===== MENUS DA CONTABILIDADE ===== */}
         {role === 'contabilidade' && (
           <>
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 px-4 mt-6">Escritório</div>
+            {!isCollapsed ? (
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-3 mt-4">Escritório</div>
+            ) : (
+              <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+            )}
             {canAccess('contabilidade_meus_clientes') && <NavItem href="/dashboard/meus-clientes" icon={Users} label="Meus Clientes" />}
             {canAccess('notas_fiscais') && <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Notas Fiscais (XMLs)" />}
             {canAccess('distribuicao_dfe') && <NavItem href="/dashboard/distribuicao-dfe" icon={Inbox} label="Distribuição de DF-e" />}
@@ -347,29 +399,64 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         )}
       </nav>
 
-      {/* User Card Inferior */}
-      <div className="p-4 lg:p-5 border-t border-slate-100 bg-slate-50/50 mt-auto">
-        <div className="flex items-center gap-3 px-3 py-2 mb-3 bg-white rounded-lg shadow-sm border border-slate-200">
-          <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm uppercase">
-            {role?.charAt(0)}
+      {/* User Card Inferior e Botão Toggle (Recolher Menu) perto do botão Sair */}
+      <div className={`p-3 ${isCollapsed ? 'p-2' : 'lg:p-4'} border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 mt-auto`}>
+        {!isCollapsed ? (
+          <div className="flex items-center gap-3 px-3 py-2 mb-2.5 bg-white dark:bg-slate-800/80 rounded-xl shadow-2xs border border-slate-200 dark:border-slate-700">
+            <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 flex items-center justify-center font-bold text-sm uppercase shrink-0">
+              {role?.charAt(0)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate capitalize">{role}</p>
+              <p className="text-[11px] text-slate-400 truncate">Sessão Ativa</p>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-slate-700 truncate capitalize">{role}</p>
-            <p className="text-xs text-slate-500 truncate">Sessão Ativa</p>
+        ) : (
+          <div className="flex justify-center mb-2" title={`Sessão Ativa: ${role}`}>
+            <div className="w-9 h-9 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 flex items-center justify-center font-bold text-xs uppercase shadow-2xs">
+              {role?.charAt(0)}
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Botão Toggle para Recolher / Expandir Menu Lateral (Perto do botão Sair) */}
         <button 
-          onClick={handleLogout} 
-          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-red-600 hover:bg-red-50 hover:text-red-700 font-medium transition-colors border border-transparent hover:border-red-100 text-sm"
+          type="button"
+          onClick={toggleSidebar}
+          title={isCollapsed ? 'Expandir Menu' : 'Recolher Menu'}
+          className={`flex items-center ${isCollapsed ? 'justify-center px-1' : 'justify-between px-3'} w-full py-2 mb-2 rounded-xl text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-700 font-semibold transition-all duration-200 text-xs border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer group`}
         >
-          <LogOut size={18} />
-          <span>Encerrar Sessão</span>
+          <div className="flex items-center gap-2">
+            {isCollapsed ? (
+              <PanelLeftOpen size={18} className="text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform" />
+            ) : (
+              <PanelLeftClose size={18} className="text-slate-500 dark:text-slate-400 group-hover:text-blue-600 transition-colors" />
+            )}
+            {!isCollapsed && <span>Recolher Menu</span>}
+          </div>
+          {!isCollapsed && (
+            <span className="text-[9px] uppercase font-bold text-slate-400 bg-white dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+              Toggle
+            </span>
+          )}
         </button>
 
-        <div className="mt-3 pt-2.5 border-t border-slate-200/70 flex items-center justify-between text-[11px] text-slate-400 px-1">
-          <span>Portal & Hub</span>
-          <span className="font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">{APP_VERSION}</span>
-        </div>
+        {/* Botão Encerrar Sessão (Sair) */}
+        <button 
+          onClick={handleLogout} 
+          title="Encerrar Sessão (Sair)"
+          className={`flex items-center ${isCollapsed ? 'justify-center px-1' : 'justify-center gap-2'} w-full px-3 py-2 rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-700 font-medium transition-colors border border-transparent hover:border-red-100 dark:hover:border-red-900/40 text-xs cursor-pointer`}
+        >
+          <LogOut size={16} />
+          {!isCollapsed && <span>Encerrar Sessão</span>}
+        </button>
+
+        {!isCollapsed && (
+          <div className="mt-2.5 pt-2 border-t border-slate-200/70 dark:border-slate-800 flex items-center justify-between text-[10px] text-slate-400 px-1">
+            <span>Portal & Hub</span>
+            <span className="font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[10px]">{APP_VERSION}</span>
+          </div>
+        )}
       </div>
     </>
   )
@@ -381,8 +468,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <TabHeaderBanner />
 
       <div className="flex-1 flex overflow-hidden relative">
-        {/* 1. Sidebar Desktop (Fixa na esquerda) */}
-        <aside className="hidden md:flex md:w-64 lg:w-72 bg-white dark:bg-[#0B1120] border-r border-slate-200 dark:border-slate-800 flex-col shadow-xs relative z-10 flex-shrink-0 transition-colors duration-200">
+        {/* 1. Sidebar Desktop (Fixa na esquerda, com suporte a recolher) */}
+        <aside className={`hidden md:flex ${isCollapsed ? 'w-20' : 'w-64 lg:w-72'} bg-white dark:bg-[#0B1120] border-r border-slate-200 dark:border-slate-800 flex-col shadow-xs relative z-10 flex-shrink-0 transition-all duration-300 ease-in-out`}>
           <SidebarContent />
         </aside>
 
@@ -409,10 +496,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {/* Botão Hambúrguer Mobile */}
             <button 
               onClick={() => setMobileMenuOpen(true)}
-              className="md:hidden p-2 rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 focus:outline-none"
+              className="md:hidden p-2 rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 focus:outline-none cursor-pointer"
               aria-label="Abrir Menu"
             >
               <Menu size={22} />
+            </button>
+            {/* Botão Toggle Desktop no Topo */}
+            <button 
+              onClick={toggleSidebar}
+              className="hidden md:flex p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800 focus:outline-none cursor-pointer transition-colors"
+              title={isCollapsed ? 'Expandir Menu Lateral' : 'Recolher Menu Lateral'}
+              aria-label="Alternar Menu Lateral"
+            >
+              {isCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
             </button>
             <h1 className="text-lg font-bold text-slate-800 dark:text-slate-100 capitalize">
               {pathname.split('/').pop()?.replace('-', ' ') || 'Visão Geral'}

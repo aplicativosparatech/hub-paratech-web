@@ -170,85 +170,85 @@ export default function ClientesPage() {
 
   return (
     <div className="p-8">
-      <header className="flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-5 mb-8">
-        <div className="flex flex-col lg:flex-row lg:items-center gap-5 xl:gap-6">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Clientes (Empresas)</h1>
-            <p className="text-slate-500 mt-1 text-sm">Gerencie os clientes e os tokens de acesso ao Hub.</p>
+      <header className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-6">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-5 flex-1 min-w-0">
+          <div className="shrink-0">
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">Clientes (Empresas)</h1>
+            <p className="text-slate-500 mt-0.5 text-xs sm:text-sm">Gerencie os clientes e os tokens de acesso ao Hub.</p>
           </div>
 
-          {/* Cards Financeiros: Mensalidades (MRR), Custos e Lucro Líquido */}
-          <div className="flex flex-wrap items-center gap-3">
+          {/* Cards Financeiros: Mensalidades (MRR), Custo Total e Lucro Líquido - Todos estritamente na mesma linha */}
+          <div className="flex items-center gap-2 sm:gap-2.5 flex-nowrap overflow-x-auto py-1 scrollbar-none">
             {/* Card 1: Soma das Mensalidades (MRR) */}
-            <div className="flex items-center gap-3 bg-gradient-to-r from-emerald-50 via-teal-50/70 to-emerald-50 border border-emerald-200/90 rounded-2xl px-3.5 py-2 shadow-xs">
-              <div className="p-2 bg-emerald-600 text-white rounded-xl shadow-xs shrink-0">
-                <DollarSign size={20} className="stroke-[2.5]" />
+            <div className="flex items-center gap-2.5 bg-gradient-to-r from-emerald-50 via-teal-50/70 to-emerald-50 border border-emerald-200/90 rounded-xl px-3 py-1.5 shadow-2xs shrink-0 whitespace-nowrap">
+              <div className="p-2 bg-emerald-600 text-white rounded-lg shadow-2xs shrink-0">
+                <DollarSign size={18} className="stroke-[2.5]" />
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
                     Mensalidades
                   </span>
-                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
                     MRR
                   </span>
                 </div>
-                <div className="flex items-baseline gap-1.5 mt-0.5">
-                  <span className="text-lg sm:text-xl font-black text-emerald-950 font-mono">
+                <div className="flex items-baseline gap-1 mt-0.5">
+                  <span className="text-base sm:text-lg font-black text-emerald-950 font-mono">
                     {totalMensalidades.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </span>
-                  <span className="text-[11px] text-emerald-700 font-medium">
-                    /mês {searchTerm ? `(filtradas: ${totalMensalidadesFiltradas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : `(${clientes.length})`}
+                  <span className="text-[10px] text-emerald-700 font-medium">
+                    /mês {searchTerm ? `(${totalMensalidadesFiltradas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : `(${clientes.length})`}
                   </span>
                 </div>
               </div>
             </div>
 
             {/* Card 2: Custo Total das Empresas */}
-            <div className="flex items-center gap-3 bg-gradient-to-r from-rose-50 via-amber-50/60 to-rose-50 border border-rose-200/90 rounded-2xl px-3.5 py-2 shadow-xs">
-              <div className="p-2 bg-rose-600 text-white rounded-xl shadow-xs shrink-0">
-                <TrendingDown size={20} className="stroke-[2.5]" />
+            <div className="flex items-center gap-2.5 bg-gradient-to-r from-rose-50 via-amber-50/60 to-rose-50 border border-rose-200/90 rounded-xl px-3 py-1.5 shadow-2xs shrink-0 whitespace-nowrap">
+              <div className="p-2 bg-rose-600 text-white rounded-lg shadow-2xs shrink-0">
+                <TrendingDown size={18} className="stroke-[2.5]" />
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-rose-800">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-rose-800">
                     Custo Total
                   </span>
-                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 border border-rose-200">
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 border border-rose-200">
                     GASTOS
                   </span>
                 </div>
-                <div className="flex items-baseline gap-1.5 mt-0.5">
-                  <span className="text-lg sm:text-xl font-black text-rose-950 font-mono">
+                <div className="flex items-baseline gap-1 mt-0.5">
+                  <span className="text-base sm:text-lg font-black text-rose-950 font-mono">
                     {totalCustos.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </span>
-                  <span className="text-[11px] text-rose-700 font-medium">
-                    /mês {searchTerm ? `(filtrado: ${totalCustosFiltrados.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : '(custo)'}
+                  <span className="text-[10px] text-rose-700 font-medium">
+                    /mês {searchTerm ? `(${totalCustosFiltrados.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : '(custo)'}
                   </span>
                 </div>
               </div>
             </div>
 
             {/* Card 3: Lucro Líquido (Mensalidades - Custos) */}
-            <div className="flex items-center gap-3 bg-gradient-to-r from-blue-50 via-indigo-50/60 to-blue-50 border border-blue-200/90 rounded-2xl px-3.5 py-2 shadow-xs">
-              <div className="p-2 bg-blue-600 text-white rounded-xl shadow-xs shrink-0">
-                <TrendingUp size={20} className="stroke-[2.5]" />
+            <div className="flex items-center gap-2.5 bg-gradient-to-r from-blue-50 via-indigo-50/60 to-blue-50 border border-blue-200/90 rounded-xl px-3 py-1.5 shadow-2xs shrink-0 whitespace-nowrap">
+              <div className="p-2 bg-blue-600 text-white rounded-lg shadow-2xs shrink-0">
+                <TrendingUp size={18} className="stroke-[2.5]" />
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-blue-800">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-800">
                     Lucro Líquido
                   </span>
-                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 border border-blue-200">
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 border border-blue-200">
                     {margemLucro}% MARGEM
                   </span>
                 </div>
-                <div className="flex items-baseline gap-1.5 mt-0.5">
-                  <span className={`text-lg sm:text-xl font-black font-mono ${totalLucro >= 0 ? 'text-blue-950' : 'text-red-700'}`}>
+                <div className="flex items-baseline gap-1 mt-0.5">
+                  <span className={`text-base sm:text-lg font-black font-mono ${totalLucro >= 0 ? 'text-blue-950' : 'text-red-700'}`}>
                     {totalLucro.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </span>
-                  <span className="text-[11px] text-blue-700 font-medium">
-                    /mês {searchTerm ? `(filtrado: ${totalLucroFiltrado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : '(líquido)'}
+                  <span className="text-[10px] text-blue-700 font-medium">
+                    /mês {searchTerm ? `(${totalLucroFiltrado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : '(líquido)'}
                   </span>
                 </div>
               </div>
