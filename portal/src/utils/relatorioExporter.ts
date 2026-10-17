@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { FUSO_BRASIL, parseDateUtc } from './dateBrasil'
 
 export interface EmpresaDados {
   razao_social: string
@@ -32,8 +33,9 @@ function formatMoney(val: number): string {
 function formatDate(dateStr?: string): string {
   if (!dateStr) return '—'
   try {
-    const d = new Date(dateStr)
-    return d.toLocaleDateString('pt-BR')
+    const d = parseDateUtc(dateStr)
+    if (!d) return dateStr
+    return d.toLocaleDateString('pt-BR', { timeZone: FUSO_BRASIL })
   } catch {
     return dateStr
   }
@@ -64,7 +66,7 @@ export function exportarCSV(
   dados: any
 ) {
   let linhas: string[] = []
-  const dataHoje = new Date().toLocaleString('pt-BR')
+  const dataHoje = new Date().toLocaleString('pt-BR', { timeZone: FUSO_BRASIL })
 
   // Cabeçalho da Empresa
   linhas.push(`EMPRESA;${empresa.razao_social || '—'}`)
@@ -348,7 +350,7 @@ export function exportarExcel(
   dados: any
 ) {
   const wb = XLSX.utils.book_new()
-  const dataHoje = new Date().toLocaleString('pt-BR')
+  const dataHoje = new Date().toLocaleString('pt-BR', { timeZone: FUSO_BRASIL })
 
   const rows: any[][] = [
     ['HUB PARATECH - SISTEMA DE AUDITORIA FISCAL'],
@@ -626,7 +628,7 @@ export function exportarPDF(
   // Configura orientação paisagem para relatórios com chave de 44 dígitos
   const orientation = (tipo === 'nfe' || tipo === 'nfce' || tipo === 'consolidado' || tipo === 'monofasicos' || tipo === 'nao_assinadas') ? 'landscape' : 'portrait'
   const doc = new jsPDF({ orientation, unit: 'mm', format: 'a4' })
-  const dataHoje = new Date().toLocaleString('pt-BR')
+  const dataHoje = new Date().toLocaleString('pt-BR', { timeZone: FUSO_BRASIL })
 
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()

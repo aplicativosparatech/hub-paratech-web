@@ -9,6 +9,7 @@ import {
 import { useGlobalClient, ClienteItem } from './GlobalClientContext'
 import { formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
 import { createClient } from '@/utils/supabase/client'
+import { formatarHubSyncBrasil, FUSO_BRASIL } from '@/utils/dateBrasil'
 
 interface GlobalCompanyActiveCardProps {
   variant?: 'default' | 'header'
@@ -119,33 +120,27 @@ export default function GlobalCompanyActiveCard({ variant = 'default' }: GlobalC
           return
         }
 
-        const syncDate = new Date(ultimaSync)
-        const diffMs = Date.now() - syncDate.getTime()
-        const diffMin = Math.floor(diffMs / (1000 * 60))
-        const diffHoras = Math.floor(diffMs / (1000 * 60 * 60))
+        const info = formatarHubSyncBrasil(ultimaSync)
 
-        const diaMes = syncDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
-        const horaMin = syncDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-
-        if (diffMin <= 10) {
+        if (info.diffMin <= 10) {
           setHubStatus({
             online: true,
-            texto: `Hub Online: ${horaMin}`,
-            detalhe: `Hub Paratech comunicando em tempo real (último sync: ${diaMes} às ${horaMin})`,
+            texto: `Hub Online: ${info.horaMin}`,
+            detalhe: `Hub Paratech ativo em tempo real (Fuso SP/Brasília: ${info.dataFormatada} às ${info.horaMin})`,
             corBadge: 'bg-emerald-950/80 text-emerald-300 border-emerald-600/60 shadow-xs'
           })
-        } else if (diffHoras < 24) {
+        } else if (info.isHoje) {
           setHubStatus({
             online: false,
-            texto: `Hub Sync: Hoje às ${horaMin}`,
-            detalhe: `Última sincronização realizada hoje às ${horaMin} (há ${diffHoras}h)`,
+            texto: `Hub Sync: Hoje às ${info.horaMin}`,
+            detalhe: `Última sincronização no Fuso SP/Brasília: Hoje às ${info.horaMin} (há ${info.diffHoras}h)`,
             corBadge: 'bg-amber-950/80 text-amber-300 border-amber-600/60 shadow-xs'
           })
         } else {
           setHubStatus({
             online: false,
-            texto: `Hub Sync: ${diaMes} às ${horaMin}`,
-            detalhe: `Última sincronização registrada em ${diaMes} às ${horaMin}`,
+            texto: `Hub Sync: ${info.diaMes} às ${info.horaMin}`,
+            detalhe: `Última sincronização no Fuso SP/Brasília: ${info.dataFormatada} às ${info.horaMin}`,
             corBadge: 'bg-slate-900/90 text-slate-300 border-slate-700/80 shadow-xs'
           })
         }
@@ -193,7 +188,7 @@ export default function GlobalCompanyActiveCard({ variant = 'default' }: GlobalC
       const dataVal = new Date(selectedCliente.certificado_validade)
       const agora = new Date()
       const diffDias = Math.ceil((dataVal.getTime() - agora.getTime()) / (1000 * 3600 * 24))
-      const dataFormatada = dataVal.toLocaleDateString('pt-BR')
+      const dataFormatada = dataVal.toLocaleDateString('pt-BR', { timeZone: FUSO_BRASIL })
 
       if (diffDias < 0) {
         return {

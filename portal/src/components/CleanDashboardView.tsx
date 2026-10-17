@@ -10,6 +10,7 @@ import {
 import { ClienteItem, useGlobalClient } from './GlobalClientContext'
 import FechamentoFiscalModal from './FechamentoFiscalModal'
 import { formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
+import { FUSO_BRASIL, parseDateUtc } from '@/utils/dateBrasil'
 
 interface CleanDashboardViewProps {
   metrics: {
@@ -67,19 +68,23 @@ interface CleanDashboardViewProps {
 function formatTempoRelativo(dateStr?: string) {
   if (!dateStr) return 'Recente'
   try {
-    const data = new Date(dateStr)
+    const data = parseDateUtc(dateStr)
+    if (!data) return 'Recente'
     const agora = new Date()
     const diffMs = agora.getTime() - data.getTime()
     const diffMin = Math.floor(diffMs / (1000 * 60))
     const diffHoras = Math.floor(diffMs / (1000 * 60 * 60))
     const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
+    const dataSp = new Intl.DateTimeFormat('en-CA', { timeZone: FUSO_BRASIL }).format(data)
+    const agoraSp = new Intl.DateTimeFormat('en-CA', { timeZone: FUSO_BRASIL }).format(agora)
+
     if (diffMin < 1) return 'Agora mesmo'
     if (diffMin < 60) return `${diffMin} min atrás`
-    if (diffHoras < 24 && data.getDate() === agora.getDate()) return `${diffHoras}h atrás`
-    if (diffDias === 1 || (diffHoras < 48 && data.getDate() === agora.getDate() - 1)) return 'Ontem'
+    if (diffHoras < 24 && dataSp === agoraSp) return `${diffHoras}h atrás`
+    if (diffDias === 1) return 'Ontem'
     if (diffDias < 7) return `${diffDias} dias atrás`
-    return data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+    return data.toLocaleDateString('pt-BR', { timeZone: FUSO_BRASIL, day: '2-digit', month: '2-digit' })
   } catch {
     return 'Recente'
   }

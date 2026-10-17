@@ -151,3 +151,68 @@ export function obterIntervaloMesBrasil(mesAno: string): { startDate: string; en
 
   return { startDate, endDate }
 }
+
+/**
+ * Converte qualquer string de data/hora (ISO, SQL ou UTC) para Date garantindo interpretação em UTC se vier do banco
+ */
+export function parseDateUtc(dateStr?: string | null): Date | null {
+  if (!dateStr) return null
+  let str = String(dateStr).trim()
+  if (!str) return null
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(str)) {
+    str = str.replace(' ', 'T')
+  }
+  if (!str.includes('Z') && !str.includes('+') && !str.includes('-', 10)) {
+    str += 'Z'
+  }
+  const d = new Date(str)
+  return isNaN(d.getTime()) ? null : d
+}
+
+/**
+ * Retorna as partes de data e hora formatadas estritamente no fuso de São Paulo / Brasília (UTC-3)
+ */
+export function formatarHubSyncBrasil(dateStr?: string | null): {
+  diaMes: string
+  horaMin: string
+  dataFormatada: string
+  isHoje: boolean
+  diffMin: number
+  diffHoras: number
+} {
+  const d = parseDateUtc(dateStr)
+  if (!d) {
+    return { diaMes: '—', horaMin: '—', dataFormatada: '—', isHoje: false, diffMin: 9999, diffHoras: 9999 }
+  }
+
+  const agora = new Date()
+  const diffMs = agora.getTime() - d.getTime()
+  const diffMin = Math.floor(diffMs / (1000 * 60))
+  const diffHoras = Math.floor(diffMs / (1000 * 60 * 60))
+
+  const diaMes = d.toLocaleDateString('pt-BR', {
+    timeZone: FUSO_BRASIL,
+    day: '2-digit',
+    month: '2-digit'
+  })
+
+  const horaMin = d.toLocaleTimeString('pt-BR', {
+    timeZone: FUSO_BRASIL,
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+
+  const dataFormatada = d.toLocaleDateString('pt-BR', {
+    timeZone: FUSO_BRASIL,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  })
+
+  // Checa se o dia no fuso de São Paulo é o mesmo de hoje em São Paulo
+  const hojeSp = new Intl.DateTimeFormat('en-CA', { timeZone: FUSO_BRASIL }).format(agora)
+  const dataSp = new Intl.DateTimeFormat('en-CA', { timeZone: FUSO_BRASIL }).format(d)
+  const isHoje = hojeSp === dataSp
+
+  return { diaMes, horaMin, dataFormatada, isHoje, diffMin, diffHoras }
+}

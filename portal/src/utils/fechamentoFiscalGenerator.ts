@@ -3,6 +3,7 @@ import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import JSZip from 'jszip'
 import { isNcmMonofasico, formatarNcm, identificarDescricaoNcm } from '@/utils/ncmMonofasicos'
+import { FUSO_BRASIL, parseDateUtc } from '@/utils/dateBrasil'
 
 export interface DadosEmpresaFechamento {
   razao_social: string
@@ -108,8 +109,9 @@ export function formatMoney(val: number): string {
 export function formatDate(dateStr?: string): string {
   if (!dateStr) return '—'
   try {
-    const d = new Date(dateStr)
-    return d.toLocaleDateString('pt-BR')
+    const d = parseDateUtc(dateStr)
+    if (!d) return dateStr
+    return d.toLocaleDateString('pt-BR', { timeZone: FUSO_BRASIL })
   } catch {
     return dateStr
   }
@@ -118,8 +120,11 @@ export function formatDate(dateStr?: string): string {
 export function formatDateTime(dateStr?: string): string {
   if (!dateStr) return '—'
   try {
-    const d = new Date(dateStr)
-    return `${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+    const d = parseDateUtc(dateStr)
+    if (!d) return dateStr
+    const dataFmt = d.toLocaleDateString('pt-BR', { timeZone: FUSO_BRASIL })
+    const horaFmt = d.toLocaleTimeString('pt-BR', { timeZone: FUSO_BRASIL, hour: '2-digit', minute: '2-digit' })
+    return `${dataFmt} ${horaFmt}`
   } catch {
     return dateStr
   }
