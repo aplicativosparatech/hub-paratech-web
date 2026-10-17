@@ -64,6 +64,15 @@ export default function DashboardPage() {
     pctAtraso: 0,
     nfQuantidade: 0,
     nfValor: 0,
+    vendasQuantidade: 0,
+    vendasValor: 0,
+    comprasQuantidade: 0,
+    comprasValor: 0,
+    nfeSaidasQtd: 0,
+    nfeSaidasValor: 0,
+    nfceSaidasQtd: 0,
+    nfceSaidasValor: 0,
+    monofasicoValor: 0,
     relatorios: 0,
     cidades: 0
   })
@@ -152,28 +161,7 @@ export default function DashboardPage() {
         const ficticioLigado = Boolean(geralConfig?.valores_ficticios_ativos)
         setIsFicticioAtivo(ficticioLigado)
 
-        // Se for contabilidade ou cliente e a opção de valores fictícios estiver ativa, usa os fictícios!
-        if (ficticioLigado && currentRole !== 'admin') {
-          const ficticioAtrasadas = Number(geralConfig?.ficticio_faturas_atrasadas ?? 0)
-          const ficticioTotalFaturas = Math.max(ficticioAtrasadas, 10)
-          const pct = ficticioTotalFaturas > 0 ? (ficticioAtrasadas / ficticioTotalFaturas) * 100 : 0
-          setMetrics({
-            clientes: Number(geralConfig?.ficticio_clientes ?? 0),
-            contabilidades: Number(geralConfig?.ficticio_contabilidades ?? 0),
-            totalFaturas: ficticioTotalFaturas,
-            faturasEmDia: Math.max(0, ficticioTotalFaturas - ficticioAtrasadas),
-            faturasAtrasadas: ficticioAtrasadas,
-            pctAtraso: pct,
-            nfQuantidade: Number(geralConfig?.ficticio_nf_quantidade ?? 0),
-            nfValor: Number(geralConfig?.ficticio_nf_valor ?? 0),
-            relatorios: Number(geralConfig?.ficticio_relatorios ?? 0),
-            cidades: Number(geralConfig?.ficticio_cidades ?? 0)
-          })
-          setLoading(false)
-          return
-        }
-
-        // 3. Caso contrário (se for Admin ou se valores fictícios estiverem desligados): calcula os valores REAIS
+        // 3. Calcula os valores REAIS das notas fiscais e módulos do portal
         const hojeStr = new Date().toISOString().split('T')[0]
 
         // Busca datas extremas (1º XML e Último XML emitidos no portal)
@@ -259,11 +247,11 @@ export default function DashboardPage() {
         const totalCidades = Math.max(cidadesSet.size, (clientesRes.count || 0) > 0 ? 1 : 0)
 
         // Carrega volume de notas fiscais respeitando o período selecionado
-        let qNfeSaidas = supabase.from('nfe_saidas').select('id, valor, data_emissao')
-        let qNfceSaidas = supabase.from('nfce_saidas').select('id, valor, data_emissao')
+        let qNfeSaidas = supabase.from('nfe_saidas').select('id, valor, valor_monofasico, data_emissao')
+        let qNfceSaidas = supabase.from('nfce_saidas').select('id, valor, valor_monofasico, data_emissao')
         let qNfeEntradas = supabase.from('nfe_entradas').select('id, valor, data_emissao')
 
-        const clienteFiltroId = (currentRole === 'cliente' && userRoleData?.cliente_id) || globalClienteId || selectedClienteId
+        const clienteFiltroId = (currentRole === 'cliente' && userRoleData?.cliente_id) || globalClienteId || null
         if (clienteFiltroId) {
           qNfeSaidas = qNfeSaidas.eq('cliente_id', clienteFiltroId)
           qNfceSaidas = qNfceSaidas.eq('cliente_id', clienteFiltroId)
@@ -313,14 +301,22 @@ export default function DashboardPage() {
         const nfeEntradasCount = (nfeEntradasRes.data || []).length
         const nfeEntradasTotal = (nfeEntradasRes.data || []).reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0)
 
-        let totalNFQuantidade = nfeCount + nfceCount + nfeEntradasCount
-        const totalNFValor = nfeTotal + nfceTotal + nfeEntradasTotal
+        // Documentos de Vendas (Saídas: NF-e 55 + NFC-e 65)
+        const vendasQuantidade = nfeCount + nfceCount
+        const vendasValor = nfeTotal + nfceTotal
 
-        if (totalNFQuantidade === 0 && (xmlsRes.count || 0) > 0) {
-          totalNFQuantidade = xmlsRes.count || 0
-        }
+        // Documentos de Compras (Entradas: NF-e 55)
+        const comprasQuantidade = nfeEntradasCount
+        const comprasValor = nfeEntradasTotal
 
-        const totalRelatorios = (xmlsRes.count || 0) > 0 ? (xmlsRes.count || 0) : (totalNFQuantidade > 0 ? totalNFQuantidade : 5)
+        const totalNFQuantidade = vendasQuantidade + comprasQuantidade
+        const totalNFValor = vendasValor + comprasValor
+
+        // Monofásicos apurados reais
+        const monofasicoTotal = (nfeRes.data || []).reduce((acc, curr) => acc + (Number(curr.valor_monofasico) || 0), 0) +
+                                (nfceRes.data || []).reduce((acc, curr) => acc + (Number(curr.valor_monofasico) || 0), 0)
+
+        const totalRelatorios = (xmlsRes.count || 0) > 0 ? (xmlsRes.count || 0) : totalNFQuantidade
 
         setMetrics({
           clientes: clientesRes.count || 0,
@@ -331,6 +327,15 @@ export default function DashboardPage() {
           pctAtraso,
           nfQuantidade: totalNFQuantidade,
           nfValor: totalNFValor,
+          vendasQuantidade,
+          vendasValor,
+          comprasQuantidade,
+          comprasValor,
+          nfeSaidasQtd: nfeCount,
+          nfeSaidasValor: nfeTotal,
+          nfceSaidasQtd: nfceCount,
+          nfceSaidasValor: nfceTotal,
+          monofasicoValor: monofasicoTotal,
           relatorios: totalRelatorios,
           cidades: totalCidades
         })
@@ -706,6 +711,32 @@ export default function DashboardPage() {
             <p className="text-xs font-bold text-emerald-600 mt-0.5 truncate">
               {loading || loadingNotas ? '...' : `R$ ${metrics.nfValor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
             </p>
+
+            {/* SEPARAÇÃO: DOCUMENTOS DE VENDAS E DE COMPRAS */}
+            <div className="mt-2.5 pt-2 border-t border-slate-100 space-y-1">
+              {/* Documentos de Vendas (Saídas: NF-e 55 + NFC-e 65) */}
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-600 font-medium flex items-center gap-1.5 truncate">
+                  <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0"></span>
+                  Vendas (Saídas):
+                </span>
+                <span className="font-bold text-slate-800 text-right shrink-0">
+                  {metrics.vendasQuantidade.toLocaleString('pt-BR')} un • R$ {metrics.vendasValor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+
+              {/* Documentos de Compras (Entradas: NF-e 55) */}
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-600 font-medium flex items-center gap-1.5 truncate">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                  Compras (Entradas):
+                </span>
+                <span className="font-bold text-slate-800 text-right shrink-0">
+                  {metrics.comprasQuantidade.toLocaleString('pt-BR')} un • R$ {metrics.comprasValor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+
             <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
               <span className="truncate" title={`1º XML: ${primeiroXmlData || '01/09/2026'} • Último: ${ultimoXmlData || '01/10/2026'}`}>
                 {primeiroXmlData ? `${primeiroXmlData} a ${ultimoXmlData}` : 'Histórico completo'}

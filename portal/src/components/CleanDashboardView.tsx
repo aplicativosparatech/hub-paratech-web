@@ -21,6 +21,15 @@ interface CleanDashboardViewProps {
     pctAtraso: number
     nfQuantidade: number
     nfValor: number
+    vendasQuantidade?: number
+    vendasValor?: number
+    comprasQuantidade?: number
+    comprasValor?: number
+    nfeSaidasQtd?: number
+    nfeSaidasValor?: number
+    nfceSaidasQtd?: number
+    nfceSaidasValor?: number
+    monofasicoValor?: number
     relatorios: number
     cidades: number
   }
@@ -68,26 +77,27 @@ export default function CleanDashboardView({
     }).format(val)
   }
 
-  // Valores dos 4 Cards Superiores (Conforme Mockup 1)
-  // Se houver valor real de notas, usa o real; caso contrário exibe o valor elegante do mockup
+  // Valores dos 4 Cards Superiores
   const faturamentoMensalValor = useMemo(() => {
-    if (metrics.nfValor > 0) return formatMoeda(metrics.nfValor)
-    return 'R$ 148.920,00'
-  }, [metrics.nfValor])
+    const val = metrics.vendasValor !== undefined ? metrics.vendasValor : metrics.nfValor
+    return formatMoeda(val)
+  }, [metrics.vendasValor, metrics.nfValor])
 
   const notasEmitidasTexto = useMemo(() => {
-    if (metrics.nfQuantidade > 0) return `${metrics.nfQuantidade.toLocaleString('pt-BR')} NF-e`
-    return '1.248 NF-e'
+    return `${metrics.nfQuantidade.toLocaleString('pt-BR')} documentos`
   }, [metrics.nfQuantidade])
 
   // Crédito monofásico apurado
   const creditoMonofasicoValor = useMemo(() => {
-    if (metrics.nfValor > 0) {
-      // Estima ~2.9% de créditos monofásicos com base no volume fiscal
-      return formatMoeda(metrics.nfValor * 0.0289)
+    if (metrics.monofasicoValor && metrics.monofasicoValor > 0) {
+      return formatMoeda(metrics.monofasicoValor)
     }
-    return 'R$ 4.310,50'
-  }, [metrics.nfValor])
+    const valVendas = metrics.vendasValor !== undefined ? metrics.vendasValor : metrics.nfValor
+    if (valVendas > 0) {
+      return formatMoeda(valVendas * 0.0289)
+    }
+    return 'R$ 0,00'
+  }, [metrics.monofasicoValor, metrics.vendasValor, metrics.nfValor])
 
   // Certificado Digital A1
   const certificadoStatus = useMemo(() => {
@@ -222,69 +232,117 @@ export default function CleanDashboardView({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         
         {/* Card 1: Faturamento Mensal */}
-        <div className="bg-white dark:bg-[#0B1120] rounded-2xl p-5 border border-slate-200/90 dark:border-slate-800 shadow-2xs hover:shadow-xs transition-shadow">
-          <p className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-2">
-            Faturamento Mensal
-          </p>
-          <div className="flex items-baseline justify-between">
-            <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-              {faturamentoMensalValor}
-            </h3>
+        <div className="bg-white dark:bg-[#0B1120] rounded-2xl p-5 border border-slate-200/90 dark:border-slate-800 shadow-2xs hover:shadow-xs transition-shadow flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                Faturamento Mensal
+              </p>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200/50 dark:border-blue-800/50">
+                Saídas
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between">
+              <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+                {faturamentoMensalValor}
+              </h3>
+            </div>
           </div>
-          <p className="mt-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-            <span>↑ 12.5%</span>
-            <span className="text-slate-400 dark:text-slate-500 font-normal">vs mês anterior</span>
+          <p className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
+            <span className="flex items-center gap-1">
+              <span>↑ 12.5%</span>
+              <span className="text-slate-400 dark:text-slate-500 font-normal">vs mês anterior</span>
+            </span>
+            <span className="text-slate-400 dark:text-slate-500 font-normal text-[11px]">
+              {(metrics.vendasQuantidade ?? metrics.nfQuantidade).toLocaleString('pt-BR')} docs
+            </span>
           </p>
         </div>
 
-        {/* Card 2: Notas Emitidas */}
-        <div className="bg-white dark:bg-[#0B1120] rounded-2xl p-5 border border-slate-200/90 dark:border-slate-800 shadow-2xs hover:shadow-xs transition-shadow">
-          <p className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-2">
-            Notas Emitidas
-          </p>
-          <div className="flex items-baseline justify-between">
-            <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-              {notasEmitidasTexto}
-            </h3>
+        {/* Card 2: NF Processadas (Separação Vendas e Compras) */}
+        <div className="bg-white dark:bg-[#0B1120] rounded-2xl p-5 border border-slate-200/90 dark:border-slate-800 shadow-2xs hover:shadow-xs transition-shadow flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                NF Processadas
+              </p>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/50">
+                Consolidado
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between">
+              <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+                {notasEmitidasTexto}
+              </h3>
+            </div>
           </div>
-          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 font-medium">
-            Total processado e validado
-          </p>
+
+          {/* Sub-bloco com separação de Documentos de Vendas e Compras */}
+          <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 space-y-1">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5 font-medium truncate">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>
+                Vendas (Saídas):
+              </span>
+              <span className="font-bold text-slate-800 dark:text-slate-200 text-right shrink-0">
+                {(metrics.vendasQuantidade ?? 0).toLocaleString('pt-BR')} un • {formatMoeda(metrics.vendasValor ?? 0)}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5 font-medium truncate">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                Compras (Entradas):
+              </span>
+              <span className="font-bold text-slate-800 dark:text-slate-200 text-right shrink-0">
+                {(metrics.comprasQuantidade ?? 0).toLocaleString('pt-BR')} un • {formatMoeda(metrics.comprasValor ?? 0)}
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* Card 3: Crédito Monofásico */}
-        <div className="bg-white dark:bg-[#0B1120] rounded-2xl p-5 border border-slate-200/90 dark:border-slate-800 shadow-2xs hover:shadow-xs transition-shadow">
-          <p className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-2">
-            Crédito Monofásico
-          </p>
-          <div className="flex items-baseline justify-between">
-            <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-              {creditoMonofasicoValor}
-            </h3>
+        <div className="bg-white dark:bg-[#0B1120] rounded-2xl p-5 border border-slate-200/90 dark:border-slate-800 shadow-2xs hover:shadow-xs transition-shadow flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                Crédito Monofásico
+              </p>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-800/50">
+                PIS/COFINS
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between">
+              <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+                {creditoMonofasicoValor}
+              </h3>
+            </div>
           </div>
-          <p className="mt-2 text-xs text-blue-600 dark:text-blue-400 font-medium">
+          <p className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 text-xs text-blue-600 dark:text-blue-400 font-medium">
             Oportunidade tributária apurada
           </p>
         </div>
 
         {/* Card 4: Certificado Digital A1 */}
-        <div className="bg-white dark:bg-[#0B1120] rounded-2xl p-5 border border-slate-200/90 dark:border-slate-800 shadow-2xs hover:shadow-xs transition-shadow">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-              Certificado Digital A1
-            </p>
-            {/* Pill 'Activo' conforme Mockup 1 */}
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              Activo
-            </span>
+        <div className="bg-white dark:bg-[#0B1120] rounded-2xl p-5 border border-slate-200/90 dark:border-slate-800 shadow-2xs hover:shadow-xs transition-shadow flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                Certificado Digital A1
+              </p>
+              {/* Pill 'Activo' conforme Mockup 1 */}
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                Ativo
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between">
+              <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+                {certificadoStatus.texto}
+              </h3>
+            </div>
           </div>
-          <div className="flex items-baseline justify-between">
-            <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-              {certificadoStatus.texto}
-            </h3>
-          </div>
-          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 font-medium">
+          <p className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 font-medium">
             Comunicação SEFAZ ativa
           </p>
         </div>
