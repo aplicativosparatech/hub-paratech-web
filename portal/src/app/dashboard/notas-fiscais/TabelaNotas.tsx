@@ -158,6 +158,8 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
   const currentCli = clientes.find(c => c.id === selectedCliente) || (userRole === 'cliente' ? clientes[0] : null)
   const cleanCurrentCnpj = limparDocumento(currentCli?.cnpj)
 
+  const isAssociacao = Boolean(currentCli?.is_associacao)
+
   // Separação solicitada pelo usuário:
   // Se a nota tiver erro/pendência (não autorizada pela SEFAZ, sem assinatura, divergente),
   // ela NÃO é listada nas abas normais (NFC-e e NF-e), e sim exclusivamente na nova aba "Arquivos para Correção".
@@ -170,8 +172,18 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
       const cleanChaveCnpj = n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : ''
       const emit = limparDocumento(n.cnpj_emitente || cleanChaveCnpj)
       return Boolean(cleanCurrentCnpj) && Boolean(emit) && cleanCurrentCnpj !== emit
+    } else {
+      // Notas de entrada (compras):
+      // O emitente DEVE ser um terceiro/fornecedor (divergente do cliente).
+      // Se for a própria empresa emitindo, só é permitido para Associação.
+      if (n.cnpj_divergente) return true
+      const cleanChaveCnpj = n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : ''
+      const emit = limparDocumento(n.cnpj_emitente || cleanChaveCnpj)
+      if (!isAssociacao && Boolean(cleanCurrentCnpj) && Boolean(emit) && cleanCurrentCnpj === emit) {
+        return true
+      }
+      return false
     }
-    return false
   })
 
   // Apenas notas 100% regulares e autorizadas são exibidas nas abas oficiais
@@ -713,7 +725,28 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                 const cleanChaveCnpj = n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : ''
                 const emitenteDoc = n.cnpj_emitente || cleanChaveCnpj
                 const cleanEmit = limparDocumento(emitenteDoc)
-                const isDivergente = Boolean(n.cnpj_divergente) || (Boolean(cleanCurrentCnpj) && Boolean(cleanEmit) && cleanCurrentCnpj !== cleanEmit)
+
+                let isDivergente = false
+                let motivoDivergencia = n.motivo_divergencia || ''
+
+                if (isSaida) {
+                  // Vendas: o emitente DEVE ser a própria empresa do cliente
+                  isDivergente = Boolean(n.cnpj_divergente) || (Boolean(cleanCurrentCnpj) && Boolean(cleanEmit) && cleanCurrentCnpj !== cleanEmit)
+                  if (isDivergente && !motivoDivergencia) {
+                    motivoDivergencia = 'Emitente diverge da empresa atual (venda emitida por outro CNPJ)'
+                  }
+                } else {
+                  // Entradas: o emitente é fornecedor terceiro (divergente da empresa por natureza).
+                  // Se o emitente for a mesma empresa, só é permitido se a empresa for Associação.
+                  if (n.cnpj_divergente) {
+                    isDivergente = true
+                  } else if (!isAssociacao && Boolean(cleanCurrentCnpj) && Boolean(cleanEmit) && cleanCurrentCnpj === cleanEmit) {
+                    isDivergente = true
+                    motivoDivergencia = 'Nota de entrada emitida pela própria empresa (permitido apenas para Associação)'
+                  } else {
+                    isDivergente = false
+                  }
+                }
 
                 return (
                   <tr 
@@ -726,7 +759,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                         {isDivergente && (
                           <span 
                             className="bg-red-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0"
-                            title={n.motivo_divergencia || 'Emitente não pertence à empresa cadastrada'}
+                            title={motivoDivergencia || 'Emitente não pertence à empresa cadastrada'}
                           >
                             ⚠️ Divergente
                           </span>
@@ -755,12 +788,12 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                     </td>
                     {!isSaida && (
                       <td className="p-3.5 font-mono text-xs overflow-hidden">
-                        <div className={`truncate ${isDivergente ? 'text-red-700 font-bold' : 'text-slate-800'}`} title={formatDoc(emitenteDoc)}>
+                        <div className={`truncate ${isDivergente ? 'text-red-700 font-bold' : 'text-slate-800 font-medium'}`} title={formatDoc(emitenteDoc)}>
                           {formatDoc(emitenteDoc)}
                         </div>
                         {isDivergente && (
-                          <div className="text-[10px] text-red-600 mt-0.5 font-sans truncate" title={n.motivo_divergencia || 'Emitente diverge da empresa atual'}>
-                            {n.motivo_divergencia || `CNPJ diverge da empresa`}
+                          <div className="text-[10px] text-red-600 mt-0.5 font-sans truncate" title={motivoDivergencia || 'Emitente diverge da regra fiscal'}>
+                            {motivoDivergencia || `CNPJ diverge da regra`}
                           </div>
                         )}
                       </td>

@@ -73,6 +73,7 @@ export default function EditarClientePage() {
     dias_carencia: '',
     is_ativo: true,
     logo_url: '',
+    is_associacao: false,
     plano_auditoria_tributaria: false,
     gemini_api_key: '',
     gemini_modelo: 'gemini-1.5-flash'
@@ -159,6 +160,7 @@ export default function EditarClientePage() {
           login_senha: d.login_senha || '',
           is_ativo: d.is_ativo !== undefined ? d.is_ativo : true,
           logo_url: d.logo_url || '',
+          is_associacao: Boolean(d.is_associacao),
           plano_auditoria_tributaria: temPlanoIa,
           gemini_api_key: iaCliente?.credenciais?.api_key || '',
           gemini_modelo: iaCliente?.credenciais?.modelo || 'gemini-1.5-flash'
@@ -497,6 +499,7 @@ export default function EditarClientePage() {
     const payload = {
       ...clienteData,
       is_ativo: formData.is_ativo,
+      is_associacao: Boolean(formData.is_associacao),
       dia_vencimento: parseInt(String(formData.dia_vencimento)) || 10,
       valor_mensalidade: clienteData.valor_mensalidade ? parseFloat(String(clienteData.valor_mensalidade).replace(',', '.')) : 0,
       custo: clienteData.custo ? parseFloat(String(clienteData.custo).replace(',', '.')) : 0,
@@ -765,6 +768,26 @@ export default function EditarClientePage() {
                   value={formData.ramo_atividade} 
                   onChange={e => setFormData({...formData, ramo_atividade: e.target.value})} 
                 />
+              </div>
+
+              <div className="md:col-span-2 p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-start sm:items-center justify-between gap-4">
+                <div className="space-y-0.5">
+                  <label className="text-sm font-bold text-slate-900 flex items-center gap-2 cursor-pointer">
+                    Associação / Cooperativa
+                  </label>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Marque esta opção caso a empresa seja uma <strong>Associação, Cooperativa ou Entidade</strong> onde notas fiscais de entrada possam ser emitidas pela própria organização ou associados (mesmo CNPJ). Em empresas convencionais (desmarcado), notas de entrada devem ter obrigatoriamente emitentes terceiros (fornecedores) e emitentes iguais à própria empresa são tratados como divergentes.
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input 
+                    type="checkbox" 
+                    checked={formData.is_associacao} 
+                    onChange={e => setFormData({ ...formData, is_associacao: e.target.checked })} 
+                    className="sr-only peer" 
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
               </div>
 
               {userRole === 'admin' && (

@@ -134,7 +134,7 @@ export async function POST(request: Request) {
     // 1. Validar Cliente e configurações
     const { data: cliente } = await supabaseAdmin
       .from('clientes')
-      .select('id, cnpj, razao_social, inscricao_estadual, is_ativo, certificado_url, certificado_senha, data_inicio_monitoramento, numero_inicial_nfe, numero_inicial_nfce, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, modo_processamento_xml)')
+      .select('id, cnpj, razao_social, inscricao_estadual, is_ativo, is_associacao, certificado_url, certificado_senha, data_inicio_monitoramento, numero_inicial_nfe, numero_inicial_nfce, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, modo_processamento_xml)')
       .eq('hub_token', token)
       .single()
 
@@ -156,6 +156,11 @@ export async function POST(request: Request) {
     const xNomeEmitente = extractTag(emitXml, 'xNome')
     const ieEmitente = extractTag(emitXml, 'IE')
 
+    // Extrair destinatário (<dest>)
+    const destMatch = xmlString.match(/<dest[^>]*>([\s\S]*?)<\/dest>/)
+    const destXml = destMatch ? destMatch[1] : ''
+    const cnpjDestinatario = extractTag(destXml, 'CNPJ') || extractTag(destXml, 'CPF')
+
     // Limpeza de caracteres especiais preservando caracteres alfanuméricos de CNPJs novos (IN RFB 2.229/2024)
     const cleanClienteDoc = limparDocumento(cliente.cnpj)
     const cleanEmitDoc = limparDocumento(cnpjEmitente)
@@ -176,6 +181,15 @@ export async function POST(request: Request) {
       } else if (cleanClienteIE && cleanEmitIE && cleanClienteIE !== cleanEmitIE && cleanEmitIE.toUpperCase() !== 'ISENTO') {
         isCnpjDivergente = true
         motivoDivergencia = `Inscrição Estadual do emitente (${ieEmitente}) diverge da cadastrada no sistema (${cliente.inscricao_estadual}).`
+      }
+    } else if (tipoPasta === 'compras') {
+      // Notas de entrada (compras):
+      // O emitente deve ser fornecedor terceiro.
+      // Se for a mesma empresa emitindo, só é permitido se o cliente for cadastrado como Associação.
+      const isAssociacao = Boolean(cliente.is_associacao)
+      if (!isAssociacao && cleanClienteDoc && cleanEmitDoc && cleanClienteDoc === cleanEmitDoc) {
+        isCnpjDivergente = true
+        motivoDivergencia = `Nota de compra com emitente igual à própria empresa (${cnpjEmitente}). Permitido apenas para clientes cadastrados como Associação.`
       }
     }
 
@@ -382,6 +396,7 @@ export async function POST(request: Request) {
       is_autorizada: isAutorizada,
       valor_monofasico: valorMonofasico || 0,
       cnpj_emitente: cnpjEmitente || null,
+      cnpj_destinatario: cnpjDestinatario || null,
       cnpj_divergente: isCnpjDivergente,
       motivo_divergencia: isCnpjDivergente ? motivoDivergencia : null,
       status_correcao: statusCorrecao

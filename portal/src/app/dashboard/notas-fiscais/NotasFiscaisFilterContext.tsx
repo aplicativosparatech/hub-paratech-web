@@ -187,7 +187,7 @@ export function NotasFiscaisFilterProvider({ children }: { children: React.React
       setUserRole(role)
 
       let clisData: any[] = []
-      const camposSelect = 'id, razao_social, nome_fantasia, cnpj, certificado_url, logo_url, uf, cidade, regime_tributario, data_inicio_monitoramento, numero_inicial_nfe, numero_inicial_nfce, numero_inicial_nfse, numero_inicial_cte, numero_inicial_mdfe'
+      const camposSelect = 'id, razao_social, nome_fantasia, cnpj, is_associacao, certificado_url, logo_url, uf, cidade, regime_tributario, data_inicio_monitoramento, numero_inicial_nfe, numero_inicial_nfce, numero_inicial_nfse, numero_inicial_cte, numero_inicial_mdfe'
 
       if (role === 'cliente' && roleData?.cliente_id) {
         const { data: cli } = await supabase
