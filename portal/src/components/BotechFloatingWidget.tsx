@@ -11,7 +11,7 @@ import { useGlobalClient } from './GlobalClientContext'
 
 interface Message {
   id: string
-  role: 'user' | 'botech'
+  role: 'user' | 'robotech'
   content: string
   timestamp: string
   actions?: {
@@ -29,7 +29,7 @@ const PERGUNTAS_RAPIDAS = [
   { label: '🔍 Consultar nota na SEFAZ', prompt: 'Como faço para consultar uma nota fiscal diretamente na SEFAZ?' }
 ]
 
-export default function BotechFloatingWidget() {
+export default function RorobotechFloatingWidget() {
   const router = useRouter()
   const pathname = usePathname()
   const { selectedClienteId } = useGlobalClient()
@@ -43,14 +43,14 @@ export default function BotechFloatingWidget() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Mensagem inicial de boas-vindas do Botech
+  // Mensagem inicial de boas-vindas do Rorobotech
   useEffect(() => {
     const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     setMessages([
       {
         id: 'msg-welcome',
-        role: 'botech',
-        content: `Olá! Eu sou o **Botech**, seu assistente de inteligência artificial da **Paratech**! 🤖✨\n\nEstou aqui para tirar suas dúvidas, te ensinar o passo a passo da plataforma, consultar dados em tempo real ou te guiar até qualquer tela.\n\nComo posso te ajudar hoje?`,
+        role: 'robotech',
+        content: `Olá! Eu sou o **Rorobotech**, seu assistente de inteligência artificial da **Paratech**! 🤖✨\n\nEstou aqui para tirar suas dúvidas, te ensinar o passo a passo da plataforma, consultar dados em tempo real ou te guiar até qualquer tela.\n\nComo posso te ajudar hoje?`,
         timestamp: hora
       }
     ])
@@ -78,7 +78,7 @@ export default function BotechFloatingWidget() {
     }
   }, [messages, isThinking, isOpen])
 
-  // Parser das ações especiais geradas pelo Botech [ACTION:NAVIGATE|url|label]
+  // Parser das ações especiais geradas pelo Rorobotech [ACTION:NAVIGATE|url|label]
   const parseActions = (text: string) => {
     const actions: { type: 'navigate' | 'whatsapp', url: string, label: string }[] = []
     let cleanedText = text
@@ -120,7 +120,7 @@ export default function BotechFloatingWidget() {
         content: m.content
       }))
 
-      const response = await fetch('/api/botech/chat', {
+      const response = await fetch('/api/robotech/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -137,21 +137,21 @@ export default function BotechFloatingWidget() {
       const rawResponse = data.resposta || 'Desculpe, ocorreu uma oscilação na resposta. Pode repetir a pergunta?'
       const { cleanedText, actions } = parseActions(rawResponse)
 
-      const botechMsg: Message = {
-        id: `botech-${Date.now()}`,
-        role: 'botech',
+      const robotechMsg: Message = {
+        id: `robotech-${Date.now()}`,
+        role: 'robotech',
         content: cleanedText,
         timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
         actions: actions.length > 0 ? actions : undefined
       }
 
-      setMessages(prev => [...prev, botechMsg])
+      setMessages(prev => [...prev, robotechMsg])
     } catch (err) {
       setMessages(prev => [
         ...prev,
         {
-          id: `botech-err-${Date.now()}`,
-          role: 'botech',
+          id: `robotech-err-${Date.now()}`,
+          role: 'robotech',
           content: 'Tive uma instabilidade momentânea na conexão. Por favor, tente novamente em instantes!',
           timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
         }
@@ -166,7 +166,7 @@ export default function BotechFloatingWidget() {
     setMessages([
       {
         id: `msg-reset-${Date.now()}`,
-        role: 'botech',
+        role: 'robotech',
         content: `Conversa reiniciada! Como posso te ajudar agora? 🤖`,
         timestamp: hora
       }
@@ -235,7 +235,7 @@ export default function BotechFloatingWidget() {
 
   return (
     <>
-      {/* Botão Flutuante (FAB) do Botech */}
+      {/* Botão Flutuante (FAB) do Rorobotech */}
       <div className="fixed bottom-12 sm:bottom-14 right-4 sm:right-6 z-50 flex items-center gap-3">
         {/* Balãozinho de Dica (Tooltip) com Saudação */}
         {showTooltip && !isOpen && (
@@ -245,7 +245,7 @@ export default function BotechFloatingWidget() {
           >
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
             <p className="text-xs font-medium leading-snug">
-              Dúvidas fiscais ou sobre o sistema? <strong className="text-blue-600 dark:text-blue-400 font-bold">Fale com o Botech!</strong>
+              Dúvidas fiscais ou sobre o sistema? <strong className="text-blue-600 dark:text-blue-400 font-bold">Fale com o Rorobotech!</strong>
             </p>
             <button 
               onClick={(e) => { e.stopPropagation(); setShowTooltip(false) }}
@@ -256,7 +256,7 @@ export default function BotechFloatingWidget() {
           </div>
         )}
 
-        {/* Botão Redondo com a Logo do Botech */}
+        {/* Botão Redondo com a Logo do Rorobotech */}
         <button
           onClick={() => { setIsOpen(!isOpen); setShowTooltip(false) }}
           className={`relative p-1 rounded-full transition-all duration-300 transform shadow-2xl focus:outline-none cursor-pointer group ${
@@ -264,16 +264,16 @@ export default function BotechFloatingWidget() {
               ? 'scale-90 rotate-90 bg-slate-800' 
               : 'hover:scale-108 active:scale-95 bg-gradient-to-tr from-blue-600 via-indigo-600 to-sky-400 hover:shadow-blue-500/50'
           }`}
-          title="Abrir Assistente Inteligente Botech"
-          aria-label="Abrir Botech"
+          title="Abrir Assistente Inteligente Rorobotech"
+          aria-label="Abrir Rorobotech"
         >
           <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 border-white/80 dark:border-slate-800 shadow-inner bg-slate-900 flex items-center justify-center">
             {isOpen ? (
               <X className="text-white w-7 h-7" />
             ) : (
               <Image 
-                src="/botech.png" 
-                alt="Botech IA" 
+                src="/rorobotech.png" 
+                alt="Rorobotech IA" 
                 fill 
                 className="object-cover object-center group-hover:scale-110 transition duration-300"
                 priority
@@ -291,7 +291,7 @@ export default function BotechFloatingWidget() {
         </button>
       </div>
 
-      {/* Janela de Chat Moderna do Botech */}
+      {/* Janela de Chat Moderna do Rorobotech */}
       {isOpen && (
         <div className="fixed bottom-28 sm:bottom-32 right-3 sm:right-6 w-[94vw] sm:w-[440px] h-[580px] max-h-[80vh] z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-200/90 dark:border-slate-800 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
           
@@ -300,8 +300,8 @@ export default function BotechFloatingWidget() {
             <div className="flex items-center gap-3">
               <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-white/90 shadow-md bg-slate-900 shrink-0">
                 <Image 
-                  src="/botech.png" 
-                  alt="Botech" 
+                  src="/rorobotech.png" 
+                  alt="Rorobotech" 
                   fill 
                   className="object-cover"
                 />
@@ -309,7 +309,7 @@ export default function BotechFloatingWidget() {
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="font-bold text-base tracking-wide flex items-center gap-1.5">
-                    Botech
+                    Rorobotech
                   </h3>
                   <span className="text-[10px] uppercase font-black bg-white/20 text-white px-1.5 py-0.5 rounded-md backdrop-blur-xs">
                     IA Paratech
@@ -348,10 +348,10 @@ export default function BotechFloatingWidget() {
                 key={msg.id}
                 className={`flex gap-2.5 items-end ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
-                {/* Avatar miniatura do Botech */}
-                {msg.role === 'botech' && (
+                {/* Avatar miniatura do Rorobotech */}
+                {msg.role === 'robotech' && (
                   <div className="relative w-7 h-7 rounded-full overflow-hidden border border-blue-400 shadow-xs bg-slate-900 shrink-0 mb-1">
-                    <Image src="/botech.png" alt="Botech" fill className="object-cover" />
+                    <Image src="/rorobotech.png" alt="Rorobotech" fill className="object-cover" />
                   </div>
                 )}
 
@@ -402,7 +402,7 @@ export default function BotechFloatingWidget() {
             {isThinking && (
               <div className="flex gap-2.5 items-end justify-start animate-in fade-in duration-200">
                 <div className="relative w-7 h-7 rounded-full overflow-hidden border border-blue-400 shadow-xs bg-slate-900 shrink-0 mb-1">
-                  <Image src="/botech.png" alt="Botech" fill className="object-cover" />
+                  <Image src="/rorobotech.png" alt="Rorobotech" fill className="object-cover" />
                 </div>
                 <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 p-3.5 rounded-2xl rounded-bl-xs shadow-xs max-w-[80%] flex items-center gap-3">
                   <div className="flex items-center gap-1.5">
@@ -411,7 +411,7 @@ export default function BotechFloatingWidget() {
                     <span className="w-2 h-2 rounded-full bg-sky-500 animate-bounce" style={{ animationDelay: '300ms' }} />
                   </div>
                   <span className="text-xs text-slate-500 dark:text-slate-400 font-medium italic">
-                    Botech está pensando e consultando dados...
+                    Rorobotech está pensando e consultando dados...
                   </span>
                 </div>
               </div>
@@ -449,7 +449,7 @@ export default function BotechFloatingWidget() {
               type="text"
               value={inputMessage}
               onChange={e => setInputMessage(e.target.value)}
-              placeholder="Pergunte ao Botech (ex: emitir monofásicos, vendas pix...)"
+              placeholder="Pergunte ao Rorobotech (ex: emitir monofásicos, vendas pix...)"
               disabled={isThinking}
               className="flex-1 bg-slate-100 dark:bg-slate-800/80 text-slate-900 dark:text-slate-100 placeholder-slate-400 text-xs sm:text-sm px-4 py-2.5 rounded-xl border border-transparent focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition"
             />

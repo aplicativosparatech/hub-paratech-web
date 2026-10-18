@@ -3,7 +3,7 @@ import { createAdminClient } from '@/utils/supabase/admin';
 
 // Conhecimento Geral e Operacional do Hub Paratech
 const CONHECIMENTO_SISTEMA = `
-VOCÊ É O BOTECH, ASSISTENTE VIRTUAL INTELIGENTE OFICIAL DA PARATECH SOLUÇÕES E SISTEMAS.
+VOCÊ É O ROBOTECH, ASSISTENTE VIRTUAL INTELIGENTE OFICIAL DA PARATECH SOLUÇÕES E SISTEMAS.
 Seu avatar é um simpático robô de headset com o emblema da Paratech no peito.
 Você é prestativo, ágil, simpático, bem-humorado, extremamente competente e didático.
 Você conhece profundamente a aplicação "Hub Paratech" e todas as regras fiscais brasileiras (NF-e, NFC-e, SPED, IBS/CBS, Simples Nacional, PIS/COFINS Monofásicos).
@@ -66,7 +66,7 @@ COMO RESPONDER:
   [ACTION:NAVIGATE|/dashboard/corretor-tributario|⚖️ Ir para Analisador Tributário]
   [ACTION:NAVIGATE|/dashboard/sugestor-tributario|🤖 Ir para Sugestor Tributário]
   [ACTION:NAVIGATE|/dashboard/configuracoes-portal?aba=cobranca|⚙️ Ver Regras Globais de Cobrança]
-  [ACTION:WHATSAPP|https://wa.me/5537920007857?text=Ola%20Botech%20me%20atendeu%20no%20Hub%20e%20gostaria%20de%20falar%20com%20o%20suporte|📲 Falar com Suporte Paratech no WhatsApp]
+  [ACTION:WHATSAPP|https://wa.me/5537920007857?text=Ola%20Rorobotech%20me%20atendeu%20no%20Hub%20e%20gostaria%20de%20falar%20com%20o%20suporte|📲 Falar com Suporte Paratech no WhatsApp]
 `;
 
 export async function POST(request: Request) {
@@ -101,7 +101,7 @@ export async function POST(request: Request) {
           dadosContexto += `\n[DADOS REAIS DO BANCO - FATURAS]: Nenhuma fatura pendente encontrada para esta empresa no momento.\n`;
         }
       } catch (e: any) {
-        console.warn('Erro ao buscar faturas no Botech:', e.message);
+        console.warn('Erro ao buscar faturas no Rorobotech:', e.message);
       }
     }
 
@@ -159,7 +159,7 @@ export async function POST(request: Request) {
           `- Total NF-e (Modelo 55): ${qtdNfe} notas emitidas, somando R$ ${totalNfe.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
           `- Faturamento Global Consolidado: R$ ${(totalNfce + totalNfe).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
       } catch (e: any) {
-        console.warn('Erro ao calcular vendas no Botech:', e.message);
+        console.warn('Erro ao calcular vendas no Rorobotech:', e.message);
       }
     }
 
@@ -175,7 +175,7 @@ export async function POST(request: Request) {
             `- Titular: ${c.titular || 'Empresa'} | CNPJ/CPF: ${c.cnpj_cpf || '—'} | Validade: ${c.data_validade || '—'}\n`;
         }
       } catch (e: any) {
-        console.warn('Erro ao buscar certificado no Botech:', e.message);
+        console.warn('Erro ao buscar certificado no Rorobotech:', e.message);
       }
     }
 
@@ -212,7 +212,7 @@ export async function POST(request: Request) {
 
         const contents: any[] = [
           { role: 'user', parts: [{ text: fullSystemInstruction }] },
-          { role: 'model', parts: [{ text: 'Olá! Sou o Botech, assistente virtual inteligente da Paratech. Estou pronto para tirar qualquer dúvida, orientar o uso do sistema, consultar dados fiscais e guiar você por cada tela do Hub Paratech!' }] }
+          { role: 'model', parts: [{ text: 'Olá! Sou o Rorobotech, assistente virtual inteligente da Paratech. Estou pronto para tirar qualquer dúvida, orientar o uso do sistema, consultar dados fiscais e guiar você por cada tela do Hub Paratech!' }] }
         ];
 
         // Anexar histórico recente
@@ -256,7 +256,7 @@ export async function POST(request: Request) {
               if (respostaTexto) {
                 return NextResponse.json({
                   resposta: respostaTexto,
-                  provedor: 'Gemini AI (Botech)',
+                  provedor: 'Gemini AI (Rorobotech)',
                   isLiveIa: true
                 });
               }
@@ -266,11 +266,11 @@ export async function POST(request: Request) {
           }
         }
       } catch (errG: any) {
-        console.warn('Erro na comunicação do Gemini no Botech:', errG.message);
+        console.warn('Erro na comunicação do Gemini no Rorobotech:', errG.message);
       }
     }
 
-    // 4. Fallback RAG Inteligente Especialista do Botech (Caso Gemini falhe ou demore)
+    // 4. Fallback RAG Inteligente Especialista do Rorobotech (Caso Gemini falhe ou demore)
     let respostaFallback = '';
 
     if (msgLower.includes('monofasico') || msgLower.includes('relatorio')) {
@@ -320,7 +320,7 @@ export async function POST(request: Request) {
         `Clique abaixo para abrir uma conversa direta no WhatsApp:\n\n` +
         `[ACTION:WHATSAPP|https://wa.me/5537920007857?text=Ola%20preciso%20de%20suporte%20com%20o%20Hub%20Paratech|📲 Falar com Suporte Paratech no WhatsApp]`;
     } else {
-      respostaFallback = `### Olá! Eu sou o Botech 🤖\n\n` +
+      respostaFallback = `### Olá! Eu sou o Rorobotech 🤖\n\n` +
         `Sou o assistente de inteligência artificial da **Paratech** e estou aqui para te ajudar em tudo!\n\n` +
         `Aqui estão algumas das coisas que posso fazer por você:\n` +
         `- 📊 **Explicar e guiar** até relatórios fiscais (como produtos monofásicos).\n` +
@@ -333,12 +333,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       resposta: respostaFallback,
-      provedor: 'Base Oficial Botech RAG',
+      provedor: 'Base Oficial Rorobotech RAG',
       isLiveIa: false
     });
 
   } catch (err: any) {
-    console.error('Erro na rota do Botech:', err);
-    return NextResponse.json({ error: err.message || 'Erro interno no Botech.' }, { status: 500 });
+    console.error('Erro na rota do Rorobotech:', err);
+    return NextResponse.json({ error: err.message || 'Erro interno no Rorobotech.' }, { status: 500 });
   }
 }
