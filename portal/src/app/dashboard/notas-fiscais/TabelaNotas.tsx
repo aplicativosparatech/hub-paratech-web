@@ -165,10 +165,13 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     const isAut = n.is_autorizada === true || n.cstat === '100' || (Boolean(n.protocolo) && Boolean(n.tem_assinatura))
     if (!isAut) return true
     if (!n.tem_assinatura) return true
-    if (n.cnpj_divergente) return true
-    const cleanChaveCnpj = n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : ''
-    const emit = limparDocumento(n.cnpj_emitente || cleanChaveCnpj)
-    return Boolean(cleanCurrentCnpj) && Boolean(emit) && cleanCurrentCnpj !== emit
+    if (isSaida) {
+      if (n.cnpj_divergente) return true
+      const cleanChaveCnpj = n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : ''
+      const emit = limparDocumento(n.cnpj_emitente || cleanChaveCnpj)
+      return Boolean(cleanCurrentCnpj) && Boolean(emit) && cleanCurrentCnpj !== emit
+    }
+    return false
   })
 
   // Apenas notas 100% regulares e autorizadas são exibidas nas abas oficiais

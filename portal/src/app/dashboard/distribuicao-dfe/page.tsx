@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { 
   Inbox, Search, Download, FileText, CheckCircle2, AlertTriangle, 
   RefreshCw, Archive, Calendar, Building2, CheckSquare, Square, 
   Trash2, ExternalLink, Copy, Check, FileDown, Layers, ShieldCheck,
-  Eye, FolderArchive, ArrowRight, Zap, Filter, Clock, Timer, Database
+  Eye, FolderArchive, ArrowRight, Zap, Filter, Clock, Timer, Database,
+  Sparkles, Play, Pause, CheckCircle, XCircle
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import JSZip from 'jszip'
@@ -131,6 +132,53 @@ export default function DistribuicaoDfePage() {
   const [modalSalvarOpen, setModalSalvarOpen] = useState(false)
   const [observacaoSalvar, setObservacaoSalvar] = useState('')
   const [salvandoConsulta, setSalvandoConsulta] = useState(false)
+
+  // Estados do recurso "Trazer XMLs para o Hub" (Guia Entradas)
+  const [modalTrazerHubOpen, setModalTrazerHubOpen] = useState(false)
+  const [processandoTrazerHub, setProcessandoTrazerHub] = useState(false)
+  const [cancelarTrazerHub, setCancelarTrazerHub] = useState(false)
+  const cancelarRef = useRef(false)
+  const logContainerRef = useRef<HTMLDivElement>(null)
+  const [notasAlvoTrazerHub, setNotasAlvoTrazerHub] = useState<DfeNotaItem[]>([])
+  const [progressoTrazerHub, setProgressoTrazerHub] = useState({
+    total: 0,
+    atual: 0,
+    sucesso: 0,
+    manifestadas: 0,
+    porcentagem: 0,
+    etapa: 'Pronto para iniciar',
+    notaAtual: null as DfeNotaItem | null
+  })
+  const [tempoTrazerHub, setTempoTrazerHub] = useState({
+    decorridoSegundos: 0,
+    restanteSegundos: null as number | null
+  })
+  const [logTrazerHub, setLogTrazerHub] = useState<Array<{
+    chave: string
+    numero?: string
+    fornecedor?: string
+    valor?: number
+    status: 'sucesso' | 'erro' | 'aviso'
+    motivo?: string
+    valorMonofasico?: number
+    hora: string
+  }>>([])
+  const [resumoFinalTrazerHub, setResumoFinalTrazerHub] = useState<{
+    concluido: boolean
+    totalProcessadas: number
+    totalSucesso: number
+    totalManifestadas: number
+    valorTotal: number
+    totalMonofasicos: number
+    tempoTotalFormatado: string
+  } | null>(null)
+
+  // Auto-scroll para o final do log de atividades
+  useEffect(() => {
+    if (logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight
+    }
+  }, [logTrazerHub])
 
   // Sincronização com o Filtro Global do Topo
   useEffect(() => {
@@ -485,6 +533,208 @@ export default function DistribuicaoDfePage() {
     } finally {
       setManifestando(false)
     }
+  }
+
+  // Ação: Abrir Modal "Trazer XMLs para o Hub"
+  const handleAbrirModalTrazerHub = (apenasSelecionadas: boolean = false) => {
+    if (!selectedClienteId) {
+      toast.error('Selecione uma empresa.')
+      return
+    }
+
+    const listaAlvo = apenasSelecionadas
+      ? notas.filter(n => selectedChaves.includes(n.chave))
+      : (notasFiltradas.length > 0 ? notasFiltradas : notas)
+
+    if (listaAlvo.length === 0) {
+      toast.error('Nenhuma nota fiscal encontrada para trazer para o Hub.')
+      return
+    }
+
+    setNotasAlvoTrazerHub(listaAlvo)
+    setProgressoTrazerHub({
+      total: listaAlvo.length,
+      atual: 0,
+      sucesso: 0,
+      manifestadas: 0,
+      porcentagem: 0,
+      etapa: 'Pronto para iniciar a importação',
+      notaAtual: null
+    })
+    setTempoTrazerHub({ decorridoSegundos: 0, restanteSegundos: null })
+    setLogTrazerHub([])
+    setResumoFinalTrazerHub(null)
+    setCancelarTrazerHub(false)
+    cancelarRef.current = false
+    setModalTrazerHubOpen(true)
+  }
+
+  // Formata segundos em MM:SS
+  const formatarTempoMmSs = (segundos: number | null | undefined): string => {
+    if (segundos === null || segundos === undefined || isNaN(segundos)) return '--:--'
+    const m = Math.floor(segundos / 60)
+    const s = segundos % 60
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  }
+
+  // Ação: Executar Trazer XMLs para o Hub com barra de progresso em tempo real
+  const handleIniciarTrazerHub = async () => {
+    if (processandoTrazerHub || notasAlvoTrazerHub.length === 0) return
+
+    setProcessandoTrazerHub(true)
+    setCancelarTrazerHub(false)
+    cancelarRef.current = false
+    setResumoFinalTrazerHub(null)
+
+    const total = notasAlvoTrazerHub.length
+    let processadas = 0
+    let sucessoCount = 0
+    let manifestadasCount = 0
+    let valorTotalAcumulado = 0
+    let monofasicosTotal = 0
+    const tempoInicio = Date.now()
+
+    // Cronômetro de tempo real e cálculo da previsão de término
+    const intervalTimer = setInterval(() => {
+      const agora = Date.now()
+      const decorridoSec = Math.max(1, Math.floor((agora - tempoInicio) / 1000))
+      let restanteSec: number | null = null
+
+      if (processadas > 0 && total > processadas) {
+        const segPorNota = decorridoSec / processadas
+        restanteSec = Math.ceil(segPorNota * (total - processadas))
+      }
+
+      setTempoTrazerHub({
+        decorridoSegundos: decorridoSec,
+        restanteSegundos: restanteSec
+      })
+    }, 1000)
+
+    let interrompido = false
+
+    try {
+      for (let i = 0; i < total; i++) {
+        if (cancelarRef.current) {
+          interrompido = true
+          break
+        }
+
+        const nota = notasAlvoTrazerHub[i]
+        const horaAtual = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+
+        setProgressoTrazerHub(prev => ({
+          ...prev,
+          atual: i + 1,
+          porcentagem: Math.round((i / total) * 100),
+          etapa: `Processando NF-e #${nota.numero || nota.chave.substring(25, 34)}...`,
+          notaAtual: nota
+        }))
+
+        try {
+          const res = await fetch('/api/sefaz/distribuicao-dfe/trazer-para-hub', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              cliente_id: selectedClienteId,
+              chave: nota.chave
+            })
+          })
+
+          const data = await res.json()
+          const itemRes = data.resultados?.[0] || data
+
+          if (res.ok && data.success) {
+            sucessoCount++
+            if (itemRes.manifestado) manifestadasCount++
+            valorTotalAcumulado += (itemRes.valor || nota.valor || 0)
+            monofasicosTotal += (itemRes.valorMonofasico || 0)
+
+            setLogTrazerHub(prev => [
+              ...prev,
+              {
+                chave: nota.chave,
+                numero: nota.numero || itemRes.numero,
+                fornecedor: nota.emitente_nome || itemRes.fornecedor,
+                valor: nota.valor || itemRes.valor,
+                valorMonofasico: itemRes.valorMonofasico,
+                status: 'sucesso',
+                motivo: itemRes.motivo || 'Importada com sucesso para Entradas',
+                hora: horaAtual
+              }
+            ])
+          } else {
+            setLogTrazerHub(prev => [
+              ...prev,
+              {
+                chave: nota.chave,
+                numero: nota.numero,
+                fornecedor: nota.emitente_nome,
+                valor: nota.valor,
+                status: 'erro',
+                motivo: data.error || itemRes?.motivo || 'Falha ao processar nota',
+                hora: horaAtual
+              }
+            ])
+          }
+        } catch (fetchErr: any) {
+          setLogTrazerHub(prev => [
+            ...prev,
+            {
+              chave: nota.chave,
+              numero: nota.numero,
+              fornecedor: nota.emitente_nome,
+              valor: nota.valor,
+              status: 'erro',
+              motivo: fetchErr?.message || 'Erro de conexão',
+              hora: horaAtual
+            }
+          ])
+        }
+
+        processadas++
+        setProgressoTrazerHub(prev => ({
+          ...prev,
+          atual: processadas,
+          sucesso: sucessoCount,
+          manifestadas: manifestadasCount,
+          porcentagem: Math.round((processadas / total) * 100),
+          etapa: processadas === total ? 'Processamento concluído com sucesso!' : `Aguardando próxima nota (${processadas}/${total})...`
+        }))
+      }
+    } finally {
+      clearInterval(intervalTimer)
+      setProcessandoTrazerHub(false)
+
+      const decorridoFinal = Math.max(1, Math.floor((Date.now() - tempoInicio) / 1000))
+      setTempoTrazerHub({
+        decorridoSegundos: decorridoFinal,
+        restanteSegundos: 0
+      })
+
+      setResumoFinalTrazerHub({
+        concluido: !interrompido,
+        totalProcessadas: processadas,
+        totalSucesso: sucessoCount,
+        totalManifestadas: manifestadasCount,
+        valorTotal: valorTotalAcumulado,
+        totalMonofasicos: monofasicosTotal,
+        tempoTotalFormatado: formatarTempoMmSs(decorridoFinal)
+      })
+
+      // Atualiza os dados de DF-e na tela de análise
+      await handleAnalisar(competencia, false)
+      if (sucessoCount > 0) {
+        toast.success(`Trazer XMLs finalizado! ${sucessoCount} notas importadas para a Guia Entradas.`)
+      }
+    }
+  }
+
+  // Interrompe o loop após a nota atual
+  const handleInterromperTrazerHub = () => {
+    cancelarRef.current = true
+    setCancelarTrazerHub(true)
+    toast('Interrompendo processo... Concluindo a nota em andamento.')
   }
 
   // Ação: Salvar Consulta para o Histórico
@@ -989,8 +1239,18 @@ export default function DistribuicaoDfePage() {
                     : `Selecionar Todas (${notasFiltradas.length})`}
                 </button>
 
-                {selectedChaves.length > 0 && (
+                {selectedChaves.length > 0 ? (
                   <>
+                    <button
+                      type="button"
+                      onClick={() => handleAbrirModalTrazerHub(true)}
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg text-xs font-bold transition shadow-xs"
+                      title="Manifestar ciência, baixar XMLs e importar as notas selecionadas para a Guia Entradas do Hub"
+                    >
+                      <Sparkles size={13} className="text-emerald-200" />
+                      Trazer Selecionadas para o Hub ({selectedChaves.length})
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => handleManifestarCiencia(selectedChaves)}
@@ -1011,6 +1271,16 @@ export default function DistribuicaoDfePage() {
                       Baixar XMLs Selecionados ({selectedChaves.length}) .ZIP
                     </button>
                   </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleAbrirModalTrazerHub(false)}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg text-xs font-bold transition shadow-xs hover:shadow"
+                    title="Manifestar ciência automaticamente, baixar XMLs da SEFAZ e importar para a Guia Entradas do Hub"
+                  >
+                    <Sparkles size={13} className="text-emerald-200" />
+                    Trazer XMLs para o Hub ({notasFiltradas.length})
+                  </button>
                 )}
 
                 <button
@@ -1520,6 +1790,241 @@ export default function DistribuicaoDfePage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Interativo: Trazer XMLs para o Hub (Guia Entradas) */}
+      {modalTrazerHubOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full border border-slate-200/80 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
+            {/* Top gradient bar */}
+            <div className="h-1.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-600" />
+
+            {/* Cabeçalho do Modal */}
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100/80 flex items-center justify-center text-emerald-700 shadow-inner">
+                  <Sparkles size={20} className={processandoTrazerHub ? 'animate-spin' : ''} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                    Trazer XMLs da SEFAZ para o Hub
+                    <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                      Guia Entradas
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {clienteAtual?.razao_social || 'Empresa'} • Competência: {competencia === 'todas' ? 'Todas as Competências' : competencia}
+                  </p>
+                </div>
+              </div>
+              {!processandoTrazerHub && (
+                <button
+                  type="button"
+                  onClick={() => setModalTrazerHubOpen(false)}
+                  className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Conteúdo Principal do Modal */}
+            <div className="p-6 overflow-y-auto space-y-5 flex-1">
+              {/* Etapa 1: Explicação antes de iniciar */}
+              {!processandoTrazerHub && !resumoFinalTrazerHub && (
+                <div className="space-y-4">
+                  <div className="p-4 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl text-xs text-emerald-950 space-y-2">
+                    <div className="flex items-center gap-2 font-bold text-emerald-900 text-sm">
+                      <CheckCircle2 size={16} className="text-emerald-600" />
+                      Automatização Integrada em Lote
+                    </div>
+                    <p className="text-emerald-800 leading-relaxed">
+                      Ao iniciar o processo, o Hub executará sequencialmente para cada uma das <strong>{notasAlvoTrazerHub.length} notas de compras</strong> listadas:
+                    </p>
+                    <ul className="space-y-1.5 pl-4 list-disc text-emerald-900 text-[11px]">
+                      <li><strong>Manifestação na SEFAZ:</strong> Registra a Ciência da Emissão (evento 210210) assinado com o certificado A1 da empresa.</li>
+                      <li><strong>Obtenção do XML:</strong> Baixa o arquivo oficial completo (procNFe) do repositório da SEFAZ Nacional.</li>
+                      <li><strong>Importação Automática:</strong> Insere os dados na tabela de <em>NF-e de Entradas</em> e salva o arquivo .xml no Storage.</li>
+                      <li><strong>Segregação Tributária:</strong> Calcula e totaliza produtos com PIS/COFINS Monofásicos (CST 04 e 06).</li>
+                    </ul>
+                  </div>
+
+                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-600">Total de notas a processar nesta execução:</span>
+                    <span className="font-bold text-slate-900 text-sm">{notasAlvoTrazerHub.length} notas fiscais</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Etapa 2: Barra de Progresso Real e Métricas em Tempo Real */}
+              {(processandoTrazerHub || resumoFinalTrazerHub) && (
+                <div className="space-y-4">
+                  {/* Grid de 4 Cards Informativos */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Progresso</div>
+                      <div className="text-base font-black text-slate-900">
+                        {progressoTrazerHub.atual} / {progressoTrazerHub.total}
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-medium">{progressoTrazerHub.porcentagem}% concluído</div>
+                    </div>
+
+                    <div className="bg-emerald-50/70 p-3 rounded-xl border border-emerald-200/80">
+                      <div className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider mb-0.5">Importadas</div>
+                      <div className="text-base font-black text-emerald-900">
+                        {progressoTrazerHub.sucesso}
+                      </div>
+                      <div className="text-[11px] text-emerald-700 font-medium">com sucesso</div>
+                    </div>
+
+                    <div className="bg-blue-50/70 p-3 rounded-xl border border-blue-200/80">
+                      <div className="text-[10px] font-bold text-blue-800 uppercase tracking-wider mb-0.5">Tempo Decorrido</div>
+                      <div className="text-base font-black text-blue-900 font-mono">
+                        {formatarTempoMmSs(tempoTrazerHub.decorridoSegundos)}
+                      </div>
+                      <div className="text-[11px] text-blue-600 font-medium">cronômetro</div>
+                    </div>
+
+                    <div className="bg-amber-50/70 p-3 rounded-xl border border-amber-200/80">
+                      <div className="text-[10px] font-bold text-amber-800 uppercase tracking-wider mb-0.5">Previsão Término</div>
+                      <div className="text-base font-black text-amber-900 font-mono">
+                        {processandoTrazerHub 
+                          ? (tempoTrazerHub.restanteSegundos !== null ? '~' + formatarTempoMmSs(tempoTrazerHub.restanteSegundos) : 'Calculando...')
+                          : 'Finalizado'}
+                      </div>
+                      <div className="text-[11px] text-amber-700 font-medium">tempo estimado</div>
+                    </div>
+                  </div>
+
+                  {/* Barra de Progresso Real */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                      <span className="truncate pr-2">{progressoTrazerHub.etapa}</span>
+                      <span className="text-indigo-600 font-mono shrink-0">{progressoTrazerHub.porcentagem}%</span>
+                    </div>
+                    <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden border border-slate-200 shadow-inner relative">
+                      <div
+                        className="h-full bg-gradient-to-r from-indigo-600 via-teal-500 to-emerald-500 rounded-full transition-all duration-300 relative overflow-hidden"
+                        style={{ width: `${Math.max(5, progressoTrazerHub.porcentagem)}%` }}
+                      >
+                        {processandoTrazerHub && (
+                          <div className="absolute inset-0 bg-white/20 animate-pulse w-full" />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Feed de Atividades / Log em Tempo Real */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      <span>Console de Execução em Tempo Real:</span>
+                      <span>{logTrazerHub.length} registro(s)</span>
+                    </div>
+                    <div
+                      ref={logContainerRef}
+                      className="max-h-52 overflow-y-auto bg-slate-900 text-slate-100 rounded-xl p-3 font-mono text-[11px] space-y-1.5 border border-slate-800 shadow-inner"
+                    >
+                      {logTrazerHub.length === 0 ? (
+                        <div className="text-slate-500 italic py-2 text-center">Iniciando comunicação com a SEFAZ...</div>
+                      ) : (
+                        logTrazerHub.map((log, idx) => (
+                          <div key={idx} className="flex items-start gap-2 leading-tight">
+                            <span className="text-slate-400 shrink-0">[{log.hora}]</span>
+                            <span className="shrink-0">{log.status === 'sucesso' ? '✅' : '❌'}</span>
+                            <div className="flex-1 truncate">
+                              <span className="text-slate-200 font-bold">NF-e #{log.numero || log.chave.substring(25, 34)}</span>
+                              {log.fornecedor && <span className="text-slate-400"> • {log.fornecedor}</span>}
+                              {log.valor ? <span className="text-emerald-400"> • {log.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span> : null}
+                              {log.valorMonofasico ? <span className="text-teal-400"> (Monofásico: {log.valorMonofasico.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})</span> : null}
+                              <span className={`block text-[10px] ${log.status === 'sucesso' ? 'text-emerald-300/80' : 'text-rose-400'}`}>
+                                ↳ {log.motivo}
+                              </span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Resumo Final quando concluído */}
+                  {resumoFinalTrazerHub && (
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-950 space-y-2 animate-in fade-in">
+                      <div className="flex items-center gap-2 font-bold text-emerald-900 text-sm">
+                        <CheckCircle2 size={18} className="text-emerald-600" />
+                        {resumoFinalTrazerHub.concluido ? 'Importação Concluída com Sucesso!' : 'Processo Interrompido pelo Usuário'}
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 text-[11px]">
+                        <p><strong>Total Importadas:</strong> {resumoFinalTrazerHub.totalSucesso} notas</p>
+                        <p><strong>Valor Total:</strong> {resumoFinalTrazerHub.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                        <p><strong>PIS/COFINS Monofásico:</strong> {resumoFinalTrazerHub.totalMonofasicos.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                        <p><strong>Ciências Registradas:</strong> {resumoFinalTrazerHub.totalManifestadas}</p>
+                        <p><strong>Tempo Total:</strong> {resumoFinalTrazerHub.tempoTotalFormatado}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Rodapé com Botões de Ação */}
+            <div className="p-5 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-3">
+              {!processandoTrazerHub && !resumoFinalTrazerHub ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setModalTrazerHubOpen(false)}
+                    className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleIniciarTrazerHub}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold rounded-xl transition shadow-md shadow-emerald-600/20"
+                  >
+                    <Play size={14} />
+                    Iniciar Importação ({notasAlvoTrazerHub.length} notas)
+                  </button>
+                </>
+              ) : processandoTrazerHub ? (
+                <>
+                  <div className="text-xs text-slate-500 font-medium flex items-center gap-2">
+                    <RefreshCw size={14} className="animate-spin text-indigo-600" />
+                    Processando com segurança e calculando previsão...
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleInterromperTrazerHub}
+                    disabled={cancelarTrazerHub}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold rounded-xl transition disabled:opacity-50"
+                  >
+                    <Pause size={13} />
+                    {cancelarTrazerHub ? 'Interrompendo...' : 'Pausar / Interromper'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setModalTrazerHubOpen(false)}
+                    className="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200 rounded-xl transition"
+                  >
+                    Fechar e Atualizar DF-e
+                  </button>
+                  <a
+                    href={`/dashboard/notas-fiscais/entradas/nfe?cliente=${selectedClienteId}&mes=${competencia !== 'todas' ? competencia : ''}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1.5 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition shadow-md shadow-indigo-600/20"
+                  >
+                    <ExternalLink size={14} />
+                    Ir para NF-e de Entradas
+                  </a>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
