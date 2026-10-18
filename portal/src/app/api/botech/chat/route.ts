@@ -4,6 +4,7 @@ import { createAdminClient } from '@/utils/supabase/admin';
 // Conhecimento Geral e Operacional do Hub Paratech
 const CONHECIMENTO_SISTEMA = `
 VOCÊ É O ROBOTECH, ASSISTENTE VIRTUAL INTELIGENTE OFICIAL DA PARATECH SOLUÇÕES E SISTEMAS.
+IMPORTANTE: Seu nome oficial é SEMPRE "Robotech". Nunca utilize "Rorobotech" ou qualquer outra grafia.
 Seu avatar é um simpático robô de headset com o emblema da Paratech no peito.
 Você é prestativo, ágil, simpático, bem-humorado, extremamente competente e didático.
 Você conhece profundamente a aplicação "Hub Paratech" e todas as regras fiscais brasileiras (NF-e, NFC-e, SPED, IBS/CBS, Simples Nacional, PIS/COFINS Monofásicos).
@@ -12,7 +13,7 @@ INFORMAÇÕES INSTITUCIONAIS DA PARATECH:
 - Empresa: Paratech Soluções e Sistemas
 - Site Oficial: https://paratechsolucoes.com.br
 - Analista Programador Responsável: Regis Alexandre
-- WhatsApp Oficial de Suporte: (37) 92000-7857 (Link direto: https://wa.me/5537920007857?text=Ola%20preciso%20de%20suporte%20com%20o%20Hub%20Paratech)
+- WhatsApp Oficial de Suporte: (37) 92000-7857 (Link direto: https://wa.me/5537920007857?text=Ola%20Robotech%20preciso%20de%20suporte)
 - Horário de atendimento comercial e suporte técnico especializado.
 
 MAPA DE FUNCIONALIDADES E TELAS DO HUB PARATECH:
@@ -66,8 +67,16 @@ COMO RESPONDER:
   [ACTION:NAVIGATE|/dashboard/corretor-tributario|⚖️ Ir para Analisador Tributário]
   [ACTION:NAVIGATE|/dashboard/sugestor-tributario|🤖 Ir para Sugestor Tributário]
   [ACTION:NAVIGATE|/dashboard/configuracoes-portal?aba=cobranca|⚙️ Ver Regras Globais de Cobrança]
-  [ACTION:WHATSAPP|https://wa.me/5537920007857?text=Ola%20RoboTech%20me%20atendeu%20no%20Hub%20e%20gostaria%20de%20falar%20com%20o%20suporte|📲 Falar com Suporte Paratech no WhatsApp]
+  [ACTION:WHATSAPP|https://wa.me/5537920007857?text=Ola%20Robotech%20me%20atendeu%20no%20Hub%20e%20gostaria%20de%20falar%20com%20o%20suporte|📲 Falar com Suporte Paratech no WhatsApp]
 `;
+
+function normalizeText(str: string): string {
+  return (str || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
 
 export async function POST(request: Request) {
   try {
@@ -79,20 +88,118 @@ export async function POST(request: Request) {
     }
 
     const supabase = createAdminClient();
-    const clienteId = context.clienteId || null;
-    const msgLower = message.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const userRole = (context.userRole as 'admin' | 'contabilidade' | 'cliente') || 'admin';
+    const clientesPermitidosInput: any[] = Array.isArray(context.clientesPermitidos) ? context.clientesPermitidos : [];
+
+    // Carregar todas as empresas cadastradas no banco de dados para reconhecimento livre
+    const { data: todosClientes } = await supabase
+      .from('clientes')
+      .select('id, razao_social, nome_fantasia, cnpj, contabilidade_id, regime_tributario, dia_vencimento, valor_mensalidade, is_ativo');
+    const listaGeral = todosClientes || [];
+
+    // Conjunto de IDs permitidos de acordo com o perfil
+    const idsAutorizados = new Set<string>();
+    if (userRole === 'admin') {
+      listaGeral.forEach(c => idsAutorizados.add(c.id));
+    } else if (clientesPermitidosInput.length > 0) {
+      clientesPermitidosInput.forEach(c => idsAutorizados.add(c.id));
+    } else if (context.clienteId) {
+      idsAutorizados.add(context.clienteId);
+    }
+
+    // Identificar dinamicamente se o usuário citou o nome de alguma empresa
+    const msgNorm = normalizeText(message);
+    let empresaMencionada: any = null;
+
+    // 1. Busca por CNPJ
+    const cnpjNumerosMsg = message.replace(/\D/g, '');
+    if (cnpjNumerosMsg.length >= 8) {
+      empresaMencionada = listaGeral.find(c => {
+        const cNum = (c.cnpj || '').replace(/\D/g, '');
+        return cNum && (cnpjNumerosMsg.includes(cNum) || cNum.includes(cnpjNumerosMsg));
+      });
+    }
+
+    // 2. Busca por Nome Fantasia ou Razão Social completos
+    if (!empresaMencionada) {
+      for (const c of listaGeral) {
+        const fant = normalizeText(c.nome_fantasia);
+        const raz = normalizeText(c.razao_social);
+        if (fant && fant.length >= 3 && msgNorm.includes(fant)) {
+          empresaMencionada = c;
+          break;
+        }
+        if (raz && raz.length >= 4 && msgNorm.includes(raz)) {
+          empresaMencionada = c;
+          break;
+        }
+      }
+    }
+
+    // 3. Busca por termos representativos (ex: "espetinho", "sinal", "toninho", "bb")
+    if (!empresaMencionada) {
+      const stopWords = ['quanto', 'qual', 'quais', 'vendas', 'fatura', 'vencimento', 'emitido', 'emitir', 'relatorio', 'notas', 'nota', 'fiscal', 'fiscais', 'cliente', 'empresa', 'paratech', 'sobre', 'para', 'como', 'quem', 'minha', 'meus', 'saldo', 'total', 'hoje', 'ontem', 'mes', 'ano', 'geral', 'saber'];
+      for (const c of listaGeral) {
+        const palavras = normalizeText(c.nome_fantasia)
+          .split(/[\s\-_/]+/)
+          .filter(p => p.length >= 4 && !stopWords.includes(p));
+        if (palavras.length > 0 && palavras.some(p => msgNorm.includes(p))) {
+          empresaMencionada = c;
+          break;
+        }
+      }
+    }
+
+    // Segurança Multi-Tenancy
+    let clienteIdConsulta: string | null = null;
+    let clienteAlvoInfo: any = null;
+
+    if (empresaMencionada) {
+      // Se citou uma empresa específica, verificar se este perfil tem autorização para vê-la
+      if (!idsAutorizados.has(empresaMencionada.id)) {
+        return NextResponse.json({
+          resposta: `⚠️ **Acesso Restrito:** Por motivos de sigilo fiscal e privacidade da LGPD, você possui permissão para consultar exclusivamente as informações vinculadas à sua conta. Se precisar de dados sobre sua empresa, estou à disposição!`,
+          provedor: 'Robotech Security Policy',
+          isLiveIa: false
+        });
+      }
+      clienteIdConsulta = empresaMencionada.id;
+      clienteAlvoInfo = empresaMencionada;
+    } else {
+      // Se não mencionou empresa pelo nome, usar a selecionada se autorizada
+      if (context.clienteId && idsAutorizados.has(context.clienteId)) {
+        clienteIdConsulta = context.clienteId;
+        clienteAlvoInfo = listaGeral.find(c => c.id === context.clienteId);
+      } else if (userRole === 'cliente' && idsAutorizados.size === 1) {
+        clienteIdConsulta = Array.from(idsAutorizados)[0];
+        clienteAlvoInfo = listaGeral.find(c => c.id === clienteIdConsulta);
+      }
+    }
 
     // 1. Consulta Contextual de Dados no Banco de Dados Supabase (RAG em Tempo Real)
     let dadosContexto = '';
 
+    if (clienteAlvoInfo) {
+      dadosContexto += `\n[EMPRESA IDENTIFICADA PARA ESTA CONSULTA]:\n` +
+        `- Nome Fantasia: ${clienteAlvoInfo.nome_fantasia || clienteAlvoInfo.razao_social}\n` +
+        `- Razão Social: ${clienteAlvoInfo.razao_social}\n` +
+        `- CNPJ: ${clienteAlvoInfo.cnpj}\n` +
+        `- Regime Tributário: ${clienteAlvoInfo.regime_tributario || 'Simples Nacional'}\n` +
+        `- Mensalidade Base: R$ ${Number(clienteAlvoInfo.valor_mensalidade || 0).toFixed(2)} (Dia Vencimento: ${clienteAlvoInfo.dia_vencimento || 10})\n`;
+    } else if (userRole === 'admin') {
+      dadosContexto += `\n[CONSULTA GLOBAL DO ADMINISTRADOR - CONSOLIDADO GERAL DE TODAS AS EMPRESAS]\n`;
+    }
+
     // A) Se perguntou sobre FATURA / VENCIMENTO / VALOR / MENSALIDADE / PAGAMENTO
-    if (msgLower.includes('fatura') || msgLower.includes('vencimento') || msgLower.includes('mensalidade') || msgLower.includes('boleto') || msgLower.includes('pagar') || msgLower.includes('quanto devo')) {
+    if (msgNorm.includes('fatura') || msgNorm.includes('vencimento') || msgNorm.includes('mensalidade') || msgNorm.includes('boleto') || msgNorm.includes('pagar') || msgNorm.includes('quanto devo')) {
       try {
         let faturasQuery = supabase.from('faturas').select('id, competencia, valor, data_vencimento, status, valor_original, valor_multa, valor_juros, pix_copia_cola, clientes(razao_social, nome_fantasia)');
-        if (clienteId) {
-          faturasQuery = faturasQuery.eq('cliente_id', clienteId);
+        if (clienteIdConsulta) {
+          faturasQuery = faturasQuery.eq('cliente_id', clienteIdConsulta);
+        } else if (userRole !== 'admin' && idsAutorizados.size > 0) {
+          faturasQuery = faturasQuery.in('cliente_id', Array.from(idsAutorizados));
         }
-        const { data: faturas } = await faturasQuery.order('data_vencimento', { ascending: false }).limit(3);
+        const { data: faturas } = await faturasQuery.order('data_vencimento', { ascending: false }).limit(4);
         if (faturas && faturas.length > 0) {
           dadosContexto += `\n[DADOS REAIS DO BANCO - FATURAS]:\n` + faturas.map(f => 
             `- Competência: ${f.competencia} | Valor: R$ ${Number(f.valor).toFixed(2)} (Original: R$ ${Number(f.valor_original || f.valor).toFixed(2)}, Multa: R$ ${Number(f.valor_multa || 0).toFixed(2)}, Juros: R$ ${Number(f.valor_juros || 0).toFixed(2)}) | Vencimento: ${f.data_vencimento} | Status: ${f.status.toUpperCase()} | Empresa: ${(f.clientes as any)?.nome_fantasia || (f.clientes as any)?.razao_social || 'Cliente'}`
@@ -101,19 +208,22 @@ export async function POST(request: Request) {
           dadosContexto += `\n[DADOS REAIS DO BANCO - FATURAS]: Nenhuma fatura pendente encontrada para esta empresa no momento.\n`;
         }
       } catch (e: any) {
-        console.warn('Erro ao buscar faturas no Rorobotech:', e.message);
+        console.warn('Erro ao buscar faturas no Robotech:', e.message);
       }
     }
 
     // B) Se perguntou sobre VENDAS / PIX / NFCE / FATURAMENTO / NOTAS EMITIDAS
-    if (msgLower.includes('venda') || msgLower.includes('pix') || msgLower.includes('nfce') || msgLower.includes('nfe') || msgLower.includes('faturamento') || msgLower.includes('quanto emiti') || msgLower.includes('total')) {
+    if (msgNorm.includes('venda') || msgNorm.includes('pix') || msgNorm.includes('nfce') || msgNorm.includes('nfe') || msgNorm.includes('faturamento') || msgNorm.includes('quanto emiti') || msgNorm.includes('total')) {
       try {
         let nfceQuery = supabase.from('nfce_saidas').select('valor, formas_pagamento, data_emissao');
         let nfeQuery = supabase.from('nfe_saidas').select('valor, formas_pagamento, data_emissao');
 
-        if (clienteId) {
-          nfceQuery = nfceQuery.eq('cliente_id', clienteId);
-          nfeQuery = nfeQuery.eq('cliente_id', clienteId);
+        if (clienteIdConsulta) {
+          nfceQuery = nfceQuery.eq('cliente_id', clienteIdConsulta);
+          nfeQuery = nfeQuery.eq('cliente_id', clienteIdConsulta);
+        } else if (userRole !== 'admin' && idsAutorizados.size > 0) {
+          nfceQuery = nfceQuery.in('cliente_id', Array.from(idsAutorizados));
+          nfeQuery = nfeQuery.in('cliente_id', Array.from(idsAutorizados));
         }
 
         const [{ data: nfces }, { data: nfes }] = await Promise.all([
@@ -151,23 +261,24 @@ export async function POST(request: Request) {
           totalNfe += Number(nf.valor || 0);
         });
 
-        dadosContexto += `\n[DADOS REAIS DO BANCO - VENDAS E EMISSÕES]:\n` +
+        const empLabel = clienteAlvoInfo ? `${clienteAlvoInfo.nome_fantasia || clienteAlvoInfo.razao_social}` : 'Consolidado Geral';
+        dadosContexto += `\n[DADOS REAIS DO BANCO - VENDAS E EMISSÕES (${empLabel})]:\n` +
           `- Total NFC-e (Modelo 65): ${qtdNfce} notas emitidas, somando R$ ${totalNfce.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
           `  * Vendas via PIX na NFC-e: R$ ${totalPixNfce.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
           `  * Vendas em Dinheiro na NFC-e: R$ ${totalDinheiroNfce.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
           `  * Vendas em Cartão (Crédito/Débito) na NFC-e: R$ ${totalCartaoNfce.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
           `- Total NF-e (Modelo 55): ${qtdNfe} notas emitidas, somando R$ ${totalNfe.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
-          `- Faturamento Global Consolidado: R$ ${(totalNfce + totalNfe).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
+          `- Faturamento Total Consolidado: R$ ${(totalNfce + totalNfe).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
       } catch (e: any) {
-        console.warn('Erro ao calcular vendas no Rorobotech:', e.message);
+        console.warn('Erro ao calcular vendas no Robotech:', e.message);
       }
     }
 
     // C) Se perguntou sobre CERTIFICADO DIGITAL
-    if (msgLower.includes('certificado') || msgLower.includes('validade') || msgLower.includes('vencimento certificado') || msgLower.includes('a1')) {
+    if (msgNorm.includes('certificado') || msgNorm.includes('validade') || msgNorm.includes('vencimento certificado') || msgNorm.includes('a1')) {
       try {
         let certQuery = supabase.from('certificados_digitais').select('*');
-        if (clienteId) certQuery = certQuery.eq('cliente_id', clienteId);
+        if (clienteIdConsulta) certQuery = certQuery.eq('cliente_id', clienteIdConsulta);
         const { data: certs } = await certQuery.limit(1);
         if (certs && certs.length > 0) {
           const c = certs[0];
@@ -175,19 +286,8 @@ export async function POST(request: Request) {
             `- Titular: ${c.titular || 'Empresa'} | CNPJ/CPF: ${c.cnpj_cpf || '—'} | Validade: ${c.data_validade || '—'}\n`;
         }
       } catch (e: any) {
-        console.warn('Erro ao buscar certificado no Rorobotech:', e.message);
+        console.warn('Erro ao buscar certificado no Robotech:', e.message);
       }
-    }
-
-    // D) Dados da Empresa Ativa
-    if (clienteId) {
-      try {
-        const { data: cli } = await supabase.from('clientes').select('razao_social, nome_fantasia, cnpj, regime_tributario, dia_vencimento, valor_mensalidade').eq('id', clienteId).single();
-        if (cli) {
-          dadosContexto += `\n[EMPRESA SELECIONADA ATUALMENTE]:\n` +
-            `- Nome: ${cli.nome_fantasia || cli.razao_social} | Razão Social: ${cli.razao_social} | CNPJ: ${cli.cnpj} | Regime: ${cli.regime_tributario || 'Simples Nacional'} | Mensalidade Base: R$ ${Number(cli.valor_mensalidade || 0).toFixed(2)} (Vencimento Dia ${cli.dia_vencimento || 10})\n`;
-        }
-      } catch {}
     }
 
     // 2. Buscar API Key do Gemini no Banco ou Ambiente
@@ -281,8 +381,9 @@ export async function POST(request: Request) {
       }
     }
 
-    // 4. Fallback RAG Inteligente Especialista do RoboTech (Caso Gemini falhe ou demore)
+    // 4. Fallback RAG Inteligente Especialista do Robotech (Caso Gemini falhe ou demore)
     let respostaFallback = '';
+    const msgLower = msgNorm;
 
     if (msgLower.includes('monofasico') || msgLower.includes('relatorio')) {
       respostaFallback = `### 📊 Como emitir o Relatório de Produtos Monofásicos:\n\n` +
@@ -311,7 +412,7 @@ export async function POST(request: Request) {
       }
     } else if (msgLower.includes('fatura') || msgLower.includes('vencimento') || msgLower.includes('valor')) {
       if (dadosContexto.includes('FATURAS')) {
-        respostaFallback = `### 💳 Informações da sua Fatura:\n\n` +
+        respostaFallback = `### 💳 Informações da Fatura:\n\n` +
           dadosContexto.replace(/\[.*?\]/g, '').trim() + `\n\n` +
           `Você pode copiar o Pix Copia e Cola instantâneo ou visualizar o recibo diretamente no menu de Faturas:\n\n` +
           `[ACTION:NAVIGATE|/dashboard/faturas|💳 Ir para Minhas Faturas]`;
@@ -329,9 +430,9 @@ export async function POST(request: Request) {
         `- 📱 **WhatsApp de Suporte:** (37) 92000-7857\n` +
         `- 🌐 **Site Oficial:** [paratechsolucoes.com.br](https://paratechsolucoes.com.br)\n\n` +
         `Clique abaixo para abrir uma conversa direta no WhatsApp:\n\n` +
-        `[ACTION:WHATSAPP|https://wa.me/5537920007857?text=Ola%20RoboTech%20me%20atendeu%20no%20Hub%20e%20gostaria%20de%20falar%20com%20o%20suporte|📲 Falar com Suporte Paratech no WhatsApp]`;
+        `[ACTION:WHATSAPP|https://wa.me/5537920007857?text=Ola%20Robotech%20me%20atendeu%20no%20Hub%20e%20gostaria%20de%20falar%20com%20o%20suporte|📲 Falar com Suporte Paratech no WhatsApp]`;
     } else {
-      respostaFallback = `### Olá! Eu sou o RoboTech 🤖\n\n` +
+      respostaFallback = `### Olá! Eu sou o Robotech 🤖\n\n` +
         `Sou o assistente de inteligência artificial da **Paratech** e estou aqui para te ajudar em tudo!\n\n` +
         `Aqui estão algumas das coisas que posso fazer por você:\n` +
         `- 📊 **Explicar e guiar** até relatórios fiscais (como produtos monofásicos).\n` +

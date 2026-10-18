@@ -32,7 +32,7 @@ const PERGUNTAS_RAPIDAS = [
 export default function RoboTechFloatingWidget() {
   const router = useRouter()
   const pathname = usePathname()
-  const { selectedClienteId } = useGlobalClient()
+  const { selectedClienteId, selectedCliente, userRole, clientes } = useGlobalClient()
 
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
@@ -43,14 +43,14 @@ export default function RoboTechFloatingWidget() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Mensagem inicial de boas-vindas do RoboTech
+  // Mensagem inicial de boas-vindas do Robotech
   useEffect(() => {
     const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     setMessages([
       {
         id: 'msg-welcome',
         role: 'robotech',
-        content: `Olá! Eu sou o **RoboTech**, seu assistente de inteligência artificial da **Paratech**! 🤖✨\n\nEstou aqui para tirar suas dúvidas, te ensinar o passo a passo da plataforma, consultar dados em tempo real ou te guiar até qualquer tela.\n\nComo posso te ajudar hoje?`,
+        content: `Olá! Eu sou o **Robotech**, seu assistente de inteligência artificial da **Paratech**! 🤖✨\n\nEstou aqui para tirar suas dúvidas, te ensinar o passo a passo da plataforma, consultar dados fiscais e faturas em tempo real ou te guiar até qualquer tela.\n\nComo posso te ajudar hoje?`,
         timestamp: hora
       }
     ])
@@ -130,6 +130,20 @@ export default function RoboTechFloatingWidget() {
             history: historyPayload,
             context: {
               clienteId: selectedClienteId || undefined,
+              userRole: userRole || 'admin',
+              selectedCliente: selectedCliente ? {
+                id: selectedCliente.id,
+                razao_social: selectedCliente.razao_social,
+                nome_fantasia: selectedCliente.nome_fantasia,
+                cnpj: selectedCliente.cnpj
+              } : null,
+              clientesPermitidos: (clientes || []).map(c => ({
+                id: c.id,
+                razao_social: c.razao_social,
+                nome_fantasia: c.nome_fantasia,
+                cnpj: c.cnpj,
+                contabilidade_id: c.contabilidade_id
+              })),
               pathname
             }
           })
