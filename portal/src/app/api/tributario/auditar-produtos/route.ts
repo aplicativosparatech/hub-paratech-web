@@ -204,6 +204,33 @@ export async function POST(request: Request) {
           credenciais: i.credenciais || {}
         }))
 
+        // Se o cliente tiver token próprio do Google Gemini cadastrado em seu perfil, utiliza como prioridade
+        const { data: iaCliente } = await supabase
+          .from('integracoes')
+          .select('*')
+          .eq('provedor', `gemini_${cliente_id}`)
+          .eq('is_ativo', true)
+          .maybeSingle()
+
+        if (iaCliente?.credenciais?.api_key) {
+          // Remove gemini global e insere a chave do cliente no topo
+          const configsSemGemini = configsIa.filter(c => c.provedor !== 'gemini')
+          configsIa.length = 0
+          configsIa.push(
+            {
+              provedor: 'gemini',
+              tipo: 'ia',
+              is_ativo: true,
+              credenciais: {
+                api_key: iaCliente.credenciais.api_key,
+                model: iaCliente.credenciais.modelo || 'gemini-1.5-flash',
+                nome: `Google Gemini (Token do Cliente)`
+              }
+            },
+            ...configsSemGemini
+          )
+        }
+
         const configGeral = configsIa.find(c => c.provedor === 'ia_geral')
         const modoConsenso = configGeral ? configGeral.credenciais.modo_consenso !== false : true
         const habilitarIaXmlsGeral = configGeral ? configGeral.credenciais.habilitar_ia_xmls !== false : true

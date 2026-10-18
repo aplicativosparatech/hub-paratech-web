@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Save, Building2, Search, Eye, EyeOff, ShieldCheck, FileKey, Calendar, FileCode, Upload, MapPin, DollarSign } from 'lucide-react'
+import { ArrowLeft, Save, Building2, Search, Eye, EyeOff, ShieldCheck, FileKey, Calendar, FileCode, Upload, MapPin, DollarSign, Sparkles, ExternalLink } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import CertificadoAlertaBanner from '@/components/CertificadoAlertaBanner'
@@ -21,6 +21,8 @@ export default function EditarClientePage() {
   const [searchingCep, setSearchingCep] = useState(false)
   const [showPassword, setShowPassword] = useState(true)
   const [showCertPassword, setShowCertPassword] = useState(false)
+  const [showGeminiKey, setShowGeminiKey] = useState(false)
+  const [testingGemini, setTestingGemini] = useState(false)
   const [contabilidades, setContabilidades] = useState<any[]>([])
   const [sistemasSugeridos, setSistemasSugeridos] = useState<string[]>(ERP_PADRAO)
   const [logoFile, setLogoFile] = useState<File | null>(null)
@@ -70,7 +72,10 @@ export default function EditarClientePage() {
     juros_mora_mensal_percentual: '',
     dias_carencia: '',
     is_ativo: true,
-    logo_url: ''
+    logo_url: '',
+    plano_auditoria_tributaria: false,
+    gemini_api_key: '',
+    gemini_modelo: 'gemini-1.5-flash'
   })
 
   useEffect(() => {
@@ -90,11 +95,12 @@ export default function EditarClientePage() {
       const role = (roleData?.role as 'admin' | 'contabilidade' | 'cliente') || 'admin'
       setUserRole(role)
 
-      const [clienteRes, contabRes, hubRes, sistemasRes] = await Promise.all([
+      const [clienteRes, contabRes, hubRes, sistemasRes, iaClienteRes] = await Promise.all([
         supabase.from('clientes').select('*').eq('id', params.id).single(),
         supabase.from('contabilidades').select('id, razao_social'),
         supabase.from('configuracoes_hub').select('*').eq('cliente_id', params.id).maybeSingle(),
-        supabase.from('clientes').select('nome_sistema_utilizado').not('nome_sistema_utilizado', 'is', null)
+        supabase.from('clientes').select('nome_sistema_utilizado').not('nome_sistema_utilizado', 'is', null),
+        supabase.from('integracoes').select('*').eq('provedor', `gemini_${params.id}`).maybeSingle()
       ])
       if (clienteRes.data) {
         const d = clienteRes.data
@@ -110,6 +116,10 @@ export default function EditarClientePage() {
           router.push('/dashboard')
           return
         }
+
+        const iaCliente = iaClienteRes?.data
+        const temPlanoIa = iaCliente ? iaCliente.is_ativo !== false : Boolean(hubRes.data?.analise_ia_xmls_ativa)
+
         setFormData({
           razao_social: d.razao_social || '',
           nome_fantasia: d.nome_fantasia || '',
@@ -148,7 +158,10 @@ export default function EditarClientePage() {
           login_email: d.login_email || '',
           login_senha: d.login_senha || '',
           is_ativo: d.is_ativo !== undefined ? d.is_ativo : true,
-          logo_url: d.logo_url || ''
+          logo_url: d.logo_url || '',
+          plano_auditoria_tributaria: temPlanoIa,
+          gemini_api_key: iaCliente?.credenciais?.api_key || '',
+          gemini_modelo: iaCliente?.credenciais?.modelo || 'gemini-1.5-flash'
         })
         if (d.logo_url) setCurrentLogo(d.logo_url)
       }
@@ -200,6 +213,39 @@ export default function EditarClientePage() {
       toast.error(err.message, { id: toastId })
     } finally {
       setReadingCert(false)
+    }
+  }
+
+  // Teste de conexão do API Token do Google Gemini do Cliente
+  const handleTestarGemini = async () => {
+    const key = formData.gemini_api_key?.trim()
+    if (!key || key.length < 10) {
+      toast.error('Informe um API Token válido do Google Gemini para testar.')
+      return
+    }
+
+    setTestingGemini(true)
+    const toastId = toast.loading('Testando conexão com o Google AI Studio...')
+    try {
+      const res = await fetch('/api/tributario/testar-token-cliente', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          api_key: key,
+          modelo: formData.gemini_modelo || 'gemini-1.5-flash'
+        })
+      })
+
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Token rejeitado pela API do Google.')
+      }
+
+      toast.success(data.mensagem || 'Token do Google Gemini validado com sucesso!', { id: toastId, duration: 5000 })
+    } catch (err: any) {
+      toast.error(err.message || 'Falha ao testar token.', { id: toastId })
+    } finally {
+      setTestingGemini(false)
     }
   }
 
@@ -446,7 +492,7 @@ export default function EditarClientePage() {
       finalCertUrl = certUploadData.storagePath
     }
 
-    const { login_email, login_senha, ...clienteData } = formData
+    const { login_email, login_senha, plano_auditoria_tributaria, gemini_api_key, gemini_modelo, ...clienteData } = formData
 
     const payload = {
       ...clienteData,
@@ -479,12 +525,47 @@ export default function EditarClientePage() {
       return
     }
 
-    // Sincronizar configuracoes_hub
+    // Sincronizar configuracoes_hub com vencimento, valor e status da IA
     await supabase.from('configuracoes_hub').upsert({
       cliente_id: params.id,
       dia_vencimento: payload.dia_vencimento,
-      valor_mensalidade: payload.valor_mensalidade
+      valor_mensalidade: payload.valor_mensalidade,
+      analise_ia_xmls_ativa: Boolean(formData.plano_auditoria_tributaria)
     })
+
+    // Sincronizar API Token do Google Gemini nas integrações para este cliente
+    const provKey = `gemini_${params.id}`
+    const { data: existingIa } = await supabase
+      .from('integracoes')
+      .select('id')
+      .eq('provedor', provKey)
+      .maybeSingle()
+
+    if (formData.plano_auditoria_tributaria && formData.gemini_api_key?.trim()) {
+      const iaPayload = {
+        tipo: 'ia_cliente',
+        provedor: provKey,
+        credenciais: {
+          cliente_id: params.id,
+          api_key: formData.gemini_api_key.trim(),
+          modelo: formData.gemini_modelo || 'gemini-1.5-flash',
+          plano_auditoria_tributaria: true
+        },
+        is_ativo: true,
+        updated_at: new Date().toISOString()
+      }
+
+      if (existingIa) {
+        await supabase.from('integracoes').update(iaPayload).eq('id', existingIa.id)
+      } else {
+        await supabase.from('integracoes').insert([iaPayload])
+      }
+    } else if (existingIa) {
+      await supabase.from('integracoes').update({ 
+        is_ativo: Boolean(formData.plano_auditoria_tributaria), 
+        updated_at: new Date().toISOString() 
+      }).eq('id', existingIa.id)
+    }
 
     // Atualizar o acesso do usuário apenas se digitou email
     if (login_email && login_email.trim() !== '') {
@@ -1106,6 +1187,108 @@ export default function EditarClientePage() {
                 <input type="email" placeholder="fiscal@empresa.com.br" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
                   value={formData.email_fiscal} onChange={e => setFormData({...formData, email_fiscal: e.target.value})} />
               </div>
+            </div>
+          </div>
+
+          {/* Plano Auditoria Tributária & Inteligência Artificial (Google Gemini) */}
+          <div className="pt-4 border-t border-slate-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 mb-4 border-b border-slate-100 gap-2">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Sparkles className="text-amber-500" size={20} />
+                Plano Auditoria Tributária & IA (Google Gemini)
+              </h3>
+              <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200/80 px-2.5 py-1 rounded-full font-semibold">
+                Módulo Opcional • Configurável pelo Admin
+              </span>
+            </div>
+
+            <div className="p-5 bg-gradient-to-br from-slate-50 to-amber-50/30 border border-slate-200 rounded-2xl space-y-4">
+              {/* Toggle de Ativação do Plano */}
+              <div className="flex items-start sm:items-center justify-between gap-4">
+                <div className="space-y-0.5">
+                  <label className="text-sm font-bold text-slate-900 flex items-center gap-2 cursor-pointer">
+                    Habilitar Plano de Auditoria Tributária com IA para este Cliente
+                  </label>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Libera os módulos de Corretor e Auditor Tributário com Inteligência Artificial para conferência automática de NCMs, CSTs, CESTs, produtos monofásicos e enquadramento da Reforma Tributária.
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input 
+                    type="checkbox" 
+                    checked={formData.plano_auditoria_tributaria} 
+                    onChange={e => setFormData({ ...formData, plano_auditoria_tributaria: e.target.checked })} 
+                    className="sr-only peer" 
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+              </div>
+
+              {/* Campo dinâmico do API Token do Gemini (exibido apenas quando o plano estiver ativo) */}
+              {formData.plano_auditoria_tributaria && (
+                <div className="pt-4 border-t border-amber-100/80 space-y-4 animate-in fade-in duration-200">
+                  <div className="p-3.5 bg-amber-50 border border-amber-200/80 rounded-xl text-xs text-amber-950 flex items-start gap-2.5">
+                    <Sparkles size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                    <div className="leading-relaxed">
+                      <span className="font-bold text-amber-900 block mb-0.5">Token de API Próprio do Cliente (Google AI Studio):</span>
+                      <p className="text-amber-900/90 text-[11px]">
+                        Insira abaixo a <strong>Chave de API do Google Gemini</strong> do cliente. As consultas tributárias e auditorias fiscais de XMLs desta empresa utilizarão a cota do cliente, sem consumir o saldo de API da sua plataforma.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                    <div className="md:col-span-8">
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                          API Token do Google Gemini (Cliente)
+                        </label>
+                        <a
+                          href="https://aistudio.google.com/app/apikey"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1"
+                        >
+                          <span>Obter chave no Google AI Studio</span>
+                          <ExternalLink size={11} />
+                        </a>
+                      </div>
+                      <div className="relative">
+                        <input 
+                          type={showGeminiKey ? 'text' : 'password'} 
+                          placeholder="AIzaSy... (Chave de API do Google Gemini)" 
+                          className="w-full px-4 py-2.5 pr-11 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white font-mono text-xs text-slate-900 shadow-xs"
+                          value={formData.gemini_api_key} 
+                          onChange={e => setFormData({ ...formData, gemini_api_key: e.target.value })} 
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowGeminiKey(!showGeminiKey)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                          title={showGeminiKey ? 'Ocultar token' : 'Ver token'}
+                        >
+                          {showGeminiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        {formData.gemini_api_key ? '✓ Token configurado para esta empresa' : 'Se deixado em branco, utilizará a chave global de IA do sistema.'}
+                      </p>
+                    </div>
+
+                    <div className="md:col-span-4">
+                      <button
+                        type="button"
+                        onClick={handleTestarGemini}
+                        disabled={testingGemini || !formData.gemini_api_key}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-xs"
+                      >
+                        <Sparkles size={14} className={testingGemini ? 'animate-spin' : ''} />
+                        {testingGemini ? 'Testando Conexão...' : 'Testar Token Gemini'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
