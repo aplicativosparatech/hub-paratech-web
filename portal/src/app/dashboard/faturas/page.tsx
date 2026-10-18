@@ -24,6 +24,7 @@ export default function FaturasPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [confirmLoteModalOpen, setConfirmLoteModalOpen] = useState(false)
   const [deleteModal, setDeleteModal] = useState<{ open: boolean; id: string; clienteNome?: string }>({ open: false, id: '', clienteNome: '' })
+  const [limiteConfianca, setLimiteConfianca] = useState(1)
 
   async function fetchFaturas() {
     const { data } = await supabase
@@ -42,6 +43,11 @@ export default function FaturasPage() {
   useEffect(() => {
     fetchFaturas()
     fetchClientes()
+    async function loadConfigGeral() {
+      const { data } = await supabase.from('configuracoes_portal_geral').select('limite_desbloqueios_confianca').eq('id', 1).maybeSingle()
+      if (data?.limite_desbloqueios_confianca) setLimiteConfianca(Number(data.limite_desbloqueios_confianca))
+    }
+    loadConfigGeral()
   }, [])
 
   // Gerar faturas em lote para todos os clientes ativos mensalistas
@@ -354,35 +360,54 @@ export default function FaturasPage() {
                     {f.status === 'pendente' && (
                       <>
                         <button 
+                          disabled={(f.confianca_qtd || 0) >= limiteConfianca}
                           onClick={async () => {
-                            const novaQtd = (f.confianca_qtd || 0) + 1
-                            const { error } = await supabase.from('faturas').update({ 
-                              desbloqueio_confianca_em: new Date().toISOString(),
-                              confianca_qtd: novaQtd
-                            }).eq('id', f.id)
-                            if (!error) {
-                              toast.success(`Liberado por 24h! (Usado ${novaQtd} vezes)`)
+                            const toastId = toast.loading('Processando liberação em confiança...')
+                            try {
+                              const res = await fetch('/api/faturas/desbloqueio-confianca', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ fatura_id: f.id })
+                              })
+                              const data = await res.json()
+                              if (!res.ok) throw new Error(data.error || 'Erro ao liberar em confiança')
+                              toast.success(data.mensagem, { id: toastId })
                               fetchFaturas()
-                            } else {
-                              toast.error('Erro ao liberar: ' + error.message)
+                            } catch (err: any) {
+                              toast.error(err.message, { id: toastId })
                             }
                           }}
-                          className="text-xs bg-orange-100 text-orange-700 px-3 py-1 rounded hover:bg-orange-200 transition font-medium"
-                          title="Libera o bloqueio no cliente por 24 horas"
+                          className={`text-xs px-3 py-1 rounded transition font-medium ${
+                            (f.confianca_qtd || 0) >= limiteConfianca
+                              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                              : 'bg-orange-100 text-orange-700 hover:bg-orange-200 cursor-pointer'
+                          }`}
+                          title={(f.confianca_qtd || 0) >= limiteConfianca ? 'Limite de desbloqueios em confiança atingido para esta fatura' : 'Libera o bloqueio no cliente'}
                         >
-                          Liberar em Confiança ({(f.confianca_qtd || 0)}x)
+                          {(f.confianca_qtd || 0) >= limiteConfianca 
+                            ? `Confiança Esgotada (${f.confianca_qtd || 0}/${limiteConfianca})` 
+                            : `Liberar em Confiança (${f.confianca_qtd || 0}/${limiteConfianca})`
+                          }
                         </button>
                         <button 
                           onClick={async () => {
-                            const { error } = await supabase.from('faturas').update({ status: 'pago', data_pagamento: new Date().toISOString() }).eq('id', f.id)
-                            if (!error) {
-                              toast.success('Pagamento simulado com sucesso!')
+                            const toastId = toast.loading('Registrando pagamento...')
+                            try {
+                              const res = await fetch('/api/faturas/baixar-manual', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ fatura_id: f.id })
+                              })
+                              const data = await res.json()
+                              if (!res.ok) throw new Error(data.error || 'Erro ao registrar pagamento')
+                              toast.success('Pagamento confirmado e próxima fatura gerada com sucesso!', { id: toastId })
                               fetchFaturas()
-                            } else {
-                              toast.error('Erro ao simular: ' + error.message)
+                            } catch (err: any) {
+                              toast.error(err.message, { id: toastId })
                             }
                           }}
-                          className="text-xs bg-emerald-100 text-emerald-700 px-3 py-1 rounded hover:bg-emerald-200 transition font-medium"
+                          className="text-xs bg-emerald-100 text-emerald-700 px-3 py-1 rounded hover:bg-emerald-200 transition font-medium cursor-pointer"
+                          title="Confirma o pagamento e já gera automaticamente a fatura do próximo mês para antecipação"
                         >
                           Simular Pagamento
                         </button>

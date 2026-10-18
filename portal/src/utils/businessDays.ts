@@ -78,16 +78,23 @@ export function getNextBusinessDay(date: Date): Date {
  * Calcula as datas de cobrança e bloqueio respeitando a regra:
  * - A DATA DO VENCIMENTO NÃO MUDA (permanece a data original gravada na fatura).
  * - O BLOQUEIO NUNCA ACONTECE EM FIM DE SEMANA OU FERIADO (prorroga para o próximo dia útil).
- * - Suporta escolha entre contagem nominal (+5 dias da data de vencimento) ou contagem real (até o dia útil do bloqueio).
+ * - Suporta escolha entre contagem nominal (+ dias de tolerância da data de vencimento) ou contagem real (até o dia útil do bloqueio).
+ * - diasTolerancia é parametrizável (individual do cliente ou global).
  */
-export function calculateEffectiveDates(dueDateString: string, modoContagem: 'bloqueio_real' | 'bloqueio_nominal' = 'bloqueio_real') {
+export function calculateEffectiveDates(
+  dueDateString: string, 
+  modoContagem: 'bloqueio_real' | 'bloqueio_nominal' = 'bloqueio_real',
+  diasTolerancia: number = 3
+) {
   // 1. Data original do Vencimento (NUNCA MUDA)
-  const rawDue = new Date(dueDateString)
+  const cleanDateStr = dueDateString.split('T')[0]
+  const [ano, mes, dia] = cleanDateStr.split('-').map(Number)
+  const rawDue = new Date(ano, mes - 1, dia)
   rawDue.setHours(0, 0, 0, 0)
 
-  // 2. Data Nominal de Bloqueio (5 dias corridos após o vencimento)
+  // 2. Data Nominal de Bloqueio (dias de tolerância/carência corridos após o vencimento)
   const nominalBlock = new Date(rawDue)
-  nominalBlock.setDate(nominalBlock.getDate() + 5)
+  nominalBlock.setDate(nominalBlock.getDate() + Math.max(diasTolerancia, 0))
 
   // 3. Data Real de Bloqueio (se cair em sábado, domingo ou feriado, só bloqueia no próximo dia útil)
   const effectiveBlock = getNextBusinessDay(nominalBlock)

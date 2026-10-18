@@ -45,6 +45,16 @@ export default function ConfiguracoesPortalPage() {
   // Preferência de exibição do Nome Fantasia como título principal
   const [priorizarNomeFantasia, setPriorizarNomeFantasia] = useState(false)
 
+  // Configurações Globais de Cobrança, Encargos e Desbloqueio em Confiança
+  const [regrasFinanceiras, setRegrasFinanceiras] = useState({
+    global_multa_atraso_percentual: 2.0,
+    global_juros_mora_mensal_percentual: 1.0,
+    global_dias_carencia: 3,
+    limite_desbloqueios_confianca: 1,
+    horas_desbloqueio_confianca: 24,
+    intervalo_horas_entre_desbloqueios: 24
+  })
+
   // Controle de Alternância de Interface (Clean vs Clássico)
   const [permitirTrocaInterface, setPermitirTrocaInterface] = useState(true)
   const [modoPadraoInterface, setModoPadraoInterface] = useState<'clean' | 'classico'>('clean')
@@ -139,6 +149,14 @@ export default function ConfiguracoesPortalPage() {
             ficticio_nf_valor: Number(geralData.ficticio_nf_valor ?? 894520.50),
             ficticio_relatorios: Number(geralData.ficticio_relatorios ?? 120),
             ficticio_cidades: Number(geralData.ficticio_cidades ?? 14)
+          })
+          setRegrasFinanceiras({
+            global_multa_atraso_percentual: Number(geralData.global_multa_atraso_percentual ?? 2.0),
+            global_juros_mora_mensal_percentual: Number(geralData.global_juros_mora_mensal_percentual ?? 1.0),
+            global_dias_carencia: Number(geralData.global_dias_carencia ?? 3),
+            limite_desbloqueios_confianca: Number(geralData.limite_desbloqueios_confianca ?? 1),
+            horas_desbloqueio_confianca: Number(geralData.horas_desbloqueio_confianca ?? 24),
+            intervalo_horas_entre_desbloqueios: Number(geralData.intervalo_horas_entre_desbloqueios ?? 24)
           })
         }
       }
@@ -252,6 +270,12 @@ export default function ConfiguracoesPortalPage() {
           ficticio_nf_valor: ficticioData.ficticio_nf_valor,
           ficticio_relatorios: ficticioData.ficticio_relatorios,
           ficticio_cidades: ficticioData.ficticio_cidades,
+          global_multa_atraso_percentual: Number(regrasFinanceiras.global_multa_atraso_percentual),
+          global_juros_mora_mensal_percentual: Number(regrasFinanceiras.global_juros_mora_mensal_percentual),
+          global_dias_carencia: Number(regrasFinanceiras.global_dias_carencia),
+          limite_desbloqueios_confianca: Number(regrasFinanceiras.limite_desbloqueios_confianca),
+          horas_desbloqueio_confianca: Number(regrasFinanceiras.horas_desbloqueio_confianca),
+          intervalo_horas_entre_desbloqueios: Number(regrasFinanceiras.intervalo_horas_entre_desbloqueios),
           updated_at: new Date().toISOString()
         })
 
@@ -988,6 +1012,180 @@ export default function ConfiguracoesPortalPage() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Configurações Globais de Cobrança, Encargos e Desbloqueio em Confiança - Exclusivo Admin */}
+          {userRole === 'admin' && (
+            <div className="mt-8 pt-8 border-t border-slate-200">
+              <div className="flex items-center gap-3 pb-4 border-b border-slate-100 mb-6">
+                <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
+                  <DollarSign size={24} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold text-slate-900">Cobrança, Juros e Desbloqueio em Confiança</h3>
+                    <span className="text-[10px] uppercase font-bold tracking-wider bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md border border-emerald-200">
+                      Exclusivo Admin
+                    </span>
+                  </div>
+                  <p className="text-slate-500 text-xs">
+                    Configure as regras globais de inadimplência, juros de mora e os limites permitidos para liberação em confiança no Hub Desktop.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                {/* 1. Encargos & Carência Global */}
+                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="font-bold text-slate-800 text-sm">
+                      Regras Globais de Encargos por Atraso e Carência
+                    </span>
+                    <span className="text-[11px] text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded font-medium">
+                      Valores padrão do sistema
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mb-4">
+                    Estes valores são aplicados no cálculo do Pix dinâmico e na régua de cobrança via WhatsApp. 
+                    <strong> Nota:</strong> Se um cliente possuir taxas ou carência cadastradas no seu perfil individual, os valores do cliente terão prioridade.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Multa por Atraso (%)
+                      </label>
+                      <div className="relative">
+                        <input 
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={regrasFinanceiras.global_multa_atraso_percentual}
+                          onChange={e => setRegrasFinanceiras({ ...regrasFinanceiras, global_multa_atraso_percentual: Number(e.target.value) })}
+                          className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-8"
+                          placeholder="Ex: 2.00"
+                        />
+                        <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">%</span>
+                      </div>
+                      <span className="text-[11px] text-slate-400 mt-1 block">Aplicada após o término da carência</span>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Juros de Mora Mensal (%)
+                      </label>
+                      <div className="relative">
+                        <input 
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={regrasFinanceiras.global_juros_mora_mensal_percentual}
+                          onChange={e => setRegrasFinanceiras({ ...regrasFinanceiras, global_juros_mora_mensal_percentual: Number(e.target.value) })}
+                          className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-8"
+                          placeholder="Ex: 1.00"
+                        />
+                        <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">% a.m.</span>
+                      </div>
+                      <span className="text-[11px] text-slate-400 mt-1 block">Proporcional diário (ex: 1% / 30 dias)</span>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Dias de Carência / Tolerância (Global)
+                      </label>
+                      <div className="relative">
+                        <input 
+                          type="number"
+                          min="0"
+                          max="60"
+                          value={regrasFinanceiras.global_dias_carencia}
+                          onChange={e => setRegrasFinanceiras({ ...regrasFinanceiras, global_dias_carencia: Number(e.target.value) })}
+                          className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-12"
+                          placeholder="Ex: 3"
+                        />
+                        <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">dias</span>
+                      </div>
+                      <span className="text-[11px] text-slate-400 mt-1 block">Prazo antes do bloqueio e encargos</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Parâmetros de Desbloqueio em Confiança */}
+                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="font-bold text-slate-800 text-sm">
+                      Parâmetros do Desbloqueio em Confiança (Hub Desktop)
+                    </span>
+                    <span className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded font-medium">
+                      Liberação temporária sem pagamento
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mb-4">
+                    Controla o comportamento do botão <strong>&quot;Liberar em Confiança&quot;</strong> na tela de Faturas. 
+                    Permite definir quantas vezes cada fatura pode ser liberada e quanto tempo o sistema permanece ativo.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Limite Máximo por Fatura
+                      </label>
+                      <div className="relative">
+                        <input 
+                          type="number"
+                          min="1"
+                          max="10"
+                          value={regrasFinanceiras.limite_desbloqueios_confianca}
+                          onChange={e => setRegrasFinanceiras({ ...regrasFinanceiras, limite_desbloqueios_confianca: Number(e.target.value) })}
+                          className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 pr-12"
+                          placeholder="Ex: 1"
+                        />
+                        <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">vezes</span>
+                      </div>
+                      <span className="text-[11px] text-slate-400 mt-1 block">Desbloqueios permitidos por cobrança</span>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Duração de Cada Desbloqueio
+                      </label>
+                      <div className="relative">
+                        <input 
+                          type="number"
+                          min="1"
+                          max="168"
+                          value={regrasFinanceiras.horas_desbloqueio_confianca}
+                          onChange={e => setRegrasFinanceiras({ ...regrasFinanceiras, horas_desbloqueio_confianca: Number(e.target.value) })}
+                          className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 pr-12"
+                          placeholder="Ex: 24"
+                        />
+                        <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">horas</span>
+                      </div>
+                      <span className="text-[11px] text-slate-400 mt-1 block">Tempo que o Hub fica liberado (ex: 24h)</span>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Intervalo Mínimo entre Liberações
+                      </label>
+                      <div className="relative">
+                        <input 
+                          type="number"
+                          min="0"
+                          max="168"
+                          value={regrasFinanceiras.intervalo_horas_entre_desbloqueios}
+                          onChange={e => setRegrasFinanceiras({ ...regrasFinanceiras, intervalo_horas_entre_desbloqueios: Number(e.target.value) })}
+                          className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 pr-12"
+                          placeholder="Ex: 24"
+                        />
+                        <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">horas</span>
+                      </div>
+                      <span className="text-[11px] text-slate-400 mt-1 block">Intervalo de segurança entre concessões</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

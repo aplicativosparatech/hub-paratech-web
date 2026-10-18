@@ -3,23 +3,15 @@ import { createAdminClient } from '@/utils/supabase/admin'
 import { sendWhatsAppMessage } from '@/utils/whatsapp'
 import { calculateEffectiveDates } from '@/utils/businessDays'
 import { gerarFaturasMensalistas } from '@/utils/billing'
+import { calcularEncargosFatura } from '@/utils/billingCharges'
 
 export async function GET(request: Request) {
-  // Segurança Básica: Em produção, checar cabeçalhos de autenticação do Vercel Cron.
-  /*
-  const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return new Response('Unauthorized', { status: 401 })
-  }
-  */
-
   const supabase = createAdminClient()
   const hoje = new Date()
-  // Zera a hora para fazer comparação apenas por dia
   hoje.setHours(0, 0, 0, 0)
 
   try {
-    // 0. Se for dia 01, garante a geração automática das faturas dos clientes ativos mensalistas
+    // 0. Se for dia 01, garante a geração/atualização automática das faturas dos clientes ativos mensalistas
     if (hoje.getDate() === 1) {
       try {
         await gerarFaturasMensalistas(hoje)
@@ -28,18 +20,28 @@ export async function GET(request: Request) {
       }
     }
 
-    // 1. Busca todas as Faturas que não estão Pagas
+    // 1. Busca configurações globais de juros, multa e carência
+    const { data: configGeral } = await supabase
+      .from('configuracoes_portal_geral')
+      .select('global_multa_atraso_percentual, global_juros_mora_mensal_percentual, global_dias_carencia')
+      .eq('id', 1)
+      .maybeSingle()
+
+    // 2. Busca todas as Faturas Pendentes (que não estão Pagas nem Canceladas)
     const { data: faturas, error: faturaError } = await supabase
       .from('faturas')
       .select(`
-        id, valor, data_vencimento, status,
-        clientes ( id, razao_social, nome_fantasia, whatsapp )
+        id, valor, valor_original, data_vencimento, status, qr_code_payload, competencia,
+        clientes ( 
+          id, razao_social, nome_fantasia, whatsapp,
+          multa_atraso_percentual, juros_mora_mensal_percentual, dias_carencia
+        )
       `)
-      .neq('status', 'paga')
+      .eq('status', 'pendente')
 
     if (faturaError) throw faturaError
 
-    // 2. Busca a API de WhatsApp Ativa
+    // 3. Busca a API de WhatsApp Ativa
     const { data: wppApis } = await supabase
       .from('integracoes')
       .select('*')
@@ -52,53 +54,81 @@ export async function GET(request: Request) {
     }
 
     const disparosRealizados = []
-
-    // Modo de contagem configurável na tela de WhatsApp: 'bloqueio_real' (considera próximo dia útil) ou 'bloqueio_nominal' (5 dias corridos da data do vencimento)
     const modoContagem = wppApis?.credenciais?.modo_contagem_bloqueio || 'bloqueio_real'
 
-    // 3. Processa cada fatura de acordo com a Régua de Cobrança
+    // 4. Processa cada fatura de acordo com a Régua de Cobrança e Carência
     for (const fatura of faturas || []) {
       const cliente: any = Array.isArray(fatura.clientes) ? fatura.clientes[0] : fatura.clientes
-      if (!cliente || !cliente.whatsapp) continue // Se o cliente não tem whatsapp cadastrado, ignora.
+      if (!cliente || !cliente.whatsapp) continue
 
-      // Cálculo de datas: data do vencimento NUNCA muda!
-      const { rawDueDate, targetCountdownDate } = calculateEffectiveDates(fatura.data_vencimento, modoContagem)
+      // Prioridade da Carência / Tolerância: Cliente individual > Global
+      const diasCarenciaEfetivos = (cliente.dias_carencia !== null && cliente.dias_carencia !== undefined)
+        ? Number(cliente.dias_carencia)
+        : Number(configGeral?.global_dias_carencia ?? 3)
+
+      // Cálculo de encargos (multa e juros)
+      const valorBase = Number(fatura.valor_original ?? fatura.valor)
+      const encargos = calcularEncargosFatura({
+        valorBase,
+        dataVencimento: fatura.data_vencimento,
+        clienteMulta: cliente?.multa_atraso_percentual,
+        clienteJuros: cliente?.juros_mora_mensal_percentual,
+        clienteCarencia: cliente?.dias_carencia,
+        globalMulta: configGeral?.global_multa_atraso_percentual,
+        globalJuros: configGeral?.global_juros_mora_mensal_percentual,
+        globalCarencia: configGeral?.global_dias_carencia
+      })
+
+      // Cálculo de datas considerando a carência/tolerância
+      const { rawDueDate, targetCountdownDate } = calculateEffectiveDates(
+        fatura.data_vencimento, 
+        modoContagem, 
+        diasCarenciaEfetivos
+      )
 
       const diferencaDias = Math.floor((rawDueDate.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
       const diasParaBloqueio = Math.floor((targetCountdownDate.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
 
       const dataVencimentoFormatada = rawDueDate.toLocaleDateString('pt-BR')
       const dataBloqueioFormatada = targetCountdownDate.toLocaleDateString('pt-BR')
-      const valorFormatado = Number(fatura.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+      const valorCobrar = encargos.valorTotal
+      const valorFormatado = valorCobrar.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+      const pixBloco = fatura.qr_code_payload 
+        ? `\n\n🔑 *Pix Copia e Cola:*\n\`\`\`${fatura.qr_code_payload}\`\`\`` 
+        : ''
+
+      let textoEncargos = ''
+      if (encargos.emAtraso && (encargos.valorMulta > 0 || encargos.valorJuros > 0)) {
+        textoEncargos = ` (inclui R$ ${encargos.valorMulta.toFixed(2)} de multa e R$ ${encargos.valorJuros.toFixed(2)} de juros)`
+      }
 
       let mensagem = null
 
       // REGRA 1: 5 dias antes (Fatura disponível)
       if (diferencaDias === 5) {
-        mensagem = `Olá! A fatura ${fatura.id.split('-')[0]} — Sistema Comercial, referente a este mês, da empresa ${cliente.nome_fantasia || cliente.razao_social}, já está disponível.\nValor: ${valorFormatado}\nVencimento: ${dataVencimentoFormatada}\n\nToque no link abaixo para pagar via Pix.\n💳 [LINK AQUI]`
+        mensagem = `Olá! A fatura ${fatura.id.split('-')[0]} — Sistema Comercial, referente a ${fatura.competencia || 'este mês'}, da empresa ${cliente.nome_fantasia || cliente.razao_social}, já está disponível.\n• *Valor:* ${valorFormatado}\n• *Vencimento:* ${dataVencimentoFormatada}${pixBloco}\n\nPague via Pix para confirmação imediata!`
       }
       
       // REGRA 2: No dia do Vencimento Efetivo
       else if (diferencaDias === 0) {
-        mensagem = `Olá! Sua fatura do Sistema Comercial vence hoje, ${dataVencimentoFormatada}. Valor: ${valorFormatado}.\n\nPara evitar o bloqueio previsto para ${dataBloqueioFormatada}, regularize o pagamento. Faltam ${diasParaBloqueio} dias.\n💳 [LINK AQUI]`
+        mensagem = `Olá! Sua fatura do Sistema Comercial vence hoje, ${dataVencimentoFormatada}.\n• *Valor:* ${valorFormatado}\n\nPara evitar o bloqueio previsto para ${dataBloqueioFormatada}, regularize o pagamento. Faltam ${diasParaBloqueio} dia(s) de tolerância.${pixBloco}`
       }
       
       // REGRA 3: Atrasado, mas antes do bloqueio efetivo
       else if (diferencaDias < 0 && diasParaBloqueio >= 0) {
         if (diasParaBloqueio === 0) {
-           // Dia do Bloqueio Efetivo (Próximo dia útil se caiu no fim de semana/feriado)
-           mensagem = `Olá. Ainda não identificamos o pagamento da fatura ${fatura.id.split('-')[0]} da empresa ${cliente.nome_fantasia || cliente.razao_social}. Vencimento: ${dataVencimentoFormatada}.\n\n⚠️ O prazo para regularizar o pagamento antes do bloqueio TERMINA HOJE.\nValor: ${valorFormatado}\n\nSe já pagou, entre em contato conosco.\n💳 [LINK AQUI]`
+           mensagem = `Olá. Ainda não identificamos o pagamento da fatura ${fatura.id.split('-')[0]} da empresa ${cliente.nome_fantasia || cliente.razao_social}. Vencimento: ${dataVencimentoFormatada}.\n\n⚠️ O prazo de tolerância para regularizar o pagamento antes do bloqueio TERMINA HOJE.\n• *Valor:* ${valorFormatado}${textoEncargos}${pixBloco}\n\nSe já pagou, favor desconsiderar.`
         } else {
-           mensagem = `Olá. Ainda não identificamos o pagamento da fatura ${fatura.id.split('-')[0]} da empresa ${cliente.nome_fantasia || cliente.razao_social}. Vencimento: ${dataVencimentoFormatada}.\n\nPara evitar o bloqueio previsto para ${dataBloqueioFormatada}, regularize o pagamento. Faltam ${diasParaBloqueio} dias.\nValor: ${valorFormatado}\n\nSe já pagou, entre em contato conosco.\n💳 [LINK AQUI]`
+           mensagem = `Olá. Ainda não identificamos o pagamento da fatura ${fatura.id.split('-')[0]} da empresa ${cliente.nome_fantasia || cliente.razao_social}. Vencimento original: ${dataVencimentoFormatada}.\n\nPara evitar o bloqueio previsto para ${dataBloqueioFormatada}, regularize o pagamento. Restam ${diasParaBloqueio} dia(s) de tolerância.\n• *Valor Atual:* ${valorFormatado}${textoEncargos}${pixBloco}\n\nSe já pagou, favor desconsiderar.`
         }
       }
       
       // REGRA 4: Já passou da data de bloqueio efetiva
       else if (diasParaBloqueio < 0) {
-        mensagem = `⚠️ AVISO DE BLOQUEIO ⚠️\nO prazo previsto para bloqueio terminou em ${dataBloqueioFormatada}. Seu sistema pode estar inativo.\n\nRegularize o pagamento de ${valorFormatado} ou entre em contato conosco imediatamente.\n💳 [LINK AQUI]`
+        mensagem = `⚠️ *AVISO DE BLOQUEIO* ⚠️\nO prazo de tolerância previsto terminou em ${dataBloqueioFormatada}. Seu sistema pode ter sido bloqueado por pendência financeira.\n\n• *Valor Atualizado:* ${valorFormatado}${textoEncargos}${pixBloco}\n\nO desbloqueio ocorre de forma 100% automática em segundos após a confirmação do Pix.`
       }
 
-      // Se gerou alguma mensagem para as condições acima, envia para a API!
       if (mensagem) {
         try {
           await sendWhatsAppMessage({
@@ -124,21 +154,18 @@ export async function GET(request: Request) {
       }
     }
 
-    // 4. ALERTA DE VENCIMENTO DO CERTIFICADO DIGITAL A1 (A partir de 45 dias antes)
-    // Respeita as permissões definidas pelo Admin em configuracoes_hub (padrão: desativado)
+    // 5. ALERTA DE VENCIMENTO DO CERTIFICADO DIGITAL A1 (A partir de 45 dias antes)
     const { data: clientesComCert } = await supabase
       .from('clientes')
       .select('id, razao_social, nome_fantasia, whatsapp, certificado_validade, contabilidade_id')
       .not('certificado_validade', 'is', null)
 
-    // Busca configurações de todos os clientes
     const { data: todasConfigs } = await supabase
       .from('configuracoes_hub')
       .select('cliente_id, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado')
 
     const configMap = new Map((todasConfigs || []).map(cfg => [cfg.cliente_id, cfg]))
 
-    // Se houver contabilidades com whatsapp, busca dados das contabilidades
     const { data: todasContabs } = await supabase
       .from('contabilidades')
       .select('id, razao_social, whatsapp')
@@ -148,7 +175,6 @@ export async function GET(request: Request) {
       if (!cli.certificado_validade) continue
       const cliConfig = configMap.get(cli.id)
 
-      // Se o envio por WhatsApp de aviso de certificado estiver desativado pelo Admin, pula
       if (cliConfig?.avisar_whatsapp_certificado === false) continue
 
       const dataValidade = new Date(cli.certificado_validade)
@@ -156,12 +182,9 @@ export async function GET(request: Request) {
 
       const diasParaVencerCert = Math.floor((dataValidade.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
 
-      // Se estiver a 45 dias ou menos do vencimento, processa os alertas
       if (diasParaVencerCert <= 45 && diasParaVencerCert >= 0) {
         const dataValidadeFormatada = dataValidade.toLocaleDateString('pt-BR')
-        const cliConfig = configMap.get(cli.id)
         
-        // 4.1 Envio para o Cliente (Somente se Admin autorizou exibir_certificados_cliente)
         if (cliConfig?.exibir_certificados_cliente && cli.whatsapp) {
           let msgCert = ''
           if (diasParaVencerCert === 0) {
@@ -196,7 +219,6 @@ export async function GET(request: Request) {
           }
         }
 
-        // 4.2 Envio para a Contabilidade (Somente se Admin autorizou exibir_certificados_contabilidade)
         if (cliConfig?.exibir_certificados_contabilidade && cli.contabilidade_id) {
           const contab = contabMap.get(cli.contabilidade_id)
           if (contab?.whatsapp) {

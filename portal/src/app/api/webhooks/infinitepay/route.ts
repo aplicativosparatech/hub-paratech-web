@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { sendWhatsAppMessage } from '@/utils/whatsapp'
+import { gerarProximaFaturaAposPagamento } from '@/utils/billingCharges'
 
 export async function POST(request: Request) {
   try {
@@ -29,20 +30,22 @@ export async function POST(request: Request) {
 
     const cliente: any = Array.isArray(fatura.clientes) ? fatura.clientes[0] : fatura.clientes
     const valorFormatado = Number(fatura.valor || amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-    const refMes = new Date(fatura.data_vencimento).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' })
-
-    // Busca o WhatsApp do Administrador configurado no Hub
-    const { data: configHub } = await supabase
-      .from('configuracoes_hub')
-      .select('pix_payload')
-      .single()
+    const refMes = fatura.competencia || new Date(fatura.data_vencimento).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' })
 
     // 1. EVENTO: PAGAMENTO CONFIRMADO
     if (event === 'transaction.paid' || event === 'payment.succeeded' || event === 'paid') {
-      // Atualiza o status da fatura para "paga"
+      if (fatura.status === 'pago' || fatura.status === 'paga') {
+        return NextResponse.json({ success: true, message: 'Fatura já estava quitada' })
+      }
+
+      // Atualiza o status da fatura para "pago"
       await supabase
         .from('faturas')
-        .update({ status: 'paga' })
+        .update({ 
+          status: 'pago',
+          data_pagamento: new Date().toISOString(),
+          provedor_pagamento: 'infinitepay'
+        })
         .eq('id', fatura.id)
 
       // Mensagem para o CLIENTE
@@ -63,14 +66,21 @@ export async function POST(request: Request) {
         try {
           await sendWhatsAppMessage({
             to: adminPhone,
-            message: `💰 *Novo Pagamento Recebido!*\n\n• *Cliente:* ${cliente?.nome_fantasia || cliente?.razao_social}\n• *Valor:* ${valorFormatado}\n• *Referência:* ${refMes}\n• *Fatura ID:* ${fatura.id.split('-')[0]}\n\nStatus do Hub: Liberado no sistema.`
+            message: `💰 *Novo Pagamento Recebido (InfinitePay)!*\n\n• *Cliente:* ${cliente?.nome_fantasia || cliente?.razao_social}\n• *Valor:* ${valorFormatado}\n• *Referência:* ${refMes}\n• *Fatura ID:* ${fatura.id.split('-')[0]}\n\nStatus do Hub: Liberado no sistema.`
           })
         } catch (e: any) {
           console.error('Erro ao notificar admin via WhatsApp:', e.message)
         }
       }
 
-      return NextResponse.json({ success: true, status: 'paga_processada' })
+      // REGRA DE ANTECIPAÇÃO: Gera automaticamente a próxima fatura para pagamento antecipado
+      try {
+        await gerarProximaFaturaAposPagamento(fatura.id)
+      } catch (errAnt: any) {
+        console.error('Erro ao gerar próxima fatura após pagamento InfinitePay:', errAnt.message)
+      }
+
+      return NextResponse.json({ success: true, status: 'pago_processado' })
     }
 
     // 2. EVENTO: CHECKOUT ABANDONADO / PAGAMENTO NÃO FINALIZADO

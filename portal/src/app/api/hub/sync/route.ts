@@ -11,22 +11,40 @@ export async function POST(request: Request) {
     const { token } = await request.json()
     if (!token) return NextResponse.json({ error: 'Token inválido' }, { status: 400 })
 
-    // 1. Busca o cliente
+    // 1. Busca o cliente com campos de tolerância e encargos
     const { data: cliente } = await supabase
       .from('clientes')
-      .select('id, nome_sistema_utilizado, is_ativo, data_inicio_monitoramento, numero_inicial_nfe, numero_inicial_nfce, numero_inicial_nfse, numero_inicial_cte, numero_inicial_mdfe')
+      .select('id, nome_sistema_utilizado, is_ativo, data_inicio_monitoramento, numero_inicial_nfe, numero_inicial_nfce, numero_inicial_nfse, numero_inicial_cte, numero_inicial_mdfe, dias_carencia')
       .eq('hub_token', token)
       .single()
     if (!cliente) return NextResponse.json({ error: 'Cliente não encontrado' }, { status: 404 })
 
-    // 2. Busca configuração (offline_secret, exes_monitorados, modo_processamento_xml)
-    const { data: config } = await supabase.from('configuracoes_hub').select('offline_secret, exes_monitorados, pastas_vendas, pastas_compras, modo_processamento_xml').eq('cliente_id', cliente.id).maybeSingle()
+    // 2. Busca configuração do Hub (pastas, exes, tolerância)
+    const { data: config } = await supabase
+      .from('configuracoes_hub')
+      .select('offline_secret, exes_monitorados, pastas_vendas, pastas_compras, modo_processamento_xml, dias_tolerancia_bloqueio')
+      .eq('cliente_id', cliente.id)
+      .maybeSingle()
 
-    // 3. Verifica faturas vencidas
+    // 3. Busca configurações globais do Portal (carência e parâmetros de desbloqueio em confiança)
+    const { data: configGeral } = await supabase
+      .from('configuracoes_portal_geral')
+      .select('global_dias_carencia, limite_desbloqueios_confianca, horas_desbloqueio_confianca')
+      .eq('id', 1)
+      .maybeSingle()
+
+    // Prioridade da carência / tolerância: Cliente individual > Hub do cliente > Global
+    const diasCarenciaEfetivos = (cliente.dias_carencia !== null && cliente.dias_carencia !== undefined)
+      ? Number(cliente.dias_carencia)
+      : (config?.dias_tolerancia_bloqueio !== null && config?.dias_tolerancia_bloqueio !== undefined)
+        ? Number(config.dias_tolerancia_bloqueio)
+        : Number(configGeral?.global_dias_carencia ?? 3)
+
+    // 4. Verifica faturas pendentes
     const hoje = new Date().toISOString().split('T')[0]
     const { data: faturaVencida } = await supabase
       .from('faturas')
-      .select('id, valor, qr_code_payload, status, desbloqueio_confianca_em, data_vencimento')
+      .select('id, valor, valor_original, qr_code_payload, status, desbloqueio_confianca_em, confianca_qtd, data_vencimento')
       .eq('cliente_id', cliente.id)
       .eq('status', 'pendente')
       .lt('data_vencimento', hoje)
@@ -34,44 +52,47 @@ export async function POST(request: Request) {
       .limit(1)
       .maybeSingle()
 
-    // Se houver fatura vencida, gera o QR Code caso ainda não tenha (Mock via API)
+    // Se houver fatura vencida, gera ou atualiza o QR Code via rota interna de pagamentos
     let finalPix = faturaVencida?.qr_code_payload
     if (faturaVencida && !finalPix) {
-       // Se não tem payload salvo, chama a nossa própria rota interna para gerar
        const host = request.headers.get('host')
        const protocol = host?.includes('localhost') ? 'http' : 'https'
-       const resPix = await fetch(`${protocol}://${host}/api/pagamentos/gerar-pix`, {
-         method: 'POST',
-         headers: { 'Content-Type': 'application/json' },
-         body: JSON.stringify({ hub_token: token, fatura_id: faturaVencida.id })
-       })
-       const pixData = await resPix.json()
-       if (pixData.qr_code_payload) finalPix = pixData.qr_code_payload
+       try {
+         const resPix = await fetch(`${protocol}://${host}/api/pagamentos/gerar-pix`, {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({ hub_token: token, fatura_id: faturaVencida.id })
+         })
+         const pixData = await resPix.json()
+         if (pixData.qr_code_payload) finalPix = pixData.qr_code_payload
+       } catch (errPix) {
+         console.error('Erro ao acionar gerar-pix no sync:', errPix)
+       }
     }
 
     let isBloqueado = !cliente.is_ativo;
 
-    // Regra de Negócio: Se o vencimento ou a data de bloqueio cair em feriado/fim de semana, prorroga para o próximo dia útil
+    // Regra de Bloqueio: respeita os dias de carência (Cliente > Global) e fins de semana/feriados
     if (faturaVencida) {
-      const { effectiveBlockDate } = calculateEffectiveDates(faturaVencida.data_vencimento)
+      const { effectiveBlockDate } = calculateEffectiveDates(faturaVencida.data_vencimento, 'bloqueio_real', diasCarenciaEfetivos)
       const dataHoje = new Date()
       dataHoje.setHours(0, 0, 0, 0)
 
-      // Só bloqueia se HOJE já atingiu ou passou a data de bloqueio efetiva (respeitando fins de semana e feriados)
       if (dataHoje.getTime() >= effectiveBlockDate.getTime()) {
-        isBloqueado = true;
+        isBloqueado = true
       }
     }
     
-    // Lógica de liberação em confiança (24h)
+    // Regra de Desbloqueio em Confiança Parametrizável
     if (faturaVencida && faturaVencida.desbloqueio_confianca_em) {
-        const dataDesbloqueio = new Date(faturaVencida.desbloqueio_confianca_em).getTime()
-        const agora = new Date().getTime()
-        const horasPassadas = (agora - dataDesbloqueio) / (1000 * 60 * 60)
-        
-        if (horasPassadas <= 24) {
-            isBloqueado = false; // Está no período de confiança!
-        }
+      const horasPermitidas = Number(configGeral?.horas_desbloqueio_confianca ?? 24)
+      const dataDesbloqueio = new Date(faturaVencida.desbloqueio_confianca_em).getTime()
+      const agora = new Date().getTime()
+      const horasPassadas = (agora - dataDesbloqueio) / (1000 * 60 * 60)
+      
+      if (horasPassadas <= horasPermitidas) {
+        isBloqueado = false // Está dentro do período de tolerância em confiança concedido!
+      }
     }
 
     const responseData = {
@@ -97,8 +118,12 @@ export async function POST(request: Request) {
       } : null
     }
 
-    // Registra que o Hub acabou de bater no servidor (Online!)
-    const { error: syncError } = await supabase.from('configuracoes_hub').update({ ultima_sincronizacao: new Date().toISOString() }).eq('cliente_id', cliente.id)
+    // Registra heartbeat do Hub (Online)
+    const { error: syncError } = await supabase
+      .from('configuracoes_hub')
+      .update({ ultima_sincronizacao: new Date().toISOString() })
+      .eq('cliente_id', cliente.id)
+
     if (syncError) {
       console.error('Erro ao atualizar sincronizacao:', syncError)
     }

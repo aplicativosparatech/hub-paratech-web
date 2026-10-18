@@ -43,6 +43,9 @@ export default function NovoClientePage() {
     valor_mensalidade: '',
     custo: '',
     dia_vencimento: '10',
+    multa_atraso_percentual: '',
+    juros_mora_mensal_percentual: '',
+    dias_carencia: '',
     is_ativo: true,
     cep: '',
     logradouro: '',
@@ -430,6 +433,9 @@ export default function NovoClientePage() {
       dia_vencimento: parseInt(String(formData.dia_vencimento)) || 10,
       valor_mensalidade: clienteData.valor_mensalidade ? parseFloat(String(clienteData.valor_mensalidade).replace(',', '.')) : 0,
       custo: clienteData.custo ? parseFloat(String(clienteData.custo).replace(',', '.')) : 0,
+      multa_atraso_percentual: formData.multa_atraso_percentual !== '' && formData.multa_atraso_percentual !== null ? parseFloat(String(formData.multa_atraso_percentual).replace(',', '.')) : null,
+      juros_mora_mensal_percentual: formData.juros_mora_mensal_percentual !== '' && formData.juros_mora_mensal_percentual !== null ? parseFloat(String(formData.juros_mora_mensal_percentual).replace(',', '.')) : null,
+      dias_carencia: formData.dias_carencia !== '' && formData.dias_carencia !== null ? parseInt(String(formData.dias_carencia)) : null,
       data_inicio_monitoramento: formData.data_inicio_monitoramento || null,
       numero_inicial_nfe: parseInt(String(formData.numero_inicial_nfe)) || 1,
       numero_inicial_nfce: parseInt(String(formData.numero_inicial_nfce)) || 1,
@@ -699,7 +705,7 @@ export default function NovoClientePage() {
                     </div>
                   </div>
 
-                  <div>
+                    <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-1">Dia de Vencimento da Fatura</label>
                     <input 
                       type="number" 
@@ -711,6 +717,47 @@ export default function NovoClientePage() {
                       onChange={e => setFormData({...formData, dia_vencimento: e.target.value})} 
                     />
                     <p className="text-[11px] text-slate-500 mt-1">Gera fatura automática todo dia 01</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Multa por Atraso Individual (%)</label>
+                    <input 
+                      type="number" 
+                      step="0.01" 
+                      min="0"
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50/50 font-medium"
+                      placeholder="Padrão Global: 2.00%"
+                      value={formData.multa_atraso_percentual} 
+                      onChange={e => setFormData({...formData, multa_atraso_percentual: e.target.value})} 
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">Vazio = usa taxa global do portal</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Juros de Mora Individual (% a.m.)</label>
+                    <input 
+                      type="number" 
+                      step="0.01" 
+                      min="0"
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50/50 font-medium"
+                      placeholder="Padrão Global: 1.00%"
+                      value={formData.juros_mora_mensal_percentual} 
+                      onChange={e => setFormData({...formData, juros_mora_mensal_percentual: e.target.value})} 
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">Vazio = usa taxa global do portal</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Dias de Carência / Tolerância</label>
+                    <input 
+                      type="number" 
+                      min="0"
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-slate-50/50 font-medium"
+                      placeholder="Padrão Global: 3 dias"
+                      value={formData.dias_carencia} 
+                      onChange={e => setFormData({...formData, dias_carencia: e.target.value})} 
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">Vazio = usa carência global</p>
                   </div>
                 </>
               )}
