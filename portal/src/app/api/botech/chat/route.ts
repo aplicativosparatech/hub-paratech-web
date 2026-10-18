@@ -66,7 +66,7 @@ COMO RESPONDER:
   [ACTION:NAVIGATE|/dashboard/corretor-tributario|⚖️ Ir para Analisador Tributário]
   [ACTION:NAVIGATE|/dashboard/sugestor-tributario|🤖 Ir para Sugestor Tributário]
   [ACTION:NAVIGATE|/dashboard/configuracoes-portal?aba=cobranca|⚙️ Ver Regras Globais de Cobrança]
-  [ACTION:WHATSAPP|https://wa.me/5537920007857?text=Ola%20Rorobotech%20me%20atendeu%20no%20Hub%20e%20gostaria%20de%20falar%20com%20o%20suporte|📲 Falar com Suporte Paratech no WhatsApp]
+  [ACTION:WHATSAPP|https://wa.me/5537920007857?text=Ola%20RoboTech%20me%20atendeu%20no%20Hub%20e%20gostaria%20de%20falar%20com%20o%20suporte|📲 Falar com Suporte Paratech no WhatsApp]
 `;
 
 export async function POST(request: Request) {
@@ -212,7 +212,7 @@ export async function POST(request: Request) {
 
         const contents: any[] = [
           { role: 'user', parts: [{ text: fullSystemInstruction }] },
-          { role: 'model', parts: [{ text: 'Olá! Sou o Rorobotech, assistente virtual inteligente da Paratech. Estou pronto para tirar qualquer dúvida, orientar o uso do sistema, consultar dados fiscais e guiar você por cada tela do Hub Paratech!' }] }
+          { role: 'model', parts: [{ text: 'Olá! Sou o RoboTech, assistente virtual inteligente da Paratech. Estou pronto para tirar qualquer dúvida, orientar o uso do sistema, consultar dados fiscais e guiar você por cada tela do Hub Paratech!' }] }
         ];
 
         // Anexar histórico recente
@@ -230,8 +230,16 @@ export async function POST(request: Request) {
           parts: [{ text: message }]
         });
 
-        // Tentar chamar gemini-flash-latest ou gemini-3.8-flash
-        const modelNames = ['gemini-flash-latest', 'gemini-3.8-flash'];
+        // Esteira moderna com modelos de alta disponibilidade e resposta ultrarrápida
+        const modelNames = [
+          'gemini-3.5-flash-lite',
+          'gemini-3.5-flash',
+          'gemini-3.6-flash',
+          'gemini-flash-lite-latest',
+          'gemini-3.8-flash',
+          'gemini-flash-latest'
+        ];
+
         for (const model of modelNames) {
           try {
             const resGemini = await fetch(
@@ -246,7 +254,7 @@ export async function POST(request: Request) {
                     maxOutputTokens: 1200
                   }
                 }),
-                signal: AbortSignal.timeout(12000)
+                signal: AbortSignal.timeout(4500)
               }
             );
 
@@ -256,21 +264,24 @@ export async function POST(request: Request) {
               if (respostaTexto) {
                 return NextResponse.json({
                   resposta: respostaTexto,
-                  provedor: 'Gemini AI (Rorobotech)',
+                  provedor: `Gemini AI (${model})`,
                   isLiveIa: true
                 });
               }
+            } else {
+              const errBody = await resGemini.text().catch(() => '');
+              console.warn(`[RoboTech AI] Modelo ${model} retornou status ${resGemini.status}:`, errBody.slice(0, 120));
             }
-          } catch (modelErr) {
-            console.warn(`Tentativa com ${model} falhou, tentando fallback...`, modelErr);
+          } catch (modelErr: any) {
+            console.warn(`[RoboTech AI] Tentativa com ${model} falhou:`, modelErr.message);
           }
         }
       } catch (errG: any) {
-        console.warn('Erro na comunicação do Gemini no Rorobotech:', errG.message);
+        console.warn('Erro na comunicação do Gemini no RoboTech:', errG.message);
       }
     }
 
-    // 4. Fallback RAG Inteligente Especialista do Rorobotech (Caso Gemini falhe ou demore)
+    // 4. Fallback RAG Inteligente Especialista do RoboTech (Caso Gemini falhe ou demore)
     let respostaFallback = '';
 
     if (msgLower.includes('monofasico') || msgLower.includes('relatorio')) {
@@ -318,9 +329,9 @@ export async function POST(request: Request) {
         `- 📱 **WhatsApp de Suporte:** (37) 92000-7857\n` +
         `- 🌐 **Site Oficial:** [paratechsolucoes.com.br](https://paratechsolucoes.com.br)\n\n` +
         `Clique abaixo para abrir uma conversa direta no WhatsApp:\n\n` +
-        `[ACTION:WHATSAPP|https://wa.me/5537920007857?text=Ola%20preciso%20de%20suporte%20com%20o%20Hub%20Paratech|📲 Falar com Suporte Paratech no WhatsApp]`;
+        `[ACTION:WHATSAPP|https://wa.me/5537920007857?text=Ola%20RoboTech%20me%20atendeu%20no%20Hub%20e%20gostaria%20de%20falar%20com%20o%20suporte|📲 Falar com Suporte Paratech no WhatsApp]`;
     } else {
-      respostaFallback = `### Olá! Eu sou o Rorobotech 🤖\n\n` +
+      respostaFallback = `### Olá! Eu sou o RoboTech 🤖\n\n` +
         `Sou o assistente de inteligência artificial da **Paratech** e estou aqui para te ajudar em tudo!\n\n` +
         `Aqui estão algumas das coisas que posso fazer por você:\n` +
         `- 📊 **Explicar e guiar** até relatórios fiscais (como produtos monofásicos).\n` +
@@ -333,12 +344,16 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       resposta: respostaFallback,
-      provedor: 'Base Oficial Rorobotech RAG',
+      provedor: 'Base Oficial RoboTech RAG',
       isLiveIa: false
     });
 
   } catch (err: any) {
-    console.error('Erro na rota do Rorobotech:', err);
-    return NextResponse.json({ error: err.message || 'Erro interno no Rorobotech.' }, { status: 500 });
+    console.error('Erro na rota do RoboTech:', err);
+    return NextResponse.json({
+      resposta: 'Olá! Sou o **RoboTech**, assistente virtual da **Paratech**! 🤖\n\nEstou à sua disposição para te orientar sobre o uso do Hub, emissão de relatórios monofásicos, consulta de faturas e notas fiscais. Como posso te ajudar?',
+      provedor: 'RoboTech Offline Fallback',
+      isLiveIa: false
+    }, { status: 200 });
   }
 }

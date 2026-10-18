@@ -120,21 +120,33 @@ export default function RoboTechFloatingWidget() {
         content: m.content
       }))
 
-      const response = await fetch('/api/botech/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: text,
-          history: historyPayload,
-          context: {
-            clienteId: selectedClienteId || undefined,
-            pathname
-          }
+      let rawResponse = ''
+      try {
+        const response = await fetch('/api/botech/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: text,
+            history: historyPayload,
+            context: {
+              clienteId: selectedClienteId || undefined,
+              pathname
+            }
+          })
         })
-      })
 
-      const data = await response.json()
-      const rawResponse = data.resposta || 'Desculpe, ocorreu uma oscilação na resposta. Pode repetir a pergunta?'
+        if (response.ok) {
+          const data = await response.json().catch(() => null)
+          rawResponse = data?.resposta || ''
+        }
+      } catch (fetchErr) {
+        console.warn('Oscilação temporária de conexão com RoboTech:', fetchErr)
+      }
+
+      if (!rawResponse) {
+        rawResponse = `Desculpe, tive uma oscilação momentânea ao consultar a inteligência artificial, mas estou à disposição!\n\nVocê pode me perguntar novamente ou entrar em contato direto com o suporte:\n\n[ACTION:WHATSAPP|https://wa.me/5537920007857?text=Ola%20RoboTech%20estou%20com%20duvidas%20no%20Hub%20Paratech|📲 Falar com Suporte Técnico no WhatsApp]`
+      }
+
       const { cleanedText, actions } = parseActions(rawResponse)
 
       const robotechMsg: Message = {
@@ -152,7 +164,7 @@ export default function RoboTechFloatingWidget() {
         {
           id: `robotech-err-${Date.now()}`,
           role: 'robotech',
-          content: 'Tive uma instabilidade momentânea na conexão. Por favor, tente novamente em instantes!',
+          content: 'Desculpe, tive uma instabilidade momentânea. Pode tentar novamente em instantes ou falar com nosso suporte!',
           timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
         }
       ])
