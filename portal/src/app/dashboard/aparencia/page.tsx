@@ -216,6 +216,9 @@ export default function AparenciaPage() {
                 <span className="text-[10px] font-semibold bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
                   ⚡ 100% Espaço Útil
                 </span>
+                <span className="text-[10px] font-semibold bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300">
+                  🤖 Robotech IA
+                </span>
               </div>
             </div>
           </button>

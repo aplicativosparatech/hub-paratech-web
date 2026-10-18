@@ -70,6 +70,16 @@ export default function RoboTechFloatingWidget() {
     }
   }, [])
 
+  // Escuta evento global para abrir o Robotech de qualquer lugar da interface (incluindo atalhos do Modo Clean)
+  useEffect(() => {
+    const handleOpen = () => {
+      setIsOpen(true)
+      setShowTooltip(false)
+    }
+    window.addEventListener('open_robotech_chat', handleOpen)
+    return () => window.removeEventListener('open_robotech_chat', handleOpen)
+  }, [])
+
   // Auto-scroll para a última mensagem
   useEffect(() => {
     if (isOpen) {

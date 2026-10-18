@@ -902,8 +902,25 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
       {
         id: 'ajuda',
         label: 'Ajuda',
-        href: '/dashboard/tutorial',
-        isActive: pathname.startsWith('/dashboard/tutorial')
+        isActive: pathname.startsWith('/dashboard/tutorial'),
+        items: [
+          {
+            href: '/dashboard/tutorial',
+            label: 'Tutorial & Tour IA',
+            desc: 'Aprenda a utilizar o Hub Paratech passo a passo',
+            icon: GraduationCap,
+            iconColor: 'text-indigo-600 dark:text-indigo-400',
+            iconBg: 'bg-indigo-50 dark:bg-indigo-950/60'
+          },
+          {
+            href: '#robotech',
+            label: 'Robotech IA',
+            desc: 'Assistente fiscal e operacional oficial Paratech',
+            icon: Sparkles,
+            iconColor: 'text-blue-600 dark:text-blue-400',
+            iconBg: 'bg-blue-50 dark:bg-blue-950/60'
+          }
+        ]
       }
     ]
 
@@ -946,6 +963,20 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                 className="p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-800 transition cursor-pointer shadow-2xs"
               >
                 <Bell size={17} />
+              </button>
+
+              {/* Botão de Acesso Rápido ao Robotech IA no Modo Clean */}
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('open_robotech_chat'))}
+                title="Abrir Robotech IA - Assistente Inteligente Oficial"
+                className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all border shadow-2xs cursor-pointer bg-blue-50/90 hover:bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/50 dark:hover:bg-blue-900/60 dark:text-blue-300 dark:border-blue-800/80"
+              >
+                <div className="w-4 h-4 rounded-full overflow-hidden bg-[#020b18] border border-blue-400 shrink-0">
+                  <img src="/robotech.png" alt="Robotech" className="w-full h-full object-cover rounded-full" />
+                </div>
+                <span>Robotech IA</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               </button>
 
               {/* Alternador de Modo de Interface (Modo Clean vs Modo Clássico) */}
@@ -1063,7 +1094,13 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                                 <Link
                                   key={item.href}
                                   href={item.href}
-                                  onClick={() => setCleanActiveDropdown(null)}
+                                  onClick={(e) => {
+                                    setCleanActiveDropdown(null)
+                                    if (item.href === '#robotech') {
+                                      e.preventDefault()
+                                      window.dispatchEvent(new CustomEvent('open_robotech_chat'))
+                                    }
+                                  }}
                                   className={`flex items-start gap-3 p-2.5 rounded-xl transition group ${
                                     isItemActive
                                       ? 'bg-blue-50/80 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-semibold'
@@ -1147,6 +1184,9 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             </a>
           </div>
         </footer>
+
+        {/* Assistente Virtual de IA Flutuante (Robotech) no Modo Clean */}
+        <BotechFloatingWidget />
 
       </div>
     )
