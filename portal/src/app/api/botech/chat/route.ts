@@ -78,6 +78,46 @@ function normalizeText(str: string): string {
     .trim();
 }
 
+async function carregarTodasNotas(
+  supabase: any,
+  tabela: 'nfce_saidas' | 'nfe_saidas',
+  clienteIdConsulta: string | null,
+  idsAutorizados: Set<string>,
+  userRole: string
+) {
+  let notas: any[] = [];
+  const pageSize = 1000;
+  let from = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    let query = supabase
+      .from(tabela)
+      .select('valor, valor_monofasico, formas_pagamento, data_emissao');
+
+    if (clienteIdConsulta) {
+      query = query.eq('cliente_id', clienteIdConsulta);
+    } else if (userRole !== 'admin' && idsAutorizados.size > 0) {
+      query = query.in('cliente_id', Array.from(idsAutorizados));
+    }
+
+    const { data, error } = await query.range(from, from + pageSize - 1);
+    if (error || !data || data.length === 0) {
+      hasMore = false;
+      break;
+    }
+
+    notas.push(...data);
+    if (data.length < pageSize) {
+      hasMore = false;
+    } else {
+      from += pageSize;
+    }
+  }
+
+  return notas;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -212,63 +252,75 @@ export async function POST(request: Request) {
       }
     }
 
-    // B) Se perguntou sobre VENDAS / PIX / NFCE / FATURAMENTO / NOTAS EMITIDAS
-    if (msgNorm.includes('venda') || msgNorm.includes('pix') || msgNorm.includes('nfce') || msgNorm.includes('nfe') || msgNorm.includes('faturamento') || msgNorm.includes('quanto emiti') || msgNorm.includes('total')) {
+    // B) Se perguntou sobre VENDAS / PIX / NFCE / FATURAMENTO / NOTAS EMITIDAS / MONOFÁSICOS
+    if (msgNorm.includes('venda') || msgNorm.includes('pix') || msgNorm.includes('nfce') || msgNorm.includes('nfe') || msgNorm.includes('faturamento') || msgNorm.includes('quanto emiti') || msgNorm.includes('total') || msgNorm.includes('monofasico')) {
       try {
-        let nfceQuery = supabase.from('nfce_saidas').select('valor, formas_pagamento, data_emissao');
-        let nfeQuery = supabase.from('nfe_saidas').select('valor, formas_pagamento, data_emissao');
-
-        if (clienteIdConsulta) {
-          nfceQuery = nfceQuery.eq('cliente_id', clienteIdConsulta);
-          nfeQuery = nfeQuery.eq('cliente_id', clienteIdConsulta);
-        } else if (userRole !== 'admin' && idsAutorizados.size > 0) {
-          nfceQuery = nfceQuery.in('cliente_id', Array.from(idsAutorizados));
-          nfeQuery = nfeQuery.in('cliente_id', Array.from(idsAutorizados));
-        }
-
-        const [{ data: nfces }, { data: nfes }] = await Promise.all([
-          nfceQuery.limit(500),
-          nfeQuery.limit(500)
+        const [nfces, nfes] = await Promise.all([
+          carregarTodasNotas(supabase, 'nfce_saidas', clienteIdConsulta, idsAutorizados, userRole),
+          carregarTodasNotas(supabase, 'nfe_saidas', clienteIdConsulta, idsAutorizados, userRole)
         ]);
 
         let totalNfce = 0;
+        let totalMonoNfce = 0;
         let totalPixNfce = 0;
+        let qtdPixNfce = 0;
         let totalDinheiroNfce = 0;
+        let qtdDinheiroNfce = 0;
         let totalCartaoNfce = 0;
-        let qtdNfce = (nfces || []).length;
+        let qtdCartaoNfce = 0;
+        const qtdNfce = nfces.length;
 
-        (nfces || []).forEach(nf => {
+        for (const nf of nfces) {
           const val = Number(nf.valor || 0);
           totalNfce += val;
+          totalMonoNfce += Number(nf.valor_monofasico || 0);
+
           const formas = Array.isArray(nf.formas_pagamento) ? nf.formas_pagamento : [];
-          formas.forEach((fp: any) => {
+          for (const fp of formas) {
             const vFp = Number(fp.valor || 0);
             const cod = String(fp.codigo || '');
             const nome = String(fp.nome || '').toUpperCase();
             if (cod === '17' || cod === '20' || nome.includes('PIX')) {
               totalPixNfce += vFp;
+              qtdPixNfce++;
             } else if (cod === '01' || nome.includes('DINHEIRO')) {
               totalDinheiroNfce += vFp;
+              qtdDinheiroNfce++;
             } else if (['03', '04'].includes(cod) || nome.includes('CARTAO') || nome.includes('CREDITO') || nome.includes('DEBITO')) {
               totalCartaoNfce += vFp;
+              qtdCartaoNfce++;
             }
-          });
-        });
+          }
+        }
 
         let totalNfe = 0;
-        let qtdNfe = (nfes || []).length;
-        (nfes || []).forEach(nf => {
+        let totalMonoNfe = 0;
+        const qtdNfe = nfes.length;
+        for (const nf of nfes) {
           totalNfe += Number(nf.valor || 0);
-        });
+          totalMonoNfe += Number(nf.valor_monofasico || 0);
+        }
 
-        const empLabel = clienteAlvoInfo ? `${clienteAlvoInfo.nome_fantasia || clienteAlvoInfo.razao_social}` : 'Consolidado Geral';
-        dadosContexto += `\n[DADOS REAIS DO BANCO - VENDAS E EMISSÕES (${empLabel})]:\n` +
-          `- Total NFC-e (Modelo 65): ${qtdNfce} notas emitidas, somando R$ ${totalNfce.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
-          `  * Vendas via PIX na NFC-e: R$ ${totalPixNfce.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
-          `  * Vendas em Dinheiro na NFC-e: R$ ${totalDinheiroNfce.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
-          `  * Vendas em Cartão (Crédito/Débito) na NFC-e: R$ ${totalCartaoNfce.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
-          `- Total NF-e (Modelo 55): ${qtdNfe} notas emitidas, somando R$ ${totalNfe.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
-          `- Faturamento Total Consolidado: R$ ${(totalNfce + totalNfe).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
+        const totalFaturadoGeral = totalNfce + totalNfe;
+        const totalMonofasicosGeral = totalMonoNfce + totalMonoNfe;
+        const baseTributavelRestante = totalFaturadoGeral - totalMonofasicosGeral;
+
+        const empLabel = clienteAlvoInfo ? `${clienteAlvoInfo.nome_fantasia || clienteAlvoInfo.razao_social} (CNPJ: ${clienteAlvoInfo.cnpj})` : 'Consolidado Geral';
+        dadosContexto += `\n[DADOS REAIS E EXATOS DO BANCO - VENDAS E EMISSÕES FISCAIS]:\n` +
+          `- Empresa: ${empLabel}\n` +
+          `- NFC-e (Modelo 65 - Consumidor / Cupom PDV):\n` +
+          `  * Quantidade total: ${qtdNfce} notas emitidas\n` +
+          `  * Valor Total: R$ ${totalNfce.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
+          `  * Vendas via PIX na NFC-e: R$ ${totalPixNfce.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${qtdPixNfce} vendas)\n` +
+          `  * Vendas em Dinheiro na NFC-e: R$ ${totalDinheiroNfce.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${qtdDinheiroNfce} vendas)\n` +
+          `  * Vendas em Cartão (Crédito/Débito) na NFC-e: R$ ${totalCartaoNfce.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${qtdCartaoNfce} vendas)\n` +
+          `- NF-e (Modelo 55 - Vendas / Grandes Operações):\n` +
+          `  * Quantidade total: ${qtdNfe} notas emitidas\n` +
+          `  * Valor Total: R$ ${totalNfe.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
+          `- Faturamento Total Geral Consolidado: R$ ${totalFaturadoGeral.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
+          `- Segregação de Produtos Monofásicos:\n` +
+          `  * Total Monofásicos a Deduzir no Simples: R$ ${totalMonofasicosGeral.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
+          `  * Base Tributável Restante: R$ ${baseTributavelRestante.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
       } catch (e: any) {
         console.warn('Erro ao calcular vendas no Robotech:', e.message);
       }
@@ -308,11 +360,11 @@ export async function POST(request: Request) {
     // 3. Execução com Gemini AI se a chave estiver presente
     if (geminiKey) {
       try {
-        const fullSystemInstruction = CONHECIMENTO_SISTEMA + (dadosContexto ? `\n\nESTES SÃO OS DADOS ATUAIS EXTRAÍDOS EM TEMPO REAL DO BANCO DE DADOS PARA ESTA CONVERSA:\n${dadosContexto}\nUtilize esses dados reais com precisão caso o usuário pergunte sobre faturas, vendas no pix, nfce, notas ou certificados.` : '');
+        const fullSystemInstruction = CONHECIMENTO_SISTEMA + (dadosContexto ? `\n\nESTES SÃO OS DADOS ATUAIS EXTRAÍDOS EM TEMPO REAL DO BANCO DE DADOS PARA ESTA CONVERSA:\n${dadosContexto}\n\nREGRA FUNDAMENTAL DE PRECISÃO: Quando o usuário perguntar sobre números de vendas, notas fiscais, faturas ou faturamento, CITE EXATAMENTE os valores em reais (R$) e as quantidades de notas informadas acima, sem arredondar, sem inventar e sem truncar. Se for solicitado o total de NFC-e ou PIX, informe exatamente a quantidade e o valor correspondente fornecido nesses dados!` : '');
 
         const contents: any[] = [
           { role: 'user', parts: [{ text: fullSystemInstruction }] },
-          { role: 'model', parts: [{ text: 'Olá! Sou o RoboTech, assistente virtual inteligente da Paratech. Estou pronto para tirar qualquer dúvida, orientar o uso do sistema, consultar dados fiscais e guiar você por cada tela do Hub Paratech!' }] }
+          { role: 'model', parts: [{ text: 'Olá! Sou o Robotech, assistente virtual inteligente da Paratech. Estou pronto para tirar qualquer dúvida, orientar o uso do sistema, consultar dados fiscais e guiar você por cada tela do Hub Paratech!' }] }
         ];
 
         // Anexar histórico recente
