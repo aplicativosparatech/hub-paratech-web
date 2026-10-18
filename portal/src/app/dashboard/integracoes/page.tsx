@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { PlugZap, CreditCard, MessageCircle, Save, Send, Calendar, Sliders, Bell, FileText, CheckCircle2, AlertTriangle, Cpu, Sparkles, Bot, ExternalLink, RefreshCw, Check, ShieldCheck, Zap, Server, Database, Building2, Layers, FileSpreadsheet } from 'lucide-react'
+import { PlugZap, CreditCard, MessageCircle, Save, Send, Calendar, Sliders, Bell, FileText, CheckCircle2, AlertTriangle, Cpu, Sparkles, Bot, ExternalLink, RefreshCw, Check, ShieldCheck, Zap, Server, Database, Building2, Layers, FileSpreadsheet, Code2, ChevronRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { createClient } from '@/utils/supabase/client'
 import { useTableFeatures } from '@/hooks/useTableFeatures'
 import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
+import CardApisHubParatech from '@/components/CardApisHubParatech'
 
 type Integracao = {
   id: string;
@@ -17,7 +18,7 @@ type Integracao = {
 
 export default function IntegracoesPage() {
   const supabase = createClient()
-  const [activeTab, setActiveTab] = useState<'gateways' | 'whatsapp' | 'ia_mcp' | 'alterdata'>('gateways')
+  const [activeTab, setActiveTab] = useState<'gateways' | 'whatsapp' | 'ia_mcp' | 'alterdata' | 'apis_hub'>('gateways')
   const [isLoading, setIsLoading] = useState(true)
   const [integracoes, setIntegracoes] = useState<Integracao[]>([])
   const [testPhone, setTestPhone] = useState('')
@@ -340,11 +341,41 @@ export default function IntegracoesPage() {
         </p>
       </header>
 
+      {/* Banner de Destaque para o Card APIs Hub_Paratech */}
+      {activeTab !== 'apis_hub' && (
+        <div className="mb-6 p-4.5 rounded-2xl bg-gradient-to-r from-blue-900/90 via-indigo-950 to-slate-900 text-white border border-indigo-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-2xl bg-blue-500/20 text-blue-400 border border-blue-400/30 flex items-center justify-center shrink-0 shadow-inner">
+              <Code2 size={22} />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold flex items-center gap-2">
+                <span>Card APIs Hub_Paratech (Integração Direta sem hub.exe)</span>
+                <span className="text-[10px] uppercase font-extrabold bg-blue-500 text-white px-2 py-0.5 rounded-full">
+                  Pronto para Copiar
+                </span>
+              </h4>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Envie XMLs, consulte a SEFAZ em nuvem, audite NCMs e chame o Robotech IA diretamente de outras aplicações.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab('apis_hub')}
+            className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl transition shadow-md shrink-0 flex items-center gap-1.5 cursor-pointer self-start sm:self-auto hover:scale-102"
+          >
+            <span>Acessar e Coletar APIs</span>
+            <ChevronRight size={15} />
+          </button>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="flex flex-wrap gap-2 bg-slate-200/50 p-1.5 rounded-xl w-fit mb-8">
         <button
           onClick={() => setActiveTab('gateways')}
-          className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
+          className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 cursor-pointer ${
             activeTab === 'gateways' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
           }`}
         >
@@ -352,7 +383,7 @@ export default function IntegracoesPage() {
         </button>
         <button
           onClick={() => setActiveTab('whatsapp')}
-          className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
+          className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 cursor-pointer ${
             activeTab === 'whatsapp' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
           }`}
         >
@@ -360,7 +391,7 @@ export default function IntegracoesPage() {
         </button>
         <button
           onClick={() => setActiveTab('ia_mcp')}
-          className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
+          className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 cursor-pointer ${
             activeTab === 'ia_mcp' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
           }`}
         >
@@ -373,7 +404,7 @@ export default function IntegracoesPage() {
         </button>
         <button
           onClick={() => setActiveTab('alterdata')}
-          className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
+          className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 cursor-pointer ${
             activeTab === 'alterdata' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
           }`}
         >
@@ -383,6 +414,21 @@ export default function IntegracoesPage() {
               Ativo
             </span>
           )}
+        </button>
+
+        {/* Aba Card APIs Hub_Paratech */}
+        <button
+          onClick={() => setActiveTab('apis_hub')}
+          className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold text-sm transition-all duration-200 cursor-pointer ${
+            activeTab === 'apis_hub' 
+              ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md' 
+              : 'text-indigo-700 bg-indigo-50/80 hover:bg-indigo-100 border border-indigo-200/60'
+          }`}
+        >
+          <Code2 size={18} /> Card APIs Hub_Paratech
+          <span className={`ml-1 px-2 py-0.5 text-xs font-extrabold rounded-full ${activeTab === 'apis_hub' ? 'bg-white/20 text-white' : 'bg-indigo-600 text-white'}`}>
+            Copiar APIs
+          </span>
         </button>
       </div>
 
@@ -1878,11 +1924,18 @@ export default function IntegracoesPage() {
         </div>
       )}
 
-      <div className="mt-8 flex justify-end">
-        <button onClick={handleSave} className="flex items-center gap-2 bg-slate-900 text-white px-8 py-3 rounded-xl font-semibold shadow-lg hover:bg-slate-800 hover:shadow-xl transition-all hover:-translate-y-0.5">
-          <Save size={20} /> Salvar Configurações
-        </button>
-      </div>
+      {/* ===================== ABA CARD APIS HUB_PARATECH ===================== */}
+      {activeTab === 'apis_hub' && (
+        <CardApisHubParatech />
+      )}
+
+      {activeTab !== 'apis_hub' && (
+        <div className="mt-8 flex justify-end">
+          <button onClick={handleSave} className="flex items-center gap-2 bg-slate-900 text-white px-8 py-3 rounded-xl font-semibold shadow-lg hover:bg-slate-800 hover:shadow-xl transition-all hover:-translate-y-0.5 cursor-pointer">
+            <Save size={20} /> Salvar Configurações
+          </button>
+        </div>
+      )}
 
     </div>
   )
