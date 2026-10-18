@@ -1236,7 +1236,7 @@ export default function DistribuicaoDfePage() {
                   )}
                   {selectedChaves.length === notasFiltradas.length && notasFiltradas.length > 0
                     ? 'Desmarcar Todas'
-                    : `Selecionar Todas (${notasFiltradas.length})`}
+                    : `Escolher Todas (${notasFiltradas.length})`}
                 </button>
 
                 {selectedChaves.length > 0 ? (
@@ -1327,7 +1327,24 @@ export default function DistribuicaoDfePage() {
                   <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
                     <ResizableSortableTh
                       columnId="select"
-                      label=""
+                      label={
+                        <button
+                          type="button"
+                          onClick={handleSelectAll}
+                          title={selectedChaves.length === notasFiltradas.length && notasFiltradas.length > 0 ? "Desmarcar Todas as Notas" : "Escolher Todas as Notas Fiscais"}
+                          className="text-slate-400 hover:text-indigo-600 transition flex items-center justify-center mx-auto"
+                        >
+                          {selectedChaves.length === notasFiltradas.length && notasFiltradas.length > 0 ? (
+                            <CheckSquare size={16} className="text-indigo-600" />
+                          ) : selectedChaves.length > 0 ? (
+                            <div className="w-4 h-4 rounded border-2 border-indigo-600 bg-indigo-50 flex items-center justify-center">
+                              <div className="w-2 h-0.5 bg-indigo-600 rounded"></div>
+                            </div>
+                          ) : (
+                            <Square size={16} />
+                          )}
+                        </button>
+                      }
                       disableSort
                       width={columnWidths.select}
                       onResize={handleResizeColumn}

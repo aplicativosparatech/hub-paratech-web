@@ -7,8 +7,10 @@ import Link from 'next/link'
 import { 
   RefreshCw, X, Trash2, AlertTriangle, ArrowRight, 
   Calendar, Filter, Search, Clock, RotateCcw, CheckCircle2, Download,
-  Printer, ExternalLink, Copy, Check, FileText, Globe, Sparkles
+  Printer, ExternalLink, Copy, Check, FileText, Globe, Sparkles,
+  CheckSquare, Square
 } from 'lucide-react'
+import JSZip from 'jszip'
 import toast from 'react-hot-toast'
 import Pagination from '@/components/Pagination'
 import { useNotasFiscaisFilters } from './NotasFiscaisFilterContext'
@@ -61,6 +63,80 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
 
   // Paginação local da tabela
   const [currentPage, setCurrentPage] = useState<number>(1)
+
+  // Seleção múltipla de notas fiscais (Escolher várias ou todas)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [downloadingZipLote, setDownloadingZipLote] = useState(false)
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }
+
+  const handleSelectAll = () => {
+    if (selectedIds.length === notasFiltradas.length && notasFiltradas.length > 0) {
+      setSelectedIds([])
+    } else {
+      setSelectedIds(notasFiltradas.map(n => n.id))
+    }
+  }
+
+  const handleClearSelection = () => {
+    setSelectedIds([])
+  }
+
+  // Ação em Lote: Download de XMLs Selecionados em ZIP
+  const handleDownloadZipLote = async () => {
+    const selecionadas = notas.filter(n => selectedIds.includes(n.id))
+    if (selecionadas.length === 0) {
+      toast.error('Nenhuma nota fiscal selecionada.')
+      return
+    }
+
+    setDownloadingZipLote(true)
+    const toastId = toast.loading(`Compactando ${selecionadas.length} arquivos XML...`)
+    try {
+      const zip = new JSZip()
+      let baixadas = 0
+
+      for (const n of selecionadas) {
+        try {
+          const res = await fetch(`/api/notas-fiscais/download-xml?tabela=${tabela}&id=${n.id}`)
+          if (res.ok) {
+            const xmlBlob = await res.blob()
+            const fileName = `${n.chave || n.numero || n.id}.xml`
+            zip.file(fileName, xmlBlob)
+            baixadas++
+          }
+        } catch (e) {
+          console.warn('Erro ao obter XML da nota:', n.id, e)
+        }
+      }
+
+      if (baixadas === 0) {
+        throw new Error('Não foi possível obter os arquivos XML das notas selecionadas.')
+      }
+
+      const content = await zip.generateAsync({ type: 'blob' })
+      const url = window.URL.createObjectURL(content)
+      const a = document.createElement('a')
+      a.href = url
+      const nomeCliente = currentCli?.razao_social ? currentCli.razao_social.replace(/[^a-zA-Z0-9]/g, '_') : 'Notas'
+      const labelLimpo = label.replace(/[^a-zA-Z0-9]/g, '_')
+      a.download = `${labelLimpo}_${nomeCliente}_${filtroMes || 'periodo'}_${selecionadas.length}_xmls.zip`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+
+      toast.success(`${baixadas} XMLs compactados e baixados com sucesso!`, { id: toastId })
+    } catch (err: any) {
+      toast.error(err.message || 'Falha ao baixar lote de XMLs.', { id: toastId })
+    } finally {
+      setDownloadingZipLote(false)
+    }
+  }
 
   // Horário da Última Sincronização do Hub e Última Consulta
   const [ultimaSincronizacaoHub, setUltimaSincronizacaoHub] = useState<string | null>(null)
@@ -145,7 +221,8 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
         const { error } = await supabase.from(tabela).delete().in('id', modalDelete.idsLote)
         if (error) throw error
         setNotas(prev => prev.filter(n => !modalDelete.idsLote!.includes(n.id)))
-        toast.success(`${modalDelete.idsLote.length} notas divergentes excluídas com sucesso!`)
+        setSelectedIds(prev => prev.filter(id => !modalDelete.idsLote!.includes(id)))
+        toast.success(`${modalDelete.idsLote.length} notas fiscais excluídas com sucesso!`)
       }
     } catch (err: any) {
       toast.error('Erro ao excluir: ' + (err.message || 'Falha na exclusão'))
@@ -259,9 +336,10 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     })
   }, [notasOficiaisValidas, filtroMes, dataInicio, dataFim, buscaNumero, buscaGeral])
 
-  // Resetar para página 1 ao alterar qualquer filtro
+  // Resetar para página 1 e limpar seleção ao alterar qualquer filtro
   useEffect(() => {
     setCurrentPage(1)
+    setSelectedIds([])
   }, [filtroMes, dataInicio, dataFim, buscaNumero, buscaGeral, selectedCliente, pageSize])
 
   // Hook de Ordenação Inteligente e Redimensionamento de Colunas
@@ -278,6 +356,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     defaultSortKey: 'numero',
     defaultSortDirection: 'desc',
     initialWidths: {
+      select: 48,
       numero: 110,
       chave: isSaida ? 380 : 320,
       emitente: 220,
@@ -605,10 +684,74 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
           </div>
         </div>
 
-        {/* Resumo do Filtro Ativo */}
-        {temFiltroAtivo && (
-          <div className="flex items-center gap-2 pt-1 text-xs text-slate-500">
-            <span>Resultados encontrados: <strong className="text-blue-600 font-bold">{notasFiltradas.length}</strong> de {notasOficiaisValidas.length} notas oficiais</span>
+        {/* Resumo do Filtro Ativo e Botão Rápido Escolher Todas */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1 text-xs text-slate-500">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={handleSelectAll}
+              disabled={notasFiltradas.length === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 transition disabled:opacity-40 shadow-2xs cursor-pointer"
+            >
+              {selectedIds.length === notasFiltradas.length && notasFiltradas.length > 0 ? (
+                <CheckSquare size={14} className="text-blue-600" />
+              ) : selectedIds.length > 0 ? (
+                <div className="w-3.5 h-3.5 rounded border-2 border-blue-600 bg-blue-50 flex items-center justify-center">
+                  <div className="w-2 h-0.5 bg-blue-600 rounded"></div>
+                </div>
+              ) : (
+                <Square size={14} className="text-slate-400" />
+              )}
+              {selectedIds.length === notasFiltradas.length && notasFiltradas.length > 0
+                ? 'Desmarcar Todas'
+                : `Escolher Todas (${notasFiltradas.length})`}
+            </button>
+
+            {temFiltroAtivo && (
+              <span>Resultados encontrados: <strong className="text-blue-600 font-bold">{notasFiltradas.length}</strong> de {notasOficiaisValidas.length} notas oficiais</span>
+            )}
+          </div>
+        </div>
+
+        {/* Barra de Ações em Lote quando houver notas selecionadas */}
+        {selectedIds.length > 0 && (
+          <div className="p-3 bg-blue-50/90 border border-blue-200/80 rounded-2xl flex flex-wrap items-center justify-between gap-3 animate-in fade-in duration-150">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-blue-900 bg-blue-100 border border-blue-200 px-2.5 py-1 rounded-lg">
+                {selectedIds.length} {selectedIds.length === 1 ? 'nota selecionada' : 'notas selecionadas'}
+              </span>
+              <span className="text-xs text-blue-700">
+                de {notasFiltradas.length} notas listadas
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleDownloadZipLote}
+                disabled={downloadingZipLote}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+                title="Baixar arquivos XML das notas selecionadas em um único arquivo .ZIP"
+              >
+                <Download size={14} className={downloadingZipLote ? 'animate-bounce' : ''} />
+                {downloadingZipLote ? 'Compactando...' : `Baixar XMLs Selecionados (${selectedIds.length}) .ZIP`}
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalDelete({ open: true, tipo: 'em_lote', idsLote: selectedIds })}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition cursor-pointer"
+                title="Excluir as notas fiscais selecionadas"
+              >
+                <Trash2 size={14} />
+                Excluir Selecionadas
+              </button>
+              <button
+                type="button"
+                onClick={handleClearSelection}
+                className="text-xs text-slate-500 hover:text-slate-700 px-2.5 py-1.5 font-medium hover:bg-slate-200/50 rounded-xl transition cursor-pointer"
+              >
+                Desmarcar Todas
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -621,6 +764,29 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
             <table className="w-full text-left text-sm text-slate-600 dark:text-slate-300 min-w-[1000px]">
               <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500 font-medium border-b border-slate-200 shadow-2xs">
                 <tr>
+                <ResizableSortableTh
+                  columnId="select"
+                  label={
+                    <input
+                      type="checkbox"
+                      checked={notasFiltradas.length > 0 && selectedIds.length === notasFiltradas.length}
+                      ref={el => {
+                        if (el) {
+                          el.indeterminate = selectedIds.length > 0 && selectedIds.length < notasFiltradas.length
+                        }
+                      }}
+                      onChange={handleSelectAll}
+                      title={selectedIds.length === notasFiltradas.length && notasFiltradas.length > 0 ? "Desmarcar Todas as Notas" : "Escolher Todas as Notas"}
+                      aria-label="Escolher todas as notas"
+                      className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer transition mx-auto block"
+                    />
+                  }
+                  disableSort
+                  width={columnWidths.select || 48}
+                  onResize={handleResizeColumn}
+                  minWidth={45}
+                  align="center"
+                />
                 <ResizableSortableTh
                   columnId="numero"
                   label="Número"
@@ -715,7 +881,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
             <tbody>
               {notasFiltradas.length === 0 ? (
                 <tr>
-                  <td colSpan={isSaida ? 7 : 8} className="p-8 text-center text-slate-400">
+                  <td colSpan={isSaida ? 8 : 9} className="p-8 text-center text-slate-400">
                     {temFiltroAtivo 
                       ? 'Nenhuma nota encontrada com os filtros selecionados. Tente ajustar os parâmetros ou limpar os filtros.' 
                       : 'Nenhuma nota encontrada. O Hub ainda não enviou dados para esta seção.'}
@@ -748,11 +914,23 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                   }
                 }
 
+                const isSelected = selectedIds.includes(n.id)
+
                 return (
                   <tr 
                     key={n.id} 
-                    className={`border-b transition ${isDivergente ? 'bg-red-50 hover:bg-red-100/90 text-red-900 border-red-200' : 'border-slate-100 hover:bg-slate-50'}`}
+                    className={`border-b transition ${isDivergente ? 'bg-red-50 hover:bg-red-100/90 text-red-900 border-red-200' : isSelected ? 'bg-blue-50/60 hover:bg-blue-100/70 border-blue-200/80' : 'border-slate-100 hover:bg-slate-50'}`}
                   >
+                    <td className="p-3.5 text-center shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleToggleSelect(n.id)}
+                        onClick={e => e.stopPropagation()}
+                        aria-label={`Selecionar nota ${n.numero || n.id}`}
+                        className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer transition mx-auto block"
+                      />
+                    </td>
                     <td className="p-3.5 font-mono overflow-hidden">
                       <div className="flex items-center gap-2 truncate">
                         <span className={isDivergente ? 'font-bold text-red-700' : 'text-slate-800 font-semibold'}>{n.numero || '—'}</span>
@@ -893,7 +1071,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
               </div>
               <div>
                 <h3 className="text-lg font-bold text-slate-900">
-                  {modalDelete.tipo === 'em_lote' ? 'Excluir Notas Divergentes' : 'Excluir Nota Fiscal'}
+                  {modalDelete.tipo === 'em_lote' ? 'Excluir Notas Selecionadas' : 'Excluir Nota Fiscal'}
                 </h3>
                 <p className="text-xs text-slate-500">Ação irreversível de limpeza</p>
               </div>
@@ -902,7 +1080,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
             <p className="text-sm text-slate-600 leading-relaxed mb-6">
               {modalDelete.tipo === 'em_lote' ? (
                 <>
-                  Tem certeza que deseja excluir permanentemente todas as <strong className="text-red-600 font-semibold">{modalDelete.idsLote?.length} notas fiscais divergentes</strong>? Elas serão removidas do Portal e dos relatórios fiscais.
+                  Tem certeza que deseja excluir permanentemente todas as <strong className="text-red-600 font-semibold">{modalDelete.idsLote?.length} notas fiscais selecionadas</strong>? Elas serão removidas do Portal e dos relatórios fiscais.
                 </>
               ) : (
                 <>
