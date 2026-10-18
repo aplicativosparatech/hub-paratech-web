@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/utils/supabase/client'
-import { FileText, Plus, X, Pencil, Trash2, RefreshCw, Zap } from 'lucide-react'
+import { FileText, Plus, X, Pencil, Trash2, RefreshCw, Zap, DollarSign } from 'lucide-react'
 import toast from 'react-hot-toast'
 import ResizableSortableTh from '@/components/ui/ResizableSortableTh'
 import { useTableFeatures } from '@/hooks/useTableFeatures'
@@ -226,7 +227,15 @@ export default function FaturasPage() {
           <h1 className="text-3xl font-bold text-slate-900">Faturas e Pagamentos</h1>
           <p className="text-slate-500 mt-1">Histórico de cobranças e controle de pagamentos.</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href="/dashboard/configuracoes-portal?aba=cobranca"
+            className="bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 px-4 py-2 rounded-lg font-semibold transition flex items-center gap-2 shadow-xs text-sm"
+            title="Configurar regras globais de juros, multa por atraso, dias de carência e desbloqueio em confiança"
+          >
+            <DollarSign size={18} className="text-emerald-700" />
+            Regras Globais de Cobrança
+          </Link>
           <button onClick={() => { setLoading(true); fetchFaturas() }} className="bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-2">
             <RefreshCw size={20} />
             Atualizar

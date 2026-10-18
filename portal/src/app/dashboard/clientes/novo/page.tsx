@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, UserPlus, Save, Search, Eye, EyeOff, ShieldCheck, ShieldAlert, FileKey, FileCode, Upload, MapPin, Calendar } from 'lucide-react'
+import { ArrowLeft, UserPlus, Save, Search, Eye, EyeOff, ShieldCheck, ShieldAlert, FileKey, FileCode, Upload, MapPin, Calendar, DollarSign } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { limparDocumento, formatarCnpjCpf, validarCnpj, validarCpf, isCnpjAlfanumerico } from '@/utils/cnpjAlfanumerico'
@@ -719,45 +719,93 @@ export default function NovoClientePage() {
                     <p className="text-[11px] text-slate-500 mt-1">Gera fatura automática todo dia 01</p>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Multa por Atraso Individual (%)</label>
-                    <input 
-                      type="number" 
-                      step="0.01" 
-                      min="0"
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50/50 font-medium"
-                      placeholder="Padrão Global: 2.00%"
-                      value={formData.multa_atraso_percentual} 
-                      onChange={e => setFormData({...formData, multa_atraso_percentual: e.target.value})} 
-                    />
-                    <p className="text-[11px] text-slate-500 mt-1">Vazio = usa taxa global do portal</p>
-                  </div>
+                                    {/* Seção Destacada: Parâmetros Individuais de Cobrança e Juros */}
+                  <div className="col-span-1 md:col-span-2 lg:col-span-3 p-5 bg-gradient-to-br from-emerald-50/70 via-teal-50/40 to-slate-50 border-2 border-emerald-300 rounded-2xl shadow-xs space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-emerald-200">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 bg-emerald-600 text-white rounded-xl shadow-xs">
+                          <DollarSign size={20} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-bold text-slate-900">
+                              Parâmetros de Cobrança, Juros e Carência (Desta Empresa)
+                            </h4>
+                            <span className="text-[10px] uppercase font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md border border-emerald-200">
+                              Prioridade Máxima
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-600 mt-0.5">
+                            Se preenchidos, os valores deste cliente anulam e substituem as taxas globais. Se deixados em branco, assumem automaticamente o padrão global do sistema.
+                          </p>
+                        </div>
+                      </div>
+                      <Link 
+                        href="/dashboard/configuracoes-portal?aba=cobranca" 
+                        target="_blank"
+                        className="text-xs font-bold text-emerald-700 hover:text-emerald-900 bg-white border border-emerald-200 px-3 py-1.5 rounded-lg shadow-2xs hover:bg-emerald-50 transition shrink-0 inline-flex items-center gap-1"
+                      >
+                        Ver Regras Globais ↗
+                      </Link>
+                    </div>
 
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Juros de Mora Individual (% a.m.)</label>
-                    <input 
-                      type="number" 
-                      step="0.01" 
-                      min="0"
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50/50 font-medium"
-                      placeholder="Padrão Global: 1.00%"
-                      value={formData.juros_mora_mensal_percentual} 
-                      onChange={e => setFormData({...formData, juros_mora_mensal_percentual: e.target.value})} 
-                    />
-                    <p className="text-[11px] text-slate-500 mt-1">Vazio = usa taxa global do portal</p>
-                  </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Multa por Atraso (%)
+                        </label>
+                        <div className="relative">
+                          <input 
+                            type="number" 
+                            step="0.01" 
+                            min="0"
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-bold text-slate-900 pr-10 text-sm"
+                            placeholder="Padrão Global: 2.00%"
+                            value={formData.multa_atraso_percentual} 
+                            onChange={e => setFormData({...formData, multa_atraso_percentual: e.target.value})} 
+                          />
+                          <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">%</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-1">Deixe em branco para usar a regra global (2%)</p>
+                      </div>
 
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Dias de Carência / Tolerância</label>
-                    <input 
-                      type="number" 
-                      min="0"
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-slate-50/50 font-medium"
-                      placeholder="Padrão Global: 3 dias"
-                      value={formData.dias_carencia} 
-                      onChange={e => setFormData({...formData, dias_carencia: e.target.value})} 
-                    />
-                    <p className="text-[11px] text-slate-500 mt-1">Vazio = usa carência global</p>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Juros de Mora Mensal (%)
+                        </label>
+                        <div className="relative">
+                          <input 
+                            type="number" 
+                            step="0.01" 
+                            min="0"
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-bold text-slate-900 pr-16 text-sm"
+                            placeholder="Padrão Global: 1.00%"
+                            value={formData.juros_mora_mensal_percentual} 
+                            onChange={e => setFormData({...formData, juros_mora_mensal_percentual: e.target.value})} 
+                          />
+                          <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">% a.m.</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-1">Deixe em branco para usar a regra global (1% a.m.)</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Dias de Carência / Tolerância
+                        </label>
+                        <div className="relative">
+                          <input 
+                            type="number" 
+                            min="0"
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white font-bold text-slate-900 pr-14 text-sm"
+                            placeholder="Padrão Global: 3 dias"
+                            value={formData.dias_carencia} 
+                            onChange={e => setFormData({...formData, dias_carencia: e.target.value})} 
+                          />
+                          <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">dias</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-1">Deixe em branco para usar carência global (3 dias)</p>
+                      </div>
+                    </div>
                   </div>
                 </>
               )}

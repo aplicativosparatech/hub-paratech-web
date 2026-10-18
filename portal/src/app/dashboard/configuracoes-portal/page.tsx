@@ -59,6 +59,111 @@ export default function ConfiguracoesPortalPage() {
   const [permitirTrocaInterface, setPermitirTrocaInterface] = useState(true)
   const [modoPadraoInterface, setModoPadraoInterface] = useState<'clean' | 'classico'>('clean')
 
+  // Controle de Abas da Página
+  const [activeTab, setActiveTab] = useState<'geral' | 'cobranca' | 'interface' | 'dashboard'>('geral')
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const aba = params.get('aba') as any
+      if (aba && ['geral', 'cobranca', 'interface', 'dashboard'].includes(aba)) {
+        setActiveTab(aba)
+      }
+    } catch {}
+  }, [])
+
+  const handleSalvarCobranca = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    setSaving(true)
+    const { error } = await supabase
+      .from('configuracoes_portal_geral')
+      .upsert({
+        id: 1,
+        global_multa_atraso_percentual: Number(regrasFinanceiras.global_multa_atraso_percentual),
+        global_juros_mora_mensal_percentual: Number(regrasFinanceiras.global_juros_mora_mensal_percentual),
+        global_dias_carencia: Number(regrasFinanceiras.global_dias_carencia),
+        limite_desbloqueios_confianca: Number(regrasFinanceiras.limite_desbloqueios_confianca),
+        horas_desbloqueio_confianca: Number(regrasFinanceiras.horas_desbloqueio_confianca),
+        intervalo_horas_entre_desbloqueios: Number(regrasFinanceiras.intervalo_horas_entre_desbloqueios),
+        updated_at: new Date().toISOString()
+      })
+
+    if (error) {
+      toast.error('Erro ao salvar regras financeiras: ' + error.message)
+    } else {
+      toast.success('Regras globais de cobrança, juros e desbloqueio salvas com sucesso!')
+    }
+    setSaving(false)
+  }
+
+  const handleSalvarInterface = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    setSaving(true)
+
+    localStorage.setItem('hub_priorizar_nome_fantasia', String(priorizarNomeFantasia))
+    localStorage.setItem('hub_permitir_troca_interface', String(permitirTrocaInterface))
+    localStorage.setItem('hub_interface_mode_default', modoPadraoInterface)
+    if (!permitirTrocaInterface) {
+      localStorage.setItem('hub_interface_mode', modoPadraoInterface)
+    }
+    window.dispatchEvent(new Event('hub_settings_changed'))
+
+    const { error: errGeral } = await supabase
+      .from('configuracoes_portal_geral')
+      .upsert({
+        id: 1,
+        priorizar_nome_fantasia: priorizarNomeFantasia,
+        updated_at: new Date().toISOString()
+      })
+
+    try {
+      await supabase
+        .from('permissoes_modulos')
+        .update({
+          permitido_cliente: permitirTrocaInterface,
+          permitido_contabilidade: permitirTrocaInterface,
+          updated_at: new Date().toISOString()
+        })
+        .eq('modulo_chave', 'troca_modo_interface')
+    } catch (errP) {
+      console.error('Erro ao salvar permissão de interface:', errP)
+    }
+
+    if (errGeral) {
+      toast.error('Erro ao salvar preferências de interface: ' + errGeral.message)
+    } else {
+      toast.success('Preferências de interface e exibição salvas com sucesso!')
+    }
+    setSaving(false)
+  }
+
+  const handleSalvarDashboard = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    setSaving(true)
+
+    const { error } = await supabase
+      .from('configuracoes_portal_geral')
+      .upsert({
+        id: 1,
+        valores_ficticios_ativos: ficticioData.valores_ficticios_ativos,
+        ficticio_clientes: ficticioData.ficticio_clientes,
+        ficticio_contabilidades: ficticioData.ficticio_contabilidades,
+        ficticio_faturas_atrasadas: ficticioData.ficticio_faturas_atrasadas,
+        ficticio_nf_quantidade: ficticioData.ficticio_nf_quantidade,
+        ficticio_nf_valor: ficticioData.ficticio_nf_valor,
+        ficticio_relatorios: ficticioData.ficticio_relatorios,
+        ficticio_cidades: ficticioData.ficticio_cidades,
+        updated_at: new Date().toISOString()
+      })
+
+    if (error) {
+      toast.error('Erro ao salvar métricas fictícias: ' + error.message)
+    } else {
+      toast.success('Métricas personalizadas do Dashboard salvas com sucesso!')
+    }
+    setSaving(false)
+  }
+
   // Carrega permissões e empresas disponíveis
   useEffect(() => {
     async function init() {
@@ -342,10 +447,267 @@ export default function ConfiguracoesPortalPage() {
           </span>
         </div>
         <p className="text-slate-500 text-sm mt-1">
-          Gerenciamento de regras de exibição, segregação e conformidade fiscal do Portal Paratech.
+          Gerenciamento de regras de cobrança, juros, desbloqueio em confiança, conformidade fiscal e interface.
         </p>
       </header>
 
+      {/* Navegação por Abas Superiores */}
+      <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-100 rounded-2xl border border-slate-200">
+        <button
+          type="button"
+          onClick={() => setActiveTab('geral')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer ${
+            activeTab === 'geral'
+              ? 'bg-white text-blue-700 shadow-sm border border-slate-200'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+          }`}
+        >
+          <Sliders size={16} />
+          Regras Fiscais & XML
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('cobranca')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer ${
+            activeTab === 'cobranca'
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+          }`}
+        >
+          <DollarSign size={16} />
+          Cobrança, Juros & Desbloqueio (Globais)
+          <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded-full font-black ${
+            activeTab === 'cobranca' ? 'bg-white text-emerald-800' : 'bg-emerald-100 text-emerald-800'
+          }`}>
+            Destacado
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('interface')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer ${
+            activeTab === 'interface'
+              ? 'bg-white text-blue-700 shadow-sm border border-slate-200'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+          }`}
+        >
+          <Building2 size={16} />
+          Interface & Exibição
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('dashboard')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer ${
+            activeTab === 'dashboard'
+              ? 'bg-white text-indigo-700 shadow-sm border border-slate-200'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+          }`}
+        >
+          <LayoutDashboard size={16} />
+          Métricas Fictícias
+        </button>
+      </div>
+
+      {/* ABA 2: COBRANÇA, JUROS E DESBLOQUEIO EM CONFIANÇA (GLOBAIS) */}
+      {activeTab === 'cobranca' && (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          <div className="p-5 bg-gradient-to-r from-emerald-50 via-teal-50 to-slate-50 border border-emerald-200 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+            <div className="flex items-center gap-3.5">
+              <div className="p-3 bg-emerald-600 text-white rounded-2xl shadow-sm">
+                <DollarSign size={28} />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">Regras Globais de Cobrança, Juros e Desbloqueio</h2>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  Estes valores são os padrões de todo o sistema. Se um cliente possuir taxas ou carência específicas no seu perfil individual, o valor do cliente terá prioridade.
+                </p>
+              </div>
+            </div>
+            <button 
+              type="button"
+              onClick={handleSalvarCobranca}
+              disabled={saving}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl transition shadow-sm hover:shadow-md flex items-center justify-center gap-2 text-sm disabled:opacity-50 cursor-pointer shrink-0"
+            >
+              <Save size={16} />
+              {saving ? 'Salvando...' : 'Salvar Regras de Cobrança'}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Bloco 1: Taxas e Carência */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+                <span className="p-2 bg-emerald-50 text-emerald-600 rounded-xl font-bold text-xs">01</span>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Encargos por Atraso & Carência Global</h3>
+                  <p className="text-xs text-slate-500">Aplicados às faturas vencidas e no cálculo do Pix</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Multa por Atraso Global (%)
+                  </label>
+                  <div className="relative">
+                    <input 
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={regrasFinanceiras.global_multa_atraso_percentual}
+                      onChange={e => setRegrasFinanceiras({ ...regrasFinanceiras, global_multa_atraso_percentual: Number(e.target.value) })}
+                      className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-10"
+                      placeholder="Ex: 2.00"
+                    />
+                    <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">%</span>
+                  </div>
+                  <span className="text-[11px] text-slate-500 mt-1 block">
+                    Taxa padrão aplicada sobre o valor original após o término dos dias de carência.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Juros de Mora Mensal Global (%)
+                  </label>
+                  <div className="relative">
+                    <input 
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={regrasFinanceiras.global_juros_mora_mensal_percentual}
+                      onChange={e => setRegrasFinanceiras({ ...regrasFinanceiras, global_juros_mora_mensal_percentual: Number(e.target.value) })}
+                      className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-16"
+                      placeholder="Ex: 1.00"
+                    />
+                    <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">% a.m.</span>
+                  </div>
+                  <span className="text-[11px] text-slate-500 mt-1 block">
+                    Cobrado de forma proporcional diária (ex: 1% ao mês $\approx$ 0,033% ao dia de atraso).
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Dias de Carência / Tolerância Global
+                  </label>
+                  <div className="relative">
+                    <input 
+                      type="number"
+                      min="0"
+                      max="60"
+                      value={regrasFinanceiras.global_dias_carencia}
+                      onChange={e => setRegrasFinanceiras({ ...regrasFinanceiras, global_dias_carencia: Number(e.target.value) })}
+                      className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-14"
+                      placeholder="Ex: 3"
+                    />
+                    <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">dias</span>
+                  </div>
+                  <span className="text-[11px] text-slate-500 mt-1 block">
+                    Dias de tolerância antes de aplicar multa, juros e antes de bloquear o sistema no Hub.
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Bloco 2: Desbloqueio em Confiança */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+                <span className="p-2 bg-amber-50 text-amber-600 rounded-xl font-bold text-xs">02</span>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Parâmetros de Desbloqueio em Confiança</h3>
+                  <p className="text-xs text-slate-500">Regras de liberação provisória sem pagamento imediato</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Limite Máximo de Desbloqueios por Fatura
+                  </label>
+                  <div className="relative">
+                    <input 
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={regrasFinanceiras.limite_desbloqueios_confianca}
+                      onChange={e => setRegrasFinanceiras({ ...regrasFinanceiras, limite_desbloqueios_confianca: Number(e.target.value) })}
+                      className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 pr-16"
+                      placeholder="Ex: 1"
+                    />
+                    <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">vezes</span>
+                  </div>
+                  <span className="text-[11px] text-slate-500 mt-1 block">
+                    Quantas vezes o botão &quot;Liberar em Confiança&quot; pode ser acionado para a mesma fatura.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Duração de Cada Desbloqueio em Confiança
+                  </label>
+                  <div className="relative">
+                    <input 
+                      type="number"
+                      min="1"
+                      max="168"
+                      value={regrasFinanceiras.horas_desbloqueio_confianca}
+                      onChange={e => setRegrasFinanceiras({ ...regrasFinanceiras, horas_desbloqueio_confianca: Number(e.target.value) })}
+                      className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 pr-16"
+                      placeholder="Ex: 24"
+                    />
+                    <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">horas</span>
+                  </div>
+                  <span className="text-[11px] text-slate-500 mt-1 block">
+                    Tempo durante o qual o Hub Desktop suspende o bloqueio antes de voltar a bloquear.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Intervalo Mínimo entre Desbloqueios
+                  </label>
+                  <div className="relative">
+                    <input 
+                      type="number"
+                      min="0"
+                      max="168"
+                      value={regrasFinanceiras.intervalo_horas_entre_desbloqueios}
+                      onChange={e => setRegrasFinanceiras({ ...regrasFinanceiras, intervalo_horas_entre_desbloqueios: Number(e.target.value) })}
+                      className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 pr-16"
+                      placeholder="Ex: 24"
+                    />
+                    <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">horas</span>
+                  </div>
+                  <span className="text-[11px] text-slate-500 mt-1 block">
+                    Intervalo de segurança exigido entre um desbloqueio e o próximo.
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-4 flex justify-end">
+            <button 
+              type="button" 
+              onClick={handleSalvarCobranca}
+              disabled={saving}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 py-3 rounded-xl transition shadow-md hover:shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+            >
+              <Save size={18} />
+              {saving ? 'Salvando...' : 'Salvar Regras Globais de Cobrança e Desbloqueio'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ABA 1: REGRAS FISCAIS & XML (Por Empresa) */}
+      {activeTab === 'geral' && (
+        <div className="space-y-6">
       {/* Seletor de Empresa para o Administrador */}
       {clientes.length > 0 && (
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -606,160 +968,6 @@ export default function ConfiguracoesPortalPage() {
             </div>
           </div>
 
-          {/* Preferências de Exibição de Empresas & Clientes (Nome Fantasia vs Razão Social) */}
-          <div className="mt-8 pt-8 border-t border-slate-200">
-            <div className="flex items-center gap-3 pb-4 border-b border-slate-100 mb-6">
-              <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
-                <Building2 size={24} />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-bold text-slate-900">Exibição de Empresas & Clientes</h3>
-                  <span className="text-[10px] uppercase font-bold tracking-wider bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md border border-blue-200">
-                    Visual & Listagens
-                  </span>
-                </div>
-                <p className="text-slate-500 text-xs">
-                  Defina como os nomes das empresas devem ser apresentados em destaque nas tabelas e no gerenciamento de clientes.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3.5 p-5 bg-slate-50 rounded-2xl border border-slate-200 hover:border-slate-300 transition">
-              <input 
-                type="checkbox" 
-                id="priorizar_nome_fantasia"
-                checked={priorizarNomeFantasia}
-                onChange={e => setPriorizarNomeFantasia(e.target.checked)}
-                className="mt-1 h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-              />
-              <label htmlFor="priorizar_nome_fantasia" className="cursor-pointer select-none">
-                <span className="font-bold text-slate-900 block text-base mb-1">
-                  Exibir Nome Fantasia como Título Principal (e Razão Social como Subtítulo)
-                </span>
-                <span className="text-slate-600 text-sm leading-relaxed block">
-                  Permite alternar a hierarquia visual na tela de <strong>Clientes (Empresas)</strong> e em outras listagens do portal.
-                </span>
-                <span className="text-slate-600 text-sm leading-relaxed block mt-2">
-                  • <strong>Se marcado:</strong> O <strong>Nome Fantasia</strong> ganha destaque em negrito como título principal e a <strong>Razão Social</strong> é exibida logo abaixo em subtítulo cinza.<br />
-                  • <strong>Se desmarcado (Padrão):</strong> A <strong>Razão Social</strong> permanece como título principal em negrito e o <strong>Nome Fantasia</strong> como subtítulo.
-                </span>
-                <span className={`inline-flex items-center gap-1.5 mt-3 text-xs font-semibold px-2.5 py-1 rounded-full ${
-                  priorizarNomeFantasia 
-                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
-                    : 'bg-slate-200 text-slate-700'
-                }`}>
-                  <CheckCircle2 size={14} /> {priorizarNomeFantasia ? 'Status: Nome Fantasia em Destaque (Título Principal)' : 'Status: Razão Social em Destaque (Padrão)'}
-                </span>
-              </label>
-            </div>
-          </div>
-
-          {/* Controle de Alternância e Modos de Interface (Clean vs Clássico) - Exclusivo Super Admin */}
-          {userRole === 'admin' && (
-            <div className="mt-8 pt-8 border-t border-slate-200">
-              <div className="flex items-center gap-3 pb-4 border-b border-slate-100 mb-6">
-                <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
-                  <LayoutDashboard size={24} />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-bold text-slate-900">Modo de Interface & Controle de Alternância</h3>
-                    <span className="text-[10px] uppercase font-bold tracking-wider bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-md border border-indigo-200">
-                      Exclusivo Admin
-                    </span>
-                  </div>
-                  <p className="text-slate-500 text-xs">
-                    Defina se clientes e contabilidades podem alternar livremente entre o Modo Clean e o Modo Clássico ou se o portal deve operar em um modo padrão fixo.
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                {/* Switch de Habilitar / Desabilitar Mudança de Interface */}
-                <div className="flex items-start gap-3.5 p-5 bg-slate-50 rounded-2xl border border-slate-200 hover:border-slate-300 transition">
-                  <input 
-                    type="checkbox" 
-                    id="permitir_troca_interface"
-                    checked={permitirTrocaInterface}
-                    onChange={e => setPermitirTrocaInterface(e.target.checked)}
-                    className="mt-1 h-5 w-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                  />
-                  <label htmlFor="permitir_troca_interface" className="cursor-pointer select-none flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-bold text-slate-900 block text-base">
-                        Permitir que Usuários Alternem entre Modo Clean e Modo Clássico
-                      </span>
-                      <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-md ${
-                        permitirTrocaInterface ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                      }`}>
-                        {permitirTrocaInterface ? 'Habilitado' : 'Desabilitado'}
-                      </span>
-                    </div>
-                    <span className="text-slate-600 text-sm leading-relaxed block">
-                      Exibe o botão de alternância de interface na barra superior e no menu lateral para usuários do tipo <strong>Contabilidade</strong> e <strong>Cliente</strong>.
-                    </span>
-                    <span className="text-slate-600 text-sm leading-relaxed block mt-2">
-                      • <strong>Se marcado (Habilitado):</strong> Todos os usuários podem escolher livremente entre o visual Clean (moderno, sem poluição) e o visual Clássico (banners e cartões tradicionais).<br />
-                      • <strong>Se desmarcado (Desabilitado):</strong> Usuários comuns (Contabilidade e Clientes) não verão o botão de alternância e ficarão fixados no <strong>Modo Padrão</strong> selecionado abaixo. Apenas Administradores mantêm acesso à troca para supervisão e testes.
-                    </span>
-                  </label>
-                </div>
-
-                {/* Seletor do Modo Padrão */}
-                <div className="p-5 bg-white rounded-2xl border border-slate-200 space-y-3">
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Modo Padrão da Interface do Portal:
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setModoPadraoInterface('clean')}
-                      className={`p-4 rounded-xl border text-left transition flex items-start gap-3 cursor-pointer ${
-                        modoPadraoInterface === 'clean'
-                          ? 'border-blue-600 bg-blue-50/60 ring-2 ring-blue-500/20'
-                          : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
-                      }`}
-                    >
-                      <div className={`p-2 rounded-lg shrink-0 ${modoPadraoInterface === 'clean' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
-                        <Sparkles size={18} />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-slate-900">Modo Clean</span>
-                          <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded">Recomendado</span>
-                        </div>
-                        <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                          Design minimalista, foco total nos dados fiscais, sem caixas repetitivas de empresa. Busca de clientes inteligente e unificada na barra superior.
-                        </p>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setModoPadraoInterface('classico')}
-                      className={`p-4 rounded-xl border text-left transition flex items-start gap-3 cursor-pointer ${
-                        modoPadraoInterface === 'classico'
-                          ? 'border-amber-600 bg-amber-50/60 ring-2 ring-amber-500/20'
-                          : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
-                      }`}
-                    >
-                      <div className={`p-2 rounded-lg shrink-0 ${modoPadraoInterface === 'classico' ? 'bg-amber-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
-                        <LayoutDashboard size={18} />
-                      </div>
-                      <div>
-                        <span className="text-sm font-bold text-slate-900">Modo Clássico</span>
-                        <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                          Layout visual tradicional com banners ilustrados coloridos, cards com gradientes em cada tela e seletores individuais em cada módulo.
-                        </p>
-                      </div>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Controle de Visibilidade de Certificados A1 - Exclusivo do Super Admin */}
           {userRole === 'admin' && (
             <div className="mt-8 pt-8 border-t border-slate-200">
@@ -824,6 +1032,7 @@ export default function ConfiguracoesPortalPage() {
                     </span>
                   </label>
                 </div>
+
                 {/* Opção para Contabilidade */}
                 <div className="flex items-start gap-3.5 p-5 bg-slate-50 rounded-2xl border border-slate-200 hover:border-slate-300 transition">
                   <input 
@@ -871,337 +1080,379 @@ export default function ConfiguracoesPortalPage() {
             </div>
           )}
 
-          {/* Configuração de Valores Fictícios do Dashboard - Exclusivo Super Admin */}
-          {userRole === 'admin' && (
-            <div className="mt-8 pt-8 border-t border-slate-200">
-              <div className="flex items-center gap-3 pb-4 border-b border-slate-100 mb-6">
-                <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
-                  <LayoutDashboard size={24} />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-bold text-slate-900">Personalização de Métricas do Dashboard (Contabilidades & Clientes)</h3>
-                    <span className="text-[10px] uppercase font-black tracking-wider bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-md border border-indigo-200">
-                      Exclusivo Admin
-                    </span>
-                  </div>
-                  <p className="text-slate-500 text-xs">
-                    Defina valores fictícios para exibição nos cards do Dashboard dos perfis de Contabilidade e Cliente. Se desativado, o sistema calculará e exibirá os valores reais.
-                  </p>
-                </div>
-              </div>
-
-              {/* Toggle Principal de Ativação */}
-              <div className="flex items-start gap-3.5 p-5 bg-indigo-50/50 rounded-2xl border border-indigo-200 hover:border-indigo-300 transition mb-6">
-                <input 
-                  type="checkbox" 
-                  id="valores_ficticios_ativos"
-                  checked={ficticioData.valores_ficticios_ativos}
-                  onChange={e => setFicticioData({ ...ficticioData, valores_ficticios_ativos: e.target.checked })}
-                  className="mt-1 h-5 w-5 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                />
-                <label htmlFor="valores_ficticios_ativos" className="cursor-pointer select-none">
-                  <span className="font-bold text-slate-900 block text-base mb-1">
-                    Ativar exibição de valores fictícios no Dashboard para Contabilidades e Clientes
-                  </span>
-                  <span className="text-slate-600 text-sm leading-relaxed block">
-                    Quando esta opção estiver marcada, os cards do Dashboard de todos os clientes e contabilidades exibirão os números personalizados abaixo, gerando maior autoridade visual.
-                  </span>
-                  <span className={`inline-flex items-center gap-1.5 mt-3 text-xs font-semibold px-2.5 py-1 rounded-full ${
-                    ficticioData.valores_ficticios_ativos 
-                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
-                      : 'bg-slate-200 text-slate-700'
-                  }`}>
-                    {ficticioData.valores_ficticios_ativos ? 'Status: Valores Fictícios ATIVOS para terceiros' : 'Status: Exibindo Valores REAIS do Sistema'}
-                  </span>
-                </label>
-              </div>
-
-              {/* Inputs dos Valores Fictícios (disponíveis quando ativo) */}
-              {ficticioData.valores_ficticios_ativos && (
-                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 mb-2 flex items-center gap-1.5">
-                    <Sparkles size={14} className="text-indigo-600" /> Digite os valores para cada card do Dashboard:
-                  </h4>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">Total de Clientes</label>
-                      <input 
-                        type="number"
-                        min="0"
-                        value={ficticioData.ficticio_clientes}
-                        onChange={e => setFicticioData({ ...ficticioData, ficticio_clientes: Number(e.target.value) })}
-                        className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder="Ex: 28"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">Contabilidades</label>
-                      <input 
-                        type="number"
-                        min="0"
-                        value={ficticioData.ficticio_contabilidades}
-                        onChange={e => setFicticioData({ ...ficticioData, ficticio_contabilidades: Number(e.target.value) })}
-                        className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder="Ex: 8"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">Faturas Atrasadas</label>
-                      <input 
-                        type="number"
-                        min="0"
-                        value={ficticioData.ficticio_faturas_atrasadas}
-                        onChange={e => setFicticioData({ ...ficticioData, ficticio_faturas_atrasadas: Number(e.target.value) })}
-                        className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder="Ex: 0"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">NF Processadas (Quantidade)</label>
-                      <input 
-                        type="number"
-                        min="0"
-                        value={ficticioData.ficticio_nf_quantidade}
-                        onChange={e => setFicticioData({ ...ficticioData, ficticio_nf_quantidade: Number(e.target.value) })}
-                        className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder="Ex: 14500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">NF Processadas (Valor Total R$)</label>
-                      <input 
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={ficticioData.ficticio_nf_valor}
-                        onChange={e => setFicticioData({ ...ficticioData, ficticio_nf_valor: Number(e.target.value) })}
-                        className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder="Ex: 894520.50"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">Total de Relatórios Gerados</label>
-                      <input 
-                        type="number"
-                        min="0"
-                        value={ficticioData.ficticio_relatorios}
-                        onChange={e => setFicticioData({ ...ficticioData, ficticio_relatorios: Number(e.target.value) })}
-                        className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder="Ex: 120"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">Cidades Atendidas</label>
-                      <input 
-                        type="number"
-                        min="0"
-                        value={ficticioData.ficticio_cidades}
-                        onChange={e => setFicticioData({ ...ficticioData, ficticio_cidades: Number(e.target.value) })}
-                        className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder="Ex: 14"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Configurações Globais de Cobrança, Encargos e Desbloqueio em Confiança - Exclusivo Admin */}
-          {userRole === 'admin' && (
-            <div className="mt-8 pt-8 border-t border-slate-200">
-              <div className="flex items-center gap-3 pb-4 border-b border-slate-100 mb-6">
-                <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
-                  <DollarSign size={24} />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-bold text-slate-900">Cobrança, Juros e Desbloqueio em Confiança</h3>
-                    <span className="text-[10px] uppercase font-bold tracking-wider bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md border border-emerald-200">
-                      Exclusivo Admin
-                    </span>
-                  </div>
-                  <p className="text-slate-500 text-xs">
-                    Configure as regras globais de inadimplência, juros de mora e os limites permitidos para liberação em confiança no Hub Desktop.
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-6">
-                {/* 1. Encargos & Carência Global */}
-                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="font-bold text-slate-800 text-sm">
-                      Regras Globais de Encargos por Atraso e Carência
-                    </span>
-                    <span className="text-[11px] text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded font-medium">
-                      Valores padrão do sistema
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 mb-4">
-                    Estes valores são aplicados no cálculo do Pix dinâmico e na régua de cobrança via WhatsApp. 
-                    <strong> Nota:</strong> Se um cliente possuir taxas ou carência cadastradas no seu perfil individual, os valores do cliente terão prioridade.
-                  </p>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Multa por Atraso (%)
-                      </label>
-                      <div className="relative">
-                        <input 
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={regrasFinanceiras.global_multa_atraso_percentual}
-                          onChange={e => setRegrasFinanceiras({ ...regrasFinanceiras, global_multa_atraso_percentual: Number(e.target.value) })}
-                          className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-8"
-                          placeholder="Ex: 2.00"
-                        />
-                        <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">%</span>
-                      </div>
-                      <span className="text-[11px] text-slate-400 mt-1 block">Aplicada após o término da carência</span>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Juros de Mora Mensal (%)
-                      </label>
-                      <div className="relative">
-                        <input 
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={regrasFinanceiras.global_juros_mora_mensal_percentual}
-                          onChange={e => setRegrasFinanceiras({ ...regrasFinanceiras, global_juros_mora_mensal_percentual: Number(e.target.value) })}
-                          className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-8"
-                          placeholder="Ex: 1.00"
-                        />
-                        <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">% a.m.</span>
-                      </div>
-                      <span className="text-[11px] text-slate-400 mt-1 block">Proporcional diário (ex: 1% / 30 dias)</span>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Dias de Carência / Tolerância (Global)
-                      </label>
-                      <div className="relative">
-                        <input 
-                          type="number"
-                          min="0"
-                          max="60"
-                          value={regrasFinanceiras.global_dias_carencia}
-                          onChange={e => setRegrasFinanceiras({ ...regrasFinanceiras, global_dias_carencia: Number(e.target.value) })}
-                          className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-12"
-                          placeholder="Ex: 3"
-                        />
-                        <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">dias</span>
-                      </div>
-                      <span className="text-[11px] text-slate-400 mt-1 block">Prazo antes do bloqueio e encargos</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 2. Parâmetros de Desbloqueio em Confiança */}
-                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="font-bold text-slate-800 text-sm">
-                      Parâmetros do Desbloqueio em Confiança (Hub Desktop)
-                    </span>
-                    <span className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded font-medium">
-                      Liberação temporária sem pagamento
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 mb-4">
-                    Controla o comportamento do botão <strong>&quot;Liberar em Confiança&quot;</strong> na tela de Faturas. 
-                    Permite definir quantas vezes cada fatura pode ser liberada e quanto tempo o sistema permanece ativo.
-                  </p>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Limite Máximo por Fatura
-                      </label>
-                      <div className="relative">
-                        <input 
-                          type="number"
-                          min="1"
-                          max="10"
-                          value={regrasFinanceiras.limite_desbloqueios_confianca}
-                          onChange={e => setRegrasFinanceiras({ ...regrasFinanceiras, limite_desbloqueios_confianca: Number(e.target.value) })}
-                          className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 pr-12"
-                          placeholder="Ex: 1"
-                        />
-                        <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">vezes</span>
-                      </div>
-                      <span className="text-[11px] text-slate-400 mt-1 block">Desbloqueios permitidos por cobrança</span>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Duração de Cada Desbloqueio
-                      </label>
-                      <div className="relative">
-                        <input 
-                          type="number"
-                          min="1"
-                          max="168"
-                          value={regrasFinanceiras.horas_desbloqueio_confianca}
-                          onChange={e => setRegrasFinanceiras({ ...regrasFinanceiras, horas_desbloqueio_confianca: Number(e.target.value) })}
-                          className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 pr-12"
-                          placeholder="Ex: 24"
-                        />
-                        <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">horas</span>
-                      </div>
-                      <span className="text-[11px] text-slate-400 mt-1 block">Tempo que o Hub fica liberado (ex: 24h)</span>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Intervalo Mínimo entre Liberações
-                      </label>
-                      <div className="relative">
-                        <input 
-                          type="number"
-                          min="0"
-                          max="168"
-                          value={regrasFinanceiras.intervalo_horas_entre_desbloqueios}
-                          onChange={e => setRegrasFinanceiras({ ...regrasFinanceiras, intervalo_horas_entre_desbloqueios: Number(e.target.value) })}
-                          className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 pr-12"
-                          placeholder="Ex: 24"
-                        />
-                        <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">horas</span>
-                      </div>
-                      <span className="text-[11px] text-slate-400 mt-1 block">Intervalo de segurança entre concessões</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
           <div className="pt-6 mt-6 border-t border-slate-100 flex justify-end">
             <button 
               type="submit" 
               disabled={saving}
-              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
             >
               <Save size={18} />
-              {saving ? 'Salvando...' : 'Salvar Configurações do Portal'}
+              {saving ? 'Salvando...' : 'Salvar Regras da Empresa Selecionada'}
             </button>
           </div>
 
         </div>
       </form>
+    </div>
+  )}
+
+  {/* ABA 3: INTERFACE & EXIBIÇÃO */}
+  {activeTab === 'interface' && (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="p-5 bg-gradient-to-r from-blue-50 via-indigo-50 to-slate-50 border border-blue-200 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+        <div className="flex items-center gap-3.5">
+          <div className="p-3 bg-blue-600 text-white rounded-2xl shadow-sm">
+            <Building2 size={28} />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-slate-900">Personalização de Interface & Exibição</h2>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Configure a hierarquia visual dos nomes das empresas e o modo padrão de exibição do portal.
+            </p>
+          </div>
+        </div>
+        <button 
+          type="button"
+          onClick={handleSalvarInterface}
+          disabled={saving}
+          className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-2.5 rounded-xl transition shadow-sm hover:shadow-md flex items-center justify-center gap-2 text-sm disabled:opacity-50 cursor-pointer shrink-0"
+        >
+          <Save size={16} />
+          {saving ? 'Salvando...' : 'Salvar Preferências de Interface'}
+        </button>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 space-y-8">
+        {/* Preferências de Exibição de Empresas & Clientes (Nome Fantasia vs Razão Social) */}
+        <div>
+          <div className="flex items-center gap-3 pb-4 border-b border-slate-100 mb-6">
+            <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
+              <Building2 size={24} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-bold text-slate-900">Exibição de Empresas & Clientes</h3>
+                <span className="text-[10px] uppercase font-bold tracking-wider bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md border border-blue-200">
+                  Visual & Listagens
+                </span>
+              </div>
+              <p className="text-slate-500 text-xs">
+                Defina como os nomes das empresas devem ser apresentados em destaque nas tabelas e no gerenciamento de clientes.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3.5 p-5 bg-slate-50 rounded-2xl border border-slate-200 hover:border-slate-300 transition">
+            <input 
+              type="checkbox" 
+              id="priorizar_nome_fantasia"
+              checked={priorizarNomeFantasia}
+              onChange={e => setPriorizarNomeFantasia(e.target.checked)}
+              className="mt-1 h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+            />
+            <label htmlFor="priorizar_nome_fantasia" className="cursor-pointer select-none">
+              <span className="font-bold text-slate-900 block text-base mb-1">
+                Exibir Nome Fantasia como Título Principal (e Razão Social como Subtítulo)
+              </span>
+              <span className="text-slate-600 text-sm leading-relaxed block">
+                Permite alternar a hierarquia visual na tela de <strong>Clientes (Empresas)</strong> e em outras listagens do portal.
+              </span>
+              <span className="text-slate-600 text-sm leading-relaxed block mt-2">
+                • <strong>Se marcado:</strong> O <strong>Nome Fantasia</strong> ganha destaque em negrito como título principal e a <strong>Razão Social</strong> é exibida logo abaixo em subtítulo cinza.<br />
+                • <strong>Se desmarcado (Padrão):</strong> A <strong>Razão Social</strong> permanece como título principal em negrito e o <strong>Nome Fantasia</strong> como subtítulo.
+              </span>
+              <span className={`inline-flex items-center gap-1.5 mt-3 text-xs font-semibold px-2.5 py-1 rounded-full ${
+                priorizarNomeFantasia 
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                  : 'bg-slate-200 text-slate-700'
+              }`}>
+                <CheckCircle2 size={14} /> {priorizarNomeFantasia ? 'Status: Nome Fantasia em Destaque (Título Principal)' : 'Status: Razão Social em Destaque (Padrão)'}
+              </span>
+            </label>
+          </div>
+        </div>
+
+        {/* Controle de Alternância e Modos de Interface (Clean vs Clássico) - Exclusivo Super Admin */}
+        {userRole === 'admin' && (
+          <div className="pt-6 border-t border-slate-200">
+            <div className="flex items-center gap-3 pb-4 border-b border-slate-100 mb-6">
+              <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+                <LayoutDashboard size={24} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-bold text-slate-900">Modo de Interface & Controle de Alternância</h3>
+                  <span className="text-[10px] uppercase font-bold tracking-wider bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-md border border-indigo-200">
+                    Exclusivo Admin
+                  </span>
+                </div>
+                <p className="text-slate-500 text-xs">
+                  Defina se clientes e contabilidades podem alternar livremente entre o Modo Clean e o Modo Clássico ou se o portal deve operar em um modo padrão fixo.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {/* Switch de Habilitar / Desabilitar Mudança de Interface */}
+              <div className="flex items-start gap-3.5 p-5 bg-slate-50 rounded-2xl border border-slate-200 hover:border-slate-300 transition">
+                <input 
+                  type="checkbox" 
+                  id="permitir_troca_interface"
+                  checked={permitirTrocaInterface}
+                  onChange={e => setPermitirTrocaInterface(e.target.checked)}
+                  className="mt-1 h-5 w-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+                <label htmlFor="permitir_troca_interface" className="cursor-pointer select-none flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-bold text-slate-900 block text-base">
+                      Permitir que Usuários Alternem entre Modo Clean e Modo Clássico
+                    </span>
+                    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-md ${
+                      permitirTrocaInterface ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                    }`}>
+                      {permitirTrocaInterface ? 'Habilitado' : 'Desabilitado'}
+                    </span>
+                  </div>
+                  <span className="text-slate-600 text-sm leading-relaxed block">
+                    Exibe o botão de alternância de interface na barra superior e no menu lateral para usuários do tipo <strong>Contabilidade</strong> e <strong>Cliente</strong>.
+                  </span>
+                  <span className="text-slate-600 text-sm leading-relaxed block mt-2">
+                    • <strong>Se marcado (Habilitado):</strong> Todos os usuários podem escolher livremente entre o visual Clean (moderno, sem poluição) e o visual Clássico (banners e cartões tradicionais).<br />
+                    • <strong>Se desmarcado (Desabilitado):</strong> Usuários comuns (Contabilidade e Clientes) não verão o botão de alternância e ficarão fixados no <strong>Modo Padrão</strong> selecionado abaixo. Apenas Administradores mantêm acesso à troca para supervisão e testes.
+                  </span>
+                </label>
+              </div>
+
+              {/* Seletor do Modo Padrão */}
+              <div className="p-5 bg-white rounded-2xl border border-slate-200 space-y-3">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Modo Padrão da Interface do Portal:
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setModoPadraoInterface('clean')}
+                    className={`p-4 rounded-xl border text-left transition flex items-start gap-3 cursor-pointer ${
+                      modoPadraoInterface === 'clean'
+                        ? 'border-blue-600 bg-blue-50/60 ring-2 ring-blue-500/20'
+                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                    }`}
+                  >
+                    <div className={`p-2 rounded-lg shrink-0 ${modoPadraoInterface === 'clean' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                      <Sparkles size={18} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-slate-900">Modo Clean</span>
+                        <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded">Recomendado</span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                        Design minimalista, foco total nos dados fiscais, sem caixas repetitivas de empresa. Busca de clientes inteligente e unificada na barra superior.
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setModoPadraoInterface('classico')}
+                    className={`p-4 rounded-xl border text-left transition flex items-start gap-3 cursor-pointer ${
+                      modoPadraoInterface === 'classico'
+                        ? 'border-amber-600 bg-amber-50/60 ring-2 ring-amber-500/20'
+                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                    }`}
+                  >
+                    <div className={`p-2 rounded-lg shrink-0 ${modoPadraoInterface === 'classico' ? 'bg-amber-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                      <LayoutDashboard size={18} />
+                    </div>
+                    <div>
+                      <span className="text-sm font-bold text-slate-900">Modo Clássico</span>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                        Layout visual tradicional com banners ilustrados coloridos, cards com gradientes em cada tela e seletores individuais em cada módulo.
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="pt-4 flex justify-end">
+          <button 
+            type="button" 
+            onClick={handleSalvarInterface}
+            disabled={saving}
+            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold px-8 py-3 rounded-xl transition shadow-md hover:shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+          >
+            <Save size={18} />
+            {saving ? 'Salvando...' : 'Salvar Preferências de Interface'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )}
+
+  {/* ABA 4: MÉTRICAS FICTÍCIAS DO DASHBOARD */}
+  {activeTab === 'dashboard' && (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="p-5 bg-gradient-to-r from-indigo-50 via-purple-50 to-slate-50 border border-indigo-200 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+        <div className="flex items-center gap-3.5">
+          <div className="p-3 bg-indigo-600 text-white rounded-2xl shadow-sm">
+            <LayoutDashboard size={28} />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-slate-900">Métricas Personalizadas do Dashboard</h2>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Defina números fictícios para exibição nos cards do painel de Contabilidades e Clientes.
+            </p>
+          </div>
+        </div>
+        <button 
+          type="button"
+          onClick={handleSalvarDashboard}
+          disabled={saving}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-2.5 rounded-xl transition shadow-sm hover:shadow-md flex items-center justify-center gap-2 text-sm disabled:opacity-50 cursor-pointer shrink-0"
+        >
+          <Save size={16} />
+          {saving ? 'Salvando...' : 'Salvar Métricas do Dashboard'}
+        </button>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 space-y-6">
+        <div className="flex items-start gap-3.5 p-5 bg-indigo-50/50 rounded-2xl border border-indigo-200 hover:border-indigo-300 transition">
+          <input 
+            type="checkbox" 
+            id="valores_ficticios_ativos"
+            checked={ficticioData.valores_ficticios_ativos}
+            onChange={e => setFicticioData({ ...ficticioData, valores_ficticios_ativos: e.target.checked })}
+            className="mt-1 h-5 w-5 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+          />
+          <label htmlFor="valores_ficticios_ativos" className="cursor-pointer select-none">
+            <span className="font-bold text-slate-900 block text-base mb-1">
+              Ativar exibição de valores fictícios no Dashboard para Contabilidades e Clientes
+            </span>
+            <span className="text-slate-600 text-sm leading-relaxed block">
+              Quando esta opção estiver marcada, os cards do Dashboard de todos os clientes e contabilidades exibirão os números personalizados abaixo, gerando maior autoridade visual.
+            </span>
+            <span className={`inline-flex items-center gap-1.5 mt-3 text-xs font-semibold px-2.5 py-1 rounded-full ${
+              ficticioData.valores_ficticios_ativos 
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                : 'bg-slate-200 text-slate-700'
+            }`}>
+              {ficticioData.valores_ficticios_ativos ? 'Status: Valores Fictícios ATIVOS para terceiros' : 'Status: Exibindo Valores REAIS do Sistema'}
+            </span>
+          </label>
+        </div>
+
+        {ficticioData.valores_ficticios_ativos && (
+          <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 mb-2 flex items-center gap-1.5">
+              <Sparkles size={14} className="text-indigo-600" /> Digite os valores para cada card do Dashboard:
+            </h4>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Total de Clientes</label>
+                <input 
+                  type="number"
+                  min="0"
+                  value={ficticioData.ficticio_clientes}
+                  onChange={e => setFicticioData({ ...ficticioData, ficticio_clientes: Number(e.target.value) })}
+                  className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Ex: 28"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Contabilidades</label>
+                <input 
+                  type="number"
+                  min="0"
+                  value={ficticioData.ficticio_contabilidades}
+                  onChange={e => setFicticioData({ ...ficticioData, ficticio_contabilidades: Number(e.target.value) })}
+                  className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Ex: 8"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Faturas Atrasadas</label>
+                <input 
+                  type="number"
+                  min="0"
+                  value={ficticioData.ficticio_faturas_atrasadas}
+                  onChange={e => setFicticioData({ ...ficticioData, ficticio_faturas_atrasadas: Number(e.target.value) })}
+                  className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Ex: 0"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">NF Processadas (Quantidade)</label>
+                <input 
+                  type="number"
+                  min="0"
+                  value={ficticioData.ficticio_nf_quantidade}
+                  onChange={e => setFicticioData({ ...ficticioData, ficticio_nf_quantidade: Number(e.target.value) })}
+                  className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Ex: 14500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">NF Processadas (Valor Total R$)</label>
+                <input 
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={ficticioData.ficticio_nf_valor}
+                  onChange={e => setFicticioData({ ...ficticioData, ficticio_nf_valor: Number(e.target.value) })}
+                  className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Ex: 894520.50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Total de Relatórios Gerados</label>
+                <input 
+                  type="number"
+                  min="0"
+                  value={ficticioData.ficticio_relatorios}
+                  onChange={e => setFicticioData({ ...ficticioData, ficticio_relatorios: Number(e.target.value) })}
+                  className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Ex: 120"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Cidades Atendidas</label>
+                <input 
+                  type="number"
+                  min="0"
+                  value={ficticioData.ficticio_cidades}
+                  onChange={e => setFicticioData({ ...ficticioData, ficticio_cidades: Number(e.target.value) })}
+                  className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Ex: 14"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="pt-4 flex justify-end">
+          <button 
+            type="button" 
+            onClick={handleSalvarDashboard}
+            disabled={saving}
+            className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-8 py-3 rounded-xl transition shadow-md hover:shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+          >
+            <Save size={18} />
+            {saving ? 'Salvando...' : 'Salvar Métricas do Dashboard'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )}
 
     </div>
   )
