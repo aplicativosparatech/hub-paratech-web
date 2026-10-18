@@ -20,6 +20,7 @@ import { GlobalClientProvider, useGlobalClient } from '@/components/GlobalClient
 import GlobalClientSelector from '@/components/GlobalClientSelector'
 import InterfaceModeToggle from '@/components/InterfaceModeToggle'
 import GlobalCompanyActiveCard from '@/components/GlobalCompanyActiveCard'
+import BotechFloatingWidget from '@/components/BotechFloatingWidget'
 
 type Role = 'admin' | 'cliente' | 'contabilidade'
 
@@ -1325,6 +1326,9 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
               </a>
             </div>
           </footer>
+
+          {/* Assistente Virtual de IA Flutuante (Botech) */}
+          <BotechFloatingWidget />
         </main>
       </div>
     </div>
