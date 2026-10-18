@@ -23,7 +23,7 @@ export default function CardApisHubParatech() {
   const [clientes, setClientes] = useState<ClienteOption[]>([])
   const [selectedCliente, setSelectedCliente] = useState<ClienteOption | null>(null)
   const [baseUrl, setBaseUrl] = useState('https://hubfiscal.paratechsolucoes.com.br')
-  const [activeLang, setActiveLang] = useState<'curl' | 'javascript' | 'python'>('curl')
+  const [activeLang, setActiveLang] = useState<'curl' | 'javascript' | 'python' | 'dart' | 'rust'>('curl')
   const [activeCategoria, setActiveCategoria] = useState<string>('todos')
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
 
@@ -61,8 +61,128 @@ export default function CardApisHubParatech() {
   const tokenAtual = selectedCliente?.hub_token || 'TOKEN_HUB_DO_CLIENTE'
   const clienteIdAtual = selectedCliente?.id || 'UUID_DO_CLIENTE'
 
-  // Lista dos 9 Endpoints do Hub Paratech
+  // Lista dos Endpoints Oficiais do Hub Paratech
   const endpoints = [
+    {
+      id: 'gateway_v1',
+      categoria: 'master',
+      metodo: 'POST',
+      rota: '/api/hub/v1',
+      titulo: '⭐ Master Gateway Global Unificado (/api/hub/v1) - Todas as Funções em 1 Única Rota',
+      badge: 'API Global Master',
+      badgeCor: 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/30',
+      descricao: 'O Master Gateway unifica TODAS as operações em um único endpoint. Basta enviar a "action" desejada e os parâmetros com o header "x-hub-token". Ideal para integrar com Dart/Flutter, Tauri 2.0 (Rust) ou Next.js.',
+      contentType: 'application/json',
+      params: [
+        { name: 'x-hub-token (Header)', type: 'string', required: true, desc: 'Token de autenticação da empresa no Hub' },
+        { name: 'action', type: 'string', required: true, desc: "'upload_xml' | 'consultar_dfe' | 'manifestar_dfe' | 'status_sefaz' | 'inutilizar_numeracao' | 'corrigir_nota' | 'auditar_produtos' | 'chat_robotech' | 'gerar_pix' | 'ping'" },
+        { name: 'params', type: 'Object', required: false, desc: 'Objeto com os parâmetros específicos da ação' }
+      ],
+      curl: `curl -X POST "${baseUrl}/api/hub/v1" \\
+  -H "x-hub-token: ${tokenAtual}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "action": "consultar_dfe",
+    "params": {
+      "competencia": "2026-10",
+      "ao_vivo": true
+    }
+  }'`,
+      javascript: `// Exemplo Master Gateway em TypeScript / JavaScript (Node / Browser)
+const response = await fetch('${baseUrl}/api/hub/v1', {
+  method: 'POST',
+  headers: {
+    'x-hub-token': '${tokenAtual}',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    action: 'consultar_dfe', // ou 'upload_xml', 'chat_robotech', 'gerar_pix', etc.
+    params: {
+      competencia: '2026-10',
+      ao_vivo: true
+    }
+  })
+});
+
+const result = await response.json();
+console.log('Resposta do Hub:', result.data);`,
+      dart: `// Exemplo Master Gateway em Dart / Flutter (pacote http)
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+Future<void> chamarHubParatech() async {
+  final url = Uri.parse('${baseUrl}/api/hub/v1');
+  final response = await http.post(
+    url,
+    headers: {
+      'x-hub-token': '${tokenAtual}',
+      'Content-Type': 'application/json',
+    },
+    body: jsonEncode({
+      'action': 'consultar_dfe', // ou 'upload_xml', 'chat_robotech', etc.
+      'params': {
+        'competencia': '2026-10',
+        'ao_vivo': true,
+      }
+    }),
+  );
+
+  if (response.statusCode == 200) {
+    final data = jsonDecode(response.body);
+    print('Sucesso Hub Paratech: \${data["data"]}');
+  }
+}`,
+      rust: `// Exemplo Master Gateway em Rust (Tauri 2.0 com reqwest)
+use reqwest::Client;
+use serde_json::json;
+
+#[tauri::command]
+pub async fn chamar_hub_paratech() -> Result<String, String> {
+    let client = Client::new();
+    let res = client.post("${baseUrl}/api/hub/v1")
+        .header("x-hub-token", "${tokenAtual}")
+        .header("Content-Type", "application/json")
+        .json(&json!({
+            "action": "consultar_dfe",
+            "params": {
+                "competencia": "2026-10",
+                "ao_vivo": true
+            }
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let text = res.text().await.map_err(|e| e.to_string())?;
+    Ok(text)
+}`,
+      python: `import requests
+
+url = "${baseUrl}/api/hub/v1"
+headers = {
+    "x-hub-token": "${tokenAtual}",
+    "Content-Type": "application/json"
+}
+payload = {
+    "action": "consultar_dfe",
+    "params": {
+        "competencia": "2026-10",
+        "ao_vivo": True
+    }
+}
+
+response = requests.post(url, json=payload, headers=headers)
+print(response.json())`,
+      responseExemplo: `{
+  "success": true,
+  "action": "consultar_dfe",
+  "data": {
+    "success": true,
+    "totalNovos": 4,
+    "ultNSU": "000000000012480"
+  }
+}`
+    },
     {
       id: 'upload_xml',
       categoria: 'xml',
@@ -600,7 +720,8 @@ print(res.json())`,
             Filtrar:
           </span>
           {[
-            { id: 'todos', label: 'Todos (9)' },
+            { id: 'todos', label: 'Todos (10)' },
+            { id: 'master', label: '⭐ Master Gateway v1' },
             { id: 'xml', label: 'XMLs & Upload' },
             { id: 'dfe', label: 'DF-e SEFAZ Nuvem' },
             { id: 'sefaz', label: 'Serviços SEFAZ' },
@@ -623,11 +744,13 @@ print(res.json())`,
         </div>
 
         {/* Seletor de Linguagem do Snippet */}
-        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700">
+        <div className="flex flex-wrap items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2">Código:</span>
           {[
             { id: 'curl', label: 'cURL' },
-            { id: 'javascript', label: 'JavaScript' },
+            { id: 'javascript', label: 'JS / TS' },
+            { id: 'dart', label: 'Flutter (Dart)' },
+            { id: 'rust', label: 'Tauri 2.0 (Rust)' },
             { id: 'python', label: 'Python' }
           ].map(lang => (
             <button
@@ -650,7 +773,7 @@ print(res.json())`,
       {/* LISTA DE CARDS DE ENDPOINTS */}
       <div className="space-y-6">
         {endpointsFiltrados.map((ep) => {
-          const codeToCopy = activeLang === 'curl' ? ep.curl : activeLang === 'javascript' ? ep.javascript : ep.python
+          const codeToCopy = (ep as any)[activeLang] || ep.curl
           const isCopied = copiedKey === `code_${ep.id}`
           const isCopiedRoute = copiedKey === `route_${ep.id}`
 
@@ -727,7 +850,7 @@ print(res.json())`,
                   <div className="flex items-center gap-2">
                     <Terminal size={14} className="text-slate-400" />
                     <span className="font-mono text-slate-300">
-                      Exemplo em {activeLang === 'curl' ? 'cURL (Terminal)' : activeLang === 'javascript' ? 'JavaScript (Fetch)' : 'Python (Requests)'}
+                      Exemplo em {activeLang === 'curl' ? 'cURL (Terminal)' : activeLang === 'javascript' ? 'JavaScript / TypeScript' : activeLang === 'dart' ? 'Dart / Flutter (http)' : activeLang === 'rust' ? 'Rust / Tauri 2.0 (reqwest)' : 'Python (Requests)'}
                     </span>
                   </div>
 
