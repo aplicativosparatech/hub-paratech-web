@@ -3,11 +3,34 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, UserPlus, Save, Search, Eye, EyeOff, ShieldCheck, ShieldAlert, FileKey, FileCode, Upload, MapPin, Calendar, DollarSign, Sparkles, ExternalLink } from 'lucide-react'
+import { 
+  ArrowLeft, 
+  UserPlus, 
+  Save, 
+  Search, 
+  Eye, 
+  EyeOff, 
+  ShieldCheck, 
+  ShieldAlert, 
+  FileKey, 
+  FileCode, 
+  MapPin, 
+  Calendar, 
+  DollarSign, 
+  Sparkles, 
+  ExternalLink,
+  Building2,
+  Phone,
+  KeyRound,
+  ChevronsDown,
+  ChevronsUp,
+  Layers
+} from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { limparDocumento, formatarCnpjCpf, validarCnpj, validarCpf, isCnpjAlfanumerico } from '@/utils/cnpjAlfanumerico'
 import { SistemaAutocompleteInput, ERP_PADRAO } from '@/components/SistemaAutocompleteInput'
+import { FormAccordionCard } from '@/components/ui/FormAccordionCard'
 
 export default function NovoClientePage() {
   const router = useRouter()
@@ -25,6 +48,48 @@ export default function NovoClientePage() {
   const [clienteExistente, setClienteExistente] = useState<{ id: string; razao_social: string; nome_fantasia?: string; cnpj: string } | null>(null)
   const [checkingDuplicidade, setCheckingDuplicidade] = useState(false)
   const [userRole, setUserRole] = useState<'admin' | 'contabilidade' | 'cliente'>('admin')
+
+  // Controle dos cards sanfona - padrão fechado (todos false)
+  const [openCards, setOpenCards] = useState<Record<string, boolean>>({
+    empresa: false,
+    contato: false,
+    endereco: false,
+    fiscal: false,
+    certificado: false,
+    cobranca: false,
+    ia: false,
+    acesso: false
+  })
+
+  const toggleCard = (card: string) => {
+    setOpenCards(prev => ({ ...prev, [card]: !prev[card] }))
+  }
+
+  const expandAll = () => {
+    setOpenCards({
+      empresa: true,
+      contato: true,
+      endereco: true,
+      fiscal: true,
+      certificado: true,
+      cobranca: true,
+      ia: true,
+      acesso: true
+    })
+  }
+
+  const collapseAll = () => {
+    setOpenCards({
+      empresa: false,
+      contato: false,
+      endereco: false,
+      fiscal: false,
+      certificado: false,
+      cobranca: false,
+      ia: false,
+      acesso: false
+    })
+  }
 
   const [formData, setFormData] = useState({
     razao_social: '',
@@ -103,6 +168,7 @@ export default function NovoClientePage() {
         ...prev,
         certificado_validade: data.dataValidade
       }))
+      setOpenCards(prev => ({ ...prev, certificado: true }))
       toast.success(`Certificado lido com sucesso! Titular: ${data.titular}`, { id: toastId })
     } catch (err: any) {
       setCertError(err.message)
@@ -207,6 +273,7 @@ export default function NovoClientePage() {
         uf: data.uf || prev.uf,
         complemento: data.complemento || prev.complemento
       }))
+      setOpenCards(prev => ({ ...prev, endereco: true }))
       toast.success('Endereço preenchido com sucesso!', { id: toastId })
     } catch (err: any) {
       toast.error(err.message || 'Erro ao consultar CEP.', { id: toastId })
@@ -233,6 +300,7 @@ export default function NovoClientePage() {
 
       if (data) {
         setClienteExistente(data)
+        setOpenCards(prev => ({ ...prev, empresa: true }))
         toast.error(`⚠️ Documento já cadastrado para: "${data.nome_fantasia || data.razao_social}". Não é permitido cadastrar clientes repetidos.`, { duration: 6000 })
         return data
       } else {
@@ -275,6 +343,7 @@ export default function NovoClientePage() {
         cnpj: cpfFormatado,
         regime_tributario: prev.regime_tributario || 'simples_nacional'
       }))
+      setOpenCards(prev => ({ ...prev, empresa: true }))
       toast.success('CPF validado e formatado com sucesso! Preencha a Razão Social/Nome.')
       return
     }
@@ -298,6 +367,7 @@ export default function NovoClientePage() {
         ...prev,
         cnpj: cnpjFormatado
       }))
+      setOpenCards(prev => ({ ...prev, empresa: true }))
       toast.success('CNPJ Alfanumérico validado com sucesso (IN RFB nº 2.229/2024)! Complete os dados cadastrais.')
       return
     }
@@ -331,6 +401,8 @@ export default function NovoClientePage() {
         regime_tributario: data.regime_tributario || prev.regime_tributario || 'simples_nacional'
       }))
 
+      setOpenCards(prev => ({ ...prev, empresa: true, endereco: true }))
+
       if (data.aviso) {
         toast.success(data.aviso, { id: toastId, duration: 6000 })
       } else {
@@ -338,6 +410,7 @@ export default function NovoClientePage() {
       }
     } catch (err: any) {
       setFormData(prev => ({ ...prev, cnpj: cnpjFormatado }))
+      setOpenCards(prev => ({ ...prev, empresa: true }))
       toast.error(err.message || 'Erro ao consultar CNPJ. Preencha os campos manualmente.', { id: toastId })
     } finally {
       setSearchingCnpj(false)
@@ -409,6 +482,7 @@ export default function NovoClientePage() {
           regime_tributario: autoRegime || prev.regime_tributario
         }))
 
+        setOpenCards(prev => ({ ...prev, empresa: true, endereco: true }))
         toast.success(`XML de amostra lido com sucesso! Emitente: ${xNome || formattedDoc}`)
       } catch (err: any) {
         toast.error(err.message || 'Erro ao processar XML de amostra')
@@ -421,11 +495,34 @@ export default function NovoClientePage() {
     e.preventDefault()
     setLoading(true)
 
+    // Validações com expansão automática do card correspondente
+    if (!formData.cnpj?.trim()) {
+      setOpenCards(prev => ({ ...prev, empresa: true }))
+      toast.error('Informe o CNPJ ou CPF da empresa.')
+      setLoading(false)
+      return
+    }
+
+    if (!formData.razao_social?.trim()) {
+      setOpenCards(prev => ({ ...prev, empresa: true }))
+      toast.error('Informe a Razão Social da empresa.')
+      setLoading(false)
+      return
+    }
+
+    if (!formData.nome_sistema_utilizado?.trim()) {
+      setOpenCards(prev => ({ ...prev, empresa: true }))
+      toast.error('Informe o Nome do Sistema Monitorado (ERP/PDV).')
+      setLoading(false)
+      return
+    }
+
     // Bloqueio rigoroso de cadastro repetido
     const rawDoc = limparDocumento(formData.cnpj)
     if (rawDoc) {
       const duplicado = await checarCnpjDuplicado(rawDoc)
       if (duplicado) {
+        setOpenCards(prev => ({ ...prev, empresa: true }))
         toast.error(`❌ Cadastro bloqueado! O cliente "${duplicado.nome_fantasia || duplicado.razao_social}" já utiliza este CNPJ/CPF (${duplicado.cnpj}). Não é permitido cadastros repetidos no sistema.`, { duration: 7000 })
         setLoading(false)
         return
@@ -457,6 +554,7 @@ export default function NovoClientePage() {
       })
       const certUploadData = await certUploadRes.json()
       if (!certUploadRes.ok || !certUploadData.success) {
+        setOpenCards(prev => ({ ...prev, certificado: true }))
         toast.error('Erro ao enviar certificado: ' + (certUploadData.error || 'Falha no envio'))
         setLoading(false)
         return
@@ -564,725 +662,631 @@ export default function NovoClientePage() {
           <UserPlus className="text-blue-600" size={30} />
           Novo Cliente
         </h1>
-        <p className="text-slate-500 text-sm mt-1">Cadastre uma nova empresa cliente com perfil fiscal completo para gerar o Token do Hub e vincular à contabilidade.</p>
+        <p className="text-slate-500 text-sm mt-1">
+          Cadastre uma nova empresa cliente com perfil fiscal completo para gerar o Token do Hub e vincular à contabilidade.
+        </p>
       </header>
 
-      {/* Formulário Expandido em Grid */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 w-full">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          
-          <div>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-4 border-b border-slate-100 gap-3">
-              <h3 className="text-base font-bold text-slate-900">
-                Dados da Empresa
-              </h3>
-              <div>
+      {/* Barra Superior de Ações do Accordion */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-slate-100/70 border border-slate-200/80 rounded-2xl">
+        <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+          <Layers size={17} className="text-blue-600" />
+          <span>Cadastro organizado em cards contextuais</span>
+          <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-500 font-normal">
+            Padrão sanfona fechado
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={expandAll}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl shadow-2xs transition"
+          >
+            <ChevronsDown size={14} className="text-blue-600" />
+            <span>Expandir Todos</span>
+          </button>
+          <button
+            type="button"
+            onClick={collapseAll}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl shadow-2xs transition"
+          >
+            <ChevronsUp size={14} className="text-slate-500" />
+            <span>Recolher Todos</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Formulário com Cards de Efeito Sanfona */}
+      <form onSubmit={handleSubmit} noValidate className="space-y-4">
+        
+        {/* CARD 1: DADOS CADASTRAIS & EMPRESA */}
+        <FormAccordionCard
+          id="empresa"
+          title="Dados Cadastrais & Identificação"
+          subtitle="CNPJ/CPF, Razão Social, Nome Fantasia, Regime Tributário, ERP e Logomarca"
+          icon={<Building2 size={22} />}
+          iconBgColor="bg-blue-50 text-blue-600 border border-blue-100"
+          isOpen={openCards.empresa}
+          onToggle={() => toggleCard('empresa')}
+          headerAction={
+            <div>
+              <button
+                type="button"
+                onClick={() => xmlSampleRef.current?.click()}
+                title="Carregar um XML emitido pela empresa para preencher automaticamente CNPJ/CPF, Razão Social, IE e endereço"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl text-xs font-semibold border border-emerald-200 transition"
+              >
+                <FileCode size={14} />
+                <span className="hidden sm:inline">Importar XML Amostra</span>
+                <span className="sm:hidden">XML Amostra</span>
+              </button>
+              <input
+                ref={xmlSampleRef}
+                type="file"
+                accept=".xml"
+                className="hidden"
+                onChange={handleCarregarXmlAmostra}
+              />
+            </div>
+          }
+          badge={
+            formData.cnpj ? (
+              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 font-mono">
+                {formData.cnpj}
+              </span>
+            ) : (
+              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                Obrigatório
+              </span>
+            )
+          }
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Campo CNPJ / CPF com Botão de Consulta Automática */}
+            <div className="md:col-span-1">
+              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                CNPJ / CPF <span className="text-red-500">*</span>
+              </label>
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  placeholder="00.000.000/0000-00 ou 000.000.000-00"
+                  className={`w-full px-4 py-2.5 rounded-xl border focus:outline-none focus:ring-2 bg-slate-50/50 ${
+                    clienteExistente 
+                      ? 'border-red-400 focus:ring-red-500 text-red-900 bg-red-50/30' 
+                      : 'border-slate-200 focus:ring-blue-500'
+                  }`}
+                  value={formData.cnpj} 
+                  onChange={e => {
+                    setFormData({...formData, cnpj: e.target.value})
+                    if (clienteExistente) setClienteExistente(null)
+                  }} 
+                  onBlur={() => checarCnpjDuplicado(formData.cnpj)}
+                />
                 <button
                   type="button"
-                  onClick={() => xmlSampleRef.current?.click()}
-                  title="Carregar um XML emitido pela empresa para preencher automaticamente CNPJ/CPF, Razão Social, IE e endereço"
-                  className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl text-xs font-semibold border border-emerald-200 transition"
+                  onClick={handleConsultarCnpj}
+                  disabled={searchingCnpj || checkingDuplicidade}
+                  title="Buscar dados do CNPJ na Receita Federal ou validar CPF"
+                  className="px-3.5 py-2.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl font-semibold flex items-center justify-center transition border border-blue-200 disabled:opacity-50"
                 >
-                  <FileCode size={15} />
-                  <span>Importar XML de Amostra da Empresa</span>
+                  <Search size={18} className={(searchingCnpj || checkingDuplicidade) ? 'animate-spin' : ''} />
                 </button>
-                <input
-                  ref={xmlSampleRef}
-                  type="file"
-                  accept=".xml"
-                  className="hidden"
-                  onChange={handleCarregarXmlAmostra}
-                />
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              
-              {/* Campo CNPJ / CPF com Botão de Consulta Automática */}
-              <div className="md:col-span-1">
-                <label className="block text-sm font-semibold text-slate-700 mb-1">CNPJ / CPF</label>
-                <div className="flex gap-2">
-                  <input 
-                    required 
-                    type="text" 
-                    placeholder="00.000.000/0000-00 ou 000.000.000-00"
-                    className={`w-full px-4 py-2.5 rounded-xl border focus:outline-none focus:ring-2 bg-slate-50/50 ${
-                      clienteExistente 
-                        ? 'border-red-400 focus:ring-red-500 text-red-900 bg-red-50/30' 
-                        : 'border-slate-200 focus:ring-blue-500'
-                    }`}
-                    value={formData.cnpj} 
-                    onChange={e => {
-                      setFormData({...formData, cnpj: e.target.value})
-                      if (clienteExistente) setClienteExistente(null)
-                    }} 
-                    onBlur={() => checarCnpjDuplicado(formData.cnpj)}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleConsultarCnpj}
-                    disabled={searchingCnpj || checkingDuplicidade}
-                    title="Buscar dados do CNPJ na Receita Federal ou validar CPF"
-                    className="px-3.5 py-2.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl font-semibold flex items-center justify-center transition border border-blue-200 disabled:opacity-50"
-                  >
-                    <Search size={18} className={(searchingCnpj || checkingDuplicidade) ? 'animate-spin' : ''} />
-                  </button>
-                </div>
-                {clienteExistente ? (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-800 flex items-start gap-2 mt-2 font-medium animate-in fade-in">
-                    <ShieldAlert size={16} className="text-red-600 shrink-0 mt-0.5" />
-                    <div>
-                      <strong className="block text-red-900 font-bold">Cadastro Repetido Bloqueado</strong>
-                      Já existe um cliente cadastrado com este documento:
-                      <span className="font-bold text-red-950 block mt-0.5">
-                        {clienteExistente.nome_fantasia || clienteExistente.razao_social} ({clienteExistente.cnpj})
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-[11px] text-slate-400 mt-1">Aceita CNPJ de Pessoa Jurídica ou CPF de Pessoa Física (Cadastros repetidos são bloqueados)</p>
-                )}
-              </div>
-
-              {/* Inscrição Estadual (IE) */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Inscrição Estadual (IE)</label>
-                <input 
-                  type="text" 
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                  placeholder="Ex: 151234567 ou ISENTO"
-                  value={formData.inscricao_estadual} 
-                  onChange={e => setFormData({...formData, inscricao_estadual: e.target.value})} 
-                />
-                <p className="text-[11px] text-slate-400 mt-1">Utilizada na validação de titularidade dos XMLs de vendas</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Razão Social</label>
-                <input required type="text" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                  placeholder="Nome oficial da empresa"
-                  value={formData.razao_social} onChange={e => setFormData({...formData, razao_social: e.target.value})} />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Nome Fantasia</label>
-                <input type="text" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                  placeholder="Nome comercial"
-                  value={formData.nome_fantasia} onChange={e => setFormData({...formData, nome_fantasia: e.target.value})} />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">WhatsApp (Cobranças / Notificações)</label>
-                <input type="text" placeholder="5511999999999" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                  value={formData.whatsapp} onChange={e => setFormData({...formData, whatsapp: e.target.value})} />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Nome do Sistema Monitorado (ERP/PDV)</label>
-                <SistemaAutocompleteInput
-                  required
-                  id="sistema-novo"
-                  value={formData.nome_sistema_utilizado}
-                  onChange={val => setFormData({ ...formData, nome_sistema_utilizado: val })}
-                  sistemasDisponiveis={sistemasSugeridos}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Vincular a uma Contabilidade</label>
-                <select className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                  value={formData.contabilidade_id} onChange={e => setFormData({...formData, contabilidade_id: e.target.value})}>
-                  <option value="">Nenhuma</option>
-                  {contabilidades.map(c => (
-                    <option key={c.id} value={c.id}>{c.razao_social}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Regime Tributário (CRT)</label>
-                <select 
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-medium"
-                  value={formData.regime_tributario} 
-                  onChange={e => setFormData({...formData, regime_tributario: e.target.value})}
-                >
-                  <option value="simples_nacional">Simples Nacional (CRT 1)</option>
-                  <option value="simples_nacional_excesso">Simples Nacional - Excesso de Sublimite (CRT 2)</option>
-                  <option value="lucro_presumido">Regime Normal - Lucro Presumido (CRT 3)</option>
-                  <option value="lucro_real">Regime Normal - Lucro Real (CRT 3)</option>
-                  <option value="mei">MEI - Microempreendedor Individual (CRT 4)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Ramo de Atividade</label>
-                <input 
-                  type="text" 
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                  placeholder="Ex: Supermercado, Depósito, Farmácia"
-                  value={formData.ramo_atividade} 
-                  onChange={e => setFormData({...formData, ramo_atividade: e.target.value})} 
-                />
-              </div>
-
-              <div className="md:col-span-2 p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-start sm:items-center justify-between gap-4">
-                <div className="space-y-0.5">
-                  <label className="text-sm font-bold text-slate-900 flex items-center gap-2 cursor-pointer">
-                    Associação / Cooperativa
-                  </label>
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    Marque esta opção caso a empresa seja uma <strong>Associação, Cooperativa ou Entidade</strong> onde notas fiscais de entrada possam ser emitidas pela própria organização ou associados (mesmo CNPJ). Em empresas convencionais (desmarcado), notas de entrada devem ter obrigatoriamente emitentes terceiros (fornecedores) e emitentes iguais à própria empresa são tratados como divergentes.
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                  <input 
-                    type="checkbox" 
-                    checked={formData.is_associacao} 
-                    onChange={e => setFormData({ ...formData, is_associacao: e.target.checked })} 
-                    className="sr-only peer" 
-                  />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
-              </div>
-
-              {userRole === 'admin' && (
-                <>
+              {clienteExistente ? (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-800 flex items-start gap-2 mt-2 font-medium animate-in fade-in">
+                  <ShieldAlert size={16} className="text-red-600 shrink-0 mt-0.5" />
                   <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Valor da Mensalidade (R$)</label>
-                    <input 
-                      type="number" 
-                      step="0.01"
-                      min="0"
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-semibold"
-                      placeholder="0.00"
-                      value={formData.valor_mensalidade} 
-                      onChange={e => setFormData({...formData, valor_mensalidade: e.target.value})} 
-                    />
+                    <strong className="block text-red-900 font-bold">Cadastro Repetido Bloqueado</strong>
+                    Já existe um cliente cadastrado com este documento:
+                    <span className="font-bold text-red-950 block mt-0.5">
+                      {clienteExistente.nome_fantasia || clienteExistente.razao_social} ({clienteExistente.cnpj})
+                    </span>
                   </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Custo do Cliente (R$)</label>
-                    <input 
-                      type="number" 
-                      step="0.01"
-                      min="0"
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500 bg-slate-50/50 font-semibold text-rose-700"
-                      placeholder="0.00"
-                      value={formData.custo} 
-                      onChange={e => setFormData({...formData, custo: e.target.value})} 
-                    />
-                    <div className="flex items-center justify-between text-[11px] mt-1">
-                      <span className="text-slate-500">Custo operacional / licença</span>
-                      {(formData.valor_mensalidade || formData.custo) && (
-                        <span className="font-semibold text-blue-700 font-mono">
-                          Lucro: {((parseFloat(String(formData.valor_mensalidade || 0).replace(',', '.')) || 0) - (parseFloat(String(formData.custo || 0).replace(',', '.')) || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                    <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Dia de Vencimento da Fatura</label>
-                    <input 
-                      type="number" 
-                      min="1" 
-                      max="31"
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-semibold"
-                      placeholder="10"
-                      value={formData.dia_vencimento} 
-                      onChange={e => setFormData({...formData, dia_vencimento: e.target.value})} 
-                    />
-                    <p className="text-[11px] text-slate-500 mt-1">Gera fatura automática todo dia 01</p>
-                  </div>
-
-                                    {/* Seção Destacada: Parâmetros Individuais de Cobrança e Juros */}
-                  <div className="col-span-1 md:col-span-2 lg:col-span-3 p-5 bg-gradient-to-br from-emerald-50/70 via-teal-50/40 to-slate-50 border-2 border-emerald-300 rounded-2xl shadow-xs space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-emerald-200">
-                      <div className="flex items-center gap-2.5">
-                        <div className="p-2 bg-emerald-600 text-white rounded-xl shadow-xs">
-                          <DollarSign size={20} />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-sm font-bold text-slate-900">
-                              Parâmetros de Cobrança, Juros e Carência (Desta Empresa)
-                            </h4>
-                            <span className="text-[10px] uppercase font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md border border-emerald-200">
-                              Prioridade Máxima
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-600 mt-0.5">
-                            Se preenchidos, os valores deste cliente anulam e substituem as taxas globais. Se deixados em branco, assumem automaticamente o padrão global do sistema.
-                          </p>
-                        </div>
-                      </div>
-                      <Link 
-                        href="/dashboard/configuracoes-portal?aba=cobranca" 
-                        target="_blank"
-                        className="text-xs font-bold text-emerald-700 hover:text-emerald-900 bg-white border border-emerald-200 px-3 py-1.5 rounded-lg shadow-2xs hover:bg-emerald-50 transition shrink-0 inline-flex items-center gap-1"
-                      >
-                        Ver Regras Globais ↗
-                      </Link>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Multa por Atraso (%)
-                        </label>
-                        <div className="relative">
-                          <input 
-                            type="number" 
-                            step="0.01" 
-                            min="0"
-                            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-bold text-slate-900 pr-10 text-sm"
-                            placeholder="Padrão Global: 2.00%"
-                            value={formData.multa_atraso_percentual} 
-                            onChange={e => setFormData({...formData, multa_atraso_percentual: e.target.value})} 
-                          />
-                          <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">%</span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 mt-1">Deixe em branco para usar a regra global (2%)</p>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Juros de Mora Mensal (%)
-                        </label>
-                        <div className="relative">
-                          <input 
-                            type="number" 
-                            step="0.01" 
-                            min="0"
-                            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-bold text-slate-900 pr-16 text-sm"
-                            placeholder="Padrão Global: 1.00%"
-                            value={formData.juros_mora_mensal_percentual} 
-                            onChange={e => setFormData({...formData, juros_mora_mensal_percentual: e.target.value})} 
-                          />
-                          <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">% a.m.</span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 mt-1">Deixe em branco para usar a regra global (1% a.m.)</p>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Dias de Carência / Tolerância
-                        </label>
-                        <div className="relative">
-                          <input 
-                            type="number" 
-                            min="0"
-                            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white font-bold text-slate-900 pr-14 text-sm"
-                            placeholder="Padrão Global: 3 dias"
-                            value={formData.dias_carencia} 
-                            onChange={e => setFormData({...formData, dias_carencia: e.target.value})} 
-                          />
-                          <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">dias</span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 mt-1">Deixe em branco para usar carência global (3 dias)</p>
-                      </div>
-                    </div>
-                  </div>
-                </>
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-400 mt-1">Aceita CNPJ de Pessoa Jurídica ou CPF de Pessoa Física (Cadastros repetidos são bloqueados)</p>
               )}
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Status no Sistema</label>
-                <select 
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-medium"
-                  value={formData.is_ativo ? 'true' : 'false'} 
-                  onChange={e => setFormData({...formData, is_ativo: e.target.value === 'true'})}
-                >
-                  <option value="true">Ativo (Acesso Liberado)</option>
-                  <option value="false">Inativo / Bloqueado</option>
-                </select>
-                <p className="text-[11px] text-slate-500 mt-1">Ativa/desativa cliente e faturamento</p>
-              </div>
-
-              <div className="md:col-span-3">
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Logomarca da Empresa</label>
-                <input type="file" accept="image/*" className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 text-sm"
-                  onChange={e => { if (e.target.files && e.target.files.length > 0) setLogoFile(e.target.files[0]) }} />
-              </div>
-            </div>
-          </div>
-
-          {/* Endereço & Localização da Empresa */}
-          <div className="pt-4 border-t border-slate-100">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 mb-4 border-b border-slate-100 gap-2">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <MapPin className="text-blue-600" size={20} />
-                Endereço & Localização da Empresa
-              </h3>
-              <span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full font-medium">
-                Preenchido automaticamente pelo CNPJ ou pelo CEP (ViaCEP)
-              </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {/* CEP */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">CEP</label>
-                <div className="flex gap-2">
-                  <input 
-                    type="text" 
-                    placeholder="00000-000"
-                    maxLength={9}
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-mono"
-                    value={formData.cep} 
-                    onChange={e => setFormData({...formData, cep: e.target.value})} 
-                    onBlur={() => {
-                      const raw = (formData.cep || '').replace(/\D/g, '')
-                      if (raw.length === 8 && !formData.logradouro) {
-                        handleConsultarCep()
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleConsultarCep}
-                    disabled={searchingCep}
-                    title="Buscar endereço pelo CEP no ViaCEP"
-                    className="px-3.5 py-2.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl font-semibold flex items-center justify-center transition border border-blue-200 disabled:opacity-50"
-                  >
-                    <Search size={18} className={searchingCep ? 'animate-spin' : ''} />
-                  </button>
-                </div>
-                <p className="text-[11px] text-slate-400 mt-1">Busca automática nos Correios</p>
-              </div>
-
-              {/* Logradouro / Rua */}
-              <div className="lg:col-span-2">
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Logradouro / Rua / Avenida</label>
-                <input 
-                  type="text" 
-                  placeholder="Ex: Av. Afonso Pena"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                  value={formData.logradouro} 
-                  onChange={e => setFormData({...formData, logradouro: e.target.value})} 
-                />
-              </div>
-
-              {/* Número */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Número</label>
-                <input 
-                  type="text" 
-                  placeholder="Ex: 1500 ou S/N"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                  value={formData.numero} 
-                  onChange={e => setFormData({...formData, numero: e.target.value})} 
-                />
-              </div>
-
-              {/* Complemento */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Complemento</label>
-                <input 
-                  type="text" 
-                  placeholder="Ex: Sala 201, Bloco B"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                  value={formData.complemento} 
-                  onChange={e => setFormData({...formData, complemento: e.target.value})} 
-                />
-              </div>
-
-              {/* Bairro */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Bairro</label>
-                <input 
-                  type="text" 
-                  placeholder="Ex: Centro"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                  value={formData.bairro} 
-                  onChange={e => setFormData({...formData, bairro: e.target.value})} 
-                />
-              </div>
-
-              {/* Cidade */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Cidade</label>
-                <input 
-                  type="text" 
-                  placeholder="Ex: Belo Horizonte"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                  value={formData.cidade} 
-                  onChange={e => setFormData({...formData, cidade: e.target.value})} 
-                />
-              </div>
-
-              {/* UF / Estado */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">UF (Estado)</label>
-                <input 
-                  type="text" 
-                  maxLength={2}
-                  placeholder="Ex: MG"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 uppercase font-semibold"
-                  value={formData.uf} 
-                  onChange={e => setFormData({...formData, uf: e.target.value.toUpperCase()})} 
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Ponto de Partida Fiscal & Competência Inicial */}
-          <div className="pt-4 border-t border-slate-100">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 mb-4 border-b border-slate-100 gap-2">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Calendar className="text-blue-600" size={20} />
-                Ponto de Partida Fiscal & Competência Inicial
-              </h3>
-              <span className="text-xs text-slate-500 font-normal">
-                Define o mês e números iniciais a partir dos quais os XMLs serão enviados ao Portal
-              </span>
+            {/* Inscrição Estadual (IE) */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Inscrição Estadual (IE)</label>
+              <input 
+                type="text" 
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                placeholder="Ex: 151234567 ou ISENTO"
+                value={formData.inscricao_estadual} 
+                onChange={e => setFormData({...formData, inscricao_estadual: e.target.value})} 
+              />
+              <p className="text-[11px] text-slate-400 mt-1">Utilizada na validação de titularidade dos XMLs de vendas</p>
             </div>
 
-            <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-800 mb-1 flex items-center gap-1.5">
-                    <span>Mês / Ano de Início das Atividades</span>
-                    <span className="text-xs text-blue-600 font-bold">*</span>
-                  </label>
-                  <input 
-                    type="month" 
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white font-semibold text-slate-800"
-                    value={formData.data_inicio_monitoramento ? formData.data_inicio_monitoramento.substring(0, 7) : ''} 
-                    onChange={e => {
-                      const val = e.target.value
-                      setFormData({ ...formData, data_inicio_monitoramento: val ? `${val}-01` : '' })
-                    }} 
-                  />
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Ex: <strong>09/2026</strong>. XMLs emitidos antes desta competência serão ignorados pelo Hub.
-                  </p>
-                </div>
+            {/* Regime Tributário (CRT) */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Regime Tributário (CRT)</label>
+              <select 
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-medium"
+                value={formData.regime_tributario} 
+                onChange={e => setFormData({...formData, regime_tributario: e.target.value})}
+              >
+                <option value="simples_nacional">Simples Nacional (CRT 1)</option>
+                <option value="simples_nacional_excesso">Simples Nacional - Excesso de Sublimite (CRT 2)</option>
+                <option value="lucro_presumido">Regime Normal - Lucro Presumido (CRT 3)</option>
+                <option value="lucro_real">Regime Normal - Lucro Real (CRT 3)</option>
+                <option value="mei">MEI - Microempreendedor Individual (CRT 4)</option>
+              </select>
+            </div>
 
-                <div className="md:col-span-2 flex items-center bg-blue-50/70 border border-blue-100 rounded-xl p-3 text-xs text-blue-900 leading-relaxed">
-                  <p>
-                    <strong>💡 Controle Anti-Poluição & Inutilizações:</strong> Configurar a data e número de início impede o envio de notas de anos passados e garante que a auditoria de <strong>inutilizações e numerações faltantes</strong> conte apenas as notas legítimas a partir do início do contrato.
-                  </p>
-                </div>
-              </div>
+            {/* Razão Social */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                Razão Social <span className="text-red-500">*</span>
+              </label>
+              <input 
+                type="text" 
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                placeholder="Nome oficial da empresa"
+                value={formData.razao_social} 
+                onChange={e => setFormData({...formData, razao_social: e.target.value})} 
+              />
+            </div>
 
-              {/* Grid com Numerações Iniciais de Cada Documento Fiscal */}
-              <div className="pt-2 border-t border-slate-200/60">
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                  Primeiro Número de Cada Documento Fiscal (Início da Contagem / Envio)
+            {/* Nome Fantasia */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Nome Fantasia</label>
+              <input 
+                type="text" 
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                placeholder="Nome comercial"
+                value={formData.nome_fantasia} 
+                onChange={e => setFormData({...formData, nome_fantasia: e.target.value})} 
+              />
+            </div>
+
+            {/* Ramo de Atividade */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Ramo de Atividade</label>
+              <input 
+                type="text" 
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                placeholder="Ex: Supermercado, Depósito, Farmácia"
+                value={formData.ramo_atividade} 
+                onChange={e => setFormData({...formData, ramo_atividade: e.target.value})} 
+              />
+            </div>
+
+            {/* Nome do Sistema Monitorado (ERP/PDV) */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                Nome do Sistema Monitorado (ERP/PDV) <span className="text-red-500">*</span>
+              </label>
+              <SistemaAutocompleteInput
+                required
+                id="sistema-novo"
+                value={formData.nome_sistema_utilizado}
+                onChange={val => setFormData({ ...formData, nome_sistema_utilizado: val })}
+                sistemasDisponiveis={sistemasSugeridos}
+              />
+            </div>
+
+            {/* Vincular a Contabilidade */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Vincular a uma Contabilidade</label>
+              <select 
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                value={formData.contabilidade_id} 
+                onChange={e => setFormData({...formData, contabilidade_id: e.target.value})}
+              >
+                <option value="">Nenhuma</option>
+                {contabilidades.map(c => (
+                  <option key={c.id} value={c.id}>{c.razao_social}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Status no Sistema */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Status no Sistema</label>
+              <select 
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-medium"
+                value={formData.is_ativo ? 'true' : 'false'} 
+                onChange={e => setFormData({...formData, is_ativo: e.target.value === 'true'})}
+              >
+                <option value="true">Ativo (Acesso Liberado)</option>
+                <option value="false">Inativo / Bloqueado</option>
+              </select>
+              <p className="text-[11px] text-slate-500 mt-1">Ativa/desativa cliente e faturamento</p>
+            </div>
+
+            {/* Associação / Cooperativa toggle */}
+            <div className="md:col-span-2 lg:col-span-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-start sm:items-center justify-between gap-4">
+              <div className="space-y-0.5">
+                <label className="text-sm font-bold text-slate-900 flex items-center gap-2 cursor-pointer">
+                  Associação / Cooperativa
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                  {/* NF-e Modelo 55 */}
-                  <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
-                    <span className="text-[11px] font-bold text-blue-700 block mb-1">NF-e (Mod. 55)</span>
-                    <input 
-                      type="number" 
-                      min={1}
-                      placeholder="Ex: 1"
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold text-slate-900 text-sm"
-                      value={formData.numero_inicial_nfe}
-                      onChange={e => setFormData({ ...formData, numero_inicial_nfe: parseInt(e.target.value) || 1 })}
-                    />
-                    <span className="text-[10px] text-slate-400 mt-0.5 block">Nota Fiscal Eletrônica</span>
-                  </div>
-
-                  {/* NFC-e Modelo 65 */}
-                  <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
-                    <span className="text-[11px] font-bold text-emerald-700 block mb-1">NFC-e (Mod. 65)</span>
-                    <input 
-                      type="number" 
-                      min={1}
-                      placeholder="Ex: 1"
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold text-slate-900 text-sm"
-                      value={formData.numero_inicial_nfce}
-                      onChange={e => setFormData({ ...formData, numero_inicial_nfce: parseInt(e.target.value) || 1 })}
-                    />
-                    <span className="text-[10px] text-slate-400 mt-0.5 block">Cupom Fiscal / Varejo</span>
-                  </div>
-
-                  {/* NFS-e Serviço */}
-                  <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
-                    <span className="text-[11px] font-bold text-indigo-700 block mb-1">NFS-e (Serviço)</span>
-                    <input 
-                      type="number" 
-                      min={1}
-                      placeholder="Ex: 1"
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold text-slate-900 text-sm"
-                      value={formData.numero_inicial_nfse}
-                      onChange={e => setFormData({ ...formData, numero_inicial_nfse: parseInt(e.target.value) || 1 })}
-                    />
-                    <span className="text-[10px] text-slate-400 mt-0.5 block">Nota Fiscal de Serviços</span>
-                  </div>
-
-                  {/* CT-e Modelo 57 */}
-                  <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
-                    <span className="text-[11px] font-bold text-amber-700 block mb-1">CT-e (Mod. 57)</span>
-                    <input 
-                      type="number" 
-                      min={1}
-                      placeholder="Ex: 1"
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold text-slate-900 text-sm"
-                      value={formData.numero_inicial_cte}
-                      onChange={e => setFormData({ ...formData, numero_inicial_cte: parseInt(e.target.value) || 1 })}
-                    />
-                    <span className="text-[10px] text-slate-400 mt-0.5 block">Transporte / Cargas</span>
-                  </div>
-
-                  {/* MDF-e Modelo 58 */}
-                  <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
-                    <span className="text-[11px] font-bold text-purple-700 block mb-1">MDF-e (Mod. 58)</span>
-                    <input 
-                      type="number" 
-                      min={1}
-                      placeholder="Ex: 1"
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold text-slate-900 text-sm"
-                      value={formData.numero_inicial_mdfe}
-                      onChange={e => setFormData({ ...formData, numero_inicial_mdfe: parseInt(e.target.value) || 1 })}
-                    />
-                    <span className="text-[10px] text-slate-400 mt-0.5 block">Manifesto de Carga</span>
-                  </div>
-                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Marque esta opção caso a empresa seja uma <strong>Associação, Cooperativa ou Entidade</strong> onde notas fiscais de entrada possam ser emitidas pela própria organização ou associados (mesmo CNPJ). Em empresas convencionais (desmarcado), notas de entrada devem ter obrigatoriamente emitentes terceiros (fornecedores) e emitentes iguais à própria empresa são tratados como divergentes.
+                </p>
               </div>
+              <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                <input 
+                  type="checkbox" 
+                  checked={formData.is_associacao} 
+                  onChange={e => setFormData({ ...formData, is_associacao: e.target.checked })} 
+                  className="sr-only peer" 
+                />
+                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+
+            {/* Logomarca da Empresa */}
+            <div className="md:col-span-2 lg:col-span-3">
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Logomarca da Empresa</label>
+              <input 
+                type="file" 
+                accept="image/*" 
+                className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 text-sm"
+                onChange={e => { if (e.target.files && e.target.files.length > 0) setLogoFile(e.target.files[0]) }} 
+              />
             </div>
           </div>
+        </FormAccordionCard>
 
-          {/* Cadastro Fiscal & Responsável */}
-          <div className="pt-4 border-t border-slate-100">
-            <h3 className="text-base font-bold text-slate-900 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
-              <ShieldCheck className="text-blue-600" size={20} />
-              Cadastro Fiscal & Contato Responsável
-            </h3>
+        {/* CARD 2: CONTATO & RESPONSÁVEL FISCAL */}
+        <FormAccordionCard
+          id="contato"
+          title="Contatos & Responsável Fiscal"
+          subtitle="WhatsApp para cobranças/alertas, nome do responsável, CPF e e-mail fiscal"
+          icon={<Phone size={22} />}
+          iconBgColor="bg-emerald-50 text-emerald-600 border border-emerald-100"
+          isOpen={openCards.contato}
+          onToggle={() => toggleCard('contato')}
+          badge={
+            formData.whatsapp || formData.email_fiscal ? (
+              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                {formData.whatsapp || formData.email_fiscal}
+              </span>
+            ) : (
+              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-normal text-slate-400 bg-slate-100">
+                Opcional
+              </span>
+            )
+          }
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">WhatsApp (Cobranças / Notificações)</label>
+              <input 
+                type="text" 
+                placeholder="5511999999999" 
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                value={formData.whatsapp} 
+                onChange={e => setFormData({...formData, whatsapp: e.target.value})} 
+              />
+              <p className="text-[11px] text-slate-400 mt-1">Usado para lembretes automáticos de fatura e certificado</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Nome do Contato / Responsável</label>
+              <input 
+                type="text" 
+                placeholder="Ex: João Silva" 
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                value={formData.nome_contato} 
+                onChange={e => setFormData({...formData, nome_contato: e.target.value})} 
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">CPF do Responsável</label>
+              <input 
+                type="text" 
+                placeholder="000.000.000-00" 
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                value={formData.cpf_contato} 
+                onChange={e => setFormData({...formData, cpf_contato: e.target.value})} 
+              />
+            </div>
+
+            <div className="md:col-span-2 lg:col-span-3">
+              <label className="block text-sm font-semibold text-slate-700 mb-1">E-mail Fiscal (para envio de guias e relatórios)</label>
+              <input 
+                type="email" 
+                placeholder="fiscal@empresa.com.br" 
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                value={formData.email_fiscal} 
+                onChange={e => setFormData({...formData, email_fiscal: e.target.value})} 
+              />
+            </div>
+          </div>
+        </FormAccordionCard>
+
+        {/* CARD 3: ENDEREÇO & LOCALIZAÇÃO */}
+        <FormAccordionCard
+          id="endereco"
+          title="Endereço & Localização"
+          subtitle="Logradouro, número, complemento, bairro, cidade e UF com busca ViaCEP"
+          icon={<MapPin size={22} />}
+          iconBgColor="bg-indigo-50 text-indigo-600 border border-indigo-100"
+          isOpen={openCards.endereco}
+          onToggle={() => toggleCard('endereco')}
+          badge={
+            formData.cidade && formData.uf ? (
+              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+                {formData.cidade} / {formData.uf}
+              </span>
+            ) : (
+              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-normal text-slate-400 bg-slate-100">
+                ViaCEP
+              </span>
+            )
+          }
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* CEP */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">CEP</label>
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  placeholder="00000-000"
+                  maxLength={9}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-mono"
+                  value={formData.cep} 
+                  onChange={e => setFormData({...formData, cep: e.target.value})} 
+                  onBlur={() => {
+                    const raw = (formData.cep || '').replace(/\D/g, '')
+                    if (raw.length === 8 && !formData.logradouro) {
+                      handleConsultarCep()
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleConsultarCep}
+                  disabled={searchingCep}
+                  title="Buscar endereço pelo CEP no ViaCEP"
+                  className="px-3.5 py-2.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl font-semibold flex items-center justify-center transition border border-blue-200 disabled:opacity-50"
+                >
+                  <Search size={18} className={searchingCep ? 'animate-spin' : ''} />
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">Busca automática nos Correios</p>
+            </div>
+
+            {/* Logradouro / Rua */}
+            <div className="lg:col-span-2">
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Logradouro / Rua / Avenida</label>
+              <input 
+                type="text" 
+                placeholder="Ex: Av. Afonso Pena"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                value={formData.logradouro} 
+                onChange={e => setFormData({...formData, logradouro: e.target.value})} 
+              />
+            </div>
+
+            {/* Número */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Número</label>
+              <input 
+                type="text" 
+                placeholder="Ex: 1500 ou S/N"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                value={formData.numero} 
+                onChange={e => setFormData({...formData, numero: e.target.value})} 
+              />
+            </div>
+
+            {/* Complemento */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Complemento</label>
+              <input 
+                type="text" 
+                placeholder="Ex: Sala 201, Bloco B"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                value={formData.complemento} 
+                onChange={e => setFormData({...formData, complemento: e.target.value})} 
+              />
+            </div>
+
+            {/* Bairro */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Bairro</label>
+              <input 
+                type="text" 
+                placeholder="Ex: Centro"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                value={formData.bairro} 
+                onChange={e => setFormData({...formData, bairro: e.target.value})} 
+              />
+            </div>
+
+            {/* Cidade */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Cidade</label>
+              <input 
+                type="text" 
+                placeholder="Ex: Belo Horizonte"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                value={formData.cidade} 
+                onChange={e => setFormData({...formData, cidade: e.target.value})} 
+              />
+            </div>
+
+            {/* UF / Estado */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">UF (Estado)</label>
+              <input 
+                type="text" 
+                maxLength={2}
+                placeholder="Ex: MG"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 uppercase font-semibold"
+                value={formData.uf} 
+                onChange={e => setFormData({...formData, uf: e.target.value.toUpperCase()})} 
+              />
+            </div>
+          </div>
+        </FormAccordionCard>
+
+        {/* CARD 4: PONTO DE PARTIDA FISCAL & NUMERAÇÃO INICIAL */}
+        <FormAccordionCard
+          id="fiscal"
+          title="Ponto de Partida Fiscal & Numeração Inicial"
+          subtitle="Mês/ano de início do monitoramento e primeiro número de cada documento fiscal"
+          icon={<Calendar size={22} />}
+          iconBgColor="bg-cyan-50 text-cyan-600 border border-cyan-100"
+          isOpen={openCards.fiscal}
+          onToggle={() => toggleCard('fiscal')}
+          badge={
+            formData.data_inicio_monitoramento ? (
+              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-cyan-50 text-cyan-700 border border-cyan-200 font-mono">
+                Início: {formData.data_inicio_monitoramento.substring(0, 7)}
+              </span>
+            ) : (
+              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-normal text-slate-400 bg-slate-100">
+                Recomendado
+              </span>
+            )
+          }
+        >
+          <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Nome do Contato / Responsável</label>
-                <input type="text" placeholder="Ex: João Silva" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                  value={formData.nome_contato} onChange={e => setFormData({...formData, nome_contato: e.target.value})} />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">CPF do Responsável</label>
-                <input type="text" placeholder="000.000.000-00" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                  value={formData.cpf_contato} onChange={e => setFormData({...formData, cpf_contato: e.target.value})} />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">E-mail Fiscal (para envio de guias e relatórios)</label>
-                <input type="email" placeholder="fiscal@empresa.com.br" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                  value={formData.email_fiscal} onChange={e => setFormData({...formData, email_fiscal: e.target.value})} />
-              </div>
-            </div>
-          </div>
-
-          {/* Plano Auditoria Tributária & Inteligência Artificial (Google Gemini) */}
-          <div className="pt-4 border-t border-slate-100">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 mb-4 border-b border-slate-100 gap-2">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Sparkles className="text-amber-500" size={20} />
-                Plano Auditoria Tributária & IA (Google Gemini)
-              </h3>
-              <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200/80 px-2.5 py-1 rounded-full font-semibold">
-                Módulo Opcional • Configurável pelo Admin
-              </span>
-            </div>
-
-            <div className="p-5 bg-gradient-to-br from-slate-50 to-amber-50/30 border border-slate-200 rounded-2xl space-y-4">
-              {/* Toggle de Ativação do Plano */}
-              <div className="flex items-start sm:items-center justify-between gap-4">
-                <div className="space-y-0.5">
-                  <label className="text-sm font-bold text-slate-900 flex items-center gap-2 cursor-pointer">
-                    Habilitar Plano de Auditoria Tributária com IA para este Cliente
-                  </label>
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    Libera os módulos de Corretor e Auditor Tributário com Inteligência Artificial para conferência automática de NCMs, CSTs, CESTs, produtos monofásicos e enquadramento da Reforma Tributária.
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                  <input 
-                    type="checkbox" 
-                    checked={formData.plano_auditoria_tributaria} 
-                    onChange={e => setFormData({ ...formData, plano_auditoria_tributaria: e.target.checked })} 
-                    className="sr-only peer" 
-                  />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                <label className="block text-sm font-semibold text-slate-800 mb-1 flex items-center gap-1.5">
+                  <span>Mês / Ano de Início das Atividades</span>
+                  <span className="text-xs text-blue-600 font-bold">*</span>
                 </label>
+                <input 
+                  type="month" 
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white font-semibold text-slate-800"
+                  value={formData.data_inicio_monitoramento ? formData.data_inicio_monitoramento.substring(0, 7) : ''} 
+                  onChange={e => {
+                    const val = e.target.value
+                    setFormData({ ...formData, data_inicio_monitoramento: val ? `${val}-01` : '' })
+                  }} 
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Ex: <strong>09/2026</strong>. XMLs emitidos antes desta competência serão ignorados pelo Hub.
+                </p>
               </div>
 
-              {/* Campo dinâmico do API Token do Gemini (exibido apenas quando o plano estiver ativo) */}
-              {formData.plano_auditoria_tributaria && (
-                <div className="pt-4 border-t border-amber-100/80 space-y-4 animate-in fade-in duration-200">
-                  <div className="p-3.5 bg-amber-50 border border-amber-200/80 rounded-xl text-xs text-amber-950 flex items-start gap-2.5">
-                    <Sparkles size={16} className="text-amber-600 shrink-0 mt-0.5" />
-                    <div className="leading-relaxed">
-                      <span className="font-bold text-amber-900 block mb-0.5">Token de API Próprio do Cliente (Google AI Studio):</span>
-                      <p className="text-amber-900/90 text-[11px]">
-                        Insira abaixo a <strong>Chave de API do Google Gemini</strong> do cliente. As consultas tributárias e auditorias fiscais de XMLs desta empresa utilizarão a cota do cliente, sem consumir o saldo de API da sua plataforma.
-                      </p>
-                    </div>
-                  </div>
+              <div className="md:col-span-2 flex items-center bg-blue-50/70 border border-blue-100 rounded-xl p-3.5 text-xs text-blue-900 leading-relaxed">
+                <p>
+                  <strong>💡 Controle Anti-Poluição & Inutilizações:</strong> Configurar a data e número de início impede o envio de notas de anos passados e garante que a auditoria de <strong>inutilizações e numerações faltantes</strong> conte apenas as notas legítimas a partir do início do contrato.
+                </p>
+              </div>
+            </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                    <div className="md:col-span-8">
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-                          API Token do Google Gemini (Cliente)
-                        </label>
-                        <a
-                          href="https://aistudio.google.com/app/apikey"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1"
-                        >
-                          <span>Obter chave no Google AI Studio</span>
-                          <ExternalLink size={11} />
-                        </a>
-                      </div>
-                      <div className="relative">
-                        <input 
-                          type={showGeminiKey ? 'text' : 'password'} 
-                          placeholder="AIzaSy... (Chave de API do Google Gemini)" 
-                          className="w-full px-4 py-2.5 pr-11 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white font-mono text-xs text-slate-900 shadow-xs"
-                          value={formData.gemini_api_key} 
-                          onChange={e => setFormData({ ...formData, gemini_api_key: e.target.value })} 
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowGeminiKey(!showGeminiKey)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
-                          title={showGeminiKey ? 'Ocultar token' : 'Ver token'}
-                        >
-                          {showGeminiKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                        </button>
-                      </div>
-                      <p className="text-[11px] text-slate-500 mt-1">
-                        {formData.gemini_api_key ? '✓ Token configurado para esta empresa' : 'Se deixado em branco, utilizará a chave global de IA do sistema.'}
-                      </p>
-                    </div>
-
-                    <div className="md:col-span-4">
-                      <button
-                        type="button"
-                        onClick={handleTestarGemini}
-                        disabled={testingGemini || !formData.gemini_api_key}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-xs"
-                      >
-                        <Sparkles size={14} className={testingGemini ? 'animate-spin' : ''} />
-                        {testingGemini ? 'Testando Conexão...' : 'Testar Token Gemini'}
-                      </button>
-                    </div>
-                  </div>
+            {/* Grid com Numerações Iniciais de Cada Documento Fiscal */}
+            <div className="pt-3 border-t border-slate-200/60">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2.5">
+                Primeiro Número de Cada Documento Fiscal (Início da Contagem / Envio)
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                {/* NF-e Modelo 55 */}
+                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                  <span className="text-[11px] font-bold text-blue-700 block mb-1">NF-e (Mod. 55)</span>
+                  <input 
+                    type="number" 
+                    min={1}
+                    placeholder="Ex: 1"
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold text-slate-900 text-sm"
+                    value={formData.numero_inicial_nfe}
+                    onChange={e => setFormData({ ...formData, numero_inicial_nfe: parseInt(e.target.value) || 1 })}
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Nota Fiscal Eletrônica</span>
                 </div>
-              )}
+
+                {/* NFC-e Modelo 65 */}
+                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                  <span className="text-[11px] font-bold text-emerald-700 block mb-1">NFC-e (Mod. 65)</span>
+                  <input 
+                    type="number" 
+                    min={1}
+                    placeholder="Ex: 1"
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold text-slate-900 text-sm"
+                    value={formData.numero_inicial_nfce}
+                    onChange={e => setFormData({ ...formData, numero_inicial_nfce: parseInt(e.target.value) || 1 })}
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Cupom Fiscal / Varejo</span>
+                </div>
+
+                {/* NFS-e Serviço */}
+                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                  <span className="text-[11px] font-bold text-indigo-700 block mb-1">NFS-e (Serviço)</span>
+                  <input 
+                    type="number" 
+                    min={1}
+                    placeholder="Ex: 1"
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold text-slate-900 text-sm"
+                    value={formData.numero_inicial_nfse}
+                    onChange={e => setFormData({ ...formData, numero_inicial_nfse: parseInt(e.target.value) || 1 })}
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Nota Fiscal de Serviços</span>
+                </div>
+
+                {/* CT-e Modelo 57 */}
+                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                  <span className="text-[11px] font-bold text-amber-700 block mb-1">CT-e (Mod. 57)</span>
+                  <input 
+                    type="number" 
+                    min={1}
+                    placeholder="Ex: 1"
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold text-slate-900 text-sm"
+                    value={formData.numero_inicial_cte}
+                    onChange={e => setFormData({ ...formData, numero_inicial_cte: parseInt(e.target.value) || 1 })}
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Transporte / Cargas</span>
+                </div>
+
+                {/* MDF-e Modelo 58 */}
+                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                  <span className="text-[11px] font-bold text-purple-700 block mb-1">MDF-e (Mod. 58)</span>
+                  <input 
+                    type="number" 
+                    min={1}
+                    placeholder="Ex: 1"
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold text-slate-900 text-sm"
+                    value={formData.numero_inicial_mdfe}
+                    onChange={e => setFormData({ ...formData, numero_inicial_mdfe: parseInt(e.target.value) || 1 })}
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Manifesto de Carga</span>
+                </div>
+              </div>
             </div>
           </div>
+        </FormAccordionCard>
 
-          {/* Certificado Digital A1 */}
-          <div className="pt-4 border-t border-slate-100">
-            <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <FileKey className="text-indigo-600" size={20} />
-                Certificado Digital A1 (.pfx / .p12)
-              </h3>
-              <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full font-medium">
-                Aviso automático via WhatsApp 45 dias antes do vencimento
+        {/* CARD 5: CERTIFICADO DIGITAL A1 */}
+        <FormAccordionCard
+          id="certificado"
+          title="Certificado Digital A1 (.pfx / .p12)"
+          subtitle="Upload de arquivo, senha e auditoria de titularidade e validade"
+          icon={<FileKey size={22} />}
+          iconBgColor="bg-amber-50 text-amber-600 border border-amber-100"
+          isOpen={openCards.certificado}
+          onToggle={() => toggleCard('certificado')}
+          badge={
+            certInfo ? (
+              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                ✓ Válido até {certInfo.validade}
               </span>
+            ) : formData.certificado_validade ? (
+              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                Vence em {formData.certificado_validade}
+              </span>
+            ) : (
+              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-normal text-slate-400 bg-slate-100">
+                Opcional
+              </span>
+            )
+          }
+        >
+          <div className="space-y-4">
+            <div className="p-3 bg-amber-50/60 border border-amber-200/80 rounded-xl text-xs text-amber-800 flex items-center justify-between">
+              <span>🔔 <strong>Aviso Automático:</strong> O cliente receberá lembretes via WhatsApp 45 dias antes do vencimento do Certificado.</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1357,7 +1361,7 @@ export default function NovoClientePage() {
 
               {/* Informações extraídas do certificado digital */}
               {certInfo && (
-                <div className="md:col-span-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-emerald-950">
+                <div className="md:col-span-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-emerald-950 animate-in fade-in">
                   <div className="space-y-1 text-xs">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-emerald-900">Titular:</span>
@@ -1382,59 +1386,367 @@ export default function NovoClientePage() {
 
               {/* Mensagem de Erro de Senha */}
               {certError && (
-                <div className="md:col-span-3 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-medium">
+                <div className="md:col-span-3 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-medium animate-in fade-in">
                   ⚠️ {certError}
                 </div>
               )}
             </div>
           </div>
+        </FormAccordionCard>
 
-          <div className="pt-4 border-t border-slate-100">
-            <h3 className="text-base font-bold text-slate-900 mb-4 pb-2 border-b border-slate-100">
-              Acesso ao Portal (Login)
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">E-mail de Login</label>
-                <input type="email" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                  placeholder="cliente@empresa.com"
-                  value={formData.login_email} onChange={e => setFormData({...formData, login_email: e.target.value})} />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Senha de Login</label>
-                <div className="relative">
+        {/* CARD 6: FATURAMENTO & PARÂMETROS DE COBRANÇA (ADMIN) */}
+        {userRole === 'admin' && (
+          <FormAccordionCard
+            id="cobranca"
+            title="Faturamento & Parâmetros de Cobrança"
+            subtitle="Mensalidade, custo operacional, dia de vencimento e regras de juros/multa/carência"
+            icon={<DollarSign size={22} />}
+            iconBgColor="bg-teal-50 text-teal-600 border border-teal-100"
+            isOpen={openCards.cobranca}
+            onToggle={() => toggleCard('cobranca')}
+            badge={
+              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+                {formData.valor_mensalidade ? `R$ ${formData.valor_mensalidade}/mês` : 'R$ 0,00'} • Dia {formData.dia_vencimento || 10}
+              </span>
+            }
+          >
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Valor da Mensalidade (R$)</label>
                   <input 
-                    type={showPassword ? 'text' : 'password'} 
-                    placeholder="Mínimo 6 caracteres" 
-                    className="w-full px-4 py-2.5 pr-11 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                    value={formData.login_senha} 
-                    onChange={e => setFormData({...formData, login_senha: e.target.value})} 
+                    type="number" 
+                    step="0.01" 
+                    min="0"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-semibold"
+                    placeholder="0.00"
+                    value={formData.valor_mensalidade} 
+                    onChange={e => setFormData({...formData, valor_mensalidade: e.target.value})} 
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
-                    title={showPassword ? 'Ocultar senha' : 'Ver senha'}
+                  <p className="text-[11px] text-slate-500 mt-1">Valor cobrado mensalmente do cliente</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Custo do Cliente (R$)</label>
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    min="0"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500 bg-slate-50/50 font-semibold text-rose-700"
+                    placeholder="0.00"
+                    value={formData.custo} 
+                    onChange={e => setFormData({...formData, custo: e.target.value})} 
+                  />
+                  <div className="flex items-center justify-between text-[11px] mt-1">
+                    <span className="text-slate-500">Custo operacional</span>
+                    {(formData.valor_mensalidade || formData.custo) && (
+                      <span className="font-semibold text-blue-700 font-mono">
+                        Lucro: {((parseFloat(String(formData.valor_mensalidade || 0).replace(',', '.')) || 0) - (parseFloat(String(formData.custo || 0).replace(',', '.')) || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Dia de Vencimento da Fatura</label>
+                  <input 
+                    type="number" 
+                    min="1" 
+                    max="31"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-semibold"
+                    placeholder="10"
+                    value={formData.dia_vencimento} 
+                    onChange={e => setFormData({...formData, dia_vencimento: e.target.value})} 
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">Gera fatura automática todo dia 01</p>
+                </div>
+              </div>
+
+              {/* Seção Destacada: Parâmetros Individuais de Cobrança e Juros */}
+              <div className="p-5 bg-gradient-to-br from-emerald-50/70 via-teal-50/40 to-slate-50 border-2 border-emerald-300 rounded-2xl shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-emerald-200">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-emerald-600 text-white rounded-xl shadow-xs">
+                      <DollarSign size={20} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-bold text-slate-900">
+                          Parâmetros de Cobrança, Juros e Carência (Desta Empresa)
+                        </h4>
+                        <span className="text-[10px] uppercase font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md border border-emerald-200">
+                          Prioridade Máxima
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 mt-0.5">
+                        Se preenchidos, os valores deste cliente anulam e substituem as taxas globais. Se deixados em branco, assumem automaticamente o padrão global do sistema.
+                      </p>
+                    </div>
+                  </div>
+                  <Link 
+                    href="/dashboard/configuracoes-portal?aba=cobranca" 
+                    target="_blank"
+                    className="text-xs font-bold text-emerald-700 hover:text-emerald-900 bg-white border border-emerald-200 px-3 py-1.5 rounded-lg shadow-2xs hover:bg-emerald-50 transition shrink-0 inline-flex items-center gap-1"
                   >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
+                    Ver Regras Globais ↗
+                  </Link>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Multa por Atraso (%)
+                    </label>
+                    <div className="relative">
+                      <input 
+                        type="number" 
+                        step="0.01" 
+                        min="0"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-bold text-slate-900 pr-10 text-sm"
+                        placeholder="Padrão Global: 2.00%"
+                        value={formData.multa_atraso_percentual} 
+                        onChange={e => setFormData({...formData, multa_atraso_percentual: e.target.value})} 
+                      />
+                      <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">%</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">Deixe em branco para usar a regra global (2%)</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Juros de Mora Mensal (%)
+                    </label>
+                    <div className="relative">
+                      <input 
+                        type="number" 
+                        step="0.01" 
+                        min="0"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-bold text-slate-900 pr-16 text-sm"
+                        placeholder="Padrão Global: 1.00%"
+                        value={formData.juros_mora_mensal_percentual} 
+                        onChange={e => setFormData({...formData, juros_mora_mensal_percentual: e.target.value})} 
+                      />
+                      <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">% a.m.</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">Deixe em branco para usar a regra global (1% a.m.)</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Dias de Carência / Tolerância
+                    </label>
+                    <div className="relative">
+                      <input 
+                        type="number" 
+                        min="0"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white font-bold text-slate-900 pr-14 text-sm"
+                        placeholder="Padrão Global: 3 dias"
+                        value={formData.dias_carencia} 
+                        onChange={e => setFormData({...formData, dias_carencia: e.target.value})} 
+                      />
+                      <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">dias</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">Deixe em branco para usar carência global (3 dias)</p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          </FormAccordionCard>
+        )}
 
-          <div className="pt-6 border-t border-slate-100 flex justify-end">
+        {/* CARD 7: PLANO AUDITORIA TRIBUTÁRIA COM IA (GOOGLE GEMINI) */}
+        <FormAccordionCard
+          id="ia"
+          title="Auditoria Tributária com IA (Google Gemini)"
+          subtitle="Habilitar IA tributária própria com chave de API do cliente (Google AI Studio)"
+          icon={<Sparkles size={22} />}
+          iconBgColor="bg-violet-50 text-violet-600 border border-violet-100"
+          isOpen={openCards.ia}
+          onToggle={() => toggleCard('ia')}
+          badge={
+            formData.plano_auditoria_tributaria ? (
+              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                ✓ IA Ativada
+              </span>
+            ) : (
+              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-normal text-slate-400 bg-slate-100">
+                Desativado
+              </span>
+            )
+          }
+        >
+          <div className="p-5 bg-gradient-to-br from-slate-50 to-amber-50/30 border border-slate-200 rounded-2xl space-y-4">
+            {/* Toggle de Ativação do Plano */}
+            <div className="flex items-start sm:items-center justify-between gap-4">
+              <div className="space-y-0.5">
+                <label className="text-sm font-bold text-slate-900 flex items-center gap-2 cursor-pointer">
+                  Habilitar Plano de Auditoria Tributária com IA para este Cliente
+                </label>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Libera os módulos de Corretor e Auditor Tributário com Inteligência Artificial para conferência automática de NCMs, CSTs, CESTs, produtos monofásicos e enquadramento da Reforma Tributária.
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                <input 
+                  type="checkbox" 
+                  checked={formData.plano_auditoria_tributaria} 
+                  onChange={e => setFormData({ ...formData, plano_auditoria_tributaria: e.target.checked })} 
+                  className="sr-only peer" 
+                />
+                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+              </label>
+            </div>
+
+            {/* Campo dinâmico do API Token do Gemini */}
+            {formData.plano_auditoria_tributaria && (
+              <div className="pt-4 border-t border-amber-100/80 space-y-4 animate-in fade-in duration-200">
+                <div className="p-3.5 bg-amber-50 border border-amber-200/80 rounded-xl text-xs text-amber-950 flex items-start gap-2.5">
+                  <Sparkles size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                  <div className="leading-relaxed">
+                    <span className="font-bold text-amber-900 block mb-0.5">Token de API Próprio do Cliente (Google AI Studio):</span>
+                    <p className="text-amber-900/90 text-[11px]">
+                      Insira abaixo a <strong>Chave de API do Google Gemini</strong> do cliente. As consultas tributárias e auditorias fiscais de XMLs desta empresa utilizarão a cota do cliente, sem consumir o saldo de API da sua plataforma.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                  <div className="md:col-span-8">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                        API Token do Google Gemini (Cliente)
+                      </label>
+                      <a
+                        href="https://aistudio.google.com/app/apikey"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1"
+                      >
+                        <span>Obter chave no Google AI Studio</span>
+                        <ExternalLink size={11} />
+                      </a>
+                    </div>
+                    <div className="relative">
+                      <input 
+                        type={showGeminiKey ? 'text' : 'password'} 
+                        placeholder="AIzaSy... (Chave de API do Google Gemini)" 
+                        className="w-full px-4 py-2.5 pr-11 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white font-mono text-xs text-slate-900 shadow-xs"
+                        value={formData.gemini_api_key} 
+                        onChange={e => setFormData({ ...formData, gemini_api_key: e.target.value })} 
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowGeminiKey(!showGeminiKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                        title={showGeminiKey ? 'Ocultar token' : 'Ver token'}
+                      >
+                        {showGeminiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      {formData.gemini_api_key ? '✓ Token configurado para esta empresa' : 'Se deixado em branco, utilizará a chave global de IA do sistema.'}
+                    </p>
+                  </div>
+
+                  <div className="md:col-span-4">
+                    <button
+                      type="button"
+                      onClick={handleTestarGemini}
+                      disabled={testingGemini || !formData.gemini_api_key}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-xs"
+                    >
+                      <Sparkles size={14} className={testingGemini ? 'animate-spin' : ''} />
+                      {testingGemini ? 'Testando Conexão...' : 'Testar Token Gemini'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </FormAccordionCard>
+
+        {/* CARD 8: ACESSO AO PORTAL (LOGIN) */}
+        <FormAccordionCard
+          id="acesso"
+          title="Acesso ao Portal (Login do Cliente)"
+          subtitle="E-mail e senha de login para a empresa acessar seu painel próprio"
+          icon={<KeyRound size={22} />}
+          iconBgColor="bg-sky-50 text-sky-600 border border-sky-100"
+          isOpen={openCards.acesso}
+          onToggle={() => toggleCard('acesso')}
+          badge={
+            formData.login_email ? (
+              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-sky-50 text-sky-700 border border-sky-200">
+                {formData.login_email}
+              </span>
+            ) : (
+              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-normal text-slate-400 bg-slate-100">
+                Opcional
+              </span>
+            )
+          }
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">E-mail de Login</label>
+              <input 
+                type="email" 
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                placeholder="cliente@empresa.com"
+                value={formData.login_email} 
+                onChange={e => setFormData({...formData, login_email: e.target.value})} 
+              />
+              <p className="text-[11px] text-slate-500 mt-1">E-mail para autenticação no portal do cliente</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Senha de Login</label>
+              <div className="relative">
+                <input 
+                  type={showPassword ? 'text' : 'password'} 
+                  placeholder="Mínimo 6 caracteres" 
+                  className="w-full px-4 py-2.5 pr-11 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                  value={formData.login_senha} 
+                  onChange={e => setFormData({...formData, login_senha: e.target.value})} 
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                  title={showPassword ? 'Ocultar senha' : 'Ver senha'}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1">Senha temporária ou definitiva do cliente</p>
+            </div>
+          </div>
+        </FormAccordionCard>
+
+        {/* Rodapé com Botão Salvar e Cancelar */}
+        <div className="p-4 sm:p-5 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
+          <p className="text-xs text-slate-500">
+            Preencha ao menos a seção <strong>Dados Cadastrais</strong>. Os demais cards são opcionais e podem ser preenchidos a qualquer momento.
+          </p>
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <Link
+              href="/dashboard/clientes"
+              className="w-full sm:w-auto px-5 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl font-semibold text-sm transition text-center"
+            >
+              Cancelar
+            </Link>
             <button 
               type="submit" 
               disabled={loading}
-              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-semibold px-7 py-2.5 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 text-sm disabled:opacity-50"
             >
               <Save size={18} />
               {loading ? 'Cadastrando cliente...' : 'Cadastrar Cliente'}
             </button>
           </div>
-        </form>
-      </div>
+        </div>
+
+      </form>
     </div>
   )
 }
