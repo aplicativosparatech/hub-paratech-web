@@ -56,18 +56,33 @@ MAPA DE FUNCIONALIDADES E TELAS DO HUB PARATECH:
    - Inicia junto com o Windows, monitora as pastas de XMLs locais do PDV/ERP e envia em tempo real para a nuvem.
    - Em caso de inadimplência, recebe a ordem de bloqueio do portal, mas permite Desbloqueio em Confiança configurável.
 
-COMO RESPONDER:
-- Sempre responda em Português do Brasil de forma simpática, clara e objetiva.
-- Use emojis amigáveis no início de tópicos.
-- Quando o usuário perguntar como fazer algo ou onde encontrar uma função, explique passo a passo e SEMPRE ofereça para guiá-lo até a tela com o formato de ação:
-  [ACTION:NAVIGATE|/dashboard/relatorios|👉 Ir para Relatórios Monofásicos]
-  [ACTION:NAVIGATE|/dashboard/faturas|💳 Ver Minhas Faturas]
-  [ACTION:NAVIGATE|/dashboard/distribuicao-dfe|📥 Ir para Distribuição DF-e]
-  [ACTION:NAVIGATE|/dashboard/notas-fiscais|📄 Ir para Notas Fiscais]
-  [ACTION:NAVIGATE|/dashboard/corretor-tributario|⚖️ Ir para Analisador Tributário]
-  [ACTION:NAVIGATE|/dashboard/sugestor-tributario|🤖 Ir para Sugestor Tributário]
-  [ACTION:NAVIGATE|/dashboard/configuracoes-portal?aba=cobranca|⚙️ Ver Regras Globais de Cobrança]
-  [ACTION:WHATSAPP|https://wa.me/5537920007857?text=Ola%20Robotech%20me%20atendeu%20no%20Hub%20e%20gostaria%20de%20falar%20com%20o%20suporte|📲 Falar com Suporte Paratech no WhatsApp]
+DIRETRIZES FUNDAMENTAIS DE ATENDIMENTO E PRECISÃO DO ROBOTECH:
+1. PRIORIDADE MÁXIMA: ENTENDER O PEDIDO E RESPONDER/LISTAR DIRETAMENTE!
+   - Se o usuário pedir para listar algo (ex: "liste para mim", "listar clientes", "quais empresas", "listar faturas", "quais notas"), VOCÊ DEVE RESPONDER LISTANDO DIRETAMENTE OS DADOS NA SUA RESPOSTA, de forma clara, organizada e bonita (em tópicos numerados ou lista estruturada com emojis).
+   - NUNCA se esquive dizendo apenas onde a tela fica ou que a pessoa deve ir em tal menu quando ela pediu para listar os dados!
+   - NUNCA diga a um Administrador ou Contabilidade que seu foco está direcionado a apenas uma empresa se os dados das empresas estiverem disponíveis no contexto ou na sua base. Administrador e Contabilidade gerenciam a carteira inteira!
+
+2. APONTAR O LOCAL NO SISTEMA (AÇÕES E BOTÕES DE NAVEGAÇÃO):
+   - Você SÓ DEVE apontar o local no sistema (com explicações de menu ou o botão [ACTION:NAVIGATE|...]) quando:
+     a) O usuário pedir EXPRESSAMENTE orientações de navegação ou localização (ex: "onde vejo isso?", "como chego lá?", "qual tela?").
+     b) OU quando você REALMENTE NÃO TIVER ACESSO aos dados detalhados solicitados no momento.
+   - Mesmo ao incluir um botão de navegação, a resposta com a informação e os dados solicitados DEVE vir primeiro!
+
+3. RESPEITO AOS PERFIS DE ACESSO:
+   - Administrador (admin): Tem acesso total a todas as empresas, faturas, relatórios e configurações. Sempre responda com visão completa e liste tudo o que ele pedir.
+   - Contabilidade (contabilidade): Tem acesso a todas as empresas vinculadas ao seu escritório contábil.
+   - Cliente (cliente): Tem acesso estrito exclusivamente aos dados da sua própria empresa.
+
+FORMATOS DE AÇÃO DE NAVEGAÇÃO (USE APENAS QUANDO SOLICITADO OU SE NÃO TIVER DADOS DIRETOS):
+- [ACTION:NAVIGATE|/dashboard/clientes|🏢 Ir para Gestão de Clientes]
+- [ACTION:NAVIGATE|/dashboard/relatorios|👉 Ir para Relatórios Monofásicos]
+- [ACTION:NAVIGATE|/dashboard/faturas|💳 Ver Minhas Faturas]
+- [ACTION:NAVIGATE|/dashboard/distribuicao-dfe|📥 Ir para Distribuição DF-e]
+- [ACTION:NAVIGATE|/dashboard/notas-fiscais|📄 Ir para Notas Fiscais]
+- [ACTION:NAVIGATE|/dashboard/corretor-tributario|⚖️ Ir para Analisador Tributário]
+- [ACTION:NAVIGATE|/dashboard/sugestor-tributario|🤖 Ir para Sugestor Tributário]
+- [ACTION:NAVIGATE|/dashboard/configuracoes-portal?aba=cobranca|⚙️ Ver Regras Globais de Cobrança]
+- [ACTION:WHATSAPP|https://wa.me/5537920007857?text=Ola%20Robotech%20me%20atendeu%20no%20Hub%20e%20gostaria%20de%20falar%20com%20o%20suporte|📲 Falar com Suporte Paratech no WhatsApp]
 `;
 
 function normalizeText(str: string): string {
@@ -190,6 +205,28 @@ export async function POST(request: Request) {
       }
     }
 
+    // Identificação inteligente de Pedido de Listagem de Empresas / Clientes
+    const isPedidoListarClientes = (
+      msgNorm === 'liste para mim' ||
+      msgNorm.includes('liste para mim') ||
+      msgNorm.includes('listar clientes') ||
+      msgNorm.includes('liste clientes') ||
+      msgNorm.includes('lista de clientes') ||
+      msgNorm.includes('listar empresas') ||
+      msgNorm.includes('liste as empresas') ||
+      msgNorm.includes('quais empresas') ||
+      msgNorm.includes('quais clientes') ||
+      msgNorm.includes('quais sao os clientes') ||
+      msgNorm.includes('quantos clientes') ||
+      msgNorm.includes('quantas empresas') ||
+      msgNorm.includes('minhas empresas') ||
+      msgNorm.includes('mostrar empresas') ||
+      msgNorm.includes('ver empresas') ||
+      msgNorm.includes('carteira de clientes') ||
+      (msgNorm.startsWith('liste') && !msgNorm.includes('fatura') && !msgNorm.includes('venda') && !msgNorm.includes('nota') && !msgNorm.includes('pix')) ||
+      (msgNorm.startsWith('listar') && !msgNorm.includes('fatura') && !msgNorm.includes('venda') && !msgNorm.includes('nota') && !msgNorm.includes('pix'))
+    );
+
     // Segurança Multi-Tenancy
     let clienteIdConsulta: string | null = null;
     let clienteAlvoInfo: any = null;
@@ -205,8 +242,8 @@ export async function POST(request: Request) {
       }
       clienteIdConsulta = empresaMencionada.id;
       clienteAlvoInfo = empresaMencionada;
-    } else {
-      // Se não mencionou empresa pelo nome, usar a selecionada se autorizada
+    } else if (!isPedidoListarClientes) {
+      // Se não for pedido de listagem de empresas, usar a selecionada se autorizada
       if (context.clienteId && idsAutorizados.has(context.clienteId)) {
         clienteIdConsulta = context.clienteId;
         clienteAlvoInfo = listaGeral.find(c => c.id === context.clienteId);
@@ -219,15 +256,26 @@ export async function POST(request: Request) {
     // 1. Consulta Contextual de Dados no Banco de Dados Supabase (RAG em Tempo Real)
     let dadosContexto = '';
 
-    if (clienteAlvoInfo) {
-      dadosContexto += `\n[EMPRESA IDENTIFICADA PARA ESTA CONSULTA]:\n` +
+    // Empresas disponíveis para este usuário
+    const empresasDisponiveis = listaGeral.filter(c => idsAutorizados.has(c.id));
+
+    if (clienteAlvoInfo && !isPedidoListarClientes) {
+      dadosContexto += `\n[EMPRESA SELECIONADA EM FOCO]:\n` +
         `- Nome Fantasia: ${clienteAlvoInfo.nome_fantasia || clienteAlvoInfo.razao_social}\n` +
         `- Razão Social: ${clienteAlvoInfo.razao_social}\n` +
         `- CNPJ: ${clienteAlvoInfo.cnpj}\n` +
         `- Regime Tributário: ${clienteAlvoInfo.regime_tributario || 'Simples Nacional'}\n` +
         `- Mensalidade Base: R$ ${Number(clienteAlvoInfo.valor_mensalidade || 0).toFixed(2)} (Dia Vencimento: ${clienteAlvoInfo.dia_vencimento || 10})\n`;
+    }
+
+    // Se o usuário pediu listagem de empresas OU se é visão global do Admin / Contabilidade:
+    if (isPedidoListarClientes || (userRole === 'admin' && !clienteAlvoInfo) || (userRole === 'contabilidade' && !clienteAlvoInfo)) {
+      dadosContexto += `\n[LISTAGEM REAL DE TODAS AS EMPRESAS CLIENTES CADASTRADAS NO BANCO DE DADOS (${empresasDisponiveis.length} empresas)]:\n` +
+        empresasDisponiveis.map((c, i) => 
+          `${i + 1}. Nome: ${c.nome_fantasia ? `${c.nome_fantasia} (${c.razao_social})` : c.razao_social} | CNPJ: ${c.cnpj || '—'} | Regime: ${c.regime_tributario || 'Simples Nacional'} | Mensalidade: R$ ${Number(c.valor_mensalidade || 0).toFixed(2)} | Status: ${c.is_ativo !== false ? 'Ativo' : 'Inativo'}`
+        ).join('\n') + `\n\nDIRETRIZ OBRIGATÓRIA ROBOTECH: O usuário pediu para listar ou está em visão geral. VOCÊ DEVE LISTAR DIRETAMENTE na resposta cada uma das empresas acima com seus respectivos nomes e CNPJs de forma organizada, simpática e legível. NUNCA diga que não consegue exibir e NUNCA responda dizendo apenas onde clicar no menu!\n`;
     } else if (userRole === 'admin') {
-      dadosContexto += `\n[CONSULTA GLOBAL DO ADMINISTRADOR - CONSOLIDADO GERAL DE TODAS AS EMPRESAS]\n`;
+      dadosContexto += `\n[CONSULTA DO ADMINISTRADOR - Total de Empresas na Carteira: ${empresasDisponiveis.length}]\n`;
     }
 
     // A) Se perguntou sobre FATURA / VENCIMENTO / VALOR / MENSALIDADE / PAGAMENTO
@@ -437,7 +485,23 @@ export async function POST(request: Request) {
     let respostaFallback = '';
     const msgLower = msgNorm;
 
-    if (msgLower.includes('monofasico') || msgLower.includes('relatorio')) {
+    if (isPedidoListarClientes || (msgLower.includes('list') && (msgLower.includes('cliente') || msgLower.includes('empresa') || msgLower.includes('mim')))) {
+      if (empresasDisponiveis.length > 0) {
+        respostaFallback = `### 🏢 Empresas Cadastradas na sua Carteira (${empresasDisponiveis.length} empresas):\n\n` +
+          `Aqui está a lista completa das empresas cadastradas no Hub Paratech:\n\n` +
+          empresasDisponiveis.map((c, i) => 
+            `**${i + 1}. ${c.nome_fantasia ? `${c.nome_fantasia} - ${c.razao_social}` : c.razao_social}**\n` +
+            `• CNPJ: \`${c.cnpj || '—'}\`\n` +
+            `• Regime: ${c.regime_tributario || 'Simples Nacional'} | Mensalidade: R$ ${Number(c.valor_mensalidade || 0).toFixed(2)} | Status: ${c.is_ativo !== false ? '✅ Ativo' : '⚠️ Inativo'}`
+          ).join('\n\n') + `\n\n` +
+          `Deseja consultar o faturamento, notas fiscais ou faturas de alguma dessas empresas?`;
+        return NextResponse.json({
+          resposta: respostaFallback,
+          provedor: 'Base Oficial RoboTech RAG (Listagem de Clientes)',
+          isLiveIa: false
+        });
+      }
+    } else if (msgLower.includes('monofasico') || msgLower.includes('relatorio')) {
       respostaFallback = `### 📊 Como emitir o Relatório de Produtos Monofásicos:\n\n` +
         `O relatório de **PIS/COFINS Monofásicos** é fundamental para empresas do Simples Nacional segregarem receitas e abaterem impostos no PGDAS:\n\n` +
         `1. Acesse o menu **Sistema** > **Relatórios**.\n` +

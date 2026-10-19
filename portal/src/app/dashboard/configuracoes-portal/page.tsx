@@ -45,6 +45,9 @@ export default function ConfiguracoesPortalPage() {
   // Preferência de exibição do Nome Fantasia como título principal
   const [priorizarNomeFantasia, setPriorizarNomeFantasia] = useState(false)
 
+  // Preferência de cliente padrão ao logar (Admin & Contabilidade): 'vazio' | 'ultimo_usado'
+  const [clientePadraoLogin, setClientePadraoLogin] = useState<'vazio' | 'ultimo_usado'>('vazio')
+
   // Configurações Globais de Cobrança, Encargos e Desbloqueio em Confiança
   const [regrasFinanceiras, setRegrasFinanceiras] = useState({
     global_multa_atraso_percentual: 2.0,
@@ -101,6 +104,7 @@ export default function ConfiguracoesPortalPage() {
     setSaving(true)
 
     localStorage.setItem('hub_priorizar_nome_fantasia', String(priorizarNomeFantasia))
+    localStorage.setItem('hub_cliente_padrao_login', clientePadraoLogin)
     localStorage.setItem('hub_permitir_troca_interface', String(permitirTrocaInterface))
     localStorage.setItem('hub_interface_mode_default', modoPadraoInterface)
     if (!permitirTrocaInterface) {
@@ -113,6 +117,7 @@ export default function ConfiguracoesPortalPage() {
       .upsert({
         id: 1,
         priorizar_nome_fantasia: priorizarNomeFantasia,
+        cliente_padrao_login: clientePadraoLogin,
         updated_at: new Date().toISOString()
       })
 
@@ -227,11 +232,14 @@ export default function ConfiguracoesPortalPage() {
         }
       }
 
-      // Carregar preferência salva em localStorage
+      // Carregar preferências salvas em localStorage
       const localPriorizar = localStorage.getItem('hub_priorizar_nome_fantasia') === 'true'
       setPriorizarNomeFantasia(localPriorizar)
 
-      // Se for Admin, carregar valores fictícios do dashboard e preferência global
+      const localPadraoLogin = (localStorage.getItem('hub_cliente_padrao_login') as 'vazio' | 'ultimo_usado') || 'vazio'
+      setClientePadraoLogin(localPadraoLogin)
+
+      // Se for Admin, carregar valores fictícios do dashboard e preferências globais
       if (role === 'admin') {
         const { data: geralData } = await supabase
           .from('configuracoes_portal_geral')
@@ -244,6 +252,11 @@ export default function ConfiguracoesPortalPage() {
             const dbPriorizar = Boolean(geralData.priorizar_nome_fantasia)
             setPriorizarNomeFantasia(dbPriorizar)
             localStorage.setItem('hub_priorizar_nome_fantasia', String(dbPriorizar))
+          }
+          if (geralData.cliente_padrao_login) {
+            const dbPadrao = geralData.cliente_padrao_login as 'vazio' | 'ultimo_usado'
+            setClientePadraoLogin(dbPadrao)
+            localStorage.setItem('hub_cliente_padrao_login', dbPadrao)
           }
           setFicticioData({
             valores_ficticios_ativos: Boolean(geralData.valores_ficticios_ativos),
@@ -1169,6 +1182,92 @@ export default function ConfiguracoesPortalPage() {
                 <CheckCircle2 size={14} /> {priorizarNomeFantasia ? 'Status: Nome Fantasia em Destaque (Título Principal)' : 'Status: Razão Social em Destaque (Padrão)'}
               </span>
             </label>
+          </div>
+        </div>
+
+        {/* Preferência de Empresa Padrão ao Fazer Login (Vazio vs Manter Último Usado) */}
+        <div>
+          <div className="flex items-center gap-3 pb-4 border-b border-slate-100 mb-6">
+            <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
+              <Building2 size={24} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-bold text-slate-900">Empresa Selecionada ao Fazer Login</h3>
+                <span className="text-[10px] uppercase font-bold tracking-wider bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md border border-emerald-200">
+                  Admin & Contabilidade
+                </span>
+              </div>
+              <p className="text-slate-500 text-xs">
+                Defina o comportamento do seletor de empresas ao fazer login no painel administrativo ou contábil.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Opção 1: Vazio / Todas as Empresas (Padrão) */}
+            <div 
+              onClick={() => setClientePadraoLogin('vazio')}
+              className={`p-5 rounded-2xl border-2 transition cursor-pointer flex flex-col justify-between ${
+                clientePadraoLogin === 'vazio' 
+                  ? 'border-blue-600 bg-blue-50/50 shadow-sm' 
+                  : 'border-slate-200 bg-white hover:border-slate-300'
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🌐</span>
+                    <span className="font-bold text-slate-900 text-base">Vazio por Padrão (Recomendado)</span>
+                  </div>
+                  <input 
+                    type="radio" 
+                    name="cliente_padrao_login"
+                    checked={clientePadraoLogin === 'vazio'}
+                    onChange={() => setClientePadraoLogin('vazio')}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Inicia o painel sem nenhuma empresa pré-selecionada (<strong>"Todas as Empresas / Visão Global"</strong>). Ideal para não focar acidentalmente em uma única empresa ao abrir o sistema.
+                </p>
+              </div>
+              <div className="mt-4 pt-3 border-t border-slate-200/60 flex items-center gap-1.5 text-xs font-semibold text-blue-700">
+                <CheckCircle2 size={14} /> Visão consolidada em todas as abas
+              </div>
+            </div>
+
+            {/* Opção 2: Manter Último Cliente Usado */}
+            <div 
+              onClick={() => setClientePadraoLogin('ultimo_usado')}
+              className={`p-5 rounded-2xl border-2 transition cursor-pointer flex flex-col justify-between ${
+                clientePadraoLogin === 'ultimo_usado' 
+                  ? 'border-blue-600 bg-blue-50/50 shadow-sm' 
+                  : 'border-slate-200 bg-white hover:border-slate-300'
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🕒</span>
+                    <span className="font-bold text-slate-900 text-base">Manter Último Cliente Usado</span>
+                  </div>
+                  <input 
+                    type="radio" 
+                    name="cliente_padrao_login"
+                    checked={clientePadraoLogin === 'ultimo_usado'}
+                    onChange={() => setClientePadraoLogin('ultimo_usado')}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Lembra automaticamente a última empresa que você estava gerenciando na sessão anterior e restaura a seleção ao fazer login.
+                </p>
+              </div>
+              <div className="mt-4 pt-3 border-t border-slate-200/60 flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                <CheckCircle2 size={14} /> Continua onde você parou
+              </div>
+            </div>
           </div>
         </div>
 
