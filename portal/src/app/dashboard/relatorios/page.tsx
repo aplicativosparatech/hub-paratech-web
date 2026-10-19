@@ -75,6 +75,7 @@ export default function RelatoriosPage() {
   const [filtroConformidade, setFiltroConformidade] = useState<'todos' | 'divergentes' | 'regulares'>('todos')
   const [modoAgrupamentoMonofasico, setModoAgrupamentoMonofasico] = useState<'cupom' | 'agrupado'>('cupom')
   const [buscaMonofasico, setBuscaMonofasico] = useState<string>('')
+  const [modoMonofasicoCard, setModoMonofasicoCard] = useState<'ncm' | 'cst'>('ncm')
   const [totaisMonofasicos, setTotaisMonofasicos] = useState<{
     total_itens: number
     valor_total: number
@@ -338,12 +339,12 @@ export default function RelatoriosPage() {
     }
   }
 
-  // Dispara carregamento de produtos monofásicos quando a aba correspondente for selecionada ou competência mudar
+  // Dispara carregamento de produtos monofásicos sempre que o cliente ou competência mudar (alimenta tanto o card da aba Faturamento quanto a aba do Auditor)
   useEffect(() => {
-    if (selectedCliente && activeTab === 'monofasicos') {
+    if (selectedCliente) {
       loadProdutosMonofasicos()
     }
-  }, [selectedCliente, selectedMonth, activeTab])
+  }, [selectedCliente, selectedMonth])
 
   // Produtos Monofásicos Filtrados pelo NCM, Conformidade e Termo de Busca
   const produtosMonofasicosFiltrados = useMemo(() => {
@@ -534,6 +535,48 @@ export default function RelatoriosPage() {
     }
 
     toast.success(`Download do relatório monofásico (${formato.toUpperCase()}) concluído!`)
+  }
+
+  // Exportação disparada pelo Card de Monofásicos da aba Faturamento (respeita o toggle NCM vs CST 04/06)
+  const handleExportarCardMonofasicos = (formato: FormatoExportacao) => {
+    const currentCli = clientes.find(c => c.id === selectedCliente) || (userRole === 'cliente' ? clientes[0] : null)
+    if (!currentCli) {
+      toast.error('Selecione uma empresa para exportar.')
+      return
+    }
+
+    const empresaDados: EmpresaDados = {
+      razao_social: currentCli.razao_social || 'Empresa',
+      nome_fantasia: currentCli.nome_fantasia,
+      cnpj: currentCli.cnpj || '',
+      regime_tributario: currentCli.regime_tributario,
+      contabilidade_nome: currentCli.contabilidade_nome
+    }
+
+    if (modoMonofasicoCard === 'ncm') {
+      if (loadingProdutosMonofasicos) {
+        toast.error('Os produtos monofásicos por NCM ainda estão sendo auditados. Aguarde alguns segundos.')
+        return
+      }
+
+      if (produtosMonofasicos.length === 0) {
+        toast.error('Nenhum produto monofásico por NCM foi localizado nesta competência.')
+        return
+      }
+
+      const totalVal = totaisMonofasicos?.valor_total ?? produtosMonofasicos.reduce((a, b) => a + (b.vProd || 0), 0)
+      const payload = {
+        produtos: produtosMonofasicos,
+        filtro_rotulo: 'Todos os Produtos Monofásicos Auditados por NCM (Faturamento Geral)',
+        total_valor: totalVal,
+        cupons_distintos: totaisMonofasicos?.cupons_distintos ?? new Set(produtosMonofasicos.map(i => i.chave || i.cupom_numero)).size
+      }
+      exportarRelatorioIndividual('monofasicos_produtos_analitico', formato, empresaDados, selectedMonth, payload)
+      toast.success(`Relatório de monofásicos por NCM (${formato.toUpperCase()}) baixado com sucesso!`)
+    } else {
+      // Modo CST 04/06 convencional
+      handleExportar('monofasicos', formato)
+    }
   }
 
   // Atalhos para Mês Anterior / Mês Atual
@@ -895,43 +938,101 @@ export default function RelatoriosPage() {
           </div>
         </div>
 
-        {/* Produtos Monofásicos */}
+        {/* Produtos Monofásicos com Seletor NCM x CST 04/06 */}
         <div className="bg-gradient-to-br from-amber-50 to-orange-50/40 p-5 rounded-2xl border border-amber-200 shadow-sm relative overflow-hidden flex flex-col justify-between">
           <div>
-            <div className="flex justify-between items-start mb-2">
+            <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
               <span className="text-xs font-bold text-amber-700 bg-amber-100 px-2.5 py-1 rounded-md flex items-center gap-1">
                 <Sparkles size={12} /> Monofásicos
               </span>
-              <span className="text-xs text-amber-800 font-semibold">Economia DAS</span>
+
+              {/* Toggle NCM vs CST 04/06 */}
+              <div className="flex items-center gap-1 bg-amber-100/90 p-0.5 rounded-lg border border-amber-300/80 text-[10px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setModoMonofasicoCard('ncm')}
+                  className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
+                    modoMonofasicoCard === 'ncm' 
+                      ? 'bg-amber-600 text-white shadow-2xs font-extrabold' 
+                      : 'text-amber-800 hover:text-amber-950'
+                  }`}
+                  title="Auditoria por Classificação Fiscal NCM Oficial (detecta monofásicos mesmo se o ERP emitiu com CST 01/49/99 incorreto)"
+                >
+                  Por NCM
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModoMonofasicoCard('cst')}
+                  className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
+                    modoMonofasicoCard === 'cst' 
+                      ? 'bg-amber-600 text-white shadow-2xs font-extrabold' 
+                      : 'text-amber-800 hover:text-amber-950'
+                  }`}
+                  title="Apenas produtos emitidos formalmente com CST 04 ou 06 no XML"
+                >
+                  Por CST 04/06
+                </button>
+              </div>
             </div>
-            <p className="text-xs font-medium text-amber-800">Total Monofásico a Segregar</p>
-            <p className="text-2xl font-bold text-amber-700 mt-2">
-              R$ {(consolidado?.geral?.total_monofasico || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+
+            <p className="text-xs font-bold text-amber-800 flex items-center justify-between">
+              <span>{modoMonofasicoCard === 'ncm' ? 'Total Monofásico por NCM' : 'Total Declarado CST 04/06'}</span>
+              <span className="text-[10px] text-amber-700 font-semibold uppercase">Economia DAS</span>
             </p>
-            <p className="text-[11px] text-amber-600 mt-1">Dedução no PGDAS (Simples Nacional)</p>
+
+            {loadingProdutosMonofasicos && modoMonofasicoCard === 'ncm' ? (
+              <div className="flex items-center gap-2 mt-3 text-amber-700 text-sm font-bold">
+                <RefreshCw size={16} className="animate-spin text-amber-600" />
+                <span>Auditando NCMs nos XMLs...</span>
+              </div>
+            ) : (
+              <p className="text-2xl font-black text-amber-700 mt-2">
+                R$ {(modoMonofasicoCard === 'ncm'
+                  ? (totaisMonofasicos?.valor_total ?? produtosMonofasicos.reduce((a, b) => a + (b.vProd || 0), 0))
+                  : (totaisMonofasicos?.valor_regular ?? consolidado?.geral?.total_monofasico ?? 0)
+                ).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </p>
+            )}
+
+            <div className="mt-1 text-[11px] text-amber-700 leading-tight">
+              {modoMonofasicoCard === 'ncm' ? (
+                totaisMonofasicos && totaisMonofasicos.qtd_divergente > 0 ? (
+                  <span className="font-semibold block text-amber-800" title={`${totaisMonofasicos.qtd_divergente} item(ns) emitidos sem CST 04/06`}>
+                    ⚠️ R$ {totaisMonofasicos.valor_divergente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} recuperável no PGDAS ({totaisMonofasicos.qtd_divergente} itens c/ CST 99/01)
+                  </span>
+                ) : (
+                  <span>Dedução legal no PGDAS por NCM oficial</span>
+                )
+              ) : (
+                <span>Declarado no PDV formalmente com CST 04/06</span>
+              )}
+            </div>
           </div>
 
           <div className="mt-4 pt-3 border-t border-amber-200/70 flex items-center justify-between">
             <span className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider">Baixar:</span>
             <div className="flex items-center gap-1">
               <button
-                onClick={() => handleExportar('monofasicos', 'pdf')}
-                title="Baixar Demonstrativo de Monofásicos em PDF"
-                className="px-2 py-1 text-xs font-semibold text-rose-700 bg-white/90 hover:bg-white border border-rose-200 rounded-md transition flex items-center gap-1 shadow-2xs"
+                type="button"
+                onClick={() => handleExportarCardMonofasicos('pdf')}
+                title={`Baixar Demonstrativo de Monofásicos (${modoMonofasicoCard === 'ncm' ? 'Por NCM' : 'Por CST'}) em PDF`}
+                className="px-2 py-1 text-xs font-semibold text-rose-700 bg-white/90 hover:bg-white border border-rose-200 rounded-md transition flex items-center gap-1 shadow-2xs cursor-pointer"
               >
                 <FileText size={12} className="text-rose-600" /> PDF
               </button>
               <button
-                onClick={() => handleExportar('monofasicos', 'xls')}
-                title="Baixar Demonstrativo de Monofásicos em Excel (XLSX)"
-                className="px-2 py-1 text-xs font-semibold text-emerald-800 bg-white/90 hover:bg-white border border-emerald-200 rounded-md transition flex items-center gap-1 shadow-2xs"
+                type="button"
+                onClick={() => handleExportarCardMonofasicos('xls')}
+                title={`Baixar Demonstrativo de Monofásicos (${modoMonofasicoCard === 'ncm' ? 'Por NCM' : 'Por CST'}) em Excel (XLSX)`}
+                className="px-2 py-1 text-xs font-semibold text-emerald-800 bg-white/90 hover:bg-white border border-emerald-200 rounded-md transition flex items-center gap-1 shadow-2xs cursor-pointer"
               >
                 <FileSpreadsheet size={12} className="text-emerald-600" /> XLS
               </button>
               <button
-                onClick={() => handleExportar('monofasicos', 'csv')}
-                title="Baixar Demonstrativo de Monofásicos em CSV"
-                className="px-2 py-1 text-xs font-semibold text-slate-700 bg-white/90 hover:bg-white border border-amber-200 rounded-md transition flex items-center gap-1 shadow-2xs"
+                type="button"
+                onClick={() => handleExportarCardMonofasicos('csv')}
+                title={`Baixar Demonstrativo de Monofásicos (${modoMonofasicoCard === 'ncm' ? 'Por NCM' : 'Por CST'}) em CSV`}
+                className="px-2 py-1 text-xs font-semibold text-slate-700 bg-white/90 hover:bg-white border border-amber-200 rounded-md transition flex items-center gap-1 shadow-2xs cursor-pointer"
               >
                 <Download size={12} className="text-slate-500" /> CSV
               </button>
