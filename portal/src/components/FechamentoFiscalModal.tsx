@@ -54,6 +54,11 @@ export default function FechamentoFiscalModal({
   const [dadosResumoEnvio, setDadosResumoEnvio] = useState<any>(null)
   const [dadosEmpresaEnvio, setDadosEmpresaEnvio] = useState<any>(null)
 
+  // Estados de Envio E-mail via Resend
+  const [enviandoEmail, setEnviandoEmail] = useState(false)
+  const [emailStatus, setEmailStatus] = useState<{ tipo: 'sucesso' | 'erro' | 'info'; texto: string } | null>(null)
+  const [dispararEmailAoGerar, setDispararEmailAoGerar] = useState(false)
+
   // Estados de Processamento e Progresso Real
   const [processando, setProcessando] = useState(false)
   const [progressoPct, setProgressoPct] = useState(0)
@@ -225,6 +230,57 @@ export default function FechamentoFiscalModal({
       })
     } finally {
       setEnviandoWhatsapp(false)
+    }
+  }
+
+  // Disparo de Fechamento via E-mail (Resend)
+  const handleEnviarEmail = async (resumoParam?: any, empresaParam?: any) => {
+    const destino = (prefs.envioEmail || '').trim()
+
+    if (!destino || !destino.includes('@')) {
+      setEmailStatus({
+        tipo: 'erro',
+        texto: 'Por favor, informe um endereço de e-mail válido no campo de destino.'
+      })
+      return
+    }
+
+    setEnviandoEmail(true)
+    setEmailStatus({
+      tipo: 'info',
+      texto: 'Conectando à API do Resend e transmitindo fechamento fiscal...'
+    })
+
+    try {
+      const res = await fetch('/api/fechamento-fiscal/enviar-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cliente_id: clienteId,
+          competencia: mesCompetencia,
+          email: destino,
+          resumo: resumoParam || dadosResumoEnvio,
+          empresa: empresaParam || dadosEmpresaEnvio || { razao_social: clienteNome || 'Empresa' }
+        })
+      })
+
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Falha ao enviar e-mail via Resend.')
+      }
+
+      setEmailStatus({
+        tipo: 'sucesso',
+        texto: `Fechamento Fiscal enviado com sucesso para ${destino} via Resend!`
+      })
+    } catch (err: any) {
+      console.error('Falha no envio de e-mail:', err)
+      setEmailStatus({
+        tipo: 'erro',
+        texto: err.message || 'Erro de comunicação com a API do Resend. Verifique se o Resend está ativo em Integrações & APIs.'
+      })
+    } finally {
+      setEnviandoEmail(false)
     }
   }
 
@@ -533,6 +589,11 @@ export default function FechamentoFiscalModal({
         handleEnviarWhatsapp(resumoParaWhatsApp, empresa)
       }
 
+      // Se o usuário marcou para disparar por E-mail ao gerar
+      if (dispararEmailAoGerar && (prefs.envioEmail || '').includes('@')) {
+        handleEnviarEmail(resumoParaWhatsApp, empresa)
+      }
+
     } catch (err: any) {
       console.error('Erro no processamento do fechamento:', err)
       setErroModal(err.message || 'Ocorreu uma falha inesperada durante o processamento do fechamento.')
@@ -692,6 +753,56 @@ export default function FechamentoFiscalModal({
                       {whatsappStatus.tipo === 'erro' && <AlertTriangle size={16} className="text-rose-600 shrink-0" />}
                       {whatsappStatus.tipo === 'info' && <Loader2 size={16} className="text-indigo-600 animate-spin shrink-0" />}
                       <span className="leading-snug">{whatsappStatus.texto}</span>
+                    </div>
+                  )}
+
+                  {/* Ação de Disparo Imediato via API do Resend (E-mail) */}
+                  <div className="mt-3.5 pt-3 border-t border-emerald-200/50 flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div className="text-left">
+                      <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                        <Mail size={13} className="text-indigo-600" />
+                        Disparo Imediato via API do Resend (E-mail):
+                      </span>
+                      <span className="text-[10px] text-slate-500 block mt-0.5">
+                        {prefs.envioEmail 
+                          ? `Transmitir resumo para: ${prefs.envioEmail}` 
+                          : 'Preencha o e-mail de destino na seção de envio para disparar.'}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleEnviarEmail()}
+                      disabled={enviandoEmail || !(prefs.envioEmail || '').includes('@')}
+                      className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 disabled:from-slate-300 disabled:to-slate-400 text-white rounded-xl text-xs font-bold shadow-sm hover:shadow transition flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      {enviandoEmail ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          Transmitindo via Resend...
+                        </>
+                      ) : (
+                        <>
+                          <Mail size={13} />
+                          Enviar no E-mail Agora
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Feedback de Status do E-mail */}
+                  {emailStatus && (
+                    <div className={`mt-3 p-3 rounded-xl text-xs font-semibold flex items-center gap-2.5 animate-in fade-in shadow-xs ${
+                      emailStatus.tipo === 'sucesso'
+                        ? 'bg-emerald-100/90 text-emerald-950 border border-emerald-300'
+                        : emailStatus.tipo === 'erro'
+                        ? 'bg-rose-50 text-rose-900 border border-rose-200'
+                        : 'bg-indigo-50 text-indigo-900 border border-indigo-200'
+                    }`}>
+                      {emailStatus.tipo === 'sucesso' && <CheckCircle2 size={16} className="text-emerald-700 shrink-0" />}
+                      {emailStatus.tipo === 'erro' && <AlertTriangle size={16} className="text-rose-600 shrink-0" />}
+                      {emailStatus.tipo === 'info' && <Loader2 size={16} className="text-indigo-600 animate-spin shrink-0" />}
+                      <span className="leading-snug">{emailStatus.texto}</span>
                     </div>
                   )}
                 </div>
@@ -1119,8 +1230,8 @@ export default function FechamentoFiscalModal({
               </div>
             </div>
 
-            {/* Checkbox para disparo imediato na geração deste fechamento (Função 1) */}
-            <div className="pt-2 border-t border-indigo-100/70">
+            {/* Checkboxes para disparo imediato na geração deste fechamento (WhatsApp e E-mail) */}
+            <div className="pt-2 border-t border-indigo-100/70 space-y-2">
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -1131,6 +1242,19 @@ export default function FechamentoFiscalModal({
                 <span className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
                   <Phone size={13} className="text-emerald-600" />
                   <strong>Disparar resumo via WhatsApp imediatamente</strong> ao gerar este fechamento
+                </span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={dispararEmailAoGerar}
+                  onChange={e => setDispararEmailAoGerar(e.target.checked)}
+                  className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                />
+                <span className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                  <Mail size={13} className="text-indigo-600" />
+                  <strong>Disparar resumo por E-mail imediatamente</strong> ao gerar este fechamento
                 </span>
               </label>
             </div>

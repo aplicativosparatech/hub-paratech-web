@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { PlugZap, CreditCard, MessageCircle, Save, Send, Calendar, Sliders, Bell, FileText, CheckCircle2, AlertTriangle, Cpu, Sparkles, Bot, ExternalLink, RefreshCw, Check, ShieldCheck, Zap, Server, Database, Building2, Layers, FileSpreadsheet, Code2, ChevronRight } from 'lucide-react'
+import { PlugZap, CreditCard, MessageCircle, Mail, Eye, EyeOff, Save, Send, Calendar, Sliders, Bell, FileText, CheckCircle2, AlertTriangle, Cpu, Sparkles, Bot, ExternalLink, RefreshCw, Check, ShieldCheck, Zap, Server, Database, Building2, Layers, FileSpreadsheet, Code2, ChevronRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { createClient } from '@/utils/supabase/client'
 import { useTableFeatures } from '@/hooks/useTableFeatures'
@@ -18,11 +18,14 @@ type Integracao = {
 
 export default function IntegracoesPage() {
   const supabase = createClient()
-  const [activeTab, setActiveTab] = useState<'gateways' | 'whatsapp' | 'ia_mcp' | 'alterdata' | 'apis_hub'>('gateways')
+  const [activeTab, setActiveTab] = useState<'gateways' | 'whatsapp' | 'email' | 'ia_mcp' | 'alterdata' | 'apis_hub'>('gateways')
   const [isLoading, setIsLoading] = useState(true)
   const [integracoes, setIntegracoes] = useState<Integracao[]>([])
   const [testPhone, setTestPhone] = useState('')
   const [isTestingWpp, setIsTestingWpp] = useState(false)
+  const [testEmail, setTestEmail] = useState('')
+  const [isTestingEmail, setIsTestingEmail] = useState(false)
+  const [mostrarKeyResend, setMostrarKeyResend] = useState(false)
   const [testandoIa, setTestandoIa] = useState<string | null>(null)
   const [resultadoTesteIa, setResultadoTesteIa] = useState<Record<string, { ok: boolean; msg: string; tempo?: number }>>({})
   const [testandoAlterdata, setTestandoAlterdata] = useState(false)
@@ -86,6 +89,48 @@ export default function IntegracoesPage() {
       toast.error(`Erro: ${err.message}`, { id: tId })
     } finally {
       setIsTestingWpp(false)
+    }
+  }
+
+  const handleTestEmail = async () => {
+    if (!testEmail || !testEmail.includes('@')) {
+      toast.error('Digite um e-mail válido para o teste.')
+      return
+    }
+
+    const resendItem = getIntegracao('resend')
+    const apiKey = (resendItem.credenciais?.api_key || '').trim()
+
+    if (!apiKey) {
+      toast.error('Informe a API Key do Resend antes de disparar o teste.')
+      return
+    }
+
+    setIsTestingEmail(true)
+    const tId = toast.loading('Enviando e-mail de teste via Resend...')
+
+    try {
+      const res = await fetch('/api/email/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: testEmail,
+          apiKey: apiKey,
+          remetenteEmail: resendItem.credenciais?.remetente_email,
+          remetenteNome: resendItem.credenciais?.remetente_nome
+        })
+      })
+
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Falha ao enviar e-mail de teste.')
+      }
+
+      toast.success(data.message || 'E-mail enviado com sucesso! Verifique sua caixa de entrada.', { id: tId })
+    } catch (err: any) {
+      toast.error(`Erro: ${err.message}`, { id: tId })
+    } finally {
+      setIsTestingEmail(false)
     }
   }
 
@@ -326,6 +371,7 @@ export default function IntegracoesPage() {
   const fiscalAi = getIntegracao('fiscal_ai')
   const iaGeral = getIntegracao('ia_geral')
   const alterdata = getIntegracao('alterdata')
+  const resend = getIntegracao('resend')
 
   const totalIasAtivas = [gemini, groq, openai, claude, ollama, mcpFiscalBrasil, fiscalAi].filter(i => i.is_ativo).length
 
@@ -388,6 +434,19 @@ export default function IntegracoesPage() {
           }`}
         >
           <MessageCircle size={18} /> APIs de WhatsApp
+        </button>
+        <button
+          onClick={() => setActiveTab('email')}
+          className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 cursor-pointer ${
+            activeTab === 'email' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Mail size={18} /> E-mails (Resend)
+          {resend.is_ativo && (
+            <span className="ml-1 px-2 py-0.5 text-xs font-bold bg-indigo-100 text-indigo-700 rounded-full">
+              Ativo
+            </span>
+          )}
         </button>
         <button
           onClick={() => setActiveTab('ia_mcp')}
@@ -536,6 +595,170 @@ export default function IntegracoesPage() {
           </>
         )}
       </div>
+
+      {/* ===================== ABA E-MAILS (RESEND) ===================== */}
+      {activeTab === 'email' && (
+        <div className="space-y-8 animate-in fade-in duration-300">
+          
+          {/* Card Principal de Configuração do Resend */}
+          <div className={`bg-white rounded-2xl p-6 sm:p-8 border-2 transition-all duration-300 shadow-sm ${resend.is_ativo ? 'border-indigo-500 shadow-lg shadow-indigo-500/10' : 'border-slate-200'}`}>
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6 pb-6 border-b border-slate-100">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-200 flex items-center justify-center shrink-0 shadow-inner">
+                  <Mail size={24} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xl font-bold text-slate-900">Resend API</h3>
+                    <span className="px-2.5 py-0.5 text-xs font-bold bg-indigo-100 text-indigo-700 rounded-full">
+                      Recomendado pela Vercel
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-500 mt-0.5">
+                    Envio de e-mails transacionais, fechamentos fiscais em ZIP, resumos contábeis e relatórios PDF.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-semibold text-slate-600">
+                  {resend.is_ativo ? 'Integração Ativa' : 'Integração Desativada'}
+                </span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={resend.is_ativo}
+                    onChange={() => updateIntegracaoLocal('resend', { is_ativo: !resend.is_ativo })}
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                </label>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Campo API Key */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Chave de API do Resend (API Key)</span>
+                  <a
+                    href="https://resend.com/api-keys"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-indigo-600 hover:underline flex items-center gap-1 font-medium"
+                  >
+                    Obter Chave no painel do Resend <ExternalLink size={12} />
+                  </a>
+                </label>
+                <div className="relative">
+                  <input
+                    type={mostrarKeyResend ? 'text' : 'password'}
+                    value={resend.credenciais?.api_key || ''}
+                    onChange={e => handleCredencialChange('resend', 'api_key', e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-xl font-mono text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none pr-11"
+                    placeholder="re_123456789_abcdefghijklmnopqrstuvwxyz"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMostrarKeyResend(!mostrarKeyResend)}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    title={mostrarKeyResend ? 'Ocultar Chave' : 'Exibir Chave'}
+                  >
+                    {mostrarKeyResend ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                <p className="text-xs text-slate-400 mt-1.5">
+                  Começa tipicamente com <code className="text-indigo-600 font-semibold">re_</code>. A chave é mantida segura e usada apenas nos disparos autorizados.
+                </p>
+              </div>
+
+              {/* Remetente E-mail (From) */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  E-mail do Remetente (From)
+                </label>
+                <input
+                  type="email"
+                  value={resend.credenciais?.remetente_email || ''}
+                  onChange={e => handleCredencialChange('resend', 'remetente_email', e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  placeholder="fiscal@seudominio.com.br ou onboarding@resend.dev"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Use <strong className="text-slate-700">onboarding@resend.dev</strong> para testes imediatos sem domínio verificado.
+                </p>
+              </div>
+
+              {/* Nome de Exibição do Remetente */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  Nome de Exibição do Remetente
+                </label>
+                <input
+                  type="text"
+                  value={resend.credenciais?.remetente_nome || ''}
+                  onChange={e => handleCredencialChange('resend', 'remetente_nome', e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  placeholder="Ex: Hub Paratech Fiscal ou Paratech Sistemas"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Nome que aparecerá na caixa de entrada do contador ou cliente.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Card de Teste de Disparo em Tempo Real */}
+          <div className="bg-gradient-to-r from-indigo-50 via-purple-50 to-blue-50 border border-indigo-200 rounded-2xl p-6 sm:p-7 shadow-xs">
+            <h3 className="text-lg font-bold text-indigo-950 mb-1 flex items-center gap-2">
+              <Send size={18} className="text-indigo-600" /> Testar Disparo de E-mail em Tempo Real
+            </h3>
+            <p className="text-sm text-indigo-800/80 mb-4">
+              Informe seu e-mail para receber uma mensagem de validação oficial e comprovar que a API Key e o remetente estão entregando normalmente.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 max-w-xl">
+              <input
+                type="email"
+                placeholder="Seu e-mail de teste (ex: seuemail@gmail.com)"
+                value={testEmail}
+                onChange={e => setTestEmail(e.target.value)}
+                className="flex-1 bg-white border border-indigo-300 px-4 py-2.5 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm shadow-xs"
+              />
+              <button
+                type="button"
+                onClick={handleTestEmail}
+                disabled={isTestingEmail}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-2.5 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 text-sm disabled:opacity-50 cursor-pointer"
+              >
+                <Send size={16} /> {isTestingEmail ? 'Disparando Teste...' : 'Enviar E-mail de Teste'}
+              </button>
+            </div>
+          </div>
+
+          {/* Guia Didático e Domínio Próprio (SPF/DKIM) */}
+          <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-4">
+            <h4 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <ShieldCheck size={20} className="text-emerald-600" />
+              Como Configurar seu Domínio Próprio no Resend (Evitar Spam)
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-slate-600">
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                <span className="font-bold text-slate-900 text-sm block mb-1">1. Crie a Conta Grátis</span>
+                Acesse <a href="https://resend.com" target="_blank" rel="noreferrer" className="text-indigo-600 font-semibold underline">resend.com</a> e faça login. O plano gratuito inclui <strong>3.000 e-mails por mês</strong> (100 por dia).
+              </div>
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                <span className="font-bold text-slate-900 text-sm block mb-1">2. Gere a API Key</span>
+                Vá no menu lateral em <strong>API Keys</strong> &gt; <strong>Create API Key</strong>, dê um nome (ex: <code>Hub Paratech</code>) e cole a chave no campo acima.
+              </div>
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                <span className="font-bold text-slate-900 text-sm block mb-1">3. Adicione seu Domínio</span>
+                Em <strong>Domains</strong>, adicione seu domínio (ex: <code>paratech.inf.br</code>). O Resend gerará registros DNS (DKIM e SPF) para você colar na hospedagem/Registro.br.
+              </div>
+            </div>
+          </div>
+
+        </div>
+      )}
 
       {/* ===================== ABA APIS & MCPS DE IA ===================== */}
       {activeTab === 'ia_mcp' && (
