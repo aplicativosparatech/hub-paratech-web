@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import { 
   Building2, ShieldCheck, AlertTriangle, CheckCircle2, 
@@ -22,12 +22,14 @@ export default function GlobalCompanyActiveCard({ variant = 'default' }: GlobalC
     userRole, 
     clientes, 
     setSelectedClienteId,
+    clearSelectedCliente,
     priorizarNomeFantasia
   } = useGlobalClient()
 
   const [modalBuscaOpen, setModalBuscaOpen] = useState(false)
   const [termoBusca, setTermoBusca] = useState('')
   const [contabilidadeNome, setContabilidadeNome] = useState<string>('')
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const [hubStatus, setHubStatus] = useState<{
     online: boolean
     texto: string
@@ -227,14 +229,32 @@ export default function GlobalCompanyActiveCard({ variant = 'default' }: GlobalC
     return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase()
   }, [selectedCliente])
 
+  useEffect(() => {
+    if (modalBuscaOpen) {
+      setTimeout(() => {
+        searchInputRef.current?.focus()
+      }, 50)
+    }
+  }, [modalBuscaOpen])
+
+  // Normalização de texto sem acentos para busca precisa
+  const normalizar = (texto?: string | null) => {
+    if (!texto) return ''
+    return texto
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+  }
+
   // Lista de empresas filtradas para o Modal de Troca
   const clientesFiltrados = useMemo(() => {
     if (!termoBusca.trim()) return clientes
-    const t = termoBusca.toLowerCase().trim()
+    const t = normalizar(termoBusca)
     const limpo = termoBusca.replace(/\D/g, '')
     return clientes.filter(c => {
-      const r = (c.razao_social || '').toLowerCase()
-      const f = (c.nome_fantasia || '').toLowerCase()
+      const r = normalizar(c.razao_social)
+      const f = normalizar(c.nome_fantasia)
       const cnpj = (c.cnpj || '').toLowerCase()
       const cnpjLimpo = (c.cnpj || '').replace(/\D/g, '')
       const whats = (c.whatsapp || '').replace(/\D/g, '')
@@ -242,40 +262,186 @@ export default function GlobalCompanyActiveCard({ variant = 'default' }: GlobalC
     })
   }, [clientes, termoBusca])
 
-  // Se o usuário for Admin ou Contabilidade e não houver nenhuma empresa selecionada:
-  if (!selectedCliente) {
+  // Modal Omnichannel de Seleção e Troca Rápida de Empresa (Ctrl+K)
+  const renderModalBusca = () => {
+    if (!modalBuscaOpen) return null
     return (
-      <div className={`w-full ${variant === 'header' ? 'mb-0' : 'mb-6'}`}>
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-3 sm:p-4 shadow-lg border border-indigo-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-600/30 border border-blue-500/40 flex items-center justify-center text-blue-400 shrink-0">
-              <Building2 size={20} />
+      <div 
+        className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-150"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            setModalBuscaOpen(false)
+          }
+        }}
+      >
+        <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[85vh]">
+          {/* Header do Modal */}
+          <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2">
+              <Building2 size={18} className="text-blue-600 dark:text-blue-400" />
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                {selectedCliente ? 'Trocar Empresa de Referência' : 'Selecionar Empresa de Referência'}
+              </h3>
             </div>
-            <div>
-              <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-                <span>Nenhuma Empresa Selecionada</span>
-                <span className="text-[10px] font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded">
-                  Aguardando Seleção
-                </span>
-              </h4>
-              <p className="text-[11px] text-slate-300">
-                Selecione uma empresa para carregar notas fiscais, apuração de impostos e relatórios em todas as abas.
-              </p>
+            <button
+              type="button"
+              onClick={() => setModalBuscaOpen(false)}
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* Campo de Busca Rápida */}
+          <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/30 shrink-0">
+            <div className="relative flex items-center">
+              <Search size={16} className="absolute left-3 text-slate-400 pointer-events-none" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={termoBusca}
+                onChange={(e) => setTermoBusca(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && clientesFiltrados.length > 0) {
+                    setSelectedClienteId(clientesFiltrados[0].id)
+                    setModalBuscaOpen(false)
+                    setTermoBusca('')
+                  } else if (e.key === 'Escape') {
+                    setModalBuscaOpen(false)
+                  }
+                }}
+                placeholder="Buscar por Razão Social, Nome Fantasia, CNPJ ou Celular..."
+                className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                autoFocus
+              />
             </div>
           </div>
 
-          {userRole !== 'cliente' && (
-            <button
-              type="button"
-              onClick={() => setModalBuscaOpen(true)}
-              className="flex items-center justify-center gap-2 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow transition active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
-            >
-              <Search size={13} />
-              <span>Selecionar Empresa (Ctrl+K)</span>
-            </button>
-          )}
+          {/* Lista de Empresas */}
+          <div className="overflow-y-auto p-2 divide-y divide-slate-100 dark:divide-slate-800/60 custom-scrollbar flex-1">
+            {/* Opção para Limpar / Todas as Empresas (Visão Consolidada) */}
+            {userRole !== 'cliente' && (
+              <button
+                type="button"
+                onClick={() => {
+                  clearSelectedCliente()
+                  setModalBuscaOpen(false)
+                  setTermoBusca('')
+                }}
+                className={`w-full text-left p-3 rounded-xl transition flex items-center justify-between gap-3 cursor-pointer mb-1 ${
+                  !selectedCliente 
+                    ? 'bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800' 
+                    : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                }`}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <Building size={14} className="text-slate-400" />
+                    <span>Todas as Empresas (Visão Consolidada / Nenhuma Selecionada)</span>
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Limpar filtro de empresa ativa e ver visão geral de notas e faturas
+                  </p>
+                </div>
+                {!selectedCliente && (
+                  <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/60 px-2 py-0.5 rounded-full shrink-0">
+                    Ativa
+                  </span>
+                )}
+              </button>
+            )}
+
+            {clientesFiltrados.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400">
+                Nenhuma empresa encontrada com os termos informados.
+              </div>
+            ) : (
+              clientesFiltrados.map((cli) => {
+                const isAtual = cli.id === selectedCliente?.id
+                return (
+                  <button
+                    key={cli.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedClienteId(cli.id)
+                      setModalBuscaOpen(false)
+                      setTermoBusca('')
+                    }}
+                    className={`w-full text-left p-3 rounded-xl transition flex items-center justify-between gap-3 cursor-pointer ${
+                      isAtual 
+                        ? 'bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800' 
+                        : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                        {cli.nome_fantasia || cli.razao_social}
+                      </p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                        {cli.razao_social} • CNPJ {formatarCnpjCpf(cli.cnpj)}
+                      </p>
+                    </div>
+
+                    {isAtual && (
+                      <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/60 px-2 py-0.5 rounded-full shrink-0">
+                        Ativa
+                      </span>
+                    )}
+                  </button>
+                )
+              })
+            )}
+          </div>
+
+          {/* Rodapé do Modal */}
+          <div className="p-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/50 flex items-center justify-between text-[11px] text-slate-400 px-4 shrink-0">
+            <span>Selecione a empresa para filtrar todas as páginas</span>
+            <kbd className="font-mono bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-[10px]">
+              ESC para fechar
+            </kbd>
+          </div>
         </div>
       </div>
+    )
+  }
+
+  // Se o usuário for Admin ou Contabilidade e não houver nenhuma empresa selecionada:
+  if (!selectedCliente) {
+    return (
+      <>
+        <div className={`w-full ${variant === 'header' ? 'mb-0' : 'mb-6'}`}>
+          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-3 sm:p-4 shadow-lg border border-indigo-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-blue-600/30 border border-blue-500/40 flex items-center justify-center text-blue-400 shrink-0">
+                <Building2 size={20} />
+              </div>
+              <div>
+                <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                  <span>Nenhuma Empresa Selecionada</span>
+                  <span className="text-[10px] font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded">
+                    Aguardando Seleção
+                  </span>
+                </h4>
+                <p className="text-[11px] text-slate-300">
+                  Selecione uma empresa para carregar notas fiscais, apuração de impostos e relatórios em todas as abas.
+                </p>
+              </div>
+            </div>
+
+            {userRole !== 'cliente' && (
+              <button
+                type="button"
+                onClick={() => setModalBuscaOpen(true)}
+                className="flex items-center justify-center gap-2 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow transition active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+              >
+                <Search size={13} />
+                <span>Selecionar Empresa (Ctrl+K)</span>
+              </button>
+            )}
+          </div>
+        </div>
+        {renderModalBusca()}
+      </>
     )
   }
 
@@ -460,105 +626,7 @@ export default function GlobalCompanyActiveCard({ variant = 'default' }: GlobalC
       </div>
 
       {/* MODAL DE TROCA RÁPIDA DE EMPRESA (OMNICHANNEL SEARCH) */}
-      {modalBuscaOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-            
-            {/* Header do Modal */}
-            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Building2 size={18} className="text-blue-600 dark:text-blue-400" />
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Trocar Empresa de Referência
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setModalBuscaOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Campo de Busca Rápida */}
-            <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/30">
-              <div className="relative flex items-center">
-                <Search size={16} className="absolute left-3 text-slate-400 pointer-events-none" />
-                <input
-                  type="text"
-                  value={termoBusca}
-                  onChange={(e) => setTermoBusca(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && clientesFiltrados.length > 0) {
-                      setSelectedClienteId(clientesFiltrados[0].id)
-                      setModalBuscaOpen(false)
-                    } else if (e.key === 'Escape') {
-                      setModalBuscaOpen(false)
-                    }
-                  }}
-                  placeholder="Buscar por Razão Social, Nome Fantasia, CNPJ ou Celular..."
-                  className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
-                  autoFocus
-                />
-              </div>
-            </div>
-
-            {/* Lista de Empresas */}
-            <div className="max-h-80 overflow-y-auto p-2 divide-y divide-slate-100 dark:divide-slate-800/60 custom-scrollbar">
-              {clientesFiltrados.length === 0 ? (
-                <div className="py-8 text-center text-xs text-slate-400">
-                  Nenhuma empresa encontrada com os termos informados.
-                </div>
-              ) : (
-                clientesFiltrados.map((cli) => {
-                  const isAtual = cli.id === selectedCliente?.id
-                  return (
-                    <button
-                      key={cli.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedClienteId(cli.id)
-                        setModalBuscaOpen(false)
-                      }}
-                      className={`w-full text-left p-3 rounded-xl transition flex items-center justify-between gap-3 cursor-pointer ${
-                        isAtual 
-                          ? 'bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800' 
-                          : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
-                      }`}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                          {cli.nome_fantasia || cli.razao_social}
-                        </p>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                          {cli.razao_social} • CNPJ {formatarCnpjCpf(cli.cnpj)}
-                        </p>
-                      </div>
-
-                      {isAtual && (
-                        <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/60 px-2 py-0.5 rounded-full shrink-0">
-                          Ativa
-                        </span>
-                      )}
-                    </button>
-                  )
-                })
-              )}
-            </div>
-
-            {/* Rodapé do Modal */}
-            <div className="p-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/50 flex items-center justify-between text-[11px] text-slate-400 px-4">
-              <span>Selecione a empresa para alterar em todas as páginas</span>
-              <kbd className="font-mono bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-[10px]">
-                ESC para fechar
-              </kbd>
-            </div>
-
-          </div>
-        </div>
-      )}
-
+      {renderModalBusca()}
     </section>
   )
 }
