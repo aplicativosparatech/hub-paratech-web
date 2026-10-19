@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Building2, Save, Search, Eye, EyeOff, UserCheck, MapPin } from 'lucide-react'
+import { ArrowLeft, Building2, Save, Search, Eye, EyeOff, UserCheck, MapPin, FolderArchive, Phone, Mail } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { limparDocumento, formatarCnpjCpf, validarCnpj, isCnpjAlfanumerico } from '@/utils/cnpjAlfanumerico'
@@ -15,6 +15,7 @@ export default function EditarContabilidadePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [searchingCnpj, setSearchingCnpj] = useState(false)
+  const [searchingCep, setSearchingCep] = useState(false)
   const [showPassword, setShowPassword] = useState(true)
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [currentLogo, setCurrentLogo] = useState('')
@@ -38,7 +39,13 @@ export default function EditarContabilidadePage() {
     uf: '',
     login_email: '',
     login_senha: '',
-    logo_url: ''
+    logo_url: '',
+    whatsapp_arquivos_fiscais: '',
+    email_arquivos_fiscais: '',
+    receber_arquivos_whatsapp: false,
+    receber_arquivos_email: false,
+    admin_permite_envio_whatsapp: true,
+    admin_permite_envio_email: true
   })
 
   useEffect(() => {
@@ -64,7 +71,13 @@ export default function EditarContabilidadePage() {
           uf: data.uf || '',
           login_email: data.login_email || '',
           login_senha: data.login_senha || '',
-          logo_url: data.logo_url || ''
+          logo_url: data.logo_url || '',
+          whatsapp_arquivos_fiscais: data.whatsapp_arquivos_fiscais || '',
+          email_arquivos_fiscais: data.email_arquivos_fiscais || '',
+          receber_arquivos_whatsapp: data.receber_arquivos_whatsapp ?? false,
+          receber_arquivos_email: data.receber_arquivos_email ?? false,
+          admin_permite_envio_whatsapp: data.admin_permite_envio_whatsapp ?? true,
+          admin_permite_envio_email: data.admin_permite_envio_email ?? true
         })
         if (data.logo_url) setCurrentLogo(data.logo_url)
       }
@@ -137,6 +150,40 @@ export default function EditarContabilidadePage() {
     }
   }
 
+  // Consulta automática de CEP via ViaCEP
+  const handleConsultarCep = async () => {
+    const rawCep = formData.cep.replace(/\D/g, '')
+    if (rawCep.length !== 8) {
+      toast.error('Informe um CEP válido com 8 dígitos.')
+      return
+    }
+
+    setSearchingCep(true)
+    const toastId = toast.loading('Buscando CEP no ViaCEP...')
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${rawCep}/json/`)
+      const data = await res.json()
+      if (data.erro) {
+        throw new Error('CEP não encontrado na base do ViaCEP.')
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        cep: `${rawCep.slice(0, 5)}-${rawCep.slice(5)}`,
+        logradouro: data.logradouro || prev.logradouro,
+        bairro: data.bairro || prev.bairro,
+        cidade: data.localidade || prev.cidade,
+        uf: data.uf || prev.uf,
+        complemento: data.complemento || prev.complemento
+      }))
+      toast.success('Endereço preenchido com sucesso!', { id: toastId })
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao consultar CEP.', { id: toastId })
+    } finally {
+      setSearchingCep(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
@@ -157,6 +204,12 @@ export default function EditarContabilidadePage() {
 
     const payload = {
       ...contabData,
+      whatsapp_arquivos_fiscais: contabData.whatsapp_arquivos_fiscais?.trim() || null,
+      email_arquivos_fiscais: contabData.email_arquivos_fiscais?.trim() || null,
+      receber_arquivos_whatsapp: Boolean(contabData.receber_arquivos_whatsapp),
+      receber_arquivos_email: Boolean(contabData.receber_arquivos_email),
+      admin_permite_envio_whatsapp: Boolean(contabData.admin_permite_envio_whatsapp),
+      admin_permite_envio_email: Boolean(contabData.admin_permite_envio_email),
       logo_url: finalLogoUrl,
       login_email: login_email && login_email.trim() !== '' ? login_email.trim() : null,
       login_senha: login_senha && login_senha.trim() !== '' ? login_senha.trim() : null
@@ -295,6 +348,130 @@ export default function EditarContabilidadePage() {
             </div>
           </div>
 
+          {/* Seção Destacada: Recepção de Arquivos Fiscais */}
+          <div className="pt-4 border-t border-slate-100">
+            <div className="p-5 bg-gradient-to-br from-indigo-50/60 via-blue-50/30 to-slate-50 border-2 border-indigo-200 rounded-2xl shadow-xs space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-indigo-100 gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-xs">
+                    <FolderArchive size={20} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900">
+                      Recepção de Arquivos Fiscais & Relatórios dos Clientes
+                    </h4>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      Configure se este escritório contábil pode receber automaticamente os XMLs, DANFEs e relatórios de fechamento fiscal via WhatsApp e E-mail.
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[10px] uppercase font-black bg-indigo-100 text-indigo-800 px-2.5 py-1 rounded-md border border-indigo-200 self-start sm:self-auto">
+                  Controle do Administrador
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* Canal WhatsApp */}
+                <div className="p-4 bg-white rounded-xl border border-indigo-100 shadow-2xs space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Phone size={16} className="text-emerald-600" />
+                      <label className="text-xs font-bold text-slate-800">
+                        Permitir Envio por WhatsApp (Admin)
+                      </label>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={formData.admin_permite_envio_whatsapp} 
+                        onChange={e => setFormData({ ...formData, admin_permite_envio_whatsapp: e.target.checked })} 
+                        className="sr-only peer" 
+                      />
+                      <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                    </label>
+                  </div>
+
+                  {formData.admin_permite_envio_whatsapp && (
+                    <div className="space-y-2 pt-2 border-t border-slate-100 animate-in fade-in">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-slate-600 font-medium">Ativar envio para este número</span>
+                        <input 
+                          type="checkbox" 
+                          id="rec-whats"
+                          checked={formData.receber_arquivos_whatsapp} 
+                          onChange={e => setFormData({ ...formData, receber_arquivos_whatsapp: e.target.checked })} 
+                          className="rounded text-blue-600 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          Número do WhatsApp para Arquivos Fiscais
+                        </label>
+                        <input 
+                          type="text" 
+                          placeholder="Ex: 5511999999999 (Se vazio, usa o principal)" 
+                          className="w-full px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50/50 text-xs font-medium"
+                          value={formData.whatsapp_arquivos_fiscais} 
+                          onChange={e => setFormData({ ...formData, whatsapp_arquivos_fiscais: e.target.value })} 
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Canal E-mail */}
+                <div className="p-4 bg-white rounded-xl border border-indigo-100 shadow-2xs space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Mail size={16} className="text-blue-600" />
+                      <label className="text-xs font-bold text-slate-800">
+                        Permitir Envio por E-mail (Admin)
+                      </label>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={formData.admin_permite_envio_email} 
+                        onChange={e => setFormData({ ...formData, admin_permite_envio_email: e.target.checked })} 
+                        className="sr-only peer" 
+                      />
+                      <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+
+                  {formData.admin_permite_envio_email && (
+                    <div className="space-y-2 pt-2 border-t border-slate-100 animate-in fade-in">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-slate-600 font-medium">Ativar envio para este e-mail</span>
+                        <input 
+                          type="checkbox" 
+                          id="rec-mail"
+                          checked={formData.receber_arquivos_email} 
+                          onChange={e => setFormData({ ...formData, receber_arquivos_email: e.target.checked })} 
+                          className="rounded text-blue-600 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          E-mail para Recebimento de Arquivos Fiscais
+                        </label>
+                        <input 
+                          type="email" 
+                          placeholder="Ex: fiscal@contabilidade.com (Se vazio, usa o principal)" 
+                          className="w-full px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50/50 text-xs font-medium"
+                          value={formData.email_arquivos_fiscais} 
+                          onChange={e => setFormData({ ...formData, email_arquivos_fiscais: e.target.value })} 
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            </div>
+          </div>
+
           {/* Dados do Contador Responsável */}
           <div className="pt-4 border-t border-slate-100">
             <h3 className="text-base font-bold text-slate-900 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
@@ -329,8 +506,24 @@ export default function EditarContabilidadePage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">CEP</label>
-                <input type="text" placeholder="00000-000" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                  value={formData.cep} onChange={e => setFormData({...formData, cep: e.target.value})} />
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    placeholder="00000-000" 
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                    value={formData.cep} 
+                    onChange={e => setFormData({...formData, cep: e.target.value})} 
+                  />
+                  <button
+                    type="button"
+                    onClick={handleConsultarCep}
+                    disabled={searchingCep}
+                    title="Buscar endereço via CEP (ViaCEP)"
+                    className="px-3.5 py-2.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl font-semibold flex items-center justify-center transition border border-blue-200 disabled:opacity-50"
+                  >
+                    <Search size={18} className={searchingCep ? 'animate-spin' : ''} />
+                  </button>
+                </div>
               </div>
               <div className="md:col-span-2">
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Logradouro (Rua / Av.)</label>

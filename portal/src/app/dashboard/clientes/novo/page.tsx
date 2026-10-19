@@ -52,11 +52,11 @@ export default function NovoClientePage() {
   // Controle dos cards sanfona - padrão fechado (todos false)
   const [openCards, setOpenCards] = useState<Record<string, boolean>>({
     empresa: false,
-    contato: false,
     endereco: false,
+    cobranca: false,
+    contato: false,
     fiscal: false,
     certificado: false,
-    cobranca: false,
     ia: false,
     acesso: false
   })
@@ -68,11 +68,11 @@ export default function NovoClientePage() {
   const expandAll = () => {
     setOpenCards({
       empresa: true,
-      contato: true,
       endereco: true,
+      cobranca: true,
+      contato: true,
       fiscal: true,
       certificado: true,
-      cobranca: true,
       ia: true,
       acesso: true
     })
@@ -81,11 +81,11 @@ export default function NovoClientePage() {
   const collapseAll = () => {
     setOpenCards({
       empresa: false,
-      contato: false,
       endereco: false,
+      cobranca: false,
+      contato: false,
       fiscal: false,
       certificado: false,
-      cobranca: false,
       ia: false,
       acesso: false
     })
@@ -99,6 +99,7 @@ export default function NovoClientePage() {
     nome_sistema_utilizado: '',
     contabilidade_id: '',
     whatsapp: '',
+    whatsapp_cobranca: '',
     nome_contato: '',
     cpf_contato: '',
     email_fiscal: '',
@@ -389,6 +390,7 @@ export default function NovoClientePage() {
         razao_social: data.razao_social || prev.razao_social,
         nome_fantasia: data.nome_fantasia || data.razao_social || prev.nome_fantasia,
         whatsapp: prev.whatsapp || data.whatsapp || '',
+        whatsapp_cobranca: prev.whatsapp_cobranca || data.whatsapp || '',
         email_fiscal: prev.email_fiscal || data.email || '',
         ramo_atividade: prev.ramo_atividade || data.ramo_atividade || '',
         cep: data.cep || prev.cep || '',
@@ -566,6 +568,7 @@ export default function NovoClientePage() {
     
     const payload = {
       ...clienteData,
+      whatsapp_cobranca: formData.whatsapp_cobranca?.trim() || null,
       is_ativo: formData.is_ativo,
       is_associacao: Boolean(formData.is_associacao),
       dia_vencimento: parseInt(String(formData.dia_vencimento)) || 10,
@@ -699,7 +702,7 @@ export default function NovoClientePage() {
       {/* Formulário com Cards de Efeito Sanfona */}
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
         
-        {/* CARD 1: DADOS CADASTRAIS & EMPRESA */}
+        {/* CARD 1: DADOS CADASTRAIS & IDENTIFICAÇÃO */}
         <FormAccordionCard
           id="empresa"
           title="Dados Cadastrais & Identificação"
@@ -933,76 +936,7 @@ export default function NovoClientePage() {
           </div>
         </FormAccordionCard>
 
-        {/* CARD 2: CONTATO & RESPONSÁVEL FISCAL */}
-        <FormAccordionCard
-          id="contato"
-          title="Contatos & Responsável Fiscal"
-          subtitle="WhatsApp para cobranças/alertas, nome do responsável, CPF e e-mail fiscal"
-          icon={<Phone size={22} />}
-          iconBgColor="bg-emerald-50 text-emerald-600 border border-emerald-100"
-          isOpen={openCards.contato}
-          onToggle={() => toggleCard('contato')}
-          badge={
-            formData.whatsapp || formData.email_fiscal ? (
-              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                {formData.whatsapp || formData.email_fiscal}
-              </span>
-            ) : (
-              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-normal text-slate-400 bg-slate-100">
-                Opcional
-              </span>
-            )
-          }
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">WhatsApp (Cobranças / Notificações)</label>
-              <input 
-                type="text" 
-                placeholder="5511999999999" 
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                value={formData.whatsapp} 
-                onChange={e => setFormData({...formData, whatsapp: e.target.value})} 
-              />
-              <p className="text-[11px] text-slate-400 mt-1">Usado para lembretes automáticos de fatura e certificado</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Nome do Contato / Responsável</label>
-              <input 
-                type="text" 
-                placeholder="Ex: João Silva" 
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                value={formData.nome_contato} 
-                onChange={e => setFormData({...formData, nome_contato: e.target.value})} 
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">CPF do Responsável</label>
-              <input 
-                type="text" 
-                placeholder="000.000.000-00" 
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                value={formData.cpf_contato} 
-                onChange={e => setFormData({...formData, cpf_contato: e.target.value})} 
-              />
-            </div>
-
-            <div className="md:col-span-2 lg:col-span-3">
-              <label className="block text-sm font-semibold text-slate-700 mb-1">E-mail Fiscal (para envio de guias e relatórios)</label>
-              <input 
-                type="email" 
-                placeholder="fiscal@empresa.com.br" 
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
-                value={formData.email_fiscal} 
-                onChange={e => setFormData({...formData, email_fiscal: e.target.value})} 
-              />
-            </div>
-          </div>
-        </FormAccordionCard>
-
-        {/* CARD 3: ENDEREÇO & LOCALIZAÇÃO */}
+        {/* CARD 2: ENDEREÇO & LOCALIZAÇÃO (Logo após dados cadastrais) */}
         <FormAccordionCard
           id="endereco"
           title="Endereço & Localização"
@@ -1130,7 +1064,250 @@ export default function NovoClientePage() {
           </div>
         </FormAccordionCard>
 
-        {/* CARD 4: PONTO DE PARTIDA FISCAL & NUMERAÇÃO INICIAL */}
+        {/* CARD 3: FATURAMENTO & PARÂMETROS DE COBRANÇA (Com campo WhatsApp para cobrança) */}
+        {userRole === 'admin' && (
+          <FormAccordionCard
+            id="cobranca"
+            title="Faturamento & Parâmetros de Cobrança"
+            subtitle="Mensalidade, custo operacional, dia de vencimento, WhatsApp de cobrança e regras individuais de juros"
+            icon={<DollarSign size={22} />}
+            iconBgColor="bg-teal-50 text-teal-600 border border-teal-100"
+            isOpen={openCards.cobranca}
+            onToggle={() => toggleCard('cobranca')}
+            badge={
+              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+                {formData.valor_mensalidade ? `R$ ${formData.valor_mensalidade}/mês` : 'R$ 0,00'} • Dia {formData.dia_vencimento || 10}
+              </span>
+            }
+          >
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Valor da Mensalidade (R$)</label>
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    min="0"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-semibold"
+                    placeholder="0.00"
+                    value={formData.valor_mensalidade} 
+                    onChange={e => setFormData({...formData, valor_mensalidade: e.target.value})} 
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">Valor cobrado mensalmente do cliente</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Custo do Cliente (R$)</label>
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    min="0"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500 bg-slate-50/50 font-semibold text-rose-700"
+                    placeholder="0.00"
+                    value={formData.custo} 
+                    onChange={e => setFormData({...formData, custo: e.target.value})} 
+                  />
+                  <div className="flex items-center justify-between text-[11px] mt-1">
+                    <span className="text-slate-500">Custo operacional</span>
+                    {(formData.valor_mensalidade || formData.custo) && (
+                      <span className="font-semibold text-blue-700 font-mono">
+                        Lucro: {((parseFloat(String(formData.valor_mensalidade || 0).replace(',', '.')) || 0) - (parseFloat(String(formData.custo || 0).replace(',', '.')) || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Dia de Vencimento da Fatura</label>
+                  <input 
+                    type="number" 
+                    min="1" 
+                    max="31"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-semibold"
+                    placeholder="10"
+                    value={formData.dia_vencimento} 
+                    onChange={e => setFormData({...formData, dia_vencimento: e.target.value})} 
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">Gera fatura automática todo dia 01</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+                    <span>WhatsApp de Cobrança / Faturas</span>
+                  </label>
+                  <input 
+                    type="text" 
+                    placeholder="5511999999999" 
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white font-medium text-slate-800"
+                    value={formData.whatsapp_cobranca} 
+                    onChange={e => setFormData({...formData, whatsapp_cobranca: e.target.value})} 
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">Recebe links de faturas Pix (se vazio, usa o WhatsApp geral)</p>
+                </div>
+              </div>
+
+              {/* Seção Destacada: Parâmetros Individuais de Cobrança e Juros */}
+              <div className="p-5 bg-gradient-to-br from-emerald-50/70 via-teal-50/40 to-slate-50 border-2 border-emerald-300 rounded-2xl shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-emerald-200">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-emerald-600 text-white rounded-xl shadow-xs">
+                      <DollarSign size={20} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-bold text-slate-900">
+                          Parâmetros de Cobrança, Juros e Carência (Desta Empresa)
+                        </h4>
+                        <span className="text-[10px] uppercase font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md border border-emerald-200">
+                          Prioridade Máxima
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 mt-0.5">
+                        Se preenchidos, os valores deste cliente anulam e substituem as taxas globais. Se deixados em branco, assumem automaticamente o padrão global do sistema.
+                      </p>
+                    </div>
+                  </div>
+                  <Link 
+                    href="/dashboard/configuracoes-portal?aba=cobranca" 
+                    target="_blank"
+                    className="text-xs font-bold text-emerald-700 hover:text-emerald-900 bg-white border border-emerald-200 px-3 py-1.5 rounded-lg shadow-2xs hover:bg-emerald-50 transition shrink-0 inline-flex items-center gap-1"
+                  >
+                    Ver Regras Globais ↗
+                  </Link>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Multa por Atraso (%)
+                    </label>
+                    <div className="relative">
+                      <input 
+                        type="number" 
+                        step="0.01" 
+                        min="0"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-bold text-slate-900 pr-10 text-sm"
+                        placeholder="Padrão Global: 2.00%"
+                        value={formData.multa_atraso_percentual} 
+                        onChange={e => setFormData({...formData, multa_atraso_percentual: e.target.value})} 
+                      />
+                      <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">%</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">Deixe em branco para usar a regra global (2%)</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Juros de Mora Mensal (%)
+                    </label>
+                    <div className="relative">
+                      <input 
+                        type="number" 
+                        step="0.01" 
+                        min="0"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-bold text-slate-900 pr-16 text-sm"
+                        placeholder="Padrão Global: 1.00%"
+                        value={formData.juros_mora_mensal_percentual} 
+                        onChange={e => setFormData({...formData, juros_mora_mensal_percentual: e.target.value})} 
+                      />
+                      <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">% a.m.</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">Deixe em branco para usar a regra global (1% a.m.)</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Dias de Carência / Tolerância
+                    </label>
+                    <div className="relative">
+                      <input 
+                        type="number" 
+                        min="0"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white font-bold text-slate-900 pr-14 text-sm"
+                        placeholder="Padrão Global: 3 dias"
+                        value={formData.dias_carencia} 
+                        onChange={e => setFormData({...formData, dias_carencia: e.target.value})} 
+                      />
+                      <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">dias</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">Deixe em branco para usar carência global (3 dias)</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </FormAccordionCard>
+        )}
+
+        {/* CARD 4: CONTATOS & RESPONSÁVEL (Renomeado) */}
+        <FormAccordionCard
+          id="contato"
+          title="Contatos & Responsável"
+          subtitle="WhatsApp principal de contato, nome do responsável legal, CPF e e-mail fiscal"
+          icon={<Phone size={22} />}
+          iconBgColor="bg-emerald-50 text-emerald-600 border border-emerald-100"
+          isOpen={openCards.contato}
+          onToggle={() => toggleCard('contato')}
+          badge={
+            formData.whatsapp || formData.email_fiscal ? (
+              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                {formData.whatsapp || formData.email_fiscal}
+              </span>
+            ) : (
+              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-normal text-slate-400 bg-slate-100">
+                Opcional
+              </span>
+            )
+          }
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Nome do Contato / Responsável</label>
+              <input 
+                type="text" 
+                placeholder="Ex: João Silva" 
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                value={formData.nome_contato} 
+                onChange={e => setFormData({...formData, nome_contato: e.target.value})} 
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">CPF do Responsável</label>
+              <input 
+                type="text" 
+                placeholder="000.000.000-00" 
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                value={formData.cpf_contato} 
+                onChange={e => setFormData({...formData, cpf_contato: e.target.value})} 
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">WhatsApp Principal / Notificações</label>
+              <input 
+                type="text" 
+                placeholder="5511999999999" 
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                value={formData.whatsapp} 
+                onChange={e => setFormData({...formData, whatsapp: e.target.value})} 
+              />
+              <p className="text-[11px] text-slate-400 mt-1">Contato geral da empresa e lembretes de certificado digital</p>
+            </div>
+
+            <div className="md:col-span-2 lg:col-span-3">
+              <label className="block text-sm font-semibold text-slate-700 mb-1">E-mail Fiscal (para envio de guias e relatórios)</label>
+              <input 
+                type="email" 
+                placeholder="fiscal@empresa.com.br" 
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                value={formData.email_fiscal} 
+                onChange={e => setFormData({...formData, email_fiscal: e.target.value})} 
+              />
+            </div>
+          </div>
+        </FormAccordionCard>
+
+        {/* CARD 5: PONTO DE PARTIDA FISCAL & NUMERAÇÃO INICIAL */}
         <FormAccordionCard
           id="fiscal"
           title="Ponto de Partida Fiscal & Numeração Inicial"
@@ -1259,7 +1436,7 @@ export default function NovoClientePage() {
           </div>
         </FormAccordionCard>
 
-        {/* CARD 5: CERTIFICADO DIGITAL A1 */}
+        {/* CARD 6: CERTIFICADO DIGITAL A1 */}
         <FormAccordionCard
           id="certificado"
           title="Certificado Digital A1 (.pfx / .p12)"
@@ -1393,166 +1570,6 @@ export default function NovoClientePage() {
             </div>
           </div>
         </FormAccordionCard>
-
-        {/* CARD 6: FATURAMENTO & PARÂMETROS DE COBRANÇA (ADMIN) */}
-        {userRole === 'admin' && (
-          <FormAccordionCard
-            id="cobranca"
-            title="Faturamento & Parâmetros de Cobrança"
-            subtitle="Mensalidade, custo operacional, dia de vencimento e regras de juros/multa/carência"
-            icon={<DollarSign size={22} />}
-            iconBgColor="bg-teal-50 text-teal-600 border border-teal-100"
-            isOpen={openCards.cobranca}
-            onToggle={() => toggleCard('cobranca')}
-            badge={
-              <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200">
-                {formData.valor_mensalidade ? `R$ ${formData.valor_mensalidade}/mês` : 'R$ 0,00'} • Dia {formData.dia_vencimento || 10}
-              </span>
-            }
-          >
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Valor da Mensalidade (R$)</label>
-                  <input 
-                    type="number" 
-                    step="0.01" 
-                    min="0"
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-semibold"
-                    placeholder="0.00"
-                    value={formData.valor_mensalidade} 
-                    onChange={e => setFormData({...formData, valor_mensalidade: e.target.value})} 
-                  />
-                  <p className="text-[11px] text-slate-500 mt-1">Valor cobrado mensalmente do cliente</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Custo do Cliente (R$)</label>
-                  <input 
-                    type="number" 
-                    step="0.01" 
-                    min="0"
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500 bg-slate-50/50 font-semibold text-rose-700"
-                    placeholder="0.00"
-                    value={formData.custo} 
-                    onChange={e => setFormData({...formData, custo: e.target.value})} 
-                  />
-                  <div className="flex items-center justify-between text-[11px] mt-1">
-                    <span className="text-slate-500">Custo operacional</span>
-                    {(formData.valor_mensalidade || formData.custo) && (
-                      <span className="font-semibold text-blue-700 font-mono">
-                        Lucro: {((parseFloat(String(formData.valor_mensalidade || 0).replace(',', '.')) || 0) - (parseFloat(String(formData.custo || 0).replace(',', '.')) || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Dia de Vencimento da Fatura</label>
-                  <input 
-                    type="number" 
-                    min="1" 
-                    max="31"
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-semibold"
-                    placeholder="10"
-                    value={formData.dia_vencimento} 
-                    onChange={e => setFormData({...formData, dia_vencimento: e.target.value})} 
-                  />
-                  <p className="text-[11px] text-slate-500 mt-1">Gera fatura automática todo dia 01</p>
-                </div>
-              </div>
-
-              {/* Seção Destacada: Parâmetros Individuais de Cobrança e Juros */}
-              <div className="p-5 bg-gradient-to-br from-emerald-50/70 via-teal-50/40 to-slate-50 border-2 border-emerald-300 rounded-2xl shadow-xs space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-emerald-200">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 bg-emerald-600 text-white rounded-xl shadow-xs">
-                      <DollarSign size={20} />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-bold text-slate-900">
-                          Parâmetros de Cobrança, Juros e Carência (Desta Empresa)
-                        </h4>
-                        <span className="text-[10px] uppercase font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md border border-emerald-200">
-                          Prioridade Máxima
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600 mt-0.5">
-                        Se preenchidos, os valores deste cliente anulam e substituem as taxas globais. Se deixados em branco, assumem automaticamente o padrão global do sistema.
-                      </p>
-                    </div>
-                  </div>
-                  <Link 
-                    href="/dashboard/configuracoes-portal?aba=cobranca" 
-                    target="_blank"
-                    className="text-xs font-bold text-emerald-700 hover:text-emerald-900 bg-white border border-emerald-200 px-3 py-1.5 rounded-lg shadow-2xs hover:bg-emerald-50 transition shrink-0 inline-flex items-center gap-1"
-                  >
-                    Ver Regras Globais ↗
-                  </Link>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Multa por Atraso (%)
-                    </label>
-                    <div className="relative">
-                      <input 
-                        type="number" 
-                        step="0.01" 
-                        min="0"
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-bold text-slate-900 pr-10 text-sm"
-                        placeholder="Padrão Global: 2.00%"
-                        value={formData.multa_atraso_percentual} 
-                        onChange={e => setFormData({...formData, multa_atraso_percentual: e.target.value})} 
-                      />
-                      <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">%</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 mt-1">Deixe em branco para usar a regra global (2%)</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Juros de Mora Mensal (%)
-                    </label>
-                    <div className="relative">
-                      <input 
-                        type="number" 
-                        step="0.01" 
-                        min="0"
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-bold text-slate-900 pr-16 text-sm"
-                        placeholder="Padrão Global: 1.00%"
-                        value={formData.juros_mora_mensal_percentual} 
-                        onChange={e => setFormData({...formData, juros_mora_mensal_percentual: e.target.value})} 
-                      />
-                      <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">% a.m.</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 mt-1">Deixe em branco para usar a regra global (1% a.m.)</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Dias de Carência / Tolerância
-                    </label>
-                    <div className="relative">
-                      <input 
-                        type="number" 
-                        min="0"
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white font-bold text-slate-900 pr-14 text-sm"
-                        placeholder="Padrão Global: 3 dias"
-                        value={formData.dias_carencia} 
-                        onChange={e => setFormData({...formData, dias_carencia: e.target.value})} 
-                      />
-                      <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">dias</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 mt-1">Deixe em branco para usar carência global (3 dias)</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </FormAccordionCard>
-        )}
 
         {/* CARD 7: PLANO AUDITORIA TRIBUTÁRIA COM IA (GOOGLE GEMINI) */}
         <FormAccordionCard
