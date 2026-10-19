@@ -173,7 +173,18 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     let query = supabase.from(tabela).select('*').order('data_emissao', { ascending: false })
     if (targetClienteId) {
       query = query.eq('cliente_id', targetClienteId)
-    } else {
+    }
+
+    // Otimização: aplica filtro de período diretamente no banco utilizando os novos índices
+    if (filtroMes && /^\d{4}-\d{2}$/.test(filtroMes)) {
+      const [ano, mes] = filtroMes.split('-').map(Number)
+      const dataInicioMes = new Date(Date.UTC(ano, mes - 1, 1, 0, 0, 0)).toISOString()
+      const dataFimMes = new Date(Date.UTC(ano, mes, 0, 23, 59, 59, 999)).toISOString()
+      query = query.gte('data_emissao', dataInicioMes).lte('data_emissao', dataFimMes)
+    } else if (dataInicio || dataFim) {
+      if (dataInicio) query = query.gte('data_emissao', `${dataInicio}T00:00:00.000Z`)
+      if (dataFim) query = query.lte('data_emissao', `${dataFim}T23:59:59.999Z`)
+    } else if (!targetClienteId) {
       query = query.limit(200)
     }
 
@@ -186,7 +197,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     if (!loadingClientes) {
       load()
     }
-  }, [tabela, selectedCliente, loadingClientes])
+  }, [tabela, selectedCliente, loadingClientes, filtroMes, dataInicio, dataFim])
 
   function formatDoc(doc?: string | null) {
     if (!doc) return '—'

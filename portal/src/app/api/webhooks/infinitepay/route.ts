@@ -5,6 +5,16 @@ import { gerarProximaFaturaAposPagamento } from '@/utils/billingCharges'
 
 export async function POST(request: Request) {
   try {
+    // 0. Validação de autenticidade (se token secreto configurado)
+    const webhookSecret = process.env.INFINITEPAY_WEBHOOK_SECRET
+    if (webhookSecret) {
+      const headerSecret = request.headers.get('x-webhook-secret') || request.headers.get('authorization')
+      if (!headerSecret || (headerSecret !== webhookSecret && headerSecret !== `Bearer ${webhookSecret}`)) {
+        console.warn('Webhook InfinitePay: Requisição bloqueada por token/segredo inválido.')
+        return NextResponse.json({ error: 'Assinatura/token de webhook inválido.' }, { status: 401 })
+      }
+    }
+
     const body = await request.json()
     const supabase = createAdminClient()
 

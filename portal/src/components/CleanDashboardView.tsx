@@ -7,8 +7,9 @@ import {
   Calendar, Receipt, Sparkles, Building2, ChevronDown, 
   ChevronUp, Package, ArrowUpRight, Clock, Store, Check, ExternalLink
 } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import { ClienteItem, useGlobalClient } from './GlobalClientContext'
-import FechamentoFiscalModal from './FechamentoFiscalModal'
+const FechamentoFiscalModal = dynamic(() => import('./FechamentoFiscalModal'), { ssr: false })
 import { formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
 import { FUSO_BRASIL, parseDateUtc } from '@/utils/dateBrasil'
 

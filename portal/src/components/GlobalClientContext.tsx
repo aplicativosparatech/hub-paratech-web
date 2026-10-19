@@ -196,8 +196,31 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
       setUserRole(role)
       setLoadingRole(false)
 
-      const camposSelect = 'id, razao_social, nome_fantasia, cnpj, whatsapp, telefone, uf, cidade, regime_tributario, certificado_url, certificado_validade, logo_url, contabilidade_id, is_ativo'
+      const camposSelect = 'id, razao_social, nome_fantasia, cnpj, whatsapp, telefone, uf, cidade, regime_tributario, certificado_url, certificado_validade, logo_url, contabilidade_id, is_ativo, contabilidades(id, razao_social, nome_fantasia), configuracoes_hub(ultima_sincronizacao)'
       let clisData: ClienteItem[] = []
+
+      const formatarClienteItem = (c: any): ClienteItem => {
+        const contab = Array.isArray(c.contabilidades) ? c.contabilidades[0] : c.contabilidades
+        const hub = Array.isArray(c.configuracoes_hub) ? c.configuracoes_hub[0] : c.configuracoes_hub
+        return {
+          id: c.id,
+          razao_social: c.razao_social,
+          nome_fantasia: c.nome_fantasia,
+          cnpj: c.cnpj,
+          whatsapp: c.whatsapp,
+          telefone: c.telefone,
+          uf: c.uf,
+          cidade: c.cidade,
+          regime_tributario: c.regime_tributario,
+          certificado_url: c.certificado_url,
+          certificado_validade: c.certificado_validade,
+          logo_url: c.logo_url,
+          contabilidade_id: c.contabilidade_id,
+          is_ativo: c.is_ativo,
+          contabilidade_nome: contab?.nome_fantasia || contab?.razao_social || 'Não vinculada',
+          ultima_sincronizacao_hub: hub?.ultima_sincronizacao || null
+        }
+      }
 
       if (role === 'cliente' && roleData?.cliente_id) {
         const { data: cli, error: errCli } = await supabase
@@ -214,7 +237,7 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
             .maybeSingle()
           if (fbCli) clisData = [fbCli as any]
         } else if (cli) {
-          clisData = [cli]
+          clisData = [formatarClienteItem(cli)]
         }
         if (clisData.length > 0) {
           _setSelectedClienteId(clisData[0].id)
@@ -235,7 +258,7 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
             .order('razao_social')
           if (fbClis) clisData = fbClis as any[]
         } else if (clis) {
-          clisData = clis
+          clisData = clis.map(formatarClienteItem)
         }
       } else {
         // Admin: busca todas as empresas
@@ -251,32 +274,8 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
             .order('razao_social')
           if (fbClis) clisData = fbClis as any[]
         } else if (clis) {
-          clisData = clis
+          clisData = clis.map(formatarClienteItem)
         }
-      }
-
-      // Enriquecer clientes com os nomes das contabilidades vinculadas
-      try {
-        const { data: contabs } = await supabase.from('contabilidades').select('id, razao_social, nome_fantasia')
-        const contabMap = new Map((contabs || []).map(c => [c.id, c.nome_fantasia || c.razao_social]))
-        clisData = clisData.map(c => ({
-          ...c,
-          contabilidade_nome: c.contabilidade_id ? (contabMap.get(c.contabilidade_id) || 'Não vinculada') : 'Não vinculada'
-        }))
-      } catch (errContabs) {
-        console.warn('Erro ao mapear nomes de contabilidades:', errContabs)
-      }
-
-      // Enriquecer clientes com a última sincronização do Hub Paratech
-      try {
-        const { data: hubConfigs } = await supabase.from('configuracoes_hub').select('cliente_id, ultima_sincronizacao')
-        const hubMap = new Map((hubConfigs || []).map(h => [h.cliente_id, h.ultima_sincronizacao]))
-        clisData = clisData.map(c => ({
-          ...c,
-          ultima_sincronizacao_hub: hubMap.get(c.id) || null
-        }))
-      } catch (errHub) {
-        console.warn('Erro ao mapear última sincronização do Hub:', errHub)
       }
 
       setClientes(clisData)
