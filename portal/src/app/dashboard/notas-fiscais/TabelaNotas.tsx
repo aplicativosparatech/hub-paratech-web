@@ -241,21 +241,25 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
   // Se a nota tiver erro/pendência (não autorizada pela SEFAZ, sem assinatura, divergente),
   // ela NÃO é listada nas abas normais (NFC-e e NF-e), e sim exclusivamente na nova aba "Arquivos para Correção".
   const pendentesList = notas.filter(n => {
-    const isAut = n.is_autorizada === true || n.cstat === '100' || (Boolean(n.protocolo) && Boolean(n.tem_assinatura))
-    if (!isAut) return true
-    if (!n.tem_assinatura) return true
     if (isSaida) {
+      // Saídas (emitidas pelo cliente): exigem autorização da SEFAZ e assinatura digital do emitente
+      const isAut = n.is_autorizada === true || n.cstat === '100' || (Boolean(n.protocolo) && Boolean(n.tem_assinatura))
+      if (!isAut) return true
+      if (!n.tem_assinatura) return true
       if (n.cnpj_divergente) return true
       const cleanChaveCnpj = n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : ''
       const emit = limparDocumento(n.cnpj_emitente || cleanChaveCnpj)
       return Boolean(cleanCurrentCnpj) && Boolean(emit) && cleanCurrentCnpj !== emit
     } else {
-      // Notas de entrada (compras):
-      // O emitente DEVE ser um terceiro/fornecedor (divergente do cliente).
-      // Se for a própria empresa emitindo, só é permitido para Associação.
+      // Notas de entrada (compras emitidas por terceiros):
+      // A nota é válida se estiver autorizada pela SEFAZ (com protocolo, cstat 100 ou is_autorizada).
+      const isAut = n.is_autorizada === true || n.cstat === '100' || Boolean(n.protocolo)
+      if (!isAut) return true
       if (n.cnpj_divergente) return true
       const cleanChaveCnpj = n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : ''
       const emit = limparDocumento(n.cnpj_emitente || cleanChaveCnpj)
+      // O emitente DEVE ser um terceiro/fornecedor (divergente do cliente).
+      // Se for a própria empresa emitindo, só é permitido para Associação.
       if (!isAssociacao && Boolean(cleanCurrentCnpj) && Boolean(emit) && cleanCurrentCnpj === emit) {
         return true
       }
@@ -995,7 +999,9 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                         </div>
                       )}
                     </td>
-                    <td className="p-3.5 text-center overflow-hidden"><AssinaturaChip ok={n.tem_assinatura} /></td>
+                    <td className="p-3.5 text-center overflow-hidden">
+                      <AssinaturaChip ok={isSaida ? Boolean(n.tem_assinatura) : Boolean(n.tem_assinatura || n.protocolo || n.cstat === '100' || n.is_autorizada)} />
+                    </td>
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center gap-1">
                         {/* 1. Botão Gerar DANFE / DANFE-NFCe */}

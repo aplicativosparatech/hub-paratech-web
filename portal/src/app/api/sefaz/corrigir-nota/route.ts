@@ -15,8 +15,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Parâmetros nota_id e tabela são obrigatórios.' }, { status: 400 })
     }
 
-    if (tabela !== 'nfce_saidas' && tabela !== 'nfe_saidas') {
-      return NextResponse.json({ error: 'Tabela inválida: deve ser nfce_saidas ou nfe_saidas.' }, { status: 400 })
+    if (tabela !== 'nfce_saidas' && tabela !== 'nfe_saidas' && tabela !== 'nfe_entradas') {
+      return NextResponse.json({ error: 'Tabela inválida: deve ser nfce_saidas, nfe_saidas ou nfe_entradas.' }, { status: 400 })
     }
 
     // 1. Busca a nota fiscal

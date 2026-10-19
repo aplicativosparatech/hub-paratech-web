@@ -194,10 +194,10 @@ async function processarNotaIndividual({
 
   let emissao = extractTag(xmlCompleto, 'dhEmi') || extractTag(xmlCompleto, 'dEmi') || dfeNota?.data_emissao || new Date().toISOString()
   let transmissao = extractTag(xmlCompleto, 'dhRecbto') || emissao
-  let temAssinatura = xmlCompleto.includes('<Signature')
   let cStat = extractTag(xmlCompleto, 'cStat') || '100'
   let xMotivo = extractTag(xmlCompleto, 'xMotivo') || 'Autorizado o uso da NF-e'
   let nProt = extractTag(xmlCompleto, 'nProt') || protocolo || ('1' + chave.substring(2, 16))
+  let temAssinatura = xmlCompleto.includes('<Signature') || xmlCompleto.includes('<protNFe') || cStat === '100'
 
   const valorMonofasico = calculateMonofasico(xmlCompleto)
   const formasPagamento = extrairFormasPagamento(xmlCompleto, valor)
@@ -261,13 +261,19 @@ async function processarNotaIndividual({
     const fallbackPayload = {
       cliente_id: cliente.id,
       numero: numero || null,
+      serie: serie || null,
       chave: chave,
       valor: valor || 0,
       data_emissao: emissao || null,
       data_transmissao: transmissao || null,
       tem_assinatura: temAssinatura,
       is_autorizada: true,
-      storage_path: filePath
+      storage_path: filePath,
+      cnpj_emitente: cnpjEmitente || null,
+      protocolo: nProt,
+      cstat: cStat,
+      motivo_sefaz: xMotivo,
+      cnpj_divergente: false
     }
     await supabaseAdmin.from('nfe_entradas').upsert(fallbackPayload, { onConflict: 'chave' })
   }

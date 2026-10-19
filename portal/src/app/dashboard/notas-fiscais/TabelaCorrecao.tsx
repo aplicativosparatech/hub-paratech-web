@@ -126,10 +126,14 @@ export default function TabelaCorrecao() {
     // Busca em nfe_saidas estritamente da empresa selecionada
     const queryNfe = supabase.from('nfe_saidas').select('*').eq('cliente_id', targetClienteId).order('data_emissao', { ascending: false })
 
-    const [resNfce, resNfe] = await Promise.all([queryNfce, queryNfe])
+    // Busca em nfe_entradas estritamente da empresa selecionada
+    const queryEntradas = supabase.from('nfe_entradas').select('*').eq('cliente_id', targetClienteId).order('data_emissao', { ascending: false })
+
+    const [resNfce, resNfe, resEntradas] = await Promise.all([queryNfce, queryNfe, queryEntradas])
 
     const currentCli = clientes.find(c => c.id === targetClienteId) || (userRole === 'cliente' ? clientes[0] : null)
     const cleanCurrentCnpj = limparDocumento(currentCli?.cnpj)
+    const isAssociacao = Boolean(currentCli?.is_associacao)
 
     const pendentesNfce = (resNfce.data || [])
       .filter((n: any) => {
@@ -151,7 +155,17 @@ export default function TabelaCorrecao() {
       })
       .map((n: any) => ({ ...n, _tabela: 'nfe_saidas', _tipo: 'NF-e (Mod 55)' }))
 
-    setNotas([...pendentesNfce, ...pendentesNfe])
+    const pendentesEntradas = (resEntradas.data || [])
+      .filter((n: any) => {
+        const isAut = n.is_autorizada === true || n.cstat === '100' || Boolean(n.protocolo)
+        const cleanChaveCnpj = n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : ''
+        const emit = limparDocumento(n.cnpj_emitente || cleanChaveCnpj)
+        const emitentePropriaEmpresa = !isAssociacao && Boolean(cleanCurrentCnpj) && Boolean(emit) && cleanCurrentCnpj === emit
+        return !isAut || n.cnpj_divergente || emitentePropriaEmpresa
+      })
+      .map((n: any) => ({ ...n, _tabela: 'nfe_entradas', _tipo: 'NF-e de Entrada' }))
+
+    setNotas([...pendentesNfce, ...pendentesNfe, ...pendentesEntradas])
     setLoading(false)
   }
 
