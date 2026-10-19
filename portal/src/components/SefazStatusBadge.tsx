@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { 
   Activity, CheckCircle2, AlertTriangle, XCircle, RefreshCw, 
   ChevronRight, X, ExternalLink, ShieldAlert, ShieldCheck, 
@@ -35,12 +36,36 @@ interface SefazStatusBadgeProps {
 }
 
 export default function SefazStatusBadge({ variant = 'sidebar' }: SefazStatusBadgeProps) {
+  const [mounted, setMounted] = useState<boolean>(false)
   const [statusData, setStatusData] = useState<SefazStatusGeralResponse | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
   const [refreshing, setRefreshing] = useState<boolean>(false)
   const [modalOpen, setModalOpen] = useState<boolean>(false)
   const [filtroUf, setFiltroUf] = useState<string>('')
   const [abaFiltro, setAbaFiltro] = useState<'todos' | 'instaveis' | 'principais'>('todos')
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Gerencia tecla ESC e trava scroll do body quando o modal estiver aberto
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setModalOpen(false)
+      }
+    }
+
+    if (modalOpen) {
+      document.addEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = 'hidden'
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = 'unset'
+    }
+  }, [modalOpen])
 
   // Busca o status inicial
   const carregarStatus = async (force = false) => {
@@ -233,10 +258,15 @@ export default function SefazStatusBadge({ variant = 'sidebar' }: SefazStatusBad
         </button>
       )}
 
-      {/* MODAL DETALHADO DE DISPONIBILIDADE DA SEFAZ */}
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white dark:bg-[#0B1120] rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+      {/* MODAL DETALHADO DE DISPONIBILIDADE DA SEFAZ (Renderizado diretamente no document.body para evitar corte/stacking context de headers ou sidebars) */}
+      {mounted && modalOpen && createPortal(
+        <div 
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-xs animate-fadeIn"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setModalOpen(false)
+          }}
+        >
+          <div className="bg-white dark:bg-[#0B1120] rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden relative z-[100000]">
             
             {/* Header do Modal */}
             <div className="p-5 sm:p-6 pb-4 border-b border-slate-100 dark:border-slate-800 flex items-start justify-between gap-4 flex-shrink-0">
@@ -483,7 +513,8 @@ export default function SefazStatusBadge({ variant = 'sidebar' }: SefazStatusBad
             </div>
 
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   )

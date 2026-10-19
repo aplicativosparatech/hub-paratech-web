@@ -72,8 +72,19 @@ export default function RelatoriosPage() {
   const [filtrosNcmDisponiveis, setFiltrosNcmDisponiveis] = useState<any[]>([])
   const [loadingProdutosMonofasicos, setLoadingProdutosMonofasicos] = useState(false)
   const [filtroNcmSelecionado, setFiltroNcmSelecionado] = useState<string>('todos')
+  const [filtroConformidade, setFiltroConformidade] = useState<'todos' | 'divergentes' | 'regulares'>('todos')
   const [modoAgrupamentoMonofasico, setModoAgrupamentoMonofasico] = useState<'cupom' | 'agrupado'>('cupom')
   const [buscaMonofasico, setBuscaMonofasico] = useState<string>('')
+  const [totaisMonofasicos, setTotaisMonofasicos] = useState<{
+    total_itens: number
+    valor_total: number
+    valor_regular: number
+    valor_divergente: number
+    qtd_regular: number
+    qtd_divergente: number
+    cupons_distintos: number
+    estimativa_economia_simples: number
+  } | null>(null)
 
   // Estados de Paginação
   const [pageMonofasico, setPageMonofasico] = useState<number>(1)
@@ -319,6 +330,7 @@ export default function RelatoriosPage() {
       if (!res.ok) throw new Error(data.error || 'Erro ao carregar produtos monofásicos')
       setProdutosMonofasicos(data.produtos || [])
       setFiltrosNcmDisponiveis(data.filtros_disponiveis || [])
+      setTotaisMonofasicos(data.totais || null)
     } catch (err: any) {
       console.warn('Erro ao carregar produtos monofásicos:', err)
     } finally {
@@ -333,18 +345,23 @@ export default function RelatoriosPage() {
     }
   }, [selectedCliente, selectedMonth, activeTab])
 
-  // Produtos Monofásicos Filtrados pelo NCM e Termo de Busca
+  // Produtos Monofásicos Filtrados pelo NCM, Conformidade e Termo de Busca
   const produtosMonofasicosFiltrados = useMemo(() => {
     return produtosMonofasicos.filter(item => {
       const matchNcm = filtroNcmSelecionado === 'todos' || item.ncm === filtroNcmSelecionado
+      const matchConformidade = 
+        filtroConformidade === 'todos' ? true :
+        filtroConformidade === 'divergentes' ? item.status_conformidade !== 'regular' :
+        item.status_conformidade === 'regular'
       const matchBusca = !buscaMonofasico || 
         item.xProd?.toLowerCase().includes(buscaMonofasico.toLowerCase()) ||
         item.cProd?.toLowerCase().includes(buscaMonofasico.toLowerCase()) ||
         item.cupom_numero?.toLowerCase().includes(buscaMonofasico.toLowerCase()) ||
-        item.descricao_ncm?.toLowerCase().includes(buscaMonofasico.toLowerCase())
-      return matchNcm && matchBusca
+        item.descricao_ncm?.toLowerCase().includes(buscaMonofasico.toLowerCase()) ||
+        item.ncm?.includes(buscaMonofasico)
+      return matchNcm && matchConformidade && matchBusca
     })
-  }, [produtosMonofasicos, filtroNcmSelecionado, buscaMonofasico])
+  }, [produtosMonofasicos, filtroNcmSelecionado, filtroConformidade, buscaMonofasico])
 
   // Produtos Agrupados por Produto e NCM (Sintético)
   const produtosMonofasicosAgrupados = useMemo(() => {
@@ -364,12 +381,21 @@ export default function RelatoriosPage() {
           uCom: item.uCom,
           qtd_total: 0,
           valor_total: 0,
+          valor_regular: 0,
+          valor_divergente: 0,
+          qtd_divergentes: 0,
           cupons: new Set<string>()
         })
       }
       const reg = map.get(key)!
       reg.qtd_total += Number(item.qCom || 0)
       reg.valor_total += Number(item.vProd || 0)
+      if (item.status_conformidade === 'regular') {
+        reg.valor_regular += Number(item.vProd || 0)
+      } else {
+        reg.valor_divergente += Number(item.vProd || 0)
+        reg.qtd_divergentes += 1
+      }
       reg.cupons.add(item.chave || item.cupom_numero)
     }
 
@@ -377,14 +403,15 @@ export default function RelatoriosPage() {
       ...r,
       qtd_cupons: r.cupons.size,
       preco_medio: r.qtd_total > 0 ? (r.valor_total / r.qtd_total) : 0,
-      percentual: totalGeral > 0 ? ((r.valor_total / totalGeral) * 100) : 0
+      percentual: totalGeral > 0 ? ((r.valor_total / totalGeral) * 100) : 0,
+      tem_divergencia: r.qtd_divergentes > 0
     })).sort((a, b) => b.valor_total - a.valor_total)
   }, [produtosMonofasicosFiltrados])
 
   // Reset de página dos produtos monofásicos ao alterar filtros ou competência
   useEffect(() => {
     setPageMonofasico(1)
-  }, [filtroNcmSelecionado, modoAgrupamentoMonofasico, buscaMonofasico, selectedMonth, selectedCliente, pageSizeMonofasico])
+  }, [filtroNcmSelecionado, filtroConformidade, modoAgrupamentoMonofasico, buscaMonofasico, selectedMonth, selectedCliente, pageSizeMonofasico])
 
   // Hook de ordenação e redimensionamento - Monofásicos Analítico (Cupom)
   const {
@@ -400,19 +427,21 @@ export default function RelatoriosPage() {
     defaultSortKey: 'total',
     defaultSortDirection: 'desc',
     initialWidths: {
-      cupom: 170,
-      produto: 250,
-      ncm: 200,
-      cfopCst: 140,
-      qtd: 90,
-      vlrUnit: 110,
-      total: 140
+      cupom: 160,
+      produto: 240,
+      ncm: 190,
+      conformidade: 180,
+      cfopCst: 130,
+      qtd: 85,
+      vlrUnit: 105,
+      total: 135
     },
     customExtractors: {
       cupom: (i: any) => Number(i.cupom_numero || 0),
       produto: (i: any) => i.xProd || '',
       ncm: (i: any) => i.ncm || '',
-      cfopCst: (i: any) => `${i.cfop || ''}/${i.cst_pis || ''}`,
+      conformidade: (i: any) => i.status_conformidade || '',
+      cfopCst: (i: any) => `${i.cfop || ''}/${i.cst || ''}`,
       qtd: (i: any) => Number(i.qCom || 0),
       vlrUnit: (i: any) => Number(i.vUnCom || 0),
       total: (i: any) => Number(i.vProd || 0)
@@ -433,8 +462,9 @@ export default function RelatoriosPage() {
     defaultSortKey: 'total',
     defaultSortDirection: 'desc',
     initialWidths: {
-      ncm: 220,
-      produto: 260,
+      ncm: 210,
+      produto: 250,
+      conformidade: 170,
       cupons: 110,
       qtdTotal: 100,
       precoMedio: 120,
@@ -444,6 +474,7 @@ export default function RelatoriosPage() {
     customExtractors: {
       ncm: (i: any) => i.ncm || '',
       produto: (i: any) => i.xProd || '',
+      conformidade: (i: any) => (i.tem_divergencia ? 'divergente' : 'regular'),
       cupons: (i: any) => Number(i.qtd_cupons || 0),
       qtdTotal: (i: any) => Number(i.qtd_total || 0),
       precoMedio: (i: any) => Number(i.preco_medio || 0),
@@ -1150,17 +1181,17 @@ export default function RelatoriosPage() {
           </div>
         )}
 
-        {/* ABA 2: AUDITOR DE MONOFÁSICOS */}
+        {/* ABA 2: AUDITOR DE MONOFÁSICOS POR NCM */}
         {activeTab === 'monofasicos' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
               <div>
                 <h3 className="text-xl font-bold text-slate-900 mb-1 flex items-center gap-2">
                   <Sparkles className="text-amber-600" size={24} />
-                  Auditor de Produtos Monofásicos (PIS & COFINS)
+                  Auditor & Analisador de Monofásicos por NCM (PIS & COFINS)
                 </h3>
                 <p className="text-sm text-slate-500">
-                  Análise detalhada de itens nos XMLs por cruzamento de <strong>NCM Oficial x CST 04/06</strong> com destaque por cupom ou produto.
+                  Cruzamento inteligente da classificação fiscal (<strong>NCM Oficial</strong>) com CST e alíquotas dos XMLs para identificar <strong>erros de preenchimento</strong> e <strong>oportunidades de recuperação tributária</strong>.
                 </p>
               </div>
 
@@ -1169,7 +1200,7 @@ export default function RelatoriosPage() {
                   onClick={loadProdutosMonofasicos}
                   disabled={loadingProdutosMonofasicos}
                   title="Atualizar lista de produtos dos XMLs"
-                  className="p-2 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition disabled:opacity-50"
+                  className="p-2 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition disabled:opacity-50 cursor-pointer"
                 >
                   <RefreshCw size={16} className={loadingProdutosMonofasicos ? 'animate-spin' : ''} />
                 </button>
@@ -1179,21 +1210,21 @@ export default function RelatoriosPage() {
                   <button
                     onClick={() => handleExportarMonofasicosPersonalizado('pdf')}
                     title="Baixar Relatório Monofásico em PDF (com os filtros ativos)"
-                    className="px-2.5 py-1.5 text-xs font-semibold text-rose-700 bg-white hover:bg-rose-50 border border-rose-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                    className="px-2.5 py-1.5 text-xs font-semibold text-rose-700 bg-white hover:bg-rose-50 border border-rose-200 rounded-lg transition flex items-center gap-1 shadow-2xs cursor-pointer"
                   >
                     <FileText size={13} className="text-rose-600" /> PDF
                   </button>
                   <button
                     onClick={() => handleExportarMonofasicosPersonalizado('xls')}
                     title="Baixar Relatório Monofásico em Excel (com os filtros ativos)"
-                    className="px-2.5 py-1.5 text-xs font-semibold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                    className="px-2.5 py-1.5 text-xs font-semibold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-200 rounded-lg transition flex items-center gap-1 shadow-2xs cursor-pointer"
                   >
                     <FileSpreadsheet size={13} className="text-emerald-600" /> XLS
                   </button>
                   <button
                     onClick={() => handleExportarMonofasicosPersonalizado('csv')}
                     title="Baixar Relatório Monofásico em CSV (com os filtros ativos)"
-                    className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                    className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition flex items-center gap-1 shadow-2xs cursor-pointer"
                   >
                     <Download size={13} className="text-slate-500" /> CSV
                   </button>
@@ -1201,40 +1232,90 @@ export default function RelatoriosPage() {
               </div>
             </div>
 
-            {/* Vias de Auditoria */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Vias e Cards de Métricas da Auditoria por NCM */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               
-              {/* Via 1: Dinheiro a Recuperar */}
-              <div className="p-6 rounded-2xl bg-emerald-50/60 border border-emerald-200">
-                <div className="flex items-center gap-2 text-emerald-800 font-bold mb-3">
-                  <CheckCircle2 size={20} className="text-emerald-600" />
-                  Via 1: Segregação Correta (Dedução no DAS)
+              {/* Card 1: Faturamento Monofásico Total por NCM */}
+              <div className="p-5 rounded-2xl bg-blue-50/60 border border-blue-200 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-2 text-blue-900 font-bold mb-2">
+                    <span className="flex items-center gap-1.5 text-sm">
+                      <ShoppingBag size={18} className="text-blue-600" />
+                      Total Monofásico por NCM
+                    </span>
+                    <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                      Base Legal
+                    </span>
+                  </div>
+                  <p className="text-xs text-blue-700 leading-relaxed mb-3">
+                    Classificação fiscal oficial de Bebidas frias, Medicamentos, Cosméticos, Autopeças e Combustíveis.
+                  </p>
                 </div>
-                <p className="text-xs text-emerald-700 leading-relaxed mb-4">
-                  Produtos monofásicos (Bebidas frias, Autopeças, Medicamentos, Cosméticos) possuem alíquota zero de PIS/COFINS na revenda e geram abatimento legal no DAS do Simples Nacional.
-                </p>
-                <div className="p-4 bg-white rounded-xl border border-emerald-200 text-center">
-                  <span className="text-xs text-slate-500 block uppercase font-bold tracking-wider">Valor Total a Segregar</span>
-                  <span className="text-3xl font-extrabold text-emerald-700 block mt-1">
-                    R$ {(consolidado?.geral?.total_monofasico || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                <div className="p-3.5 bg-white rounded-xl border border-blue-100 text-center">
+                  <span className="text-[11px] text-slate-500 block uppercase font-bold tracking-wider">Faturado no Período</span>
+                  <span className="text-2xl font-black text-blue-700 block mt-1">
+                    R$ {(totaisMonofasicos?.valor_total ?? produtosMonofasicos.reduce((a, b) => a + (b.vProd || 0), 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-[11px] text-slate-500 mt-1 block">
+                    {totaisMonofasicos?.total_itens ?? produtosMonofasicos.length} itens em {totaisMonofasicos?.cupons_distintos ?? new Set(produtosMonofasicos.map(i => i.chave || i.cupom_numero)).size} cupons
                   </span>
                 </div>
               </div>
 
-              {/* Via 2: Auditoria de Risco */}
-              <div className="p-6 rounded-2xl bg-amber-50/60 border border-amber-200">
-                <div className="flex items-center gap-2 text-amber-800 font-bold mb-3">
-                  <AlertTriangle size={20} className="text-amber-600" />
-                  Via 2: Auditoria Cadastral dos XMLs
+              {/* Card 2: Segregação Regular no XML (CST 04/06) */}
+              <div className="p-5 rounded-2xl bg-emerald-50/60 border border-emerald-200 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-2 text-emerald-900 font-bold mb-2">
+                    <span className="flex items-center gap-1.5 text-sm">
+                      <CheckCircle2 size={18} className="text-emerald-600" />
+                      Regular no XML (CST 04/06)
+                    </span>
+                    <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                      Conforme
+                    </span>
+                  </div>
+                  <p className="text-xs text-emerald-700 leading-relaxed mb-3">
+                    Itens preenchidos adequadamente no PDV/ERP com alíquota zero de PIS e COFINS.
+                  </p>
                 </div>
-                <p className="text-xs text-amber-700 leading-relaxed mb-4">
-                  O motor do Hub audita se produtos tributados integralmente possuem NCM monofásico ou se cadastros no PDV/ERP precisam de revisão fiscal para evitar pagamento indevido de impostos.
-                </p>
-                <div className="p-4 bg-white rounded-xl border border-amber-200 text-center">
-                  <span className="text-xs text-slate-500 block uppercase font-bold tracking-wider">Itens Monofásicos nos XMLs</span>
-                  <span className="text-sm font-bold text-amber-800 block mt-2">
-                    {loadingProdutosMonofasicos ? 'Auditando arquivos...' : `${produtosMonofasicos.length} item(ns) identificados no período`}
+                <div className="p-3.5 bg-white rounded-xl border border-emerald-100 text-center">
+                  <span className="text-[11px] text-slate-500 block uppercase font-bold tracking-wider">Segregação Confirmada</span>
+                  <span className="text-2xl font-black text-emerald-700 block mt-1">
+                    R$ {(totaisMonofasicos?.valor_regular ?? produtosMonofasicos.filter(i => i.status_conformidade === 'regular').reduce((a, b) => a + (b.vProd || 0), 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </span>
+                  <span className="text-[11px] text-emerald-600 font-bold mt-1 block">
+                    {totaisMonofasicos?.qtd_regular ?? produtosMonofasicos.filter(i => i.status_conformidade === 'regular').length} item(ns) regulares
+                  </span>
+                </div>
+              </div>
+
+              {/* Card 3: Oportunidade de Recuperação (NCM Monofásico c/ CST Divergente) */}
+              <div className="p-5 rounded-2xl bg-amber-50/80 border border-amber-300 flex flex-col justify-between shadow-2xs">
+                <div>
+                  <div className="flex items-center justify-between gap-2 text-amber-900 font-bold mb-2">
+                    <span className="flex items-center gap-1.5 text-sm">
+                      <AlertTriangle size={18} className="text-amber-600" />
+                      Oportunidade de Recuperação Fiscal
+                    </span>
+                    <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900">
+                      Ação Fiscal
+                    </span>
+                  </div>
+                  <p className="text-xs text-amber-800 leading-relaxed mb-3">
+                    NCM monofásico por lei, mas emitido com CST tributado (01/49/99) ou sem CST. <strong>Segregar no DAS para recuperar imposto.</strong>
+                  </p>
+                </div>
+                <div className="p-3.5 bg-white rounded-xl border border-amber-200 text-center">
+                  <span className="text-[11px] text-slate-500 block uppercase font-bold tracking-wider">Faturamento Não Aproveitado</span>
+                  <span className="text-2xl font-black text-amber-700 block mt-1">
+                    R$ {(totaisMonofasicos?.valor_divergente ?? produtosMonofasicos.filter(i => i.status_conformidade !== 'regular').reduce((a, b) => a + (b.vProd || 0), 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                  <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex items-center justify-between text-xs">
+                    <span className="text-slate-500 font-medium">Economia est. DAS (~3%):</span>
+                    <strong className="text-emerald-700 font-black">
+                      R$ {(totaisMonofasicos?.estimativa_economia_simples ?? ((totaisMonofasicos?.valor_divergente || 0) * 0.03)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </strong>
+                  </div>
                 </div>
               </div>
 
@@ -1245,6 +1326,53 @@ export default function RelatoriosPage() {
               
               {/* Barra de Filtros e Controles */}
               <div className="bg-slate-50/80 p-5 rounded-2xl border border-slate-200 space-y-4">
+                
+                {/* Linha 1: Seletor Rápido de Conformidade Fiscal */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/80">
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck size={15} className="text-blue-600" />
+                    Filtrar por Status de Conformidade do NCM:
+                  </span>
+
+                  <div className="inline-flex p-1 bg-white border border-slate-200 rounded-xl shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => setFiltroConformidade('todos')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        filtroConformidade === 'todos'
+                          ? 'bg-slate-900 text-white shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                      }`}
+                    >
+                      Todos ({produtosMonofasicos.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFiltroConformidade('divergentes')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        filtroConformidade === 'divergentes'
+                          ? 'bg-amber-600 text-white shadow-2xs'
+                          : 'text-amber-800 hover:bg-amber-50'
+                      }`}
+                    >
+                      <AlertTriangle size={13} />
+                      Com Divergência / Recuperação ({totaisMonofasicos?.qtd_divergente ?? produtosMonofasicos.filter(i => i.status_conformidade !== 'regular').length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFiltroConformidade('regulares')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        filtroConformidade === 'regulares'
+                          ? 'bg-emerald-600 text-white shadow-2xs'
+                          : 'text-emerald-800 hover:bg-emerald-50'
+                      }`}
+                    >
+                      <CheckCircle2 size={13} />
+                      Regulares CST 04/06 ({totaisMonofasicos?.qtd_regular ?? produtosMonofasicos.filter(i => i.status_conformidade === 'regular').length})
+                    </button>
+                  </div>
+                </div>
+
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                   
                   {/* Filtro Dinâmico por NCM / Tipo de Produto */}
@@ -1263,7 +1391,7 @@ export default function RelatoriosPage() {
                       </option>
                       {filtrosNcmDisponiveis.map(f => (
                         <option key={f.ncm} value={f.ncm}>
-                          [{f.ncm_formatado}] {f.descricao} ({f.categoria}) — {f.total_itens} item(ns) | R$ {f.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} {f.produtos_exemplo.length > 0 ? `(Ex: ${f.produtos_exemplo.slice(0, 2).join(', ')})` : ''}
+                          [{f.ncm_formatado}] {f.descricao} ({f.categoria}) — {f.total_itens} item(ns) | R$ {f.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} {f.qtd_divergente > 0 ? `(⚠️ ${f.qtd_divergente} divergente(s))` : '(✅ Conforme)'}
                         </option>
                       ))}
                     </select>
@@ -1277,8 +1405,9 @@ export default function RelatoriosPage() {
                     </label>
                     <div className="inline-flex p-1 bg-white border border-slate-200 rounded-xl shadow-2xs">
                       <button
+                        type="button"
                         onClick={() => setModoAgrupamentoMonofasico('cupom')}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                           modoAgrupamentoMonofasico === 'cupom'
                             ? 'bg-blue-600 text-white shadow-2xs'
                             : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -1288,8 +1417,9 @@ export default function RelatoriosPage() {
                         Por Cupom / Item a Item
                       </button>
                       <button
+                        type="button"
                         onClick={() => setModoAgrupamentoMonofasico('agrupado')}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                           modoAgrupamentoMonofasico === 'agrupado'
                             ? 'bg-amber-600 text-white shadow-2xs'
                             : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -1303,20 +1433,21 @@ export default function RelatoriosPage() {
 
                 </div>
 
-                {/* Linha 2: Busca rápida por texto */}
+                {/* Linha 3: Busca rápida por texto */}
                 <div className="relative">
                   <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
-                    placeholder="Buscar produto por nome (ex: cerveja, coca, red bull), código ou número de cupom..."
+                    placeholder="Buscar produto por nome (ex: cerveja, coca, remédio, óleo), NCM (ex: 2203), código ou cupom..."
                     value={buscaMonofasico}
                     onChange={e => setBuscaMonofasico(e.target.value)}
                     className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500"
                   />
                   {buscaMonofasico && (
                     <button
+                      type="button"
                       onClick={() => setBuscaMonofasico('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 font-bold"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 font-bold cursor-pointer"
                     >
                       Limpar
                     </button>
@@ -1351,9 +1482,13 @@ export default function RelatoriosPage() {
                 </div>
 
                 <div className="bg-emerald-50/80 border border-emerald-200/80 p-3.5 rounded-xl">
-                  <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block">Modo Atual</span>
+                  <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block">Status do Filtro</span>
                   <span className="text-xs font-bold text-emerald-700 mt-1 block">
-                    {modoAgrupamentoMonofasico === 'cupom' ? '📄 Analítico por Cupom' : '📊 Agrupado por NCM'}
+                    {filtroConformidade === 'divergentes' 
+                      ? '⚠️ Apenas Divergentes' 
+                      : filtroConformidade === 'regulares' 
+                      ? '✅ Apenas Regulares (04/06)' 
+                      : '🔍 Todos os Status'}
                   </span>
                 </div>
               </div>
@@ -1362,8 +1497,8 @@ export default function RelatoriosPage() {
               {loadingProdutosMonofasicos ? (
                 <div className="p-12 text-center bg-slate-50 rounded-2xl border border-slate-200">
                   <RefreshCw size={32} className="text-amber-600 animate-spin mx-auto mb-3" />
-                  <h4 className="font-bold text-slate-800 text-base">Lendo Produtos Monofásicos nos XMLs...</h4>
-                  <p className="text-xs text-slate-500 mt-1">Extraindo itens com CST 04/06 e NCM oficial das notas fiscais do período.</p>
+                  <h4 className="font-bold text-slate-800 text-base">Auditando Produtos Monofásicos nos XMLs...</h4>
+                  <p className="text-xs text-slate-500 mt-1">Analisando NCMs oficiais e cruzando com CSTs de PIS/COFINS das notas fiscais do período.</p>
                 </div>
               ) : produtosMonofasicosFiltrados.length === 0 ? (
                 <div className="p-12 text-center bg-slate-50 rounded-2xl border border-slate-200">
@@ -1378,9 +1513,9 @@ export default function RelatoriosPage() {
                 </div>
               ) : modoAgrupamentoMonofasico === 'cupom' ? (
                 
-                /* TABELA MODO 1: ANALÍTICO POR CUPOM */
+                /* TABELA MODO 1: ANALÍTICO POR CUPOM COM AUDITORIA NCM */
                 <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xs custom-scrollbar w-full">
-                  <table className="w-full text-left border-collapse min-w-[950px]">
+                  <table className="w-full text-left border-collapse min-w-[1050px]">
                     <thead className="sticky top-0 z-10 bg-slate-100/95 backdrop-blur-xs border-b border-slate-200 shadow-2xs">
                       <tr className="bg-slate-100/80 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
                         <ResizableSortableTh
@@ -1417,6 +1552,17 @@ export default function RelatoriosPage() {
                           minWidth={160}
                         />
                         <ResizableSortableTh
+                          columnId="conformidade"
+                          label="Auditoria NCM & CST"
+                          sortKey="conformidade"
+                          currentSortKey={sortKeyMonoCupom}
+                          currentSortDirection={sortDirMonoCupom}
+                          onSort={handleSortMonoCupom}
+                          width={colWidthsMonoCupom.conformidade}
+                          onResize={handleResizeMonoCupom}
+                          minWidth={160}
+                        />
+                        <ResizableSortableTh
                           columnId="cfopCst"
                           label="CFOP & CST"
                           sortKey="cfopCst"
@@ -1425,7 +1571,7 @@ export default function RelatoriosPage() {
                           onSort={handleSortMonoCupom}
                           width={colWidthsMonoCupom.cfopCst}
                           onResize={handleResizeMonoCupom}
-                          minWidth={120}
+                          minWidth={110}
                         />
                         <ResizableSortableTh
                           columnId="qtd"
@@ -1466,58 +1612,82 @@ export default function RelatoriosPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-sm bg-white">
-                      {produtosMonofasicosFiltradosPaginados.map((item: any) => (
-                        <tr key={item.id} className="hover:bg-amber-50/30 transition">
-                          <td className="p-3.5 whitespace-nowrap truncate">
-                            <div className="flex items-center gap-2">
-                              <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-extrabold rounded-md">
-                                {item.modelo === '65' ? 'NFC-e' : 'NF-e'} Nº {item.cupom_numero}
+                      {produtosMonofasicosFiltradosPaginados.map((item: any) => {
+                        const isRegular = item.status_conformidade === 'regular'
+                        return (
+                          <tr key={item.id} className="hover:bg-amber-50/30 transition">
+                            <td className="p-3.5 whitespace-nowrap truncate">
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-extrabold rounded-md">
+                                  {item.modelo === '65' ? 'NFC-e' : 'NF-e'} Nº {item.cupom_numero}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-400 mt-1">
+                                {item.data_emissao ? new Date(item.data_emissao).toLocaleDateString('pt-BR') : '—'} {item.hora_emissao ? `às ${item.hora_emissao}` : ''}
+                              </div>
+                            </td>
+
+                            <td className="p-3.5 truncate">
+                              <span className="font-bold text-slate-900 block truncate">{item.xProd}</span>
+                              <span className="text-[11px] text-slate-400 font-mono">Cód: {item.cProd}</span>
+                            </td>
+
+                            <td className="p-3.5 whitespace-nowrap truncate">
+                              <span className="font-mono text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200/60 px-2 py-0.5 rounded-md">
+                                {item.ncm_formatado}
                               </span>
-                            </div>
-                            <div className="text-[11px] text-slate-400 mt-1">
-                              {item.data_emissao ? new Date(item.data_emissao).toLocaleDateString('pt-BR') : '—'} {item.hora_emissao ? `às ${item.hora_emissao}` : ''}
-                            </div>
-                          </td>
+                              <span className="text-xs text-slate-600 block mt-1 font-medium truncate max-w-[220px]" title={item.descricao_ncm}>
+                                {item.descricao_ncm} ({item.categoria})
+                              </span>
+                            </td>
 
-                          <td className="p-3.5 truncate">
-                            <span className="font-bold text-slate-900 block truncate">{item.xProd}</span>
-                            <span className="text-[11px] text-slate-400 font-mono">Cód: {item.cProd}</span>
-                          </td>
+                            {/* Coluna de Auditoria NCM e Conformidade */}
+                            <td className="p-3.5 whitespace-nowrap">
+                              {isRegular ? (
+                                <div className="flex flex-col">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold">
+                                    <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
+                                    Conforme (CST {item.cst})
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 mt-0.5">Alíquota zero no XML</span>
+                                </div>
+                              ) : (
+                                <div className="flex flex-col" title={item.status_descricao || 'NCM Monofásico emitido com CST tributado'}>
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-300 text-amber-900 text-[11px] font-bold">
+                                    <AlertTriangle size={12} className="text-amber-600 shrink-0" />
+                                    Divergência (CST {item.cst})
+                                  </span>
+                                  <span className="text-[10px] text-amber-700 font-semibold mt-0.5">NCM Monofásico c/ Tributação</span>
+                                </div>
+                              )}
+                            </td>
 
-                          <td className="p-3.5 whitespace-nowrap truncate">
-                            <span className="font-mono text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200/60 px-2 py-0.5 rounded-md">
-                              {item.ncm_formatado}
-                            </span>
-                            <span className="text-xs text-slate-600 block mt-1 font-medium truncate max-w-[220px]" title={item.descricao_ncm}>
-                              {item.descricao_ncm} ({item.categoria})
-                            </span>
-                          </td>
+                            <td className="p-3.5 whitespace-nowrap truncate">
+                              <span className="text-xs text-slate-600 font-mono font-medium block">CFOP: {item.cfop}</span>
+                              <span className="text-[11px] font-mono font-bold text-slate-700">
+                                CST: {item.cst}
+                              </span>
+                            </td>
 
-                          <td className="p-3.5 whitespace-nowrap truncate">
-                            <span className="text-xs text-slate-600 font-mono font-medium block">CFOP: {item.cfop}</span>
-                            <span className="text-[11px] text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded font-bold">
-                              CST: {item.cst} (Alíq. Zero)
-                            </span>
-                          </td>
+                            <td className="p-3.5 text-right whitespace-nowrap truncate">
+                              <span className="font-semibold text-slate-800">
+                                {Number(item.qCom || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </span>
+                              <span className="text-xs text-slate-400 ml-1">{item.uCom}</span>
+                            </td>
 
-                          <td className="p-3.5 text-right whitespace-nowrap truncate">
-                            <span className="font-semibold text-slate-800">
-                              {Number(item.qCom || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </span>
-                            <span className="text-xs text-slate-400 ml-1">{item.uCom}</span>
-                          </td>
+                            <td className="p-3.5 text-right whitespace-nowrap text-slate-600 text-xs truncate">
+                              R$ {Number(item.vUnCom || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </td>
 
-                          <td className="p-3.5 text-right whitespace-nowrap text-slate-600 text-xs truncate">
-                            R$ {Number(item.vUnCom || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </td>
-
-                          <td className="p-3.5 text-right whitespace-nowrap truncate">
-                            <span className="font-bold text-amber-700 text-base">
-                              R$ {Number(item.vProd || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
+                            <td className="p-3.5 text-right whitespace-nowrap truncate">
+                              <span className="font-bold text-amber-700 text-base">
+                                R$ {Number(item.vProd || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </span>
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
 
@@ -1534,9 +1704,9 @@ export default function RelatoriosPage() {
 
               ) : (
 
-                /* TABELA MODO 2: AGRUPADO POR PRODUTO / NCM */
+                /* TABELA MODO 2: AGRUPADO POR PRODUTO / NCM COM DIAGNÓSTICO FISCAL */
                 <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xs custom-scrollbar w-full">
-                  <table className="w-full text-left border-collapse min-w-[950px]">
+                  <table className="w-full text-left border-collapse min-w-[1050px]">
                     <thead className="sticky top-0 z-10 bg-slate-100/95 backdrop-blur-xs border-b border-slate-200 shadow-2xs">
                       <tr className="bg-slate-100/80 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
                         <ResizableSortableTh
@@ -1560,6 +1730,17 @@ export default function RelatoriosPage() {
                           width={colWidthsMonoNcm.produto}
                           onResize={handleResizeMonoNcm}
                           minWidth={180}
+                        />
+                        <ResizableSortableTh
+                          columnId="conformidade"
+                          label="Diagnóstico Fiscal"
+                          sortKey="conformidade"
+                          currentSortKey={sortKeyMonoNcm}
+                          currentSortDirection={sortDirMonoNcm}
+                          onSort={handleSortMonoNcm}
+                          width={colWidthsMonoNcm.conformidade}
+                          onResize={handleResizeMonoNcm}
+                          minWidth={150}
                         />
                         <ResizableSortableTh
                           columnId="cupons"
@@ -1638,6 +1819,26 @@ export default function RelatoriosPage() {
                           <td className="p-3.5 truncate">
                             <span className="font-bold text-slate-900 block truncate">{item.xProd}</span>
                             <span className="text-[11px] text-slate-400 font-mono">Cód: {item.cProd}</span>
+                          </td>
+
+                          {/* Diagnóstico Fiscal no Sintético */}
+                          <td className="p-3.5 whitespace-nowrap">
+                            {item.tem_divergencia ? (
+                              <div>
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-300 text-amber-900 text-[11px] font-bold">
+                                  <AlertTriangle size={12} className="text-amber-600 shrink-0" />
+                                  Divergente ({item.qtd_divergentes} vendas)
+                                </span>
+                                <span className="text-[10px] text-amber-700 block mt-0.5 font-medium">
+                                  R$ {Number(item.valor_divergente || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} recuperável
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold">
+                                <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
+                                100% Conforme
+                              </span>
+                            )}
                           </td>
 
                           <td className="p-3.5 text-center whitespace-nowrap truncate">

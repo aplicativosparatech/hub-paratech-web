@@ -231,9 +231,13 @@ export function exportarCSV(
     linhas.push(`TOTAL DE ITENS MONOFASICOS;${lista.length}`)
     linhas.push(`VALOR TOTAL MONOFASICO;R$ ${formatMoney(dados.total_valor || lista.reduce((a: number, b: any) => a + (b.vProd || 0), 0))}`)
     linhas.push('')
-    linhas.push('CUPOM / NOTA;MODELO;SERIE;DATA;HORA;COD PROD;DESCRICAO DO PRODUTO;NCM;CATEGORIA;DESCRICAO NCM;CFOP;QTD;UN;VALOR UNIT (R$);VALOR TOTAL (R$);CST;CHAVE DE ACESSO;PROTOCOLO')
+    linhas.push('CUPOM / NOTA;MODELO;SERIE;DATA;HORA;COD PROD;DESCRICAO DO PRODUTO;NCM;CATEGORIA;DESCRICAO NCM;CFOP;QTD;UN;VALOR UNIT (R$);VALOR TOTAL (R$);CST;STATUS AUDITORIA NCM;CHAVE DE ACESSO;PROTOCOLO')
 
     lista.forEach((item: any) => {
+      const statusAuditoria = item.status_conformidade === 'regular' 
+        ? 'Conforme (CST 04/06)' 
+        : `Divergente: NCM Monofasico c/ CST ${item.cst || 'Outros'}`
+
       linhas.push([
         `Nº ${item.cupom_numero || '—'}`,
         item.modelo_nome || 'NFC-e',
@@ -251,6 +255,7 @@ export function exportarCSV(
         Number(item.vUnCom || 0).toFixed(2).replace('.', ','),
         Number(item.vProd || 0).toFixed(2).replace('.', ','),
         item.cst || '04',
+        statusAuditoria,
         item.chave || '—',
         item.protocolo || '—'
       ].join(';'))
@@ -510,9 +515,13 @@ export function exportarExcel(
     rows.push(['Total de Itens Monofásicos', lista.length])
     rows.push(['Valor Total Monofásico (R$)', Number(dados.total_valor || lista.reduce((a: number, b: any) => a + (b.vProd || 0), 0))])
     rows.push([])
-    rows.push(['Cupom / Nota', 'Modelo', 'Série', 'Data', 'Hora', 'Cód. Prod', 'Descrição do Produto', 'NCM', 'Categoria', 'Descrição NCM', 'CFOP', 'Qtd', 'Un', 'Valor Unit (R$)', 'Valor Total (R$)', 'CST', 'Chave de Acesso', 'Protocolo SEFAZ'])
+    rows.push(['Cupom / Nota', 'Modelo', 'Série', 'Data', 'Hora', 'Cód. Prod', 'Descrição do Produto', 'NCM', 'Categoria', 'Descrição NCM', 'CFOP', 'Qtd', 'Un', 'Valor Unit (R$)', 'Valor Total (R$)', 'CST', 'Auditoria Fiscal NCM', 'Chave de Acesso', 'Protocolo SEFAZ'])
 
     lista.forEach((item: any) => {
+      const statusAuditoria = item.status_conformidade === 'regular' 
+        ? 'Conforme (CST 04/06)' 
+        : `Divergência: NCM Monofásico com CST ${item.cst || 'Outros'} (Recuperável)`
+
       rows.push([
         `Nº ${item.cupom_numero || '—'}`,
         item.modelo_nome || 'NFC-e',
@@ -530,6 +539,7 @@ export function exportarExcel(
         Number(item.vUnCom || 0),
         Number(item.vProd || 0),
         item.cst || '04',
+        statusAuditoria,
         item.chave || '',
         item.protocolo || ''
       ])
@@ -1021,24 +1031,29 @@ export function exportarPDF(
 
     const finalY = (doc as any).lastAutoTable.finalY + 6
 
-    const tableBody = lista.map((item: any) => [
-      `Nº ${item.cupom_numero || '—'}`,
-      item.modelo === '65' ? 'NFC-e' : 'NF-e',
-      formatDate(item.data_emissao),
-      item.cProd || '—',
-      item.xProd || '—',
-      item.ncm_formatado || item.ncm || '—',
-      item.descricao_ncm || item.categoria || '—',
-      Number(item.qCom || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
-      item.uCom || 'UN',
-      `R$ ${formatMoney(item.vUnCom || 0)}`,
-      `R$ ${formatMoney(item.vProd || 0)}`,
-      item.cst || '04'
-    ])
+    const tableBody = lista.map((item: any) => {
+      const isRegular = item.status_conformidade === 'regular'
+      const statusStr = isRegular ? `CST ${item.cst} (Conf)` : `CST ${item.cst} (Diverg)`
+
+      return [
+        `Nº ${item.cupom_numero || '—'}`,
+        item.modelo === '65' ? 'NFC-e' : 'NF-e',
+        formatDate(item.data_emissao),
+        item.cProd || '—',
+        item.xProd || '—',
+        item.ncm_formatado || item.ncm || '—',
+        item.descricao_ncm || item.categoria || '—',
+        Number(item.qCom || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
+        item.uCom || 'UN',
+        `R$ ${formatMoney(item.vUnCom || 0)}`,
+        `R$ ${formatMoney(item.vProd || 0)}`,
+        statusStr
+      ]
+    })
 
     autoTable(doc, {
       startY: finalY,
-      head: [['Cupom/Nota', 'Mod', 'Data', 'Cód.', 'Descrição do Produto', 'NCM', 'Classificação / Categoria', 'Qtd', 'Un', 'Vlr Unit', 'Vlr Total', 'CST']],
+      head: [['Cupom/Nota', 'Mod', 'Data', 'Cód.', 'Descrição do Produto', 'NCM', 'Classificação / Categoria', 'Qtd', 'Un', 'Vlr Unit', 'Vlr Total', 'Status NCM']],
       body: tableBody,
       theme: 'striped',
       headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5 },
@@ -1048,14 +1063,14 @@ export function exportarPDF(
         1: { cellWidth: 12 },
         2: { cellWidth: 18 },
         3: { cellWidth: 14, font: 'courier' },
-        4: { cellWidth: 60, fontStyle: 'bold' },
-        5: { cellWidth: 22, font: 'courier' },
-        6: { cellWidth: 45 },
+        4: { cellWidth: 55, fontStyle: 'bold' },
+        5: { cellWidth: 20, font: 'courier' },
+        6: { cellWidth: 42 },
         7: { cellWidth: 14, halign: 'right' },
         8: { cellWidth: 10, halign: 'center' },
         9: { cellWidth: 20, halign: 'right' },
         10: { cellWidth: 22, halign: 'right', fontStyle: 'bold', textColor: [180, 83, 9] },
-        11: { cellWidth: 12, halign: 'center' }
+        11: { cellWidth: 19, halign: 'center', fontStyle: 'bold' }
       },
       didDrawPage: (data: any) => {
         const str = `Página ${data.pageNumber} de ${doc.getNumberOfPages()}`
