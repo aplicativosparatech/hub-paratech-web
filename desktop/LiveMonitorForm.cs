@@ -4,6 +4,8 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
+using System.Diagnostics;
+using System.Text.Json;
 
 namespace HubParatechDesktop
 {
@@ -37,16 +39,83 @@ namespace HubParatechDesktop
         private Label lblStatusPill;
         private System.Windows.Forms.Timer refreshTimer;
 
+        private static readonly string HistoryPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "HubParatech",
+            "monitor_history.json"
+        );
+
+        static LiveMonitorForm()
+        {
+            LoadHistory();
+        }
+
+        public static int CountLogs
+        {
+            get
+            {
+                lock (LogLock) return GlobalLogItems.Count;
+            }
+        }
+
+        private static void LoadHistory()
+        {
+            try
+            {
+                if (File.Exists(HistoryPath))
+                {
+                    string json = File.ReadAllText(HistoryPath);
+                    var items = JsonSerializer.Deserialize<List<XmlLogItem>>(json);
+                    if (items != null)
+                    {
+                        lock (LogLock)
+                        {
+                            GlobalLogItems.Clear();
+                            GlobalLogItems.AddRange(items.Take(300));
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private static void SaveHistory()
+        {
+            try
+            {
+                List<XmlLogItem> copy;
+                lock (LogLock)
+                {
+                    copy = GlobalLogItems.Take(150).ToList();
+                }
+                string dir = Path.GetDirectoryName(HistoryPath)!;
+                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                string json = JsonSerializer.Serialize(copy, new JsonSerializerOptions { WriteIndented = false });
+                File.WriteAllText(HistoryPath, json);
+            }
+            catch { }
+        }
+
         public static void AddLog(XmlLogItem item)
         {
             lock (LogLock)
             {
+                // Evita duplicatas consecutivas idênticas da mesma chave e mesmo status
+                if (GlobalLogItems.Count > 0 &&
+                    GlobalLogItems[0].Chave == item.Chave &&
+                    GlobalLogItems[0].Status == item.Status)
+                {
+                    return;
+                }
+
                 GlobalLogItems.Insert(0, item);
                 if (GlobalLogItems.Count > 300)
                 {
                     GlobalLogItems.RemoveAt(GlobalLogItems.Count - 1);
                 }
             }
+
+            SaveHistory();
 
             if (activeInstance != null && !activeInstance.IsDisposed)
             {
@@ -56,6 +125,41 @@ namespace HubParatechDesktop
                 }
                 catch { }
             }
+        }
+
+        public static void OpenWebPortal(string url)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = url,
+                    UseShellExecute = true
+                };
+                Process.Start(psi);
+                return;
+            }
+            catch { }
+
+            try
+            {
+                var psiCmd = new ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = $"/c start \"\" \"{url}\"",
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                };
+                Process.Start(psiCmd);
+                return;
+            }
+            catch { }
+
+            try
+            {
+                Process.Start("explorer.exe", $"\"{url}\"");
+            }
+            catch { }
         }
 
         public static void OpenMonitor(int pastasCount, string modo)
@@ -219,7 +323,9 @@ namespace HubParatechDesktop
                 MultiSelect = false,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
                 Font = new Font("Segoe UI", 9f),
-                AutoGenerateColumns = false
+                AutoGenerateColumns = false,
+                ColumnHeadersVisible = true,
+                ScrollBars = ScrollBars.Both
             };
 
             EnsureColumns();
@@ -271,12 +377,7 @@ namespace HubParatechDesktop
             };
             btnPortal.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
             btnPortal.Click += (s, e) => {
-                try {
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo {
-                        FileName = "https://hub-paratech-web.vercel.app/dashboard/documentos",
-                        UseShellExecute = true
-                    });
-                } catch { }
+                OpenWebPortal("https://hub-paratech-web.vercel.app/dashboard/notas-fiscais");
             };
             bottomPanel.Controls.Add(btnPortal);
 
@@ -296,6 +397,7 @@ namespace HubParatechDesktop
                 try
                 {
                     lock (LogLock) GlobalLogItems.Clear();
+                    try { if (File.Exists(HistoryPath)) File.Delete(HistoryPath); } catch { }
                     RefreshDataGrid();
                 }
                 catch { }
@@ -319,6 +421,7 @@ namespace HubParatechDesktop
             bottomPanel.Controls.Add(btnClose);
 
             Controls.Add(bottomPanel);
+            gridContainer.BringToFront();
 
             // Timer suave de atualização
             refreshTimer = new System.Windows.Forms.Timer { Interval = 2500 };

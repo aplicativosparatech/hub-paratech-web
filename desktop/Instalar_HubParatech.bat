@@ -1,10 +1,10 @@
 @echo off
 chcp 65001 >nul
-title Instalador e Atualizador - Hub Paratech Desktop v2.5.8
+title Instalador e Atualizador - Hub Paratech Desktop v2.5.9
 color 0B
 
 echo ===============================================================================
-echo          HUB PARATECH DESKTOP v2.5.8 - INSTALADOR E ATUALIZADOR PROTEGIDO
+echo          HUB PARATECH DESKTOP v2.5.9 - INSTALADOR E ATUALIZADOR PROTEGIDO
 echo ===============================================================================
 echo.
 
@@ -64,14 +64,14 @@ reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "HubParatech" /t
 
 echo.
 echo ===============================================================================
-echo  [SUCESSO] Hub Paratech Desktop v2.5.8 Instalado / Atualizado com Sucesso!
+echo  [SUCESSO] Hub Paratech Desktop v2.5.9 Instalado / Atualizado com Sucesso!
 echo ===============================================================================
 echo.
 echo  • Local de Instalação : C:\Paratech\HubDesktop\HubParatechDesktop.exe
-echo  • Versão Atualizada  : v2.5.8 (Com correção de DataGridView e Ponto de Partida)
+echo  • Versão Atualizada  : v2.5.9 (Com persistência de histórico e portal direto)
 echo  • Inicialização      : Automática no logon (Agendador de Tarefas + Registro)
 echo.
-echo Iniciando o Hub Paratech v2.5.8...
+echo Iniciando o Hub Paratech v2.5.9...
 echo.
 
 start "" "C:\Paratech\HubDesktop\HubParatechDesktop.exe"

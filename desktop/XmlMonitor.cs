@@ -312,25 +312,53 @@ namespace HubParatechDesktop
 
                     string fileIdentifier = $"{fileName}_{fileInfo.Length}";
 
-                    if (XmlUploadCache.IsUploaded(fileIdentifier))
-                    {
-                        jaProcessados++;
-                        continue;
-                    }
+                    // Extração rápida de metadados se a chave de 44 dígitos estiver no nome do arquivo
+                    string? chRapida = null;
+                    string? dataEmiChave = null;
+                    string modChave = "65";
+                    long numChave = 0;
 
-                    // PRÉ-FILTRO ULTRA-RÁPIDO: Se o nome contiver chave de 44 dígitos, verifica ponto de partida sem ler o disco
                     var matchChaveNome = Regex.Match(fileName, @"\d{44}");
                     if (matchChaveNome.Success)
                     {
-                        string ch = matchChaveNome.Value;
-                        string aa = ch.Substring(2, 2);
-                        string mm = ch.Substring(4, 2);
-                        string dataEmiChave = $"20{aa}-{mm}-01";
-                        string modChave = ch.Substring(20, 2);
-                        long numChave = long.TryParse(ch.Substring(25, 9), out long n) ? n : 0;
+                        chRapida = matchChaveNome.Value;
+                        string aa = chRapida.Substring(2, 2);
+                        string mm = chRapida.Substring(4, 2);
+                        dataEmiChave = $"20{aa}-{mm}-01";
+                        modChave = chRapida.Substring(20, 2);
+                        numChave = long.TryParse(chRapida.Substring(25, 9), out long n) ? n : 0;
+                    }
 
+                    if (XmlUploadCache.IsUploaded(fileIdentifier, chRapida))
+                    {
+                        jaProcessados++;
+                        if (LiveMonitorForm.CountLogs < 80 && chRapida != null)
+                        {
+                            LiveMonitorForm.AddLog(new XmlLogItem
+                            {
+                                Timestamp = fileInfo.LastWriteTime,
+                                TipoPasta = tipoPasta == "compras" ? "Entrada" : "Saída",
+                                Modelo = modChave,
+                                Numero = numChave.ToString(),
+                                Serie = "1",
+                                DataEmissao = dataEmiChave ?? fileInfo.LastWriteTime.ToString("yyyy-MM-dd"),
+                                ValorTotal = 0,
+                                Chave = chRapida,
+                                Status = "Já no Portal (Sincronizado)",
+                                Arquivo = fileName,
+                                IsRealTime = false
+                            });
+                        }
+                        continue;
+                    }
+
+                    // PRÉ-FILTRO ULTRA-RÁPIDO: Ponto de partida fiscal
+                    if (chRapida != null)
+                    {
                         bool ignorar = false;
-                        if (!string.IsNullOrWhiteSpace(dataInicioMonitoramento))
+                        string motivoIgnorar = "Ignorado (Ponto de Partida)";
+
+                        if (!string.IsNullOrWhiteSpace(dataInicioMonitoramento) && dataEmiChave != null)
                         {
                             string dataInicioFormatada = dataInicioMonitoramento.Trim();
                             if (dataInicioFormatada.Length == 7) dataInicioFormatada += "-01";
@@ -339,19 +367,45 @@ namespace HubParatechDesktop
                             if (string.Compare(dataEmiChave, dataInicioFormatada, StringComparison.Ordinal) < 0)
                             {
                                 ignorar = true;
+                                motivoIgnorar = $"Ignorado (Emissão {dataEmiChave} < {dataInicioFormatada})";
                             }
                         }
 
                         if (!ignorar && tipoPasta == "vendas" && numChave > 0)
                         {
-                            if (modChave == "65" && numeroInicialNfce > 1 && numChave < numeroInicialNfce) ignorar = true;
-                            else if (modChave == "55" && numeroInicialNfe > 1 && numChave < numeroInicialNfe) ignorar = true;
+                            if (modChave == "65" && numeroInicialNfce > 1 && numChave < numeroInicialNfce)
+                            {
+                                ignorar = true;
+                                motivoIgnorar = $"Ignorado (NFC-e #{numChave} < #{numeroInicialNfce})";
+                            }
+                            else if (modChave == "55" && numeroInicialNfe > 1 && numChave < numeroInicialNfe)
+                            {
+                                ignorar = true;
+                                motivoIgnorar = $"Ignorado (NF-e #{numChave} < #{numeroInicialNfe})";
+                            }
                         }
 
                         if (ignorar)
                         {
-                            XmlUploadCache.MarkAsUploaded(fileIdentifier, ch);
+                            XmlUploadCache.MarkAsUploaded(fileIdentifier, chRapida);
                             jaProcessados++;
+                            if (LiveMonitorForm.CountLogs < 80)
+                            {
+                                LiveMonitorForm.AddLog(new XmlLogItem
+                                {
+                                    Timestamp = fileInfo.LastWriteTime,
+                                    TipoPasta = tipoPasta == "compras" ? "Entrada" : "Saída",
+                                    Modelo = modChave,
+                                    Numero = numChave.ToString(),
+                                    Serie = "1",
+                                    DataEmissao = dataEmiChave ?? fileInfo.LastWriteTime.ToString("yyyy-MM-dd"),
+                                    ValorTotal = 0,
+                                    Chave = chRapida,
+                                    Status = motivoIgnorar,
+                                    Arquivo = fileName,
+                                    IsRealTime = false
+                                });
+                            }
                             continue;
                         }
                     }
