@@ -22,6 +22,28 @@ namespace HubParatechDesktop
         public string Status { get; set; } = "Sucesso";
         public string Arquivo { get; set; } = "";
         public bool IsRealTime { get; set; }
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public long NumeroLong => long.TryParse(Numero, out long n) ? n : 0;
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public DateTime? DataEmissaoData
+        {
+            get
+            {
+                if (!string.IsNullOrWhiteSpace(DataEmissao))
+                {
+                    if (DateTime.TryParse(DataEmissao, out DateTime dt))
+                        return dt.Date;
+                    var m = System.Text.RegularExpressions.Regex.Match(DataEmissao, @"^(\d{4})-(\d{2})-(\d{2})");
+                    if (m.Success && int.TryParse(m.Groups[1].Value, out int y) && int.TryParse(m.Groups[2].Value, out int mo) && int.TryParse(m.Groups[3].Value, out int d))
+                    {
+                        return new DateTime(y, mo, d);
+                    }
+                }
+                return Timestamp.Date;
+            }
+        }
     }
 
     public class LiveMonitorForm : Form
@@ -31,12 +53,23 @@ namespace HubParatechDesktop
         private static LiveMonitorForm? activeInstance = null;
         public static string PontoPartidaInfo { get; set; } = "Configuração do Portal";
 
+        private static int currentProgress = 100;
+        private static int maxProgress = 100;
+        private static string progressMessage = "Sincronização em dia • Monitoramento ativo";
+        private static bool isSyncingActive = false;
+
         private DataGridView dgvLogs;
         private Label lblTotalEnviados;
         private Label lblTotalNoCache;
         private Label lblPastasMonitoradas;
         private Label lblModoOperacao;
         private Label lblStatusPill;
+        private ProgressBar pbSync;
+        private Label lblProgressMessage;
+        private Label lblProgressPercent;
+        private ComboBox cmbFiltroData;
+        private DateTimePicker dtpFiltro;
+        private Label lblContadorFiltro;
         private System.Windows.Forms.Timer refreshTimer;
 
         private static readonly string HistoryPath = Path.Combine(
@@ -71,7 +104,16 @@ namespace HubParatechDesktop
                         lock (LogLock)
                         {
                             GlobalLogItems.Clear();
-                            GlobalLogItems.AddRange(items.Take(300));
+                            foreach (var it in items.Take(300))
+                            {
+                                if (it.ValorTotal == 0 && !string.IsNullOrEmpty(it.Arquivo) && File.Exists(it.Arquivo))
+                                {
+                                    var meta = XmlMonitor.ExtrairMetadadosRapidos(it.Arquivo);
+                                    if (meta.valor > 0) it.ValorTotal = meta.valor;
+                                    if (!string.IsNullOrEmpty(meta.dhEmi)) it.DataEmissao = meta.dhEmi;
+                                }
+                                GlobalLogItems.Add(it);
+                            }
                         }
                     }
                 }
@@ -86,7 +128,7 @@ namespace HubParatechDesktop
                 List<XmlLogItem> copy;
                 lock (LogLock)
                 {
-                    copy = GlobalLogItems.Take(150).ToList();
+                    copy = GlobalLogItems.Take(200).ToList();
                 }
                 string dir = Path.GetDirectoryName(HistoryPath)!;
                 if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
@@ -100,18 +142,25 @@ namespace HubParatechDesktop
         {
             lock (LogLock)
             {
-                // Evita duplicatas consecutivas idênticas da mesma chave e mesmo status
-                if (GlobalLogItems.Count > 0 &&
-                    GlobalLogItems[0].Chave == item.Chave &&
-                    GlobalLogItems[0].Status == item.Status)
+                var existing = GlobalLogItems.FirstOrDefault(x => x.Chave == item.Chave && !string.IsNullOrEmpty(x.Chave));
+                if (existing != null)
                 {
-                    return;
+                    if (existing.ValorTotal == 0 && item.ValorTotal > 0)
+                        existing.ValorTotal = item.ValorTotal;
+                    if (!string.IsNullOrEmpty(item.Status))
+                        existing.Status = item.Status;
+                    if (!string.IsNullOrEmpty(item.DataEmissao))
+                        existing.DataEmissao = item.DataEmissao;
+                    if (!string.IsNullOrEmpty(item.Arquivo))
+                        existing.Arquivo = item.Arquivo;
                 }
-
-                GlobalLogItems.Insert(0, item);
-                if (GlobalLogItems.Count > 300)
+                else
                 {
-                    GlobalLogItems.RemoveAt(GlobalLogItems.Count - 1);
+                    GlobalLogItems.Insert(0, item);
+                    if (GlobalLogItems.Count > 400)
+                    {
+                        GlobalLogItems.RemoveAt(GlobalLogItems.Count - 1);
+                    }
                 }
             }
 
@@ -125,6 +174,55 @@ namespace HubParatechDesktop
                 }
                 catch { }
             }
+        }
+
+        public static void ReportProgress(int current, int total, string message, bool isSyncing = true)
+        {
+            currentProgress = current;
+            maxProgress = Math.Max(1, total);
+            progressMessage = message;
+            isSyncingActive = isSyncing;
+
+            if (activeInstance != null && !activeInstance.IsDisposed)
+            {
+                try
+                {
+                    activeInstance.BeginInvoke(new Action(() => activeInstance.UpdateProgressUI()));
+                }
+                catch { }
+            }
+        }
+
+        public void UpdateProgressUI()
+        {
+            if (InvokeRequired)
+            {
+                try { BeginInvoke(new Action(UpdateProgressUI)); } catch { }
+                return;
+            }
+
+            try
+            {
+                if (pbSync != null && !pbSync.IsDisposed)
+                {
+                    pbSync.Maximum = Math.Max(1, maxProgress);
+                    pbSync.Value = Math.Min(Math.Max(0, currentProgress), pbSync.Maximum);
+                }
+
+                if (lblProgressPercent != null && !lblProgressPercent.IsDisposed)
+                {
+                    int pct = maxProgress > 0 ? (int)Math.Round((double)currentProgress * 100.0 / maxProgress) : 100;
+                    if (pct > 100) pct = 100;
+                    lblProgressPercent.Text = $"{pct}%";
+                    lblProgressPercent.ForeColor = isSyncingActive ? Color.FromArgb(14, 116, 144) : Color.FromArgb(16, 185, 129);
+                }
+
+                if (lblProgressMessage != null && !lblProgressMessage.IsDisposed)
+                {
+                    lblProgressMessage.Text = progressMessage;
+                }
+            }
+            catch { }
         }
 
         public static void OpenWebPortal(string url)
@@ -308,6 +406,158 @@ namespace HubParatechDesktop
 
             Controls.Add(statsPanel);
 
+            // 2.5 Barra de Progresso e Filtro por Data
+            var toolBarPanel = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 52,
+                BackColor = Color.White,
+                Padding = new Padding(20, 6, 20, 6)
+            };
+
+            var toolBarBorder = new Panel
+            {
+                Dock = DockStyle.Bottom,
+                Height = 1,
+                BackColor = Color.FromArgb(226, 232, 240)
+            };
+            toolBarPanel.Controls.Add(toolBarBorder);
+
+            // Lado Esquerdo: Progresso da Sincronização / Varredura
+            var pnlProgress = new Panel
+            {
+                Location = new Point(20, 6),
+                Size = new Size(380, 40),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left,
+                BackColor = Color.Transparent
+            };
+
+            lblProgressMessage = new Label
+            {
+                Text = progressMessage,
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(71, 85, 105),
+                Location = new Point(0, 2),
+                AutoSize = true
+            };
+            pnlProgress.Controls.Add(lblProgressMessage);
+
+            pbSync = new ProgressBar
+            {
+                Location = new Point(0, 20),
+                Size = new Size(240, 14),
+                Minimum = 0,
+                Maximum = 100,
+                Value = 100,
+                Style = ProgressBarStyle.Continuous
+            };
+            pnlProgress.Controls.Add(pbSync);
+
+            lblProgressPercent = new Label
+            {
+                Text = "100%",
+                Font = new Font("Segoe UI", 8f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(16, 185, 129),
+                Location = new Point(245, 19),
+                AutoSize = true
+            };
+            pnlProgress.Controls.Add(lblProgressPercent);
+
+            toolBarPanel.Controls.Add(pnlProgress);
+
+            // Lado Direito: Filtro por Data de Emissão (Padrão: Data do Dia)
+            var pnlFilter = new Panel
+            {
+                Size = new Size(540, 40),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                Location = new Point(toolBarPanel.Width - 560, 6),
+                BackColor = Color.Transparent
+            };
+
+            var lblFiltro = new Label
+            {
+                Text = "📅 Emissão:",
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(71, 85, 105),
+                Location = new Point(0, 9),
+                AutoSize = true
+            };
+            pnlFilter.Controls.Add(lblFiltro);
+
+            cmbFiltroData = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Font = new Font("Segoe UI", 8.5f),
+                Size = new Size(160, 26),
+                Location = new Point(78, 6)
+            };
+            cmbFiltroData.Items.Add($"Hoje ({DateTime.Today:dd/MM})");
+            cmbFiltroData.Items.Add($"Ontem ({DateTime.Today.AddDays(-1):dd/MM})");
+            cmbFiltroData.Items.Add("Últimos 7 dias");
+            cmbFiltroData.Items.Add("Todas as Datas");
+            cmbFiltroData.Items.Add("Data no Calendário ▾");
+            cmbFiltroData.SelectedIndex = 0; // Padrão solicitado: Data do Dia!
+            pnlFilter.Controls.Add(cmbFiltroData);
+
+            dtpFiltro = new DateTimePicker
+            {
+                Format = DateTimePickerFormat.Short,
+                Font = new Font("Segoe UI", 8.5f),
+                Size = new Size(95, 24),
+                Location = new Point(244, 6),
+                Value = DateTime.Today,
+                Enabled = false
+            };
+            pnlFilter.Controls.Add(dtpFiltro);
+
+            lblContadorFiltro = new Label
+            {
+                Text = "Carregando...",
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(14, 116, 144),
+                Location = new Point(345, 9),
+                AutoSize = true
+            };
+            pnlFilter.Controls.Add(lblContadorFiltro);
+
+            toolBarPanel.Controls.Add(pnlFilter);
+
+            toolBarPanel.Resize += (s, e) => {
+                pnlFilter.Location = new Point(toolBarPanel.Width - pnlFilter.Width - 20, 6);
+            };
+
+            cmbFiltroData.SelectedIndexChanged += (s, e) => {
+                if (cmbFiltroData.SelectedIndex == 0) // Hoje
+                {
+                    dtpFiltro.Value = DateTime.Today;
+                    dtpFiltro.Enabled = false;
+                }
+                else if (cmbFiltroData.SelectedIndex == 1) // Ontem
+                {
+                    dtpFiltro.Value = DateTime.Today.AddDays(-1);
+                    dtpFiltro.Enabled = false;
+                }
+                else if (cmbFiltroData.SelectedIndex == 4) // Calendário
+                {
+                    dtpFiltro.Enabled = true;
+                }
+                else
+                {
+                    dtpFiltro.Enabled = false;
+                }
+                RefreshDataGrid();
+            };
+
+            dtpFiltro.ValueChanged += (s, e) => {
+                if (cmbFiltroData.SelectedIndex != 4)
+                {
+                    cmbFiltroData.SelectedIndex = 4;
+                }
+                RefreshDataGrid();
+            };
+
+            Controls.Add(toolBarPanel);
+
             // 3. Grid de Logs em Tempo Real
             dgvLogs = new DataGridView
             {
@@ -460,7 +710,17 @@ namespace HubParatechDesktop
                     dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colNumero", HeaderText = "Número", FillWeight = 55 });
                     dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colSerie", HeaderText = "Série", FillWeight = 35 });
                     dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colEmissao", HeaderText = "Emissão <dhEmi>", FillWeight = 85 });
-                    dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colValor", HeaderText = "Valor (R$)", FillWeight = 65 });
+
+                    var colValor = new DataGridViewTextBoxColumn
+                    {
+                        Name = "colValor",
+                        HeaderText = "Valor (R$)",
+                        FillWeight = 65
+                    };
+                    colValor.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+                    colValor.HeaderCell.Style.Alignment = DataGridViewContentAlignment.MiddleRight;
+                    dgvLogs.Columns.Add(colValor);
+
                     dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colChave", HeaderText = "Chave de Acesso", FillWeight = 160 });
                     dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colStatus", HeaderText = "Status Portal", FillWeight = 75 });
                 }
@@ -523,15 +783,17 @@ namespace HubParatechDesktop
                 EnsureColumns();
                 if (dgvLogs.Columns.Count < 9) return;
 
-                List<XmlLogItem> copy;
+                UpdateProgressUI();
+
+                List<XmlLogItem> allCopy;
                 lock (LogLock)
                 {
-                    copy = GlobalLogItems.ToList();
+                    allCopy = GlobalLogItems.ToList();
                 }
 
                 if (lblTotalEnviados != null && !lblTotalEnviados.IsDisposed)
                 {
-                    int countSucesso = copy.Count(x => x.Status == "Sucesso" || x.Status == "Enviado");
+                    int countSucesso = allCopy.Count(x => x.Status == "Sucesso" || x.Status == "Enviado");
                     lblTotalEnviados.Text = countSucesso.ToString();
                 }
 
@@ -540,11 +802,60 @@ namespace HubParatechDesktop
                     lblTotalNoCache.Text = PontoPartidaInfo;
                 }
 
+                // 1. Filtragem por data (Padrão: Data do Dia / Hoje)
+                int modoFiltro = cmbFiltroData != null ? cmbFiltroData.SelectedIndex : 0;
+                DateTime dataEscolhida = dtpFiltro != null ? dtpFiltro.Value.Date : DateTime.Today;
+
+                List<XmlLogItem> filtered;
+                if (modoFiltro == 0) // Hoje (Padrão)
+                {
+                    filtered = allCopy.Where(x => x.DataEmissaoData == DateTime.Today).ToList();
+                }
+                else if (modoFiltro == 1) // Ontem
+                {
+                    filtered = allCopy.Where(x => x.DataEmissaoData == DateTime.Today.AddDays(-1)).ToList();
+                }
+                else if (modoFiltro == 2) // Últimos 7 dias
+                {
+                    DateTime d7 = DateTime.Today.AddDays(-7);
+                    filtered = allCopy.Where(x => (x.DataEmissaoData ?? DateTime.MinValue) >= d7).ToList();
+                }
+                else if (modoFiltro == 4) // Data no Calendário
+                {
+                    filtered = allCopy.Where(x => x.DataEmissaoData == dataEscolhida).ToList();
+                }
+                else // 3 = Todas as Datas
+                {
+                    filtered = allCopy;
+                }
+
+                // 2. Inverter a ordem: Notas finais no início (mais recentes e com maior número no topo)
+                filtered = filtered
+                    .OrderByDescending(x => x.DataEmissaoData ?? DateTime.MinValue)
+                    .ThenByDescending(x => x.NumeroLong)
+                    .ThenByDescending(x => x.Timestamp)
+                    .ToList();
+
+                // 3. Atualizar contador do filtro
+                if (lblContadorFiltro != null && !lblContadorFiltro.IsDisposed)
+                {
+                    if (modoFiltro == 0 && filtered.Count == 0 && allCopy.Count > 0)
+                    {
+                        lblContadorFiltro.Text = $"0 notas hoje ({DateTime.Today:dd/MM}) • {allCopy.Count} no histórico geral (Escolha 'Todas as Datas')";
+                        lblContadorFiltro.ForeColor = Color.FromArgb(217, 119, 6); // amber
+                    }
+                    else
+                    {
+                        lblContadorFiltro.Text = $"Exibindo {filtered.Count} nota(s)";
+                        lblContadorFiltro.ForeColor = Color.FromArgb(14, 116, 144); // cyan-700
+                    }
+                }
+
                 dgvLogs.SuspendLayout();
                 try
                 {
                     dgvLogs.Rows.Clear();
-                    foreach (var item in copy)
+                    foreach (var item in filtered)
                     {
                         if (dgvLogs.Columns.Count < 9) break;
 
@@ -554,6 +865,16 @@ namespace HubParatechDesktop
                         {
                             emissaoFormatada = dtEmi.ToString("dd/MM/yyyy HH:mm");
                         }
+                        else if (!string.IsNullOrEmpty(item.DataEmissao) && item.DataEmissao.Length >= 10)
+                        {
+                            var m = System.Text.RegularExpressions.Regex.Match(item.DataEmissao, @"^(\d{4})-(\d{2})-(\d{2})");
+                            if (m.Success)
+                            {
+                                emissaoFormatada = $"{m.Groups[3].Value}/{m.Groups[2].Value}/{m.Groups[1].Value}";
+                            }
+                        }
+
+                        string valorStr = item.ValorTotal > 0 ? item.ValorTotal.ToString("N2") : "-";
 
                         int rowIndex = -1;
                         try
@@ -565,7 +886,7 @@ namespace HubParatechDesktop
                                 item.Numero,
                                 item.Serie,
                                 emissaoFormatada,
-                                item.ValorTotal > 0 ? item.ValorTotal.ToString("N2") : "-",
+                                valorStr,
                                 item.Chave,
                                 item.Status
                             );

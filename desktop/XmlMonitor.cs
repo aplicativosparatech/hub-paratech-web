@@ -283,11 +283,13 @@ namespace HubParatechDesktop
                 int jaProcessados = 0;
                 int enviadosNestaRodada = 0;
                 int falhas = 0;
+                int analisados = 0;
 
                 Debug.WriteLine($"[Auditoria Hub] Iniciando conferência em {rootPath}. Total de arquivos XML encontrados: {totalArquivos}");
 
                 if (totalArquivos > 0)
                 {
+                    LiveMonitorForm.ReportProgress(0, totalArquivos, $"Iniciando conferência de {totalArquivos} notas fiscais...", isSyncing: true);
                     OnSyncStatusChanged?.Invoke(this, new XmlSyncEventArgs
                     {
                         IsSyncing = true,
@@ -299,6 +301,13 @@ namespace HubParatechDesktop
                 foreach (var fileInfo in files)
                 {
                     if (!isRunning) break;
+                    analisados++;
+
+                    if (totalArquivos > 0 && (analisados % 10 == 0 || analisados == totalArquivos))
+                    {
+                        int pct = (int)Math.Round((double)analisados * 100.0 / totalArquivos);
+                        LiveMonitorForm.ReportProgress(analisados, totalArquivos, $"Varrendo notas: {analisados} de {totalArquivos} ({pct}%)...", isSyncing: true);
+                    }
 
                     string file = fileInfo.FullName;
                     string fileName = fileInfo.Name;
@@ -332,8 +341,9 @@ namespace HubParatechDesktop
                     if (XmlUploadCache.IsUploaded(fileIdentifier, chRapida))
                     {
                         jaProcessados++;
-                        if (LiveMonitorForm.CountLogs < 80 && chRapida != null)
+                        if (LiveMonitorForm.CountLogs < 150 && chRapida != null)
                         {
+                            var meta = ExtrairMetadadosRapidos(file);
                             LiveMonitorForm.AddLog(new XmlLogItem
                             {
                                 Timestamp = fileInfo.LastWriteTime,
@@ -341,11 +351,11 @@ namespace HubParatechDesktop
                                 Modelo = modChave,
                                 Numero = numChave.ToString(),
                                 Serie = "1",
-                                DataEmissao = dataEmiChave ?? fileInfo.LastWriteTime.ToString("yyyy-MM-dd"),
-                                ValorTotal = 0,
+                                DataEmissao = meta.dhEmi ?? dataEmiChave ?? fileInfo.LastWriteTime.ToString("yyyy-MM-dd"),
+                                ValorTotal = meta.valor,
                                 Chave = chRapida,
                                 Status = "Já no Portal (Sincronizado)",
-                                Arquivo = fileName,
+                                Arquivo = file,
                                 IsRealTime = false
                             });
                         }
@@ -389,8 +399,9 @@ namespace HubParatechDesktop
                         {
                             XmlUploadCache.MarkAsUploaded(fileIdentifier, chRapida);
                             jaProcessados++;
-                            if (LiveMonitorForm.CountLogs < 80)
+                            if (LiveMonitorForm.CountLogs < 150)
                             {
+                                var meta = ExtrairMetadadosRapidos(file);
                                 LiveMonitorForm.AddLog(new XmlLogItem
                                 {
                                     Timestamp = fileInfo.LastWriteTime,
@@ -398,11 +409,11 @@ namespace HubParatechDesktop
                                     Modelo = modChave,
                                     Numero = numChave.ToString(),
                                     Serie = "1",
-                                    DataEmissao = dataEmiChave ?? fileInfo.LastWriteTime.ToString("yyyy-MM-dd"),
-                                    ValorTotal = 0,
+                                    DataEmissao = meta.dhEmi ?? dataEmiChave ?? fileInfo.LastWriteTime.ToString("yyyy-MM-dd"),
+                                    ValorTotal = meta.valor,
                                     Chave = chRapida,
                                     Status = motivoIgnorar,
-                                    Arquivo = fileName,
+                                    Arquivo = file,
                                     IsRealTime = false
                                 });
                             }
@@ -417,6 +428,8 @@ namespace HubParatechDesktop
                     await Task.Delay(40); // Pausa suave para não sobrecarregar I/O ou rede
                 }
 
+                LiveMonitorForm.ReportProgress(totalArquivos, totalArquivos, $"Sincronização em dia • {totalArquivos} notas conferidas", isSyncing: false);
+
                 OnSyncStatusChanged?.Invoke(this, new XmlSyncEventArgs
                 {
                     IsSyncing = false,
@@ -429,12 +442,53 @@ namespace HubParatechDesktop
             catch (Exception ex)
             {
                 Debug.WriteLine($"Erro ao varrer arquivos existentes em {rootPath}: {ex.Message}");
+                LiveMonitorForm.ReportProgress(100, 100, "Monitoramento ativo", isSyncing: false);
                 OnSyncStatusChanged?.Invoke(this, new XmlSyncEventArgs
                 {
                     IsSyncing = false,
                     StatusMessage = "Monitorando",
                     TipoPasta = tipoPasta
                 });
+            }
+        }
+
+        public static (decimal valor, string? dhEmi) ExtrairMetadadosRapidos(string filePath)
+        {
+            try
+            {
+                if (!File.Exists(filePath)) return (0, null);
+                byte[] bytes;
+                using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                {
+                    bytes = new byte[fs.Length];
+                    fs.Read(bytes, 0, bytes.Length);
+                }
+
+                string text = System.Text.Encoding.UTF8.GetString(bytes);
+                if (text.Contains("encoding=\"ISO-8859-1\"") || text.Contains("encoding=\"iso-8859-1\""))
+                {
+                    try { text = System.Text.Encoding.GetEncoding("ISO-8859-1").GetString(bytes); } catch { }
+                }
+
+                decimal valor = 0;
+                var matchV = Regex.Match(text, @"<vNF>([\d\.]+)</vNF>");
+                if (matchV.Success && decimal.TryParse(matchV.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal v))
+                {
+                    valor = v;
+                }
+
+                string? dhEmi = null;
+                var matchEmi = Regex.Match(text, @"<(?:dhEmi|dEmi)[^>]*>([^<]+)<");
+                if (matchEmi.Success)
+                {
+                    dhEmi = matchEmi.Groups[1].Value;
+                }
+
+                return (valor, dhEmi);
+            }
+            catch
+            {
+                return (0, null);
             }
         }
 
@@ -666,7 +720,7 @@ namespace HubParatechDesktop
                         ValorTotal = dadosLocais.ValorTotal,
                         Chave = dadosLocais.Chave ?? "",
                         Status = motivoPontoPartida,
-                        Arquivo = fileName,
+                        Arquivo = filePath,
                         IsRealTime = isRealTime
                     });
                     return true;
@@ -754,7 +808,7 @@ namespace HubParatechDesktop
                                 ValorTotal = dadosLocais.ValorTotal,
                                 Chave = dadosLocais.Chave ?? "",
                                 Status = $"Ignorado ({statusIgn})",
-                                Arquivo = fileName,
+                                Arquivo = filePath,
                                 IsRealTime = isRealTime
                             });
 
@@ -796,7 +850,7 @@ namespace HubParatechDesktop
                             ValorTotal = dadosLocais.ValorTotal,
                             Chave = dadosLocais.Chave ?? "",
                             Status = "Sucesso",
-                            Arquivo = fileName,
+                            Arquivo = filePath,
                             IsRealTime = isRealTime
                         });
 
@@ -839,7 +893,7 @@ namespace HubParatechDesktop
                             ValorTotal = dadosLocais.ValorTotal,
                             Chave = dadosLocais.Chave ?? "",
                             Status = $"Falha ({response.StatusCode})",
-                            Arquivo = fileName,
+                            Arquivo = filePath,
                             IsRealTime = isRealTime
                         });
 
