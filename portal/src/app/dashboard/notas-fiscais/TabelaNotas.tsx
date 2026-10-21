@@ -896,10 +896,40 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
             <tbody>
               {notasFiltradas.length === 0 ? (
                 <tr>
-                  <td colSpan={isSaida ? 8 : 9} className="p-8 text-center text-slate-400">
-                    {temFiltroAtivo 
-                      ? 'Nenhuma nota encontrada com os filtros selecionados. Tente ajustar os parâmetros ou limpar os filtros.' 
-                      : 'Nenhuma nota encontrada. O Hub ainda não enviou dados para esta seção.'}
+                  <td colSpan={isSaida ? 8 : 9} className="py-12 px-6 text-center text-slate-500">
+                    <p className="font-semibold text-slate-700 text-base">
+                      {temFiltroAtivo 
+                        ? 'Nenhuma nota encontrada com os filtros selecionados.' 
+                        : 'Nenhuma nota encontrada nesta seção.'}
+                    </p>
+                    
+                    {tabela === 'nfe_saidas' && (
+                      <div className="mt-4 inline-flex flex-col sm:flex-row items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl text-blue-800 text-sm">
+                        <span className="font-medium">💡 Sua empresa emite Cupom Fiscal Eletrônico?</span>
+                        <Link 
+                          href="/dashboard/notas-fiscais/saidas/nfce" 
+                          className="font-bold underline text-blue-600 hover:text-blue-900 flex items-center gap-1"
+                        >
+                          Clique aqui para abrir NFC-e (Mod 65) →
+                        </Link>
+                      </div>
+                    )}
+
+                    {tabela === 'nfce_saidas' && (
+                      <div className="mt-4 inline-flex flex-col sm:flex-row items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-sm">
+                        <span className="font-medium">Procurando notas grandes / faturadas?</span>
+                        <Link 
+                          href="/dashboard/notas-fiscais/saidas/nfe" 
+                          className="font-bold underline text-blue-600 hover:text-blue-800"
+                        >
+                          Ver NF-e (Mod 55)
+                        </Link>
+                      </div>
+                    )}
+
+                    <p className="text-xs text-slate-400 mt-4 max-w-lg mx-auto">
+                      Dica: Se as notas sincronizadas foram emitidas em outro mês (como Setembro/2026), selecione o mês correspondente no filtro de <b>Mês de Competência</b> acima.
+                    </p>
                   </td>
                 </tr>
               ) : notasPaginadas.map(n => {
