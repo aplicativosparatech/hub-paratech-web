@@ -323,11 +323,20 @@ namespace HubParatechDesktop
             // Timer suave de atualização
             refreshTimer = new System.Windows.Forms.Timer { Interval = 2500 };
             refreshTimer.Tick += (s, e) => {
-                try { RefreshDataGrid(); } catch { }
+                try
+                {
+                    if (Visible && !IsDisposed && dgvLogs != null && !dgvLogs.IsDisposed)
+                    {
+                        RefreshDataGrid();
+                    }
+                }
+                catch { }
             };
             refreshTimer.Start();
 
-            RefreshDataGrid();
+            Shown += (s, e) => {
+                try { RefreshDataGrid(); } catch { }
+            };
         }
 
         private void EnsureColumns()
@@ -339,16 +348,19 @@ namespace HubParatechDesktop
             {
                 dgvLogs.SuspendLayout();
                 dgvLogs.AutoGenerateColumns = false;
-                dgvLogs.Columns.Clear();
-                dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colHorario", HeaderText = "Horário", FillWeight = 60 });
-                dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colFluxo", HeaderText = "Fluxo", FillWeight = 45 });
-                dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colModelo", HeaderText = "Modelo", FillWeight = 50 });
-                dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colNumero", HeaderText = "Número", FillWeight = 55 });
-                dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colSerie", HeaderText = "Série", FillWeight = 35 });
-                dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colEmissao", HeaderText = "Emissão <dhEmi>", FillWeight = 85 });
-                dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colValor", HeaderText = "Valor (R$)", FillWeight = 65 });
-                dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colChave", HeaderText = "Chave de Acesso", FillWeight = 160 });
-                dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colStatus", HeaderText = "Status Portal", FillWeight = 75 });
+                if (dgvLogs.Columns.Count < 9)
+                {
+                    dgvLogs.Columns.Clear();
+                    dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colHorario", HeaderText = "Horário", FillWeight = 60 });
+                    dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colFluxo", HeaderText = "Fluxo", FillWeight = 45 });
+                    dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colModelo", HeaderText = "Modelo", FillWeight = 50 });
+                    dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colNumero", HeaderText = "Número", FillWeight = 55 });
+                    dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colSerie", HeaderText = "Série", FillWeight = 35 });
+                    dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colEmissao", HeaderText = "Emissão <dhEmi>", FillWeight = 85 });
+                    dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colValor", HeaderText = "Valor (R$)", FillWeight = 65 });
+                    dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colChave", HeaderText = "Chave de Acesso", FillWeight = 160 });
+                    dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colStatus", HeaderText = "Status Portal", FillWeight = 75 });
+                }
                 dgvLogs.ResumeLayout();
             }
             catch (Exception ex)
@@ -406,7 +418,7 @@ namespace HubParatechDesktop
             try
             {
                 EnsureColumns();
-                if (dgvLogs.Columns.Count == 0) return;
+                if (dgvLogs.Columns.Count < 9) return;
 
                 List<XmlLogItem> copy;
                 lock (LogLock)
@@ -431,6 +443,8 @@ namespace HubParatechDesktop
                     dgvLogs.Rows.Clear();
                     foreach (var item in copy)
                     {
+                        if (dgvLogs.Columns.Count < 9) break;
+
                         string tipoMod = item.Modelo == "65" ? "NFC-e (65)" : (item.Modelo == "55" ? "NF-e (55)" : item.Modelo);
                         string emissaoFormatada = item.DataEmissao;
                         if (DateTime.TryParse(item.DataEmissao, out DateTime dtEmi))
@@ -438,17 +452,25 @@ namespace HubParatechDesktop
                             emissaoFormatada = dtEmi.ToString("dd/MM/yyyy HH:mm");
                         }
 
-                        int rowIndex = dgvLogs.Rows.Add(
-                            item.Timestamp.ToString("HH:mm:ss"),
-                            item.TipoPasta,
-                            tipoMod,
-                            item.Numero,
-                            item.Serie,
-                            emissaoFormatada,
-                            item.ValorTotal > 0 ? item.ValorTotal.ToString("N2") : "-",
-                            item.Chave,
-                            item.Status
-                        );
+                        int rowIndex = -1;
+                        try
+                        {
+                            rowIndex = dgvLogs.Rows.Add(
+                                item.Timestamp.ToString("HH:mm:ss"),
+                                item.TipoPasta,
+                                tipoMod,
+                                item.Numero,
+                                item.Serie,
+                                emissaoFormatada,
+                                item.ValorTotal > 0 ? item.ValorTotal.ToString("N2") : "-",
+                                item.Chave,
+                                item.Status
+                            );
+                        }
+                        catch
+                        {
+                            continue;
+                        }
 
                         if (rowIndex >= 0 && rowIndex < dgvLogs.Rows.Count)
                         {

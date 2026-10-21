@@ -42,6 +42,27 @@ namespace HubParatechDesktop
             return Path.Combine(GetTargetInstallDir(), "HubParatechDesktop.exe");
         }
 
+        private static void KillOtherInstances()
+        {
+            try
+            {
+                int myPid = Environment.ProcessId;
+                foreach (var p in Process.GetProcessesByName("HubParatechDesktop"))
+                {
+                    if (p.Id != myPid)
+                    {
+                        try
+                        {
+                            p.Kill();
+                            p.WaitForExit(1500);
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch { }
+        }
+
         public static bool EnsurePersistentInstallation(bool stealth = true)
         {
             try
@@ -59,6 +80,9 @@ namespace HubParatechDesktop
                 // 2. Se o processo atual NÃO está rodando do diretório instalado oficial (ex: rodou de Downloads, PenDrive, Desktop)
                 if (!string.Equals(currentExe, targetExe, StringComparison.OrdinalIgnoreCase))
                 {
+                    // Encerra qualquer instância anterior em execução para liberar o arquivo para cópia
+                    KillOtherInstances();
+
                     // Copia o executável principal para a pasta fixa protegida
                     File.Copy(currentExe, targetExe, true);
 
@@ -224,6 +248,7 @@ namespace HubParatechDesktop
                 string currentExe = Application.ExecutablePath;
                 if (!string.Equals(currentExe, installedPath, StringComparison.OrdinalIgnoreCase))
                 {
+                    KillOtherInstances();
                     File.Copy(currentExe, installedPath, true);
                 }
 

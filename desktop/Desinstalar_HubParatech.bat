@@ -26,6 +26,9 @@ echo [*] Removendo entradas de inicialização do Registro do Windows...
 reg delete "HKLM\Software\Microsoft\Windows\CurrentVersion\Run" /v "HubParatech" /f >nul 2>&1
 reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "HubParatech" /f >nul 2>&1
 
+echo [*] Limpando executáveis anteriores...
+if exist "C:\Paratech\HubDesktop\HubParatechDesktop.exe" del /F /Q "C:\Paratech\HubDesktop\HubParatechDesktop.exe" >nul 2>&1
+
 echo.
 echo ===============================================================================
 echo  [SUCESSO] Inicialização automática e tarefas do Hub Paratech foram removidas!
