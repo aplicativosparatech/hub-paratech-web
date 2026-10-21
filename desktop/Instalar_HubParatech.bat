@@ -1,10 +1,10 @@
 @echo off
 chcp 65001 >nul
-title Instalador e Protetor - Hub Paratech Desktop v2.5.6
+title Instalador e Protetor - Hub Paratech Desktop v2.5.7
 color 0B
 
 echo ===============================================================================
-echo          HUB PARATECH DESKTOP v2.5.6 - INSTALADOR E ATIVAÇÃO PROTEGIDA
+echo          HUB PARATECH DESKTOP v2.5.7 - INSTALADOR E ATIVAÇÃO PROTEGIDA
 echo ===============================================================================
 echo.
 
@@ -44,7 +44,7 @@ reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "HubParatech" /t
 
 echo.
 echo ===============================================================================
-echo  [SUCESSO] Hub Paratech Desktop v2.5.6 Instalado com Proteção Anti-Burla!
+echo  [SUCESSO] Hub Paratech Desktop v2.5.7 Instalado com Proteção Anti-Burla!
 echo ===============================================================================
 echo.
 echo  • Local de Instalação : C:\Paratech\HubDesktop\HubParatechDesktop.exe

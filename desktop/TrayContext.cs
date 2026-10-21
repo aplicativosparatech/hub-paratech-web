@@ -81,10 +81,10 @@ namespace HubParatechDesktop
                 Icon = baseIcon,
                 ContextMenuStrip = new ContextMenuStrip(),
                 Visible = !isStealthMode,
-                Text = "Hub Paratech v2.5.6 - Monitorando"
+                Text = "Hub Paratech v2.5.7 - Monitorando"
             };
 
-            var itemVersao = new ToolStripMenuItem("Hub Paratech v2.5.6") { Enabled = false, Font = new Font(Control.DefaultFont, FontStyle.Bold) };
+            var itemVersao = new ToolStripMenuItem("Hub Paratech v2.5.7") { Enabled = false, Font = new Font(Control.DefaultFont, FontStyle.Bold) };
             trayIcon.ContextMenuStrip.Items.Add(itemVersao);
             trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
 
@@ -100,7 +100,7 @@ namespace HubParatechDesktop
             trayIcon.ContextMenuStrip.Items.Add("Ver Status Interno", null, (s, e) => {
                 string procs = targetProcesses.Count > 0 ? string.Join(", ", targetProcesses) : "Nenhum processo restrito";
                 string syncTxt = lastSync > DateTime.MinValue ? lastSync.ToString("dd/MM/yyyy HH:mm:ss") : "Pendente";
-                string msg = $"Status Operacional do Hub Paratech v2.5.6:\n\n" +
+                string msg = $"Status Operacional do Hub Paratech v2.5.7:\n\n" +
                              $"• Situação do Sistema: {(isBlocked ? "BLOQUEADO" : "LIBERADO / REGULAR")}\n" +
                              $"• Processos Alvo: {procs}\n" +
                              $"• Modo de Operação: {currentModoProcessamento.ToUpper()}\n" +
@@ -137,7 +137,7 @@ namespace HubParatechDesktop
 
             if (!isStealthMode)
             {
-                trayIcon.ShowBalloonTip(3000, "Hub Paratech v2.5.6", "Monitoramento em tempo real ativo em todas as pastas e subpastas.", ToolTipIcon.Info);
+                trayIcon.ShowBalloonTip(3000, "Hub Paratech v2.5.7", "Monitoramento em tempo real ativo em todas as pastas e subpastas.", ToolTipIcon.Info);
             }
             EnableAutoStart();
 
@@ -245,7 +245,7 @@ namespace HubParatechDesktop
                     isCurrentlySyncing = false;
                     animTimer.Stop();
                     trayIcon.Icon = baseIcon;
-                    SetTrayText("Hub Paratech v2.5.6 - Monitorando");
+                    SetTrayText("Hub Paratech v2.5.7 - Monitorando");
                 }
             }
             catch { }

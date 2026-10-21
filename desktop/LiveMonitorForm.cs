@@ -217,18 +217,11 @@ namespace HubParatechDesktop
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect,
                 MultiSelect = false,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                Font = new Font("Segoe UI", 9f)
+                Font = new Font("Segoe UI", 9f),
+                AutoGenerateColumns = false
             };
 
-            dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Horário", DataPropertyName = "Horario", FillWeight = 60 });
-            dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Fluxo", DataPropertyName = "Tipo", FillWeight = 45 });
-            dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Modelo", DataPropertyName = "Modelo", FillWeight = 50 });
-            dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Número", DataPropertyName = "Numero", FillWeight = 55 });
-            dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Série", DataPropertyName = "Serie", FillWeight = 35 });
-            dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Emissão <dhEmi>", DataPropertyName = "Emissao", FillWeight = 85 });
-            dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Valor (R$)", DataPropertyName = "Valor", FillWeight = 65 });
-            dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Chave de Acesso", DataPropertyName = "Chave", FillWeight = 160 });
-            dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Status Portal", DataPropertyName = "Status", FillWeight = 75 });
+            EnsureColumns();
 
             // Estilização do Grid
             dgvLogs.EnableHeadersVisualStyles = false;
@@ -299,8 +292,12 @@ namespace HubParatechDesktop
             };
             btnLimpar.FlatAppearance.BorderColor = Color.FromArgb(226, 232, 240);
             btnLimpar.Click += (s, e) => {
-                lock (LogLock) GlobalLogItems.Clear();
-                RefreshDataGrid();
+                try
+                {
+                    lock (LogLock) GlobalLogItems.Clear();
+                    RefreshDataGrid();
+                }
+                catch { }
             };
             bottomPanel.Controls.Add(btnLimpar);
 
@@ -324,10 +321,39 @@ namespace HubParatechDesktop
 
             // Timer suave de atualização
             refreshTimer = new System.Windows.Forms.Timer { Interval = 2500 };
-            refreshTimer.Tick += (s, e) => RefreshDataGrid();
+            refreshTimer.Tick += (s, e) => {
+                try { RefreshDataGrid(); } catch { }
+            };
             refreshTimer.Start();
 
             RefreshDataGrid();
+        }
+
+        private void EnsureColumns()
+        {
+            if (dgvLogs == null) return;
+            if (dgvLogs.Columns.Count >= 9) return;
+
+            try
+            {
+                dgvLogs.SuspendLayout();
+                dgvLogs.AutoGenerateColumns = false;
+                dgvLogs.Columns.Clear();
+                dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colHorario", HeaderText = "Horário", FillWeight = 60 });
+                dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colFluxo", HeaderText = "Fluxo", FillWeight = 45 });
+                dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colModelo", HeaderText = "Modelo", FillWeight = 50 });
+                dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colNumero", HeaderText = "Número", FillWeight = 55 });
+                dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colSerie", HeaderText = "Série", FillWeight = 35 });
+                dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colEmissao", HeaderText = "Emissão <dhEmi>", FillWeight = 85 });
+                dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colValor", HeaderText = "Valor (R$)", FillWeight = 65 });
+                dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colChave", HeaderText = "Chave de Acesso", FillWeight = 160 });
+                dgvLogs.Columns.Add(new DataGridViewTextBoxColumn { Name = "colStatus", HeaderText = "Status Portal", FillWeight = 75 });
+                dgvLogs.ResumeLayout();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LiveMonitor] Falha ao configurar colunas: {ex.Message}");
+            }
         }
 
         private Panel CreateCard(string title, string value, out Label lblValue)
@@ -364,51 +390,87 @@ namespace HubParatechDesktop
 
         private void RefreshDataGrid()
         {
-            List<XmlLogItem> copy;
-            lock (LogLock)
+            if (dgvLogs == null || dgvLogs.IsDisposed) return;
+
+            if (InvokeRequired)
             {
-                copy = GlobalLogItems.ToList();
+                try
+                {
+                    BeginInvoke(new Action(RefreshDataGrid));
+                }
+                catch { }
+                return;
             }
 
-            int countSucesso = copy.Count(x => x.Status == "Sucesso" || x.Status == "Enviado");
-            lblTotalEnviados.Text = countSucesso.ToString();
-
-            dgvLogs.Rows.Clear();
-            foreach (var item in copy)
+            try
             {
-                string tipoMod = item.Modelo == "65" ? "NFC-e (65)" : (item.Modelo == "55" ? "NF-e (55)" : item.Modelo);
-                string emissaoFormatada = item.DataEmissao;
-                if (DateTime.TryParse(item.DataEmissao, out DateTime dtEmi))
+                EnsureColumns();
+                if (dgvLogs.Columns.Count == 0) return;
+
+                List<XmlLogItem> copy;
+                lock (LogLock)
                 {
-                    emissaoFormatada = dtEmi.ToString("dd/MM/yyyy HH:mm");
+                    copy = GlobalLogItems.ToList();
                 }
 
-                int rowIndex = dgvLogs.Rows.Add(
-                    item.Timestamp.ToString("HH:mm:ss"),
-                    item.TipoPasta,
-                    tipoMod,
-                    item.Numero,
-                    item.Serie,
-                    emissaoFormatada,
-                    item.ValorTotal > 0 ? item.ValorTotal.ToString("N2") : "-",
-                    item.Chave,
-                    item.Status
-                );
+                if (lblTotalEnviados != null && !lblTotalEnviados.IsDisposed)
+                {
+                    int countSucesso = copy.Count(x => x.Status == "Sucesso" || x.Status == "Enviado");
+                    lblTotalEnviados.Text = countSucesso.ToString();
+                }
 
-                var row = dgvLogs.Rows[rowIndex];
-                if (item.Status == "Sucesso" || item.Status == "Enviado")
+                dgvLogs.SuspendLayout();
+                try
                 {
-                    row.Cells[8].Style.ForeColor = Color.FromArgb(16, 185, 129); // emerald-600
-                    row.Cells[8].Style.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+                    dgvLogs.Rows.Clear();
+                    foreach (var item in copy)
+                    {
+                        string tipoMod = item.Modelo == "65" ? "NFC-e (65)" : (item.Modelo == "55" ? "NF-e (55)" : item.Modelo);
+                        string emissaoFormatada = item.DataEmissao;
+                        if (DateTime.TryParse(item.DataEmissao, out DateTime dtEmi))
+                        {
+                            emissaoFormatada = dtEmi.ToString("dd/MM/yyyy HH:mm");
+                        }
+
+                        int rowIndex = dgvLogs.Rows.Add(
+                            item.Timestamp.ToString("HH:mm:ss"),
+                            item.TipoPasta,
+                            tipoMod,
+                            item.Numero,
+                            item.Serie,
+                            emissaoFormatada,
+                            item.ValorTotal > 0 ? item.ValorTotal.ToString("N2") : "-",
+                            item.Chave,
+                            item.Status
+                        );
+
+                        if (rowIndex >= 0 && rowIndex < dgvLogs.Rows.Count)
+                        {
+                            var row = dgvLogs.Rows[rowIndex];
+                            if (item.Status == "Sucesso" || item.Status == "Enviado")
+                            {
+                                row.Cells[8].Style.ForeColor = Color.FromArgb(16, 185, 129); // emerald-600
+                                row.Cells[8].Style.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+                            }
+                            else if (item.Status.Contains("Cache") || item.Status.Contains("Já no Portal"))
+                            {
+                                row.Cells[8].Style.ForeColor = Color.FromArgb(14, 116, 144); // cyan-700
+                            }
+                            else
+                            {
+                                row.Cells[8].Style.ForeColor = Color.FromArgb(239, 68, 68); // red-500
+                            }
+                        }
+                    }
                 }
-                else if (item.Status.Contains("Cache") || item.Status.Contains("Já no Portal"))
+                finally
                 {
-                    row.Cells[8].Style.ForeColor = Color.FromArgb(14, 116, 144); // cyan-700
+                    dgvLogs.ResumeLayout();
                 }
-                else
-                {
-                    row.Cells[8].Style.ForeColor = Color.FromArgb(239, 68, 68); // red-500
-                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LiveMonitor] Erro protegido ao atualizar grid: {ex.Message}");
             }
         }
     }

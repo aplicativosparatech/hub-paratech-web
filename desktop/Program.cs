@@ -8,6 +8,16 @@ static class Program
     [STAThread]
     static void Main(string[] args)
     {
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (s, e) =>
+        {
+            System.Diagnostics.Debug.WriteLine($"[Hub Paratech Error] ThreadException: {e.Exception.Message}");
+        };
+        AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+        {
+            System.Diagnostics.Debug.WriteLine($"[Hub Paratech Error] UnhandledException: {e.ExceptionObject}");
+        };
+
         ApplicationConfiguration.Initialize();
 
         bool forceStealth = false;
