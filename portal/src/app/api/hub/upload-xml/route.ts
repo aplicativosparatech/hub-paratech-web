@@ -233,26 +233,29 @@ export async function POST(request: Request) {
     }
 
     // REGRA FISCAL: Filtro de Competência Inicial e Numeração de Ponto de Partida
-    if (tipoPasta === 'vendas') {
-      const dataEmissaoStr = emissao ? emissao.split('T')[0] : null
-      if (cliente.data_inicio_monitoramento && dataEmissaoStr && dataEmissaoStr < cliente.data_inicio_monitoramento) {
-        return NextResponse.json({
-          ignored: true,
-          reason: `XML com data de emissão (${dataEmissaoStr}) anterior à competência de início de monitoramento da empresa (${cliente.data_inicio_monitoramento}).`
-        }, { status: 200 })
-      }
+    const dataEmissaoStr = emissao ? emissao.split('T')[0] : null
+    if (cliente.data_inicio_monitoramento && dataEmissaoStr && dataEmissaoStr < cliente.data_inicio_monitoramento) {
+      return NextResponse.json({
+        ignored: true,
+        ponto_partida: true,
+        reason: `XML com data de emissão (${dataEmissaoStr}) anterior à competência de início de monitoramento da empresa (${cliente.data_inicio_monitoramento}).`
+      }, { status: 200 })
+    }
 
+    if (tipoPasta === 'vendas') {
       const numInt = numero ? parseInt(String(numero).replace(/\D/g, ''), 10) : 0
       if (numInt > 0) {
         if (mod === '55' && cliente.numero_inicial_nfe && numInt < cliente.numero_inicial_nfe) {
           return NextResponse.json({
             ignored: true,
+            ponto_partida: true,
             reason: `NF-e número ${numInt} anterior ao número inicial de contagem da empresa (${cliente.numero_inicial_nfe}).`
           }, { status: 200 })
         }
         if (mod === '65' && cliente.numero_inicial_nfce && numInt < cliente.numero_inicial_nfce) {
           return NextResponse.json({
             ignored: true,
+            ponto_partida: true,
             reason: `NFC-e número ${numInt} anterior ao número inicial de contagem da empresa (${cliente.numero_inicial_nfce}).`
           }, { status: 200 })
         }

@@ -27,6 +27,7 @@ namespace HubParatechDesktop
         private static readonly List<XmlLogItem> GlobalLogItems = new List<XmlLogItem>();
         private static readonly object LogLock = new object();
         private static LiveMonitorForm? activeInstance = null;
+        public static string PontoPartidaInfo { get; set; } = "Configuração do Portal";
 
         private DataGridView dgvLogs;
         private Label lblTotalEnviados;
@@ -188,8 +189,8 @@ namespace HubParatechDesktop
             statsPanel.Controls.Add(card2);
             curX += cardWidth + cardGap;
 
-            // Card 3: Validações Ativas
-            var card3 = CreateCard("VALIDAÇÃO FISCAL", "Tags <dhEmi> e <cStat>", out lblTotalNoCache);
+            // Card 3: Ponto de Partida Fiscal
+            var card3 = CreateCard("PONTO DE PARTIDA FISCAL", PontoPartidaInfo, out lblTotalNoCache);
             card3.Location = new Point(curX, 10);
             card3.Size = new Size(cardWidth, 62);
             statsPanel.Controls.Add(card3);
@@ -419,6 +420,11 @@ namespace HubParatechDesktop
                     lblTotalEnviados.Text = countSucesso.ToString();
                 }
 
+                if (lblTotalNoCache != null && !lblTotalNoCache.IsDisposed)
+                {
+                    lblTotalNoCache.Text = PontoPartidaInfo;
+                }
+
                 dgvLogs.SuspendLayout();
                 try
                 {
@@ -451,6 +457,11 @@ namespace HubParatechDesktop
                             {
                                 row.Cells[8].Style.ForeColor = Color.FromArgb(16, 185, 129); // emerald-600
                                 row.Cells[8].Style.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+                            }
+                            else if (item.Status.StartsWith("Ignorado") || item.Status.Contains("Ponto de Partida"))
+                            {
+                                row.Cells[8].Style.ForeColor = Color.FromArgb(217, 119, 6); // amber-600
+                                row.Cells[8].Style.Font = new Font("Segoe UI", 8.5f, FontStyle.Regular);
                             }
                             else if (item.Status.Contains("Cache") || item.Status.Contains("Já no Portal"))
                             {

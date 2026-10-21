@@ -67,6 +67,9 @@ namespace HubParatechDesktop
         private HttpClient http;
         private bool isRunning = true;
         private string modoProcessamento = "hub"; // "hub" (pré-processa localmente) ou "portal" (envia bruto)
+        private string? dataInicioMonitoramento;
+        private long numeroInicialNfe = 1;
+        private long numeroInicialNfce = 1;
 
         private static readonly Dictionary<string, string> NomesFormasPagamento = new Dictionary<string, string>
         {
@@ -112,13 +115,16 @@ namespace HubParatechDesktop
             catch { }
         }
 
-        public XmlMonitor(string path, string tipoPasta, string token, HttpClient httpClient, string modoProcessamento = "hub")
+        public XmlMonitor(string path, string tipoPasta, string token, HttpClient httpClient, string modoProcessamento = "hub", string? dataInicio = null, long? nfeInicial = null, long? nfceInicial = null)
         {
             this.rootPath = path;
             this.tipoPasta = tipoPasta;
             this.hubToken = token;
             this.http = httpClient;
             this.modoProcessamento = string.Equals(modoProcessamento, "portal", StringComparison.OrdinalIgnoreCase) ? "portal" : "hub";
+            this.dataInicioMonitoramento = dataInicio;
+            this.numeroInicialNfe = nfeInicial.HasValue && nfeInicial.Value > 0 ? nfeInicial.Value : 1;
+            this.numeroInicialNfce = nfceInicial.HasValue && nfceInicial.Value > 0 ? nfceInicial.Value : 1;
 
             // Impede suspensão de thread e economia de energia do Windows para garantir monitoramento ininterrupto
             KeepSystemAwake();
@@ -132,6 +138,72 @@ namespace HubParatechDesktop
 
             // Inicia varredura e monitoramento periódico de arquivos existentes em segundo plano
             Task.Run(StartPeriodicScanAsync);
+        }
+
+        public void UpdatePontoPartida(string? dataInicio, long? nfe, long? nfce)
+        {
+            this.dataInicioMonitoramento = dataInicio;
+            this.numeroInicialNfe = nfe.HasValue && nfe.Value > 0 ? nfe.Value : 1;
+            this.numeroInicialNfce = nfce.HasValue && nfce.Value > 0 ? nfce.Value : 1;
+        }
+
+        public bool IsAnteriorAoPontoPartida(DadosXmlExtraidos dados, out string motivo)
+        {
+            motivo = "";
+
+            // 1. Verificação de Data de Emissão vs Data Início do Monitoramento (Vendas e Compras)
+            if (!string.IsNullOrWhiteSpace(dataInicioMonitoramento))
+            {
+                string dataInicioFormatada = dataInicioMonitoramento.Trim();
+                if (dataInicioFormatada.Length == 7) // Ex: "2026-09" -> "2026-09-01"
+                {
+                    dataInicioFormatada += "-01";
+                }
+                else if (dataInicioFormatada.Length > 10)
+                {
+                    dataInicioFormatada = dataInicioFormatada.Substring(0, 10);
+                }
+
+                string? dataEmi = null;
+                if (!string.IsNullOrWhiteSpace(dados.DataEmissao))
+                {
+                    var m = Regex.Match(dados.DataEmissao, @"^(\d{4}-\d{2}-\d{2})");
+                    if (m.Success) dataEmi = m.Groups[1].Value;
+                }
+
+                if (string.IsNullOrEmpty(dataEmi) && !string.IsNullOrEmpty(dados.Chave) && dados.Chave.Length == 44)
+                {
+                    string aa = dados.Chave.Substring(2, 2);
+                    string mm = dados.Chave.Substring(4, 2);
+                    dataEmi = $"20{aa}-{mm}-01";
+                }
+
+                if (!string.IsNullOrEmpty(dataEmi))
+                {
+                    if (string.Compare(dataEmi, dataInicioFormatada, StringComparison.Ordinal) < 0)
+                    {
+                        motivo = $"Ignorado (Emissão {dataEmi} < {dataInicioFormatada})";
+                        return true;
+                    }
+                }
+            }
+
+            // 2. Verificação de Numeração Inicial (Vendas)
+            if (tipoPasta == "vendas" && long.TryParse(dados.Numero, out long num) && num > 0)
+            {
+                if (dados.Modelo == "65" && numeroInicialNfce > 1 && num < numeroInicialNfce)
+                {
+                    motivo = $"Ignorado (NFC-e #{num} < #{numeroInicialNfce})";
+                    return true;
+                }
+                if (dados.Modelo == "55" && numeroInicialNfe > 1 && num < numeroInicialNfe)
+                {
+                    motivo = $"Ignorado (NF-e #{num} < #{numeroInicialNfe})";
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void SetupWatcher()
@@ -244,6 +316,44 @@ namespace HubParatechDesktop
                     {
                         jaProcessados++;
                         continue;
+                    }
+
+                    // PRÉ-FILTRO ULTRA-RÁPIDO: Se o nome contiver chave de 44 dígitos, verifica ponto de partida sem ler o disco
+                    var matchChaveNome = Regex.Match(fileName, @"\d{44}");
+                    if (matchChaveNome.Success)
+                    {
+                        string ch = matchChaveNome.Value;
+                        string aa = ch.Substring(2, 2);
+                        string mm = ch.Substring(4, 2);
+                        string dataEmiChave = $"20{aa}-{mm}-01";
+                        string modChave = ch.Substring(20, 2);
+                        long numChave = long.TryParse(ch.Substring(25, 9), out long n) ? n : 0;
+
+                        bool ignorar = false;
+                        if (!string.IsNullOrWhiteSpace(dataInicioMonitoramento))
+                        {
+                            string dataInicioFormatada = dataInicioMonitoramento.Trim();
+                            if (dataInicioFormatada.Length == 7) dataInicioFormatada += "-01";
+                            else if (dataInicioFormatada.Length > 10) dataInicioFormatada = dataInicioFormatada.Substring(0, 10);
+
+                            if (string.Compare(dataEmiChave, dataInicioFormatada, StringComparison.Ordinal) < 0)
+                            {
+                                ignorar = true;
+                            }
+                        }
+
+                        if (!ignorar && tipoPasta == "vendas" && numChave > 0)
+                        {
+                            if (modChave == "65" && numeroInicialNfce > 1 && numChave < numeroInicialNfce) ignorar = true;
+                            else if (modChave == "55" && numeroInicialNfe > 1 && numChave < numeroInicialNfe) ignorar = true;
+                        }
+
+                        if (ignorar)
+                        {
+                            XmlUploadCache.MarkAsUploaded(fileIdentifier, ch);
+                            jaProcessados++;
+                            continue;
+                        }
                     }
 
                     bool sucesso = await ProcessFileAsync(file, isRealTime: false);
@@ -487,6 +597,27 @@ namespace HubParatechDesktop
                     return true;
                 }
 
+                // VALIDAÇÃO FISCAL PRÉVIA: Ponto de Partida Fiscal (ignora arquivos antigos sem fazer requisição de rede)
+                if (IsAnteriorAoPontoPartida(dadosLocais, out string motivoPontoPartida))
+                {
+                    XmlUploadCache.MarkAsUploaded(fileIdentifier, dadosLocais.Chave);
+                    LiveMonitorForm.AddLog(new XmlLogItem
+                    {
+                        Timestamp = DateTime.Now,
+                        TipoPasta = tipoPasta == "compras" ? "Entrada" : "Saída",
+                        Modelo = dadosLocais.Modelo ?? "65",
+                        Numero = dadosLocais.Numero ?? "",
+                        Serie = dadosLocais.Serie ?? "1",
+                        DataEmissao = dadosLocais.DataEmissao ?? "",
+                        ValorTotal = dadosLocais.ValorTotal,
+                        Chave = dadosLocais.Chave ?? "",
+                        Status = motivoPontoPartida,
+                        Arquivo = fileName,
+                        IsRealTime = isRealTime
+                    });
+                    return true;
+                }
+
                 // Dispara indicador visual de que está sincronizando/enviando
                 string modeloNome = dadosLocais.Modelo == "65" ? "NFC-e" : (dadosLocais.Modelo == "55" ? "NF-e" : "Nota");
                 OnSyncStatusChanged?.Invoke(this, new XmlSyncEventArgs
@@ -532,13 +663,74 @@ namespace HubParatechDesktop
 
                     if (response.IsSuccessStatusCode)
                     {
-                        // 1. Marca no cache local que foi enviado
+                        var respString = await response.Content.ReadAsStringAsync();
+                        bool isIgnored = false;
+                        string reason = "";
+                        try
+                        {
+                            using var doc = JsonDocument.Parse(respString);
+                            if (doc.RootElement.TryGetProperty("ignored", out var ignProp) && ignProp.GetBoolean())
+                            {
+                                isIgnored = true;
+                                if (doc.RootElement.TryGetProperty("reason", out var reasProp))
+                                {
+                                    reason = reasProp.GetString() ?? "";
+                                }
+                            }
+                        }
+                        catch { }
+
+                        // 1. Marca no cache local que foi processado
                         XmlUploadCache.MarkAsUploaded(fileIdentifier, dadosLocais.Chave);
 
-                        // 2. Cria cópia de conferência na pasta Contabilidade_Paratech/{MM-MES-AAAA}
+                        if (isIgnored)
+                        {
+                            string statusIgn = !string.IsNullOrWhiteSpace(reason)
+                                ? (reason.Length > 40 ? reason.Substring(0, 37) + "..." : reason)
+                                : "Ignorado pelo Portal";
+
+                            LiveMonitorForm.AddLog(new XmlLogItem
+                            {
+                                Timestamp = DateTime.Now,
+                                TipoPasta = tipoPasta == "compras" ? "Entrada" : "Saída",
+                                Modelo = dadosLocais.Modelo ?? "65",
+                                Numero = dadosLocais.Numero ?? "",
+                                Serie = dadosLocais.Serie ?? "1",
+                                DataEmissao = dadosLocais.DataEmissao ?? "",
+                                ValorTotal = dadosLocais.ValorTotal,
+                                Chave = dadosLocais.Chave ?? "",
+                                Status = $"Ignorado ({statusIgn})",
+                                Arquivo = fileName,
+                                IsRealTime = isRealTime
+                            });
+
+                            OnXmlProcessed?.Invoke(this, new XmlSyncEventArgs
+                            {
+                                IsSyncing = false,
+                                StatusMessage = "Ignorado",
+                                FileName = fileName,
+                                Dados = dadosLocais,
+                                IsRealTime = isRealTime,
+                                Sucesso = false,
+                                StatusDescricao = reason,
+                                TipoPasta = tipoPasta,
+                                FilePath = filePath
+                            });
+
+                            OnSyncStatusChanged?.Invoke(this, new XmlSyncEventArgs
+                            {
+                                IsSyncing = false,
+                                StatusMessage = "Monitorando",
+                                TipoPasta = tipoPasta
+                            });
+
+                            return true;
+                        }
+
+                        // 2. Cria cópia de conferência na pasta Contabilidade_Paratech/{MM-MES-AAAA} apenas se foi aceito com sucesso
                         SaveBackupCopy(filePath, fileBytes, dadosLocais);
 
-                        // 3. Adiciona ao log em tempo real
+                        // 3. Adiciona ao log em tempo real com status Sucesso
                         LiveMonitorForm.AddLog(new XmlLogItem
                         {
                             Timestamp = DateTime.Now,

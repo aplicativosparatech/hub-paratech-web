@@ -20,6 +20,12 @@ namespace HubParatechDesktop
         public string[]? pastas_compras { get; set; }
         public string? offline_secret { get; set; }
         public string? modo_processamento { get; set; }
+        public string? data_inicio_monitoramento { get; set; }
+        public long? numero_inicial_nfe { get; set; }
+        public long? numero_inicial_nfce { get; set; }
+        public long? numero_inicial_nfse { get; set; }
+        public long? numero_inicial_cte { get; set; }
+        public long? numero_inicial_mdfe { get; set; }
         public FaturaSync? fatura { get; set; }
     }
 
@@ -64,6 +70,9 @@ namespace HubParatechDesktop
         private string currentVendasStr = "";
         private string currentComprasStr = "";
         private string currentModoProcessamento = "hub";
+        private string? currentDataInicio = null;
+        private long currentNumeroNfe = 1;
+        private long currentNumeroNfce = 1;
         private DateTime lastSync = DateTime.MinValue;
 
         private bool isStealthMode = false;
@@ -81,10 +90,10 @@ namespace HubParatechDesktop
                 Icon = baseIcon,
                 ContextMenuStrip = new ContextMenuStrip(),
                 Visible = !isStealthMode,
-                Text = "Hub Paratech v2.5.7 - Monitorando"
+                Text = "Hub Paratech v2.5.8 - Monitorando"
             };
 
-            var itemVersao = new ToolStripMenuItem("Hub Paratech v2.5.7") { Enabled = false, Font = new Font(Control.DefaultFont, FontStyle.Bold) };
+            var itemVersao = new ToolStripMenuItem("Hub Paratech v2.5.8") { Enabled = false, Font = new Font(Control.DefaultFont, FontStyle.Bold) };
             trayIcon.ContextMenuStrip.Items.Add(itemVersao);
             trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
 
@@ -100,13 +109,13 @@ namespace HubParatechDesktop
             trayIcon.ContextMenuStrip.Items.Add("Ver Status Interno", null, (s, e) => {
                 string procs = targetProcesses.Count > 0 ? string.Join(", ", targetProcesses) : "Nenhum processo restrito";
                 string syncTxt = lastSync > DateTime.MinValue ? lastSync.ToString("dd/MM/yyyy HH:mm:ss") : "Pendente";
-                string msg = $"Status Operacional do Hub Paratech v2.5.7:\n\n" +
+                string msg = $"Status Operacional do Hub Paratech v2.5.8:\n\n" +
                              $"• Situação do Sistema: {(isBlocked ? "BLOQUEADO" : "LIBERADO / REGULAR")}\n" +
                              $"• Processos Alvo: {procs}\n" +
                              $"• Modo de Operação: {currentModoProcessamento.ToUpper()}\n" +
                              $"• Modo Oculto: {(isStealthMode ? "ATIVADO (Invisível ao cliente)" : "DESATIVADO (Ícone visível)")}\n" +
                              $"• Monitores XML Ativos: {activeMonitors.Count} (com busca recursiva de subpastas)\n" +
-                             $"• Inspeção Fiscal: Tags <dhEmi>, <cStat> e Chave de 44 dígitos ativas\n" +
+                             $"• Ponto de Partida Fiscal: {LiveMonitorForm.PontoPartidaInfo}\n" +
                              $"• Fatura Pendente: R$ {faturaValor:F2}\n" +
                              $"• Empresa: {(string.IsNullOrEmpty(clienteNome) ? "Cliente Paratech" : clienteNome)}\n" +
                              $"• Última Sincronização: {syncTxt}";
@@ -245,7 +254,7 @@ namespace HubParatechDesktop
                     isCurrentlySyncing = false;
                     animTimer.Stop();
                     trayIcon.Icon = baseIcon;
-                    SetTrayText("Hub Paratech v2.5.7 - Monitorando");
+                    SetTrayText("Hub Paratech v2.5.8 - Monitorando");
                 }
             }
             catch { }
@@ -344,9 +353,19 @@ namespace HubParatechDesktop
                         string novoModo = !string.IsNullOrWhiteSpace(data.modo_processamento) ? data.modo_processamento : "hub";
                         currentModoProcessamento = novoModo;
 
+                        currentDataInicio = data.data_inicio_monitoramento;
+                        currentNumeroNfe = data.numero_inicial_nfe ?? 1;
+                        currentNumeroNfce = data.numero_inicial_nfce ?? 1;
+
+                        string ppInfo = $"NFC-e ≥ #{currentNumeroNfce}";
+                        if (currentNumeroNfe > 1) ppInfo += $" | NF-e ≥ #{currentNumeroNfe}";
+                        if (!string.IsNullOrEmpty(currentDataInicio)) ppInfo += $" | Desde {currentDataInicio}";
+                        LiveMonitorForm.PontoPartidaInfo = ppInfo;
+
                         foreach (var m in activeMonitors)
                         {
                             m.SetModoProcessamento(currentModoProcessamento);
+                            m.UpdatePontoPartida(currentDataInicio, currentNumeroNfe, currentNumeroNfce);
                         }
 
                         string novasVendasStr = data.pastas_vendas != null ? string.Join("|", data.pastas_vendas) : "";
@@ -361,7 +380,7 @@ namespace HubParatechDesktop
                             {
                                 foreach (string p in data.pastas_vendas)
                                 {
-                                    if (!string.IsNullOrWhiteSpace(p)) activeMonitors.Add(new XmlMonitor(p.Trim().Replace(@"\\", @"\"), "vendas", ConfigManager.Load().HubToken, http, currentModoProcessamento));
+                                    if (!string.IsNullOrWhiteSpace(p)) activeMonitors.Add(new XmlMonitor(p.Trim().Replace(@"\\", @"\"), "vendas", ConfigManager.Load().HubToken, http, currentModoProcessamento, currentDataInicio, currentNumeroNfe, currentNumeroNfce));
                                 }
                             }
 
@@ -369,7 +388,7 @@ namespace HubParatechDesktop
                             {
                                 foreach (string p in data.pastas_compras)
                                 {
-                                    if (!string.IsNullOrWhiteSpace(p)) activeMonitors.Add(new XmlMonitor(p.Trim().Replace(@"\\", @"\"), "compras", ConfigManager.Load().HubToken, http, currentModoProcessamento));
+                                    if (!string.IsNullOrWhiteSpace(p)) activeMonitors.Add(new XmlMonitor(p.Trim().Replace(@"\\", @"\"), "compras", ConfigManager.Load().HubToken, http, currentModoProcessamento, currentDataInicio, 1, 1));
                                 }
                             }
 
