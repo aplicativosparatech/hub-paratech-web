@@ -311,21 +311,22 @@ namespace HubParatechDesktop
 
                     string file = fileInfo.FullName;
                     string fileName = fileInfo.Name;
-                    string fileNameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
 
-                    // REGRA: Arquivos menores que 35 chars sem chave são tipicamente rascunhos temporários do ERP
-                    if (fileNameWithoutExt.Length <= 35 && !Regex.IsMatch(fileName, @"\d{44}"))
+                    // Ignora arquivos vazios ou rascunhos de bloqueio menores que 100 bytes
+                    if (fileInfo.Length < 100)
                     {
                         continue;
                     }
 
                     string fileIdentifier = $"{fileName}_{fileInfo.Length}";
 
-                    // Extração rápida de metadados se a chave de 44 dígitos estiver no nome do arquivo
+                    // Extração rápida de chave e metadados
                     string? chRapida = null;
                     string? dataEmiChave = null;
                     string modChave = "65";
                     long numChave = 0;
+                    string serieChave = "1";
+                    decimal valorRapido = 0;
 
                     var matchChaveNome = Regex.Match(fileName, @"\d{44}");
                     if (matchChaveNome.Success)
@@ -336,24 +337,46 @@ namespace HubParatechDesktop
                         dataEmiChave = $"20{aa}-{mm}-01";
                         modChave = chRapida.Substring(20, 2);
                         numChave = long.TryParse(chRapida.Substring(25, 9), out long n) ? n : 0;
+                        serieChave = long.TryParse(chRapida.Substring(22, 3), out long s) ? s.ToString() : "1";
+                    }
+
+                    // Se a chave não estava no nome do arquivo (ex: SiedFood "44162.xml"), extrai do próprio XML
+                    if (chRapida == null)
+                    {
+                        var meta = ExtrairMetadadosRapidos(file);
+                        if (!string.IsNullOrEmpty(meta.chave))
+                        {
+                            chRapida = meta.chave;
+                            modChave = meta.modelo ?? "65";
+                            if (long.TryParse(meta.numero, out long n)) numChave = n;
+                            if (!string.IsNullOrEmpty(meta.serie)) serieChave = meta.serie;
+                            dataEmiChave = meta.dhEmi;
+                            valorRapido = meta.valor;
+                        }
                     }
 
                     if (XmlUploadCache.IsUploaded(fileIdentifier, chRapida))
                     {
                         jaProcessados++;
-                        if (LiveMonitorForm.CountLogs < 150 && chRapida != null)
+                        if (LiveMonitorForm.CountLogs < 150)
                         {
-                            var meta = ExtrairMetadadosRapidos(file);
+                            if (valorRapido == 0)
+                            {
+                                var meta = ExtrairMetadadosRapidos(file);
+                                valorRapido = meta.valor;
+                                if (dataEmiChave == null) dataEmiChave = meta.dhEmi;
+                            }
+
                             LiveMonitorForm.AddLog(new XmlLogItem
                             {
                                 Timestamp = fileInfo.LastWriteTime,
                                 TipoPasta = tipoPasta == "compras" ? "Entrada" : "Saída",
                                 Modelo = modChave,
-                                Numero = numChave.ToString(),
-                                Serie = "1",
-                                DataEmissao = meta.dhEmi ?? dataEmiChave ?? fileInfo.LastWriteTime.ToString("yyyy-MM-dd"),
-                                ValorTotal = meta.valor,
-                                Chave = chRapida,
+                                Numero = numChave > 0 ? numChave.ToString() : Path.GetFileNameWithoutExtension(fileName),
+                                Serie = serieChave,
+                                DataEmissao = dataEmiChave ?? fileInfo.LastWriteTime.ToString("yyyy-MM-dd"),
+                                ValorTotal = valorRapido,
+                                Chave = chRapida ?? "-",
                                 Status = "Já no Portal (Sincronizado)",
                                 Arquivo = file,
                                 IsRealTime = false
@@ -374,10 +397,11 @@ namespace HubParatechDesktop
                             if (dataInicioFormatada.Length == 7) dataInicioFormatada += "-01";
                             else if (dataInicioFormatada.Length > 10) dataInicioFormatada = dataInicioFormatada.Substring(0, 10);
 
-                            if (string.Compare(dataEmiChave, dataInicioFormatada, StringComparison.Ordinal) < 0)
+                            string dataComp = dataEmiChave.Length >= 10 ? dataEmiChave.Substring(0, 10) : dataEmiChave;
+                            if (string.Compare(dataComp, dataInicioFormatada, StringComparison.Ordinal) < 0)
                             {
                                 ignorar = true;
-                                motivoIgnorar = $"Ignorado (Emissão {dataEmiChave} < {dataInicioFormatada})";
+                                motivoIgnorar = $"Ignorado (Emissão {dataComp} < {dataInicioFormatada})";
                             }
                         }
 
@@ -401,16 +425,22 @@ namespace HubParatechDesktop
                             jaProcessados++;
                             if (LiveMonitorForm.CountLogs < 150)
                             {
-                                var meta = ExtrairMetadadosRapidos(file);
+                                if (valorRapido == 0)
+                                {
+                                    var meta = ExtrairMetadadosRapidos(file);
+                                    valorRapido = meta.valor;
+                                    if (dataEmiChave == null) dataEmiChave = meta.dhEmi;
+                                }
+
                                 LiveMonitorForm.AddLog(new XmlLogItem
                                 {
                                     Timestamp = fileInfo.LastWriteTime,
                                     TipoPasta = tipoPasta == "compras" ? "Entrada" : "Saída",
                                     Modelo = modChave,
-                                    Numero = numChave.ToString(),
-                                    Serie = "1",
-                                    DataEmissao = meta.dhEmi ?? dataEmiChave ?? fileInfo.LastWriteTime.ToString("yyyy-MM-dd"),
-                                    ValorTotal = meta.valor,
+                                    Numero = numChave > 0 ? numChave.ToString() : Path.GetFileNameWithoutExtension(fileName),
+                                    Serie = serieChave,
+                                    DataEmissao = dataEmiChave ?? fileInfo.LastWriteTime.ToString("yyyy-MM-dd"),
+                                    ValorTotal = valorRapido,
                                     Chave = chRapida,
                                     Status = motivoIgnorar,
                                     Arquivo = file,
@@ -452,16 +482,17 @@ namespace HubParatechDesktop
             }
         }
 
-        public static (decimal valor, string? dhEmi) ExtrairMetadadosRapidos(string filePath)
+        public static (decimal valor, string? dhEmi, string? chave, string? modelo, string? numero, string? serie) ExtrairMetadadosRapidos(string filePath)
         {
             try
             {
-                if (!File.Exists(filePath)) return (0, null);
+                if (!File.Exists(filePath)) return (0, null, null, null, null, null);
                 byte[] bytes;
                 using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                 {
-                    bytes = new byte[fs.Length];
-                    fs.Read(bytes, 0, bytes.Length);
+                    int len = (int)Math.Min(fs.Length, 32768);
+                    bytes = new byte[len];
+                    fs.Read(bytes, 0, len);
                 }
 
                 string text = System.Text.Encoding.UTF8.GetString(bytes);
@@ -484,11 +515,59 @@ namespace HubParatechDesktop
                     dhEmi = matchEmi.Groups[1].Value;
                 }
 
-                return (valor, dhEmi);
+                string? chave = null;
+                var matchChave = Regex.Match(text, @"<(?:chNFe|chCTe|chMDFe)[^>]*>([A-Za-z0-9]{44})<");
+                if (matchChave.Success)
+                {
+                    chave = matchChave.Groups[1].Value.ToUpper();
+                }
+                else
+                {
+                    var matchId = Regex.Match(text, @"Id\s*=\s*[""'](?:NFe|NFCe|CTe|MDFe)?([A-Za-z0-9]{44})[""']", RegexOptions.IgnoreCase);
+                    if (matchId.Success)
+                    {
+                        chave = matchId.Groups[1].Value.ToUpper();
+                    }
+                }
+
+                string? modelo = null;
+                if (!string.IsNullOrEmpty(chave) && chave.Length == 44)
+                {
+                    modelo = chave.Substring(20, 2);
+                }
+                else
+                {
+                    var matchMod = Regex.Match(text, @"<mod>(\d{2})</mod>");
+                    if (matchMod.Success) modelo = matchMod.Groups[1].Value;
+                }
+
+                string? numero = null;
+                var matchNum = Regex.Match(text, @"<nNF>(\d+)</nNF>");
+                if (matchNum.Success)
+                {
+                    numero = matchNum.Groups[1].Value;
+                }
+                else if (!string.IsNullOrEmpty(chave) && chave.Length == 44)
+                {
+                    numero = Convert.ToInt64(chave.Substring(25, 9)).ToString();
+                }
+
+                string? serie = null;
+                var matchSerie = Regex.Match(text, @"<serie>(\d+)</serie>");
+                if (matchSerie.Success)
+                {
+                    serie = matchSerie.Groups[1].Value;
+                }
+                else if (!string.IsNullOrEmpty(chave) && chave.Length == 44)
+                {
+                    serie = Convert.ToInt32(chave.Substring(22, 3)).ToString();
+                }
+
+                return (valor, dhEmi, chave, modelo, numero, serie);
             }
             catch
             {
-                return (0, null);
+                return (0, null, null, null, null, null);
             }
         }
 
@@ -687,6 +766,9 @@ namespace HubParatechDesktop
                 // Tenta ler o arquivo com segurança (esperando o ERP terminar a gravação no disco)
                 byte[]? fileBytes = await ReadFileWithRetryAsync(filePath, maxRetries: 4, delayMs: 1500);
                 if (fileBytes == null || fileBytes.Length == 0) return false;
+
+                // Atualiza o identificador com o tamanho real dos bytes lidos do disco
+                fileIdentifier = $"{fileName}_{fileBytes.Length}";
 
                 // Análise e Validação Fiscal Completa do Conteúdo
                 var validacao = ValidarEExtrairXml(fileBytes, fileName);
@@ -924,6 +1006,20 @@ namespace HubParatechDesktop
             catch (Exception ex)
             {
                 Debug.WriteLine($"Erro ao processar XML {filePath}: {ex.Message}");
+                LiveMonitorForm.AddLog(new XmlLogItem
+                {
+                    Timestamp = DateTime.Now,
+                    TipoPasta = tipoPasta == "compras" ? "Entrada" : "Saída",
+                    Modelo = "XML",
+                    Numero = Path.GetFileNameWithoutExtension(filePath),
+                    Serie = "-",
+                    DataEmissao = DateTime.Now.ToString("yyyy-MM-dd"),
+                    ValorTotal = 0,
+                    Chave = "-",
+                    Status = $"Erro: {ex.Message}",
+                    Arquivo = filePath,
+                    IsRealTime = isRealTime
+                });
                 OnSyncStatusChanged?.Invoke(this, new XmlSyncEventArgs
                 {
                     IsSyncing = false,

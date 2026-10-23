@@ -664,6 +664,7 @@ namespace HubParatechDesktop
                 {
                     lock (LogLock) GlobalLogItems.Clear();
                     try { if (File.Exists(HistoryPath)) File.Delete(HistoryPath); } catch { }
+                    XmlUploadCache.Clear();
                     RefreshDataGrid();
                 }
                 catch { }

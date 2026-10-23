@@ -158,9 +158,9 @@ namespace HubParatechDesktop
             animTimer = new System.Windows.Forms.Timer { Interval = 280 };
             animTimer.Tick += AnimTimer_Tick;
 
-            // Timer para sincronizar com a nuvem a cada 1 hora (3600000 ms)
+            // Timer para sincronizar com a nuvem a cada 45 segundos (mantém status Online em tempo real)
             syncTimer = new System.Windows.Forms.Timer();
-            syncTimer.Interval = 3600000;
+            syncTimer.Interval = 45000;
             syncTimer.Tick += async (s, e) => await SyncWithServer();
             syncTimer.Start();
 

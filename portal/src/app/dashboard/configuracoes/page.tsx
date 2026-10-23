@@ -51,7 +51,7 @@ export default function ConfiguracoesPage() {
         const lastSync = config?.ultima_sincronizacao
         if (!lastSync) return 0
         const diff = new Date().getTime() - new Date(lastSync).getTime()
-        return diff < 180000 ? 1 : 0
+        return diff < 300000 ? 1 : 0
       }
     }
   })
@@ -81,6 +81,8 @@ export default function ConfiguracoesPage() {
 
   useEffect(() => {
     loadClientes()
+    const timer = setInterval(loadClientes, 15000)
+    return () => clearInterval(timer)
   }, [])
 
   useEffect(() => {
@@ -336,7 +338,7 @@ export default function ConfiguracoesPage() {
                   if (lastSync) {
                     const diff = new Date().getTime() - new Date(lastSync).getTime();
                     // Considera online se comunicou nos últimos 3 minutos (180000 ms)
-                    isOnline = diff < 180000;
+                    isOnline = diff < 300000;
                   }
 
                   return (

@@ -73,5 +73,21 @@ namespace HubParatechDesktop
                 }
             }
         }
+
+        public static void Clear()
+        {
+            lock (LockObj)
+            {
+                UploadedKeys.Clear();
+                try
+                {
+                    if (File.Exists(CachePath))
+                    {
+                        File.Delete(CachePath);
+                    }
+                }
+                catch { }
+            }
+        }
     }
 }
