@@ -341,19 +341,19 @@ export default function FechamentoFiscalModal({
       const todasNotasComStorage: Array<{ nota: any; modalidade: keyof typeof xmlsPorModalidade }> = []
 
       ;(documentos.nfe_entradas || []).forEach((n: any) => {
-        if (n.storage_path) todasNotasComStorage.push({ nota: n, modalidade: 'nfe_entradas' })
+        if (n.storage_path || n.conteudo_xml) todasNotasComStorage.push({ nota: n, modalidade: 'nfe_entradas' })
       })
       ;(documentos.nfse_entradas || []).forEach((n: any) => {
-        if (n.storage_path) todasNotasComStorage.push({ nota: n, modalidade: 'nfse_entradas' })
+        if (n.storage_path || n.conteudo_xml) todasNotasComStorage.push({ nota: n, modalidade: 'nfse_entradas' })
       })
       ;(documentos.nfe_saidas || []).forEach((n: any) => {
-        if (n.storage_path) todasNotasComStorage.push({ nota: n, modalidade: 'nfe_saidas' })
+        if (n.storage_path || n.conteudo_xml) todasNotasComStorage.push({ nota: n, modalidade: 'nfe_saidas' })
       })
       ;(documentos.nfse_saidas || []).forEach((n: any) => {
-        if (n.storage_path) todasNotasComStorage.push({ nota: n, modalidade: 'nfse_saidas' })
+        if (n.storage_path || n.conteudo_xml) todasNotasComStorage.push({ nota: n, modalidade: 'nfse_saidas' })
       })
       ;(documentos.nfce_saidas || []).forEach((n: any) => {
-        if (n.storage_path) todasNotasComStorage.push({ nota: n, modalidade: 'nfce_saidas' })
+        if (n.storage_path || n.conteudo_xml) todasNotasComStorage.push({ nota: n, modalidade: 'nfce_saidas' })
       })
 
       const totalArquivos = todasNotasComStorage.length
@@ -366,16 +366,55 @@ export default function FechamentoFiscalModal({
 
         await Promise.all(batch.map(async ({ nota, modalidade }) => {
           try {
-            const { data: blob, error } = await supabase.storage.from('xmls').download(nota.storage_path)
-            if (!error && blob) {
-              const arrayBuffer = await blob.arrayBuffer()
-              const xmlText = new TextDecoder('utf-8').decode(arrayBuffer)
+            let xmlText = ''
+            let arrayBuffer: ArrayBuffer | null = null
+
+            if (nota.storage_path) {
+              const { data: blob, error } = await supabase.storage.from('xmls').download(nota.storage_path)
+              if (!error && blob) {
+                arrayBuffer = await blob.arrayBuffer()
+                xmlText = new TextDecoder('utf-8').decode(arrayBuffer)
+              }
+            }
+
+            if (!xmlText && nota.conteudo_xml) {
+              xmlText = nota.conteudo_xml
+              arrayBuffer = new TextEncoder().encode(xmlText).buffer
+            }
+
+            if (xmlText && arrayBuffer) {
               const nomeArquivo = `${nota.chave || nota.numero || 'doc'}.xml`
 
               xmlsPorModalidade[modalidade].push({
                 nome: nomeArquivo,
                 buffer: new Uint8Array(arrayBuffer)
               })
+
+              // Se for nota de entrada (Compras), enriquece fornecedor, cidade e UF a partir do XML da SEFAZ
+              if (modalidade === 'nfe_entradas') {
+                const emitMatch = xmlText.match(/<emit[^>]*>([\s\S]*?)<\/emit>/)
+                if (emitMatch) {
+                  const xNomeMatch = emitMatch[1].match(/<xNome[^>]*>(.*?)<\/xNome>/)
+                  const xMunMatch = emitMatch[1].match(/<xMun[^>]*>(.*?)<\/xMun>/)
+                  const ufMatch = emitMatch[1].match(/<UF[^>]*>(.*?)<\/UF>/)
+                  if (xNomeMatch && (!nota.contato_nome || nota.contato_nome === 'Fornecedor' || nota.contato_nome.startsWith('CNPJ'))) {
+                    nota.contato_nome = xNomeMatch[1].trim()
+                  }
+                  if (xMunMatch && (nota.cidade === '—' || !nota.cidade)) {
+                    nota.cidade = xMunMatch[1].trim()
+                  }
+                  if (ufMatch && (nota.uf === '—' || !nota.uf)) {
+                    nota.uf = ufMatch[1].trim()
+                  }
+                }
+                const ideMatch = xmlText.match(/<ide[^>]*>([\s\S]*?)<\/ide>/)
+                if (ideMatch) {
+                  const dSaiEntMatch = ideMatch[1].match(/<d(?:h)?SaiEnt[^>]*>(.*?)<\/d(?:h)?SaiEnt>/)
+                  if (dSaiEntMatch && dSaiEntMatch[1]) {
+                    nota.data_entrada = dSaiEntMatch[1].trim()
+                  }
+                }
+              }
 
               // Se for nota de saída e relatório de monofásicos estiver marcado, extrai itens
               if (prefs.relMonofasicos && (modalidade === 'nfce_saidas' || modalidade === 'nfe_saidas')) {
@@ -384,7 +423,7 @@ export default function FechamentoFiscalModal({
               }
             }
           } catch (errDownload) {
-            console.warn(`Aviso: Falha ao baixar XML de ${nota.storage_path}:`, errDownload)
+            console.warn(`Aviso: Falha ao processar XML de ${nota.storage_path || nota.chave}:`, errDownload)
           } finally {
             arquivosBaixados++
           }

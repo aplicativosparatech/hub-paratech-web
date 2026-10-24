@@ -10,6 +10,9 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import JSZip from 'jszip'
+import * as XLSX from 'xlsx'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 import { createClient } from '@/utils/supabase/client'
 import { formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
 import ResizableSortableTh from '@/components/ui/ResizableSortableTh'
@@ -132,6 +135,24 @@ export default function DistribuicaoDfePage() {
   const [modalSalvarOpen, setModalSalvarOpen] = useState(false)
   const [observacaoSalvar, setObservacaoSalvar] = useState('')
   const [salvandoConsulta, setSalvandoConsulta] = useState(false)
+
+  // Menu de Exportação de Relatórios da Distribuição DF-e (Excel, PDF, CSV)
+  const [exportMenuOpen, setExportMenuOpen] = useState(false)
+  const exportMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setExportMenuOpen(false)
+      }
+    }
+    if (exportMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [exportMenuOpen])
 
   // Estados do recurso "Trazer XMLs para o Hub" (Guia Entradas)
   const [modalTrazerHubOpen, setModalTrazerHubOpen] = useState(false)
@@ -575,6 +596,258 @@ export default function DistribuicaoDfePage() {
     const m = Math.floor(segundos / 60)
     const s = segundos % 60
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  }
+
+  // Helper para formatar data e hora
+  const formatarDataHora = (iso?: string): string => {
+    if (!iso) return '—'
+    try {
+      const d = new Date(iso)
+      return d.toLocaleDateString('pt-BR')
+    } catch {
+      return iso
+    }
+  }
+
+  // Ação: Exportar Relatório de Notas Fiscais Destinadas (Distribuição de DF-e)
+  const handleExportarDfe = (formato: 'xlsx' | 'pdf' | 'csv') => {
+    const listaAlvo = selectedChaves.length > 0
+      ? notas.filter(n => selectedChaves.includes(n.chave))
+      : (notasFiltradas.length > 0 ? notasFiltradas : notas)
+
+    if (listaAlvo.length === 0) {
+      toast.error('Nenhuma nota fiscal encontrada para exportar.')
+      return
+    }
+
+    const nomeEmpresa = clienteAtual?.razao_social || clienteAtual?.nome_fantasia || 'Empresa'
+    const cnpjEmpresa = clienteAtual?.cnpj ? formatarCnpjCpf(clienteAtual.cnpj) : '—'
+    const totalNotas = listaAlvo.length
+    const valorTotal = listaAlvo.reduce((acc, n) => acc + (n.valor || 0), 0)
+    const baseFileName = `Relatorio_Distribuicao_DFe_${clienteAtual?.cnpj || 'empresa'}_${competencia.replace('-', '_')}`
+
+    // 1. Exportação em EXCEL (.xlsx)
+    if (formato === 'xlsx') {
+      const wb = XLSX.utils.book_new()
+      const rows = [
+        ['HUB PARATECH • RELATÓRIO DE DISTRIBUIÇÃO DE DF-E (SEFAZ NACIONAL)'],
+        ['EMPRESA:', nomeEmpresa, 'CNPJ:', cnpjEmpresa, 'COMPETÊNCIA:', competencia],
+        ['GERADO EM:', new Date().toLocaleString('pt-BR'), 'TOTAL DE NOTAS:', totalNotas, 'VALOR TOTAL (R$):', valorTotal],
+        [],
+        ['RESUMO EXECUTIVO:'],
+        ['Total de Documentos:', totalNotas],
+        ['Valor Total das Compras (R$):', valorTotal],
+        ['Situação dos Documentos:', `Apurado para competência ${competencia}`],
+        [],
+        [
+          'Documento Fiscal',
+          'Série',
+          'Número',
+          'Chave de Acesso',
+          'Fornecedor / Emitente',
+          'CNPJ Fornecedor',
+          'IE Fornecedor',
+          'Data Emissão',
+          'Valor (R$)',
+          'Situação SEFAZ',
+          'Manifestação do Destinatário',
+          'Protocolo SEFAZ',
+          'XML Disponível'
+        ],
+        ...listaAlvo.map(n => [
+          `NF-e #${n.numero} Série ${n.serie || '1'}`,
+          n.serie || '1',
+          n.numero || '—',
+          n.chave,
+          n.emitente_nome || '—',
+          formatarCnpjCpf(n.emitente_cnpj),
+          n.emitente_ie || '—',
+          formatarDataHora(n.data_emissao),
+          n.valor || 0,
+          n.situacao_nfe || 'AUTORIZADA',
+          n.manifestacao_status === 'CIENCIA' ? 'Ciência Registrada'
+            : n.manifestacao_status === 'CONFIRMADA' ? 'Confirmada'
+            : n.manifestacao_status === 'DESCONHECIDA' ? 'Desconhecida'
+            : n.manifestacao_status === 'NAO_REALIZADA' ? 'Não Realizada'
+            : 'Sem Manifestação',
+          n.protocolo || '—',
+          n.tem_xml ? 'Sim' : 'Não'
+        ]),
+        [],
+        ['', '', '', '', '', '', '', 'TOTAL GERAL:', valorTotal, '', '', '', '']
+      ]
+
+      const ws = XLSX.utils.aoa_to_sheet(rows)
+      ws['!cols'] = [
+        { wch: 22 },
+        { wch: 8 },
+        { wch: 12 },
+        { wch: 48 },
+        { wch: 38 },
+        { wch: 20 },
+        { wch: 16 },
+        { wch: 14 },
+        { wch: 16 },
+        { wch: 16 },
+        { wch: 22 },
+        { wch: 20 },
+        { wch: 12 }
+      ]
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Distribuicao_DFe')
+      XLSX.writeFile(wb, `${baseFileName}.xlsx`)
+      toast.success('Relatório Excel (.xlsx) exportado com sucesso!')
+      return
+    }
+
+    // 2. Exportação em PDF (.pdf)
+    if (formato === 'pdf') {
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const pageHeight = doc.internal.pageSize.getHeight()
+
+      // Header Banner estilo Hub Paratech
+      doc.setFillColor(15, 23, 42) // Slate 900
+      doc.rect(0, 0, pageWidth, 28, 'F')
+
+      // Linha decorativa Indigo
+      doc.setFillColor(79, 70, 229) // Indigo 600
+      doc.rect(0, 28, pageWidth, 2, 'F')
+
+      // Título
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(13)
+      doc.setTextColor(255, 255, 255)
+      doc.text('HUB PARATECH • RELATÓRIO DE DISTRIBUIÇÃO DE DF-E', 14, 11)
+
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8.5)
+      doc.setTextColor(199, 210, 254)
+      doc.text('Documentos Fiscais Eletrônicos Destinados (Compras - NF-e Mod 55) • SEFAZ Nacional', 14, 17)
+
+      // Metadados da Empresa e Resumo
+      doc.setFontSize(8)
+      doc.setTextColor(226, 232, 240)
+      doc.text(`Empresa: ${nomeEmpresa} • CNPJ: ${cnpjEmpresa}`, 14, 23)
+
+      const infoCompetencia = `Competência: ${competencia} | Total: ${totalNotas} nota(s) | Valor Total: R$ ${valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      doc.text(infoCompetencia, pageWidth - 14, 23, { align: 'right' })
+
+      // Tabela de Dados
+      const colunasPdf = [
+        'Doc Fiscal',
+        'Fornecedor / Emitente',
+        'CNPJ',
+        'Emissão',
+        'Valor (R$)',
+        'Situação',
+        'Manifestação',
+        'Chave de Acesso'
+      ]
+
+      const linhasPdf = listaAlvo.map(n => [
+        `NF-e #${n.numero}\nSérie ${n.serie || '1'}`,
+        n.emitente_nome ? (n.emitente_nome.length > 32 ? n.emitente_nome.slice(0, 32) + '...' : n.emitente_nome) : '—',
+        formatarCnpjCpf(n.emitente_cnpj),
+        formatarDataHora(n.data_emissao),
+        n.valor ? n.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0,00',
+        n.situacao_nfe || 'AUTORIZADA',
+        n.manifestacao_status === 'CIENCIA' ? 'Ciência'
+          : n.manifestacao_status === 'CONFIRMADA' ? 'Confirmada'
+          : n.manifestacao_status === 'DESCONHECIDA' ? 'Desconhecida'
+          : n.manifestacao_status === 'NAO_REALIZADA' ? 'Não Realiz.'
+          : 'Sem Manif.',
+        n.chave ? `${n.chave.slice(0, 16)}...${n.chave.slice(-8)}` : '—'
+      ])
+
+      autoTable(doc, {
+        head: [colunasPdf],
+        body: linhasPdf,
+        startY: 34,
+        margin: { left: 14, right: 14, bottom: 16 },
+        theme: 'striped',
+        styles: {
+          fontSize: 7.5,
+          cellPadding: 2,
+          valign: 'middle'
+        },
+        headStyles: {
+          fillColor: [30, 41, 59],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          halign: 'left'
+        },
+        columnStyles: {
+          0: { cellWidth: 26 },
+          1: { cellWidth: 58 },
+          2: { cellWidth: 34 },
+          3: { cellWidth: 20 },
+          4: { cellWidth: 26, halign: 'right' },
+          5: { cellWidth: 24 },
+          6: { cellWidth: 26 },
+          7: { cellWidth: 55 }
+        },
+        foot: [[
+          'TOTAL GERAL',
+          `${totalNotas} documento(s)`,
+          '',
+          '',
+          `R$ ${valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          '',
+          '',
+          ''
+        ]],
+        footStyles: {
+          fillColor: [241, 245, 249],
+          textColor: [15, 23, 42],
+          fontStyle: 'bold'
+        },
+        didDrawPage: (data) => {
+          const totalPages = doc.internal.pages.length - 1
+          doc.setFont('helvetica', 'normal')
+          doc.setFontSize(7)
+          doc.setTextColor(148, 163, 184)
+          doc.line(14, pageHeight - 8, pageWidth - 14, pageHeight - 8)
+          doc.text(
+            `HUB PARATECH • Relatório Oficial de Distribuição DF-e • Gerado em ${new Date().toLocaleString('pt-BR')}`,
+            14,
+            pageHeight - 4
+          )
+          doc.text(`Página ${data.pageNumber} de ${totalPages}`, pageWidth - 14, pageHeight - 4, { align: 'right' })
+        }
+      })
+
+      doc.save(`${baseFileName}.pdf`)
+      toast.success('Relatório PDF (.pdf) exportado com sucesso!')
+      return
+    }
+
+    // 3. Exportação em CSV (.csv)
+    if (formato === 'csv') {
+      let csv = '\uFEFF'
+      csv += 'RELATÓRIO FISCAL;Distribuição de DF-e (Notas Destinadas SEFAZ Nacional)\r\n'
+      csv += `EMPRESA;${nomeEmpresa};CNPJ;${cnpjEmpresa};COMPETENCIA;${competencia}\r\n`
+      csv += `TOTAL DE NOTAS;${totalNotas};VALOR TOTAL;${valorTotal.toFixed(2).replace('.', ',')}\r\n\r\n`
+      csv += 'DOCUMENTO;SERIE;NUMERO;CHAVE DE ACESSO;FORNECEDOR;CNPJ FORNECEDOR;DATA EMISSAO;VALOR (R$);SITUACAO SEFAZ;MANIFESTACAO;PROTOCOLO;TEM XML\r\n'
+
+      listaAlvo.forEach(n => {
+        csv += `"NF-e #${n.numero}";"${n.serie || '1'}";"${n.numero || '—'}";"${n.chave}";"${(n.emitente_nome || '—').replace(/"/g, '""')}";"${formatarCnpjCpf(n.emitente_cnpj)}";"${formatarDataHora(n.data_emissao)}";"${(n.valor || 0).toFixed(2).replace('.', ',')}";"${n.situacao_nfe || 'AUTORIZADA'}";"${n.manifestacao_status || 'SEM_MANIFESTACAO'}";"${n.protocolo || '—'}";"${n.tem_xml ? 'SIM' : 'NAO'}"\r\n`
+      })
+
+      csv += `;;;;;;TOTAL GERAL;${valorTotal.toFixed(2).replace('.', ',')};;;;\r\n`
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${baseFileName}.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+
+      toast.success('Relatório CSV (.csv) exportado com sucesso!')
+    }
   }
 
   // Ação: Executar Trazer XMLs para o Hub com barra de progresso em tempo real
@@ -1291,6 +1564,51 @@ export default function DistribuicaoDfePage() {
                   <Archive size={13} />
                   Salvar Consulta no Histórico
                 </button>
+
+                {/* Botão Exportar Relatório DF-e */}
+                <div className="relative" ref={exportMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setExportMenuOpen(prev => !prev)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-bold transition shadow-xs"
+                    title="Exportar relatório de notas fiscais da Distribuição de DF-e"
+                  >
+                    <FileDown size={13} className="text-indigo-600" />
+                    Exportar {selectedChaves.length > 0 ? `(${selectedChaves.length})` : ''}
+                  </button>
+
+                  {exportMenuOpen && (
+                    <div className="absolute right-0 top-full mt-1.5 w-52 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
+                      <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 mb-1">
+                        Exportar {selectedChaves.length > 0 ? `${selectedChaves.length} Selecionadas` : 'Todas Filtradas'}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { handleExportarDfe('xlsx'); setExportMenuOpen(false); }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 transition text-left"
+                      >
+                        <FileText size={14} className="text-emerald-600" />
+                        Planilha Excel (.xlsx)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { handleExportarDfe('pdf'); setExportMenuOpen(false); }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-rose-50 hover:text-rose-700 transition text-left"
+                      >
+                        <FileText size={14} className="text-rose-600" />
+                        Relatório PDF (.pdf)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { handleExportarDfe('csv'); setExportMenuOpen(false); }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition text-left"
+                      >
+                        <FileDown size={14} className="text-slate-600" />
+                        Arquivo CSV (.csv)
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Filtro de Busca e Situação */}
