@@ -674,7 +674,10 @@ export default function DistribuicaoDfePage() {
           n.tem_xml ? 'Sim' : 'Não'
         ]),
         [],
-        ['', '', '', '', '', '', '', 'TOTAL GERAL:', valorTotal, '', '', '', '']
+        ['', '', '', '', '', '', '', 'TOTAL GERAL:', valorTotal, '', '', '', ''],
+        [],
+        ['Desenvolvido por Paratech Soluções e Sistemas - www.paratechsolucoes.com.br (https://paratechsolucoes.com.br/)'],
+        ['Analista programador Responsável: Regis Alexandre • 37 92000 - 78 57 (https://wa.me/5537920007857?text=Ol%C3%A1%20Regis,%20contato%20atrav%C3%A9s%20do%20HubParatech)']
       ]
 
       const ws = XLSX.utils.aoa_to_sheet(rows)
@@ -804,16 +807,40 @@ export default function DistribuicaoDfePage() {
         },
         didDrawPage: (data) => {
           const totalPages = doc.internal.pages.length - 1
+          doc.setDrawColor(226, 232, 240)
+          doc.line(14, pageHeight - 9.5, pageWidth - 14, pageHeight - 9.5)
+
           doc.setFont('helvetica', 'normal')
-          doc.setFontSize(7)
+          doc.setFontSize(6.5)
           doc.setTextColor(148, 163, 184)
-          doc.line(14, pageHeight - 8, pageWidth - 14, pageHeight - 8)
           doc.text(
             `HUB PARATECH • Relatório Oficial de Distribuição DF-e • Gerado em ${new Date().toLocaleString('pt-BR')}`,
             14,
-            pageHeight - 4
+            pageHeight - 5.5
           )
-          doc.text(`Página ${data.pageNumber} de ${totalPages}`, pageWidth - 14, pageHeight - 4, { align: 'right' })
+          doc.text(`Página ${data.pageNumber} de ${totalPages}`, pageWidth - 14, pageHeight - 5.5, { align: 'right' })
+
+          // Linha 2: Desenvolvido por Paratech Soluções e Sistemas... com links ativos
+          const txt1 = 'Desenvolvido por Paratech Soluções e Sistemas - '
+          const url1 = 'www.paratechsolucoes.com.br'
+          const txt2 = ' • Analista programador Responsável: Regis Alexandre • '
+          const url2 = '37 92000 - 78 57'
+
+          doc.setFontSize(6.5)
+          doc.setTextColor(100, 116, 139)
+          doc.text(txt1, 14, pageHeight - 2.5)
+
+          const xUrl1 = 14 + doc.getTextWidth(txt1)
+          doc.setTextColor(37, 99, 235)
+          doc.textWithLink(url1, xUrl1, pageHeight - 2.5, { url: 'https://paratechsolucoes.com.br/' })
+
+          const xTxt2 = xUrl1 + doc.getTextWidth(url1)
+          doc.setTextColor(100, 116, 139)
+          doc.text(txt2, xTxt2, pageHeight - 2.5)
+
+          const xUrl2 = xTxt2 + doc.getTextWidth(txt2)
+          doc.setTextColor(5, 150, 105)
+          doc.textWithLink(url2, xUrl2, pageHeight - 2.5, { url: 'https://wa.me/5537920007857?text=Ol%C3%A1%20Regis,%20contato%20atrav%C3%A9s%20do%20HubParatech' })
         }
       })
 
@@ -834,7 +861,9 @@ export default function DistribuicaoDfePage() {
         csv += `"NF-e #${n.numero}";"${n.serie || '1'}";"${n.numero || '—'}";"${n.chave}";"${(n.emitente_nome || '—').replace(/"/g, '""')}";"${formatarCnpjCpf(n.emitente_cnpj)}";"${formatarDataHora(n.data_emissao)}";"${(n.valor || 0).toFixed(2).replace('.', ',')}";"${n.situacao_nfe || 'AUTORIZADA'}";"${n.manifestacao_status || 'SEM_MANIFESTACAO'}";"${n.protocolo || '—'}";"${n.tem_xml ? 'SIM' : 'NAO'}"\r\n`
       })
 
-      csv += `;;;;;;TOTAL GERAL;${valorTotal.toFixed(2).replace('.', ',')};;;;\r\n`
+      csv += `;;;;;;TOTAL GERAL;${valorTotal.toFixed(2).replace('.', ',')};;;;\r\n\r\n`
+      csv += 'Desenvolvido por Paratech Soluções e Sistemas - www.paratechsolucoes.com.br (https://paratechsolucoes.com.br/)\r\n'
+      csv += 'Analista programador Responsável: Regis Alexandre • 37 92000 - 78 57 (https://wa.me/5537920007857?text=Ol%C3%A1%20Regis,%20contato%20atrav%C3%A9s%20do%20HubParatech)\r\n'
 
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
       const url = URL.createObjectURL(blob)

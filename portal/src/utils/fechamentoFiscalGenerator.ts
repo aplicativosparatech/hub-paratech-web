@@ -102,6 +102,15 @@ export const PREFERENCIAS_FECHAMENTO_PADRAO: FechamentoPreferencias = {
   envioEmail: ''
 }
 
+export const RODAPE_PARATECH_CSV =
+  '\r\nDesenvolvido por Paratech Soluções e Sistemas - www.paratechsolucoes.com.br (https://paratechsolucoes.com.br/)\r\nAnalista programador Responsável: Regis Alexandre • 37 92000 - 78 57 (https://wa.me/5537920007857?text=Ol%C3%A1%20Regis,%20contato%20atrav%C3%A9s%20do%20HubParatech)\r\n'
+
+export const RODAPE_PARATECH_XLSX_ROWS = [
+  [],
+  ['Desenvolvido por Paratech Soluções e Sistemas - www.paratechsolucoes.com.br (https://paratechsolucoes.com.br/)'],
+  ['Analista programador Responsável: Regis Alexandre • 37 92000 - 78 57 (https://wa.me/5537920007857?text=Ol%C3%A1%20Regis,%20contato%20atrav%C3%A9s%20do%20HubParatech)']
+]
+
 export function formatMoney(val: number): string {
   return (val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
@@ -399,7 +408,7 @@ export function gerarDocumentoPdfFiscal(cfg: ConfigPdfFiscal): Uint8Array {
 
   autoTable(doc, {
     startY: 46,
-    margin: { left: margem, right: margem, bottom: 12 },
+    margin: { left: margem, right: margem, bottom: 13 },
     head: [cfg.colunas],
     body: bodyData,
     foot: [footRow],
@@ -431,22 +440,45 @@ export function gerarDocumentoPdfFiscal(cfg: ConfigPdfFiscal): Uint8Array {
     columnStyles: columnStylesConfig
   })
 
-  // 4. Numeração e Rodapé Limpo em todas as páginas
+  // 4. Numeração e Rodapé Limpo em todas as páginas com links oficiais Paratech
   const totalPages = doc.getNumberOfPages()
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i)
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(6.8)
-    doc.setTextColor(148, 163, 184)
     doc.setDrawColor(226, 232, 240)
-    doc.line(margem, pageHeight - 7, margem + contentWidth, pageHeight - 7)
+    doc.line(margem, pageHeight - 9.5, margem + contentWidth, pageHeight - 9.5)
     
+    // Linha 1: Dados do relatório e página
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(6.5)
+    doc.setTextColor(148, 163, 184)
     doc.text(
       `HUB PARATECH • Relatório Fiscal Oficial para Escrituração Contábil • Gerado em ${new Date().toLocaleDateString('pt-BR')}`,
       margem,
-      pageHeight - 3.5
+      pageHeight - 5.5
     )
-    doc.text(`Página ${i} de ${totalPages}`, margem + contentWidth, pageHeight - 3.5, { align: 'right' })
+    doc.text(`Página ${i} de ${totalPages}`, margem + contentWidth, pageHeight - 5.5, { align: 'right' })
+
+    // Linha 2: Desenvolvido por Paratech Soluções e Sistemas... com links ativos
+    const txt1 = 'Desenvolvido por Paratech Soluções e Sistemas - '
+    const url1 = 'www.paratechsolucoes.com.br'
+    const txt2 = ' • Analista programador Responsável: Regis Alexandre • '
+    const url2 = '37 92000 - 78 57'
+
+    doc.setFontSize(6.5)
+    doc.setTextColor(100, 116, 139)
+    doc.text(txt1, margem, pageHeight - 2.5)
+
+    const xUrl1 = margem + doc.getTextWidth(txt1)
+    doc.setTextColor(37, 99, 235)
+    doc.textWithLink(url1, xUrl1, pageHeight - 2.5, { url: 'https://paratechsolucoes.com.br/' })
+
+    const xTxt2 = xUrl1 + doc.getTextWidth(url1)
+    doc.setTextColor(100, 116, 139)
+    doc.text(txt2, xTxt2, pageHeight - 2.5)
+
+    const xUrl2 = xTxt2 + doc.getTextWidth(txt2)
+    doc.setTextColor(5, 150, 105)
+    doc.textWithLink(url2, xUrl2, pageHeight - 2.5, { url: 'https://wa.me/5537920007857?text=Ol%C3%A1%20Regis,%20contato%20atrav%C3%A9s%20do%20HubParatech' })
   }
 
   return new Uint8Array(doc.output('arraybuffer'))
@@ -477,7 +509,7 @@ export function gerarRelatorioNfeCompras(
     lista.forEach(d => {
       csv += `${d.numero || '—'};${formatDate(d.data_emissao)};${formatDate(d.data_entrada || d.data_emissao)};"${(d.contato_nome || '—').replace(/"/g, '""')}";${d.cidade || '—'}/${d.uf || '—'};${(d.valor || 0).toFixed(2).replace('.', ',')};${d.chave || '—'}\r\n`
     })
-    csv += `;;;;TOTAL GERAL;${totalGeral.toFixed(2).replace('.', ',')};\r\n`
+    csv += `;;;;TOTAL GERAL;${totalGeral.toFixed(2).replace('.', ',')};\r\n${RODAPE_PARATECH_CSV}`
     resultados.push({
       nomeArquivo: `${baseName}.csv`,
       buffer: csv,
@@ -537,7 +569,8 @@ export function gerarRelatorioNfeCompras(
         d.valor || 0,
         d.chave || '—'
       ]),
-      ['', '', '', '', 'TOTAL GERAL:', totalGeral, '']
+      ['', '', '', '', 'TOTAL GERAL:', totalGeral, ''],
+      ...RODAPE_PARATECH_XLSX_ROWS
     ]
     const ws = XLSX.utils.aoa_to_sheet(rows)
     XLSX.utils.book_append_sheet(wb, ws, 'Compras_NFe')
@@ -612,7 +645,7 @@ export function gerarRelatorioNfseEntrada(
     lista.forEach(d => {
       csv += `${d.numero || '—'};${formatDate(d.data_emissao)};${formatDate(d.data_entrada || d.data_emissao)};"${(d.contato_nome || '—').replace(/"/g, '""')}";${d.cidade || '—'}/${d.uf || '—'};${(d.valor || 0).toFixed(2).replace('.', ',')};${d.chave || '—'}\r\n`
     })
-    csv += `;;;;TOTAL GERAL;${totalGeral.toFixed(2).replace('.', ',')};\r\n`
+    csv += `;;;;TOTAL GERAL;${totalGeral.toFixed(2).replace('.', ',')};\r\n${RODAPE_PARATECH_CSV}`
     resultados.push({
       nomeArquivo: `${baseName}.csv`,
       buffer: csv,
@@ -672,7 +705,8 @@ export function gerarRelatorioNfseEntrada(
         d.valor || 0,
         d.chave || '—'
       ]),
-      ['', '', '', '', 'TOTAL GERAL:', totalGeral, '']
+      ['', '', '', '', 'TOTAL GERAL:', totalGeral, ''],
+      ...RODAPE_PARATECH_XLSX_ROWS
     ]
     const ws = XLSX.utils.aoa_to_sheet(rows)
     XLSX.utils.book_append_sheet(wb, ws, 'Servicos_NFSe')
@@ -747,7 +781,7 @@ export function gerarRelatorioNfeSaidas(
     lista.forEach(d => {
       csv += `${d.numero || '—'};${formatDateTime(d.data_emissao)};"${(d.contato_nome || '—').replace(/"/g, '""')}";${(d.valor || 0).toFixed(2).replace('.', ',')};${d.chave || '—'}\r\n`
     })
-    csv += `;;TOTAL GERAL;${totalGeral.toFixed(2).replace('.', ',')};\r\n`
+    csv += `;;TOTAL GERAL;${totalGeral.toFixed(2).replace('.', ',')};\r\n${RODAPE_PARATECH_CSV}`
     resultados.push({
       nomeArquivo: `${baseName}.csv`,
       buffer: csv,
@@ -803,7 +837,8 @@ export function gerarRelatorioNfeSaidas(
         d.valor || 0,
         d.chave || '—'
       ]),
-      ['', '', '', 'TOTAL GERAL:', totalGeral, '']
+      ['', '', '', 'TOTAL GERAL:', totalGeral, ''],
+      ...RODAPE_PARATECH_XLSX_ROWS
     ]
     const ws = XLSX.utils.aoa_to_sheet(rows)
     XLSX.utils.book_append_sheet(wb, ws, 'Vendas_NFe')
@@ -877,7 +912,7 @@ export function gerarRelatorioNfseSaidas(
     lista.forEach(d => {
       csv += `${d.numero || '—'};${formatDateTime(d.data_emissao)};"${(d.contato_nome || '—').replace(/"/g, '""')}";${(d.valor || 0).toFixed(2).replace('.', ',')};${d.chave || '—'}\r\n`
     })
-    csv += `;;TOTAL GERAL;${totalGeral.toFixed(2).replace('.', ',')};\r\n`
+    csv += `;;TOTAL GERAL;${totalGeral.toFixed(2).replace('.', ',')};\r\n${RODAPE_PARATECH_CSV}`
     resultados.push({
       nomeArquivo: `${baseName}.csv`,
       buffer: csv,
@@ -932,7 +967,8 @@ export function gerarRelatorioNfseSaidas(
         d.valor || 0,
         d.chave || '—'
       ]),
-      ['', '', 'TOTAL GERAL:', totalGeral, '']
+      ['', '', 'TOTAL GERAL:', totalGeral, ''],
+      ...RODAPE_PARATECH_XLSX_ROWS
     ]
     const ws = XLSX.utils.aoa_to_sheet(rows)
     XLSX.utils.book_append_sheet(wb, ws, 'Servicos_Prestados')
@@ -1005,7 +1041,7 @@ export function gerarRelatorioNfceSaidas(
     lista.forEach(d => {
       csv += `${d.numero || '—'};${formatDateTime(d.data_emissao)};"${(d.contato_nome || 'Consumidor Final').replace(/"/g, '""')}";${(d.valor || 0).toFixed(2).replace('.', ',')};${d.chave || '—'}\r\n`
     })
-    csv += `;;TOTAL GERAL;${totalGeral.toFixed(2).replace('.', ',')};\r\n`
+    csv += `;;TOTAL GERAL;${totalGeral.toFixed(2).replace('.', ',')};\r\n${RODAPE_PARATECH_CSV}`
     resultados.push({
       nomeArquivo: `${baseName}.csv`,
       buffer: csv,
@@ -1060,7 +1096,8 @@ export function gerarRelatorioNfceSaidas(
         d.valor || 0,
         d.chave || '—'
       ]),
-      ['', '', '', 'TOTAL GERAL:', totalGeral, '']
+      ['', '', '', 'TOTAL GERAL:', totalGeral, ''],
+      ...RODAPE_PARATECH_XLSX_ROWS
     ]
     const ws = XLSX.utils.aoa_to_sheet(rows)
     XLSX.utils.book_append_sheet(wb, ws, 'Vendas_NFCe')
@@ -1150,7 +1187,7 @@ export function gerarRelatorioMonofasicos(
       lista.forEach(it => {
         csv += `${it.numero_nota || '—'};${formatDateTime(it.data_hora)};"${it.produto_nome.replace(/"/g, '""')}";${formatarNcm(it.ncm)};${it.cst_pis_cofins};${it.quantidade.toFixed(2).replace('.', ',')};${it.valor_total.toFixed(2).replace('.', ',')};${it.is_monofasico ? 'Monofásico' : 'Tributado'}\r\n`
       })
-      csv += `;;;;TOTAL GERAL;${totalQtd.toFixed(2).replace('.', ',')};${totalGeral.toFixed(2).replace('.', ',')};\r\n`
+      csv += `;;;;TOTAL GERAL;${totalQtd.toFixed(2).replace('.', ',')};${totalGeral.toFixed(2).replace('.', ',')};\r\n${RODAPE_PARATECH_CSV}`
       resultados.push({
         nomeArquivo: `${baseName}.csv`,
         buffer: csv,
@@ -1205,7 +1242,8 @@ export function gerarRelatorioMonofasicos(
           it.valor_total,
           it.is_monofasico ? 'Monofásico' : 'Tributado Integral'
         ]),
-        ['', '', '', '', 'TOTAL GERAL:', totalQtd, totalGeral, '']
+        ['', '', '', '', 'TOTAL GERAL:', totalQtd, totalGeral, ''],
+        ...RODAPE_PARATECH_XLSX_ROWS
       ]
       const ws = XLSX.utils.aoa_to_sheet(rows)
       XLSX.utils.book_append_sheet(wb, ws, 'Monofasicos_Detalhado')
@@ -1270,7 +1308,7 @@ export function gerarRelatorioMonofasicos(
       agrupados.forEach(it => {
         csv += `${it.quantidade_total.toFixed(2).replace('.', ',')};"${it.produto_nome.replace(/"/g, '""')}";${formatarNcm(it.ncm)};${it.cst_pis_cofins};${it.valor_total.toFixed(2).replace('.', ',')};${it.is_monofasico ? 'Monofásico' : 'Tributado'}\r\n`
       })
-      csv += `${totalQtd.toFixed(2).replace('.', ',')};TOTAL GERAL;;;${totalGeral.toFixed(2).replace('.', ',')};\r\n`
+      csv += `${totalQtd.toFixed(2).replace('.', ',')};TOTAL GERAL;;;${totalGeral.toFixed(2).replace('.', ',')};\r\n${RODAPE_PARATECH_CSV}`
       resultados.push({
         nomeArquivo: `${baseName}.csv`,
         buffer: csv,
@@ -1323,7 +1361,8 @@ export function gerarRelatorioMonofasicos(
           it.valor_total,
           it.is_monofasico ? 'Monofásico' : 'Tributado Integral'
         ]),
-        [totalQtd, 'TOTAL GERAL:', '', '', totalGeral, '']
+        [totalQtd, 'TOTAL GERAL:', '', '', totalGeral, ''],
+        ...RODAPE_PARATECH_XLSX_ROWS
       ]
       const ws = XLSX.utils.aoa_to_sheet(rows)
       XLSX.utils.book_append_sheet(wb, ws, 'Monofasicos_Agrupado')

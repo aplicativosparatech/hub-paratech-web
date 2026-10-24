@@ -333,6 +333,10 @@ export function exportarCSV(
     })
   }
 
+  linhas.push('')
+  linhas.push('Desenvolvido por Paratech Soluções e Sistemas - www.paratechsolucoes.com.br (https://paratechsolucoes.com.br/)')
+  linhas.push('Analista programador Responsável: Regis Alexandre • 37 92000 - 78 57 (https://wa.me/5537920007857?text=Ol%C3%A1%20Regis,%20contato%20atrav%C3%A9s%20do%20HubParatech)')
+
   const csvContent = '\uFEFF' + linhas.join('\r\n')
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
@@ -621,6 +625,10 @@ export function exportarExcel(
     })
   }
 
+  rows.push([])
+  rows.push(['Desenvolvido por Paratech Soluções e Sistemas - www.paratechsolucoes.com.br (https://paratechsolucoes.com.br/)'])
+  rows.push(['Analista programador Responsável: Regis Alexandre • 37 92000 - 78 57 (https://wa.me/5537920007857?text=Ol%C3%A1%20Regis,%20contato%20atrav%C3%A9s%20do%20HubParatech)'])
+
   const ws = XLSX.utils.aoa_to_sheet(rows)
   XLSX.utils.book_append_sheet(wb, ws, sheetName.substring(0, 31))
   XLSX.writeFile(wb, `Relatorio_${tipo.toUpperCase()}_${sanitizeFileName(empresa.razao_social)}_${competencia}.xlsx`)
@@ -629,6 +637,44 @@ export function exportarExcel(
 // ==========================================
 // 3. EXPORTAÇÃO PDF PROFISSIONAL (jspdf)
 // ==========================================
+function renderizarRodapeParatech(doc: jsPDF, pageNumber: number) {
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const pageHeight = doc.internal.pageSize.getHeight()
+  const margem = 14
+
+  // Linha separadora
+  doc.setDrawColor(226, 232, 240)
+  doc.line(margem, pageHeight - 9.5, pageWidth - margem, pageHeight - 9.5)
+
+  // Linha com links oficiais Paratech e suporte
+  const txt1 = 'Desenvolvido por Paratech Soluções e Sistemas - '
+  const url1 = 'www.paratechsolucoes.com.br'
+  const txt2 = ' • Analista programador Responsável: Regis Alexandre • '
+  const url2 = '37 92000 - 78 57'
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(6.8)
+  doc.setTextColor(100, 116, 139)
+  doc.text(txt1, margem, pageHeight - 4)
+
+  const xUrl1 = margem + doc.getTextWidth(txt1)
+  doc.setTextColor(37, 99, 235)
+  doc.textWithLink(url1, xUrl1, pageHeight - 4, { url: 'https://paratechsolucoes.com.br/' })
+
+  const xTxt2 = xUrl1 + doc.getTextWidth(url1)
+  doc.setTextColor(100, 116, 139)
+  doc.text(txt2, xTxt2, pageHeight - 4)
+
+  const xUrl2 = xTxt2 + doc.getTextWidth(txt2)
+  doc.setTextColor(5, 150, 105)
+  doc.textWithLink(url2, xUrl2, pageHeight - 4, { url: 'https://wa.me/5537920007857?text=Ol%C3%A1%20Regis,%20contato%20atrav%C3%A9s%20do%20HubParatech' })
+
+  // Numeração de páginas à direita
+  const strPagina = `Página ${pageNumber} de ${doc.getNumberOfPages()}`
+  doc.setTextColor(148, 163, 184)
+  doc.text(strPagina, pageWidth - margem, pageHeight - 4, { align: 'right' })
+}
+
 export function exportarPDF(
   tipo: TipoRelatorio,
   empresa: EmpresaDados,
@@ -746,11 +792,7 @@ export function exportarPDF(
         7: { cellWidth: 22, halign: 'center' }
       },
       didDrawPage: (data: any) => {
-        // Rodapé da página
-        const str = `Página ${data.pageNumber} de ${doc.getNumberOfPages()}`
-        doc.setFontSize(8)
-        doc.setTextColor(148, 163, 184)
-        doc.text(str, pageWidth - 30, pageHeight - 8)
+        renderizarRodapeParatech(doc, data.pageNumber)
       }
     })
 
@@ -834,10 +876,7 @@ export function exportarPDF(
         7: { cellWidth: 35 }
       },
       didDrawPage: (data: any) => {
-        const str = `Página ${data.pageNumber} de ${doc.getNumberOfPages()}`
-        doc.setFontSize(8)
-        doc.setTextColor(148, 163, 184)
-        doc.text(str, pageWidth - 30, pageHeight - 8)
+        renderizarRodapeParatech(doc, data.pageNumber)
       }
     })
 
@@ -944,10 +983,7 @@ export function exportarPDF(
         7: { cellWidth: 25, halign: 'right', fontStyle: 'bold' }
       },
       didDrawPage: (data: any) => {
-        const str = `Página ${data.pageNumber} de ${doc.getNumberOfPages()}`
-        doc.setFontSize(8)
-        doc.setTextColor(148, 163, 184)
-        doc.text(str, pageWidth - 30, pageHeight - 8)
+        renderizarRodapeParatech(doc, data.pageNumber)
       }
     })
 
@@ -1001,10 +1037,7 @@ export function exportarPDF(
         6: { cellWidth: 35, halign: 'right', fontStyle: 'bold', textColor: [180, 83, 9] }
       },
       didDrawPage: (data: any) => {
-        const str = `Página ${data.pageNumber} de ${doc.getNumberOfPages()}`
-        doc.setFontSize(8)
-        doc.setTextColor(148, 163, 184)
-        doc.text(str, pageWidth - 30, pageHeight - 8)
+        renderizarRodapeParatech(doc, data.pageNumber)
       }
     })
 
@@ -1073,10 +1106,7 @@ export function exportarPDF(
         11: { cellWidth: 19, halign: 'center', fontStyle: 'bold' }
       },
       didDrawPage: (data: any) => {
-        const str = `Página ${data.pageNumber} de ${doc.getNumberOfPages()}`
-        doc.setFontSize(8)
-        doc.setTextColor(148, 163, 184)
-        doc.text(str, pageWidth - 30, pageHeight - 8)
+        renderizarRodapeParatech(doc, data.pageNumber)
       }
     })
 
@@ -1138,10 +1168,7 @@ export function exportarPDF(
         10: { cellWidth: 15, halign: 'right' }
       },
       didDrawPage: (data: any) => {
-        const str = `Página ${data.pageNumber} de ${doc.getNumberOfPages()}`
-        doc.setFontSize(8)
-        doc.setTextColor(148, 163, 184)
-        doc.text(str, pageWidth - 30, pageHeight - 8)
+        renderizarRodapeParatech(doc, data.pageNumber)
       }
     })
 
@@ -1165,10 +1192,7 @@ export function exportarPDF(
       headStyles: { fillColor: [185, 28, 28], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
       bodyStyles: { fontSize: 8 },
       didDrawPage: (data: any) => {
-        const str = `Página ${data.pageNumber} de ${doc.getNumberOfPages()}`
-        doc.setFontSize(8)
-        doc.setTextColor(148, 163, 184)
-        doc.text(str, pageWidth - 30, pageHeight - 8)
+        renderizarRodapeParatech(doc, data.pageNumber)
       }
     })
 
@@ -1199,10 +1223,7 @@ export function exportarPDF(
         5: { cellWidth: 50 }
       },
       didDrawPage: (data: any) => {
-        const str = `Página ${data.pageNumber} de ${doc.getNumberOfPages()}`
-        doc.setFontSize(8)
-        doc.setTextColor(148, 163, 184)
-        doc.text(str, pageWidth - 30, pageHeight - 8)
+        renderizarRodapeParatech(doc, data.pageNumber)
       }
     })
 
@@ -1225,10 +1246,7 @@ export function exportarPDF(
       headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
       bodyStyles: { fontSize: 8 },
       didDrawPage: (data: any) => {
-        const str = `Página ${data.pageNumber} de ${doc.getNumberOfPages()}`
-        doc.setFontSize(8)
-        doc.setTextColor(148, 163, 184)
-        doc.text(str, pageWidth - 30, pageHeight - 8)
+        renderizarRodapeParatech(doc, data.pageNumber)
       }
     })
   }

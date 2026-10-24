@@ -1171,7 +1171,8 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             </a>
           </div>
           <div className="flex items-center gap-1.5 text-right pl-3 truncate">
-            <span className="hidden sm:inline text-slate-400">Suporte Técnico:</span>
+            <span className="hidden sm:inline text-slate-400">Analista programador Responsável:</span>
+            <span className="sm:hidden text-slate-400">Resp:</span>
             <strong className="text-slate-700 dark:text-slate-200 font-semibold">Regis Alexandre</strong>
             <span className="text-slate-300 dark:text-slate-600">•</span>
             <a 
