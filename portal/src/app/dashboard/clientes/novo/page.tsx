@@ -24,7 +24,8 @@ import {
   KeyRound,
   ChevronsDown,
   ChevronsUp,
-  Layers
+  Layers,
+  Store
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
@@ -900,6 +901,34 @@ export default function NovoClientePage() {
                 <option value="false">Inativo / Bloqueado</option>
               </select>
               <p className="text-[11px] text-slate-500 mt-1">Ativa/desativa cliente e faturamento</p>
+            </div>
+
+            {/* Toggle MEI Simples */}
+            <div className="md:col-span-2 lg:col-span-3 p-4 bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800/60 rounded-2xl flex items-start sm:items-center justify-between gap-4">
+              <div className="space-y-0.5">
+                <label className="text-sm font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-2 cursor-pointer">
+                  <Store className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  Aplicativo MEI Simples (SaaS Nativo)
+                </label>
+                <p className="text-xs text-indigo-800/80 dark:text-indigo-300/80 leading-relaxed">
+                  Marque esta opção caso este cliente utilize o aplicativo <strong>MEI Simples</strong>. Isso define o sistema em uso como <code>MEI_SIMPLES</code> e inclui a empresa na aba de gestão <strong>MEI Simples</strong> do Hub com controle nativo de assinaturas, bloqueios e pagamentos PIX sem necessidade de executável desktop instalado.
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                <input 
+                  type="checkbox" 
+                  checked={Boolean(formData.nome_sistema_utilizado?.toUpperCase().includes('MEI'))} 
+                  onChange={e => {
+                    const checked = e.target.checked
+                    setFormData({ 
+                      ...formData, 
+                      nome_sistema_utilizado: checked ? 'MEI_SIMPLES' : '' 
+                    })
+                  }} 
+                  className="sr-only peer" 
+                />
+                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+              </label>
             </div>
 
             {/* Associação / Cooperativa toggle */}

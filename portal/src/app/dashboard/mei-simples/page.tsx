@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { 
   Store, Users, CheckCircle2, AlertTriangle, XCircle, Search, 
   RefreshCw, Plus, Copy, Lock, Unlock, Zap, DollarSign, Clock, 
-  KeyRound, QrCode, FileText, Check, ShieldAlert, Phone
+  KeyRound, QrCode, FileText, Check, ShieldAlert, Phone, UserPlus, UserMinus
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
@@ -47,7 +47,13 @@ export default function MeiSimplesPage() {
   // Modais
   const [modalEditarOpen, setModalEditarOpen] = useState(false)
   const [modalPixOpen, setModalPixOpen] = useState(false)
+  const [modalVincularOpen, setModalVincularOpen] = useState(false)
   const [clienteSelecionado, setClienteSelecionado] = useState<ClienteMei | null>(null)
+  
+  // Lista de outros clientes para vinculação rápida
+  const [outrosClientes, setOutrosClientes] = useState<{ id: string, razao_social: string, nome_fantasia?: string, cnpj: string, nome_sistema_utilizado?: string }[]>([])
+  const [clienteParaVincularId, setClienteParaVincularId] = useState('')
+  const [vinculando, setVinculando] = useState(false)
   
   // Form Edição
   const [editDiaVencimento, setEditDiaVencimento] = useState(10)
@@ -62,7 +68,7 @@ export default function MeiSimplesPage() {
   async function carregarDados() {
     setLoading(true)
     try {
-      // 1. Busca todos os clientes cadastrados para o MEI Simples (ou todos com identificação MEI)
+      // 1. Busca SOMENTE os clientes cadastrados que utilizam o MEI Simples
       const { data: clientesData, error: cliErr } = await supabase
         .from('clientes')
         .select(`
@@ -73,9 +79,19 @@ export default function MeiSimplesPage() {
             offline_secret, ultima_sincronizacao, dias_tolerancia_bloqueio, mensagem_bloqueio
           )
         `)
+        .ilike('nome_sistema_utilizado', '%mei%')
         .order('created_at', { ascending: false })
 
       if (cliErr) throw cliErr
+
+      // 1.1 Busca lista de clientes convencionais para possibilitar vinculação rápida
+      const { data: outrosData } = await supabase
+        .from('clientes')
+        .select('id, razao_social, nome_fantasia, cnpj, nome_sistema_utilizado')
+        .or('nome_sistema_utilizado.is.null,nome_sistema_utilizado.not.ilike.%mei%')
+        .order('razao_social', { ascending: true })
+
+      if (outrosData) setOutrosClientes(outrosData)
 
       // 2. Busca faturas mais recentes
       const { data: faturasData } = await supabase
@@ -274,6 +290,47 @@ export default function MeiSimplesPage() {
     }
   }
 
+  // Vincular Cliente Existente ao MEI Simples
+  const vincularClienteAoMei = async (id: string) => {
+    if (!id) return
+    setVinculando(true)
+    try {
+      const { error } = await supabase
+        .from('clientes')
+        .update({ nome_sistema_utilizado: 'MEI_SIMPLES' })
+        .eq('id', id)
+
+      if (error) throw error
+
+      toast.success('Cliente ativado no MEI Simples com sucesso!')
+      setModalVincularOpen(false)
+      setClienteParaVincularId('')
+      carregarDados()
+    } catch (err: any) {
+      toast.error('Erro ao vincular cliente: ' + err.message)
+    } finally {
+      setVinculando(false)
+    }
+  }
+
+  // Desvincular Cliente do MEI Simples
+  const desvincularClienteDoMei = async (cliente: ClienteMei) => {
+    if (!confirm(`Deseja desativar o aplicativo MEI Simples para "${cliente.nome_fantasia || cliente.razao_social}"?\nO cliente deixará de ser listado nesta aba.`)) return
+    try {
+      const { error } = await supabase
+        .from('clientes')
+        .update({ nome_sistema_utilizado: 'PDV+' })
+        .eq('id', cliente.id)
+
+      if (error) throw error
+
+      toast.success('Cliente desvinculado do MEI Simples.')
+      carregarDados()
+    } catch (err: any) {
+      toast.error('Erro ao desvincular: ' + err.message)
+    }
+  }
+
   // Copiar para Área de Transferência
   const copiarTexto = (texto: string, label: string) => {
     navigator.clipboard.writeText(texto)
@@ -312,6 +369,14 @@ export default function MeiSimplesPage() {
         </div>
 
         <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setModalVincularOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition shadow-xs cursor-pointer"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            <span>Vincular Cliente</span>
+          </button>
+
           <button
             onClick={carregarDados}
             disabled={loading}
@@ -621,6 +686,15 @@ export default function MeiSimplesPage() {
                           >
                             <KeyRound className="w-3.5 h-3.5" />
                           </button>
+
+                          {/* Botão Desvincular do MEI Simples */}
+                          <button
+                            onClick={() => desvincularClienteDoMei(cliente)}
+                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition cursor-pointer"
+                            title="Desativar MEI Simples para esta empresa"
+                          >
+                            <UserMinus className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -788,6 +862,79 @@ export default function MeiSimplesPage() {
             >
               Fechar
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 7. MODAL DE VINCULAR CLIENTE AO MEI SIMPLES */}
+      {modalVincularOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl overflow-hidden p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600">
+                <Store className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                  Vincular Cliente ao MEI Simples
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Selecione uma empresa já cadastrada no Hub para ativar o aplicativo MEI Simples.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-1.5 text-left">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                Selecione o Cliente
+              </label>
+              <select
+                value={clienteParaVincularId}
+                onChange={e => setClienteParaVincularId(e.target.value)}
+                className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">Selecione uma empresa...</option>
+                {outrosClientes.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.razao_social} {c.nome_fantasia ? `(${c.nome_fantasia})` : ''} — CNPJ: {c.cnpj} {c.nome_sistema_utilizado ? `[${c.nome_sistema_utilizado}]` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl text-xs text-slate-600 dark:text-slate-400 space-y-1">
+              <p className="font-medium text-slate-800 dark:text-slate-200">
+                O que acontece ao vincular:
+              </p>
+              <ul className="list-disc list-inside space-y-0.5 text-[11px]">
+                <li>O sistema em uso será alterado para <strong>MEI_SIMPLES</strong>.</li>
+                <li>A empresa passará a ser gerenciada nativamente nesta aba.</li>
+                <li>O aplicativo Flutter no PC/dispositivo do cliente conectará via token.</li>
+              </ul>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setModalVincularOpen(false)
+                  setClienteParaVincularId('')
+                }}
+                disabled={vinculando}
+                className="px-4 py-2 text-xs font-semibold rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => vincularClienteAoMei(clienteParaVincularId)}
+                disabled={vinculando || !clienteParaVincularId}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition disabled:opacity-50 cursor-pointer shadow-xs"
+              >
+                {vinculando ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                <span>{vinculando ? 'Vinculando...' : 'Ativar no MEI Simples'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

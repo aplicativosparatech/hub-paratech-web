@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { Check, ChevronDown, Laptop, Sparkles } from 'lucide-react'
 
 export const ERP_PADRAO = [
+  'MEI_SIMPLES',
   'BARTECH',
   'SIEDFOOD',
   'GDOOR SLIM',
@@ -33,6 +34,7 @@ export const ERP_PADRAO = [
 
 // Lista prioritária exibida nos atalhos rápidos (badges)
 export const ATALHOS_PRIORITARIOS = [
+  'MEI_SIMPLES',
   'BARTECH',
   'SIEDFOOD',
   'GDOOR SLIM',
