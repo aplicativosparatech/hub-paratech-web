@@ -1,11 +1,11 @@
 @echo off
 setlocal EnableDelayedExpansion
 
-title Instalador e Atualizador - Hub Paratech Desktop v2.5.9
+title Instalador e Atualizador - Hub Paratech Desktop v2.6.0
 color 0B
 
 echo ===============================================================================
-echo          HUB PARATECH DESKTOP v2.5.9 - INSTALADOR E ATUALIZADOR PROTEGIDO
+echo          HUB PARATECH DESKTOP v2.6.0 - INSTALADOR E ATUALIZADOR PROTEGIDO
 echo ===============================================================================
 echo.
 
@@ -68,14 +68,14 @@ reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "HubParatech" /t
 
 echo.
 echo ===============================================================================
-echo  [SUCESSO] Hub Paratech Desktop v2.5.9 Instalado e Atualizado com Sucesso!
+echo  [SUCESSO] Hub Paratech Desktop v2.6.0 Instalado e Atualizado com Sucesso!
 echo ===============================================================================
 echo.
 echo  - Local de Instalacao : %TARGET_DIR%\HubParatechDesktop.exe
-echo  - Versao              : v2.5.9 Standalone
+echo  - Versao              : v2.6.0 Standalone
 echo  - Inicializacao       : Automatica no logon (Agendador de Tarefas + Registro)
 echo.
-echo Iniciando o Hub Paratech v2.5.9...
+echo Iniciando o Hub Paratech v2.6.0...
 echo.
 
 start "" "%TARGET_DIR%\HubParatechDesktop.exe"

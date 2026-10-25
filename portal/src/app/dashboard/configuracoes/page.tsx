@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
-import { RefreshCw, Download } from 'lucide-react'
+import { RefreshCw, Download, Clock } from 'lucide-react'
 import { APP_VERSION } from '@/utils/version'
 import { useTableFeatures } from '@/hooks/useTableFeatures'
 import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
@@ -13,6 +13,13 @@ export default function ConfiguracoesPage() {
   const [clientes, setClientes] = useState<any[]>([])
   const [hubs, setHubs] = useState<any[]>([])
   const [selectedCliente, setSelectedCliente] = useState<string>('')
+  const [now, setNow] = useState<number>(() => Date.now())
+
+  // Ticker de 1 segundo para atualizar o cronômetro regressivo de batimento cardíaco (15 min)
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
@@ -50,8 +57,8 @@ export default function ConfiguracoesPage() {
         const config = Array.isArray(h.configuracoes_hub) ? h.configuracoes_hub[0] : h.configuracoes_hub
         const lastSync = config?.ultima_sincronizacao
         if (!lastSync) return 0
-        const diff = new Date().getTime() - new Date(lastSync).getTime()
-        return diff < 300000 ? 1 : 0
+        const diff = Date.now() - new Date(lastSync).getTime()
+        return diff < (15 * 60 * 1000 + 2 * 60 * 1000) ? 1 : 0
       }
     }
   })
@@ -333,12 +340,62 @@ export default function ConfiguracoesPage() {
                   const config = Array.isArray(hub.configuracoes_hub) ? hub.configuracoes_hub[0] : hub.configuracoes_hub;
                   const lastSync = config?.ultima_sincronizacao;
                   const offlineSecret = config?.offline_secret || 'Não gerada';
-                  let isOnline = false;
-                  
-                  if (lastSync) {
-                    const diff = new Date().getTime() - new Date(lastSync).getTime();
-                    // Considera online se comunicou nos últimos 3 minutos (180000 ms)
-                    isOnline = diff < 300000;
+                  let statusElement;
+                  const INTERVALO_MS = 15 * 60 * 1000;
+                  const TOLERANCIA_MS = 2 * 60 * 1000;
+
+                  if (!lastSync) {
+                    statusElement = (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500">
+                        Nunca
+                      </span>
+                    );
+                  } else {
+                    const diff = now - new Date(lastSync).getTime();
+                    if (diff <= INTERVALO_MS) {
+                      const restanteMs = Math.max(0, INTERVALO_MS - diff);
+                      const min = Math.floor(restanteMs / 60000);
+                      const sec = Math.floor((restanteMs % 60000) / 1000);
+                      const mmss = `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+                      statusElement = (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-700 w-fit">
+                            <span className="w-2 h-2 rounded-full bg-green-500 mr-1.5 animate-pulse"></span>
+                            Online
+                          </span>
+                          <span className="text-[11px] font-mono text-slate-500 flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-slate-400" />
+                            Próximo pulso: <strong className="text-emerald-600">{mmss}</strong>
+                          </span>
+                        </div>
+                      );
+                    } else if (diff <= (INTERVALO_MS + TOLERANCIA_MS)) {
+                      const atrasoSec = Math.floor((diff - INTERVALO_MS) / 1000);
+                      statusElement = (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 w-fit">
+                            <span className="w-2 h-2 rounded-full bg-amber-500 mr-1.5 animate-ping"></span>
+                            Aguardando Sinal
+                          </span>
+                          <span className="text-[10px] text-amber-700">
+                            Tolerância (+{atrasoSec}s)
+                          </span>
+                        </div>
+                      );
+                    } else {
+                      const diffMin = Math.floor(diff / 60000);
+                      const decorrido = diffMin < 60 ? `${diffMin} min` : diffMin < 1440 ? `${Math.floor(diffMin / 60)} h` : `${Math.floor(diffMin / 1440)} dias`;
+                      statusElement = (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 w-fit">
+                            Offline
+                          </span>
+                          <span className="text-[10px] text-slate-400">
+                            Último sinal há {decorrido}
+                          </span>
+                        </div>
+                      );
+                    }
                   }
 
                   return (
@@ -351,16 +408,7 @@ export default function ConfiguracoesPage() {
                         {lastSync ? new Date(lastSync).toLocaleString('pt-BR') : 'Nunca'}
                       </td>
                       <td className="p-4 text-sm truncate">
-                        {isOnline ? (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                            <span className="w-2 h-2 rounded-full bg-green-500 mr-1.5 animate-pulse"></span>
-                            Online
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
-                            Offline
-                          </span>
-                        )}
+                        {statusElement}
                       </td>
                       <td className="p-4 text-right whitespace-nowrap">
                         <button

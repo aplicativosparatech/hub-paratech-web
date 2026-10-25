@@ -62,6 +62,13 @@ export default function MeiSimplesPage() {
   const [editOfflineSecret, setEditOfflineSecret] = useState('')
   const [editMensagemBloqueio, setEditMensagemBloqueio] = useState('')
   const [salvando, setSalvando] = useState(false)
+  const [now, setNow] = useState<number>(() => Date.now())
+
+  // Ticker de 1 segundo para atualizar os cronômetros regressivos em tempo real
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [])
   
   const supabase = createClient()
 
@@ -337,14 +344,79 @@ export default function MeiSimplesPage() {
     toast.success(`${label} copiado para a área de transferência!`)
   }
 
-  // Formatar tempo de última sincronização
+  // Intervalo e Tolerância do Heartbeat (15 minutos + 2 min carência)
+  const INTERVALO_HEARTBEAT_MS = 15 * 60 * 1000
+  const TOLERANCIA_HEARTBEAT_MS = 2 * 60 * 1000
+
+  // Formatar tempo de última sincronização com Cronômetro Regressivo ao vivo
   const formatarHeartbeat = (dataIso?: string) => {
-    if (!dataIso) return <span className="text-slate-400 text-xs">Nunca conectou</span>
-    const diff = (new Date().getTime() - new Date(dataIso).getTime()) / 1000
-    if (diff < 120) return <span className="text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>Online agora</span>
-    if (diff < 3600) return <span className="text-sky-600 dark:text-sky-400 text-xs">Conectou há {Math.floor(diff / 60)} min</span>
-    if (diff < 86400) return <span className="text-slate-600 dark:text-slate-300 text-xs">Conectou há {Math.floor(diff / 3600)} h</span>
-    return <span className="text-amber-600 dark:text-amber-400 text-xs">Offline há {Math.floor(diff / 86400)} dias</span>
+    if (!dataIso) {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+          Nunca conectou
+        </span>
+      )
+    }
+
+    const syncTime = new Date(dataIso).getTime()
+    const diff = now - syncTime
+
+    // Caso 1: Dentro da janela de 15 minutos (Online com cronômetro regressivo)
+    if (diff <= INTERVALO_HEARTBEAT_MS) {
+      const restanteMs = Math.max(0, INTERVALO_HEARTBEAT_MS - diff)
+      const minutos = Math.floor(restanteMs / 60000)
+      const segundos = Math.floor((restanteMs % 60000) / 1000)
+      const tempoFormatado = `${minutos.toString().padStart(2, '0')}:${segundos.toString().padStart(2, '0')}`
+
+      return (
+        <div className="flex flex-col gap-0.5">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 w-fit">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            Online
+          </span>
+          <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 flex items-center gap-1">
+            <Clock className="w-3 h-3 text-slate-400" />
+            Próximo sinal: <strong className="text-emerald-600 dark:text-emerald-400">{tempoFormatado}</strong>
+          </span>
+        </div>
+      )
+    }
+
+    // Caso 2: Entre 15 e 17 minutos (Janela de tolerância / aguardando pulso)
+    if (diff <= (INTERVALO_HEARTBEAT_MS + TOLERANCIA_HEARTBEAT_MS)) {
+      const atrasoSegundos = Math.floor((diff - INTERVALO_HEARTBEAT_MS) / 1000)
+      return (
+        <div className="flex flex-col gap-0.5">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 w-fit">
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+            Aguardando Sinal
+          </span>
+          <span className="text-[10px] text-amber-700 dark:text-amber-400">
+            Tolerância (+{atrasoSegundos}s)
+          </span>
+        </div>
+      )
+    }
+
+    // Caso 3: Mais de 17 minutos (Offline)
+    const diffMinutos = Math.floor(diff / 60000)
+    const textoDecorrido = diffMinutos < 60 
+      ? `${diffMinutos} min` 
+      : diffMinutos < 1440 
+        ? `${Math.floor(diffMinutos / 60)} h` 
+        : `${Math.floor(diffMinutos / 1440)} dias`
+
+    return (
+      <div className="flex flex-col gap-0.5">
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700 w-fit">
+          <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+          Offline
+        </span>
+        <span className="text-[10px] text-slate-400 dark:text-slate-500">
+          Último sinal há {textoDecorrido}
+        </span>
+      </div>
+    )
   }
 
   return (

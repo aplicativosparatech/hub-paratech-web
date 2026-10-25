@@ -44,10 +44,12 @@ namespace HubParatechDesktop
 
         private NotifyIcon trayIcon;
         private System.Windows.Forms.Timer syncTimer;
+        private System.Windows.Forms.Timer countdownTimer;
         private System.Windows.Forms.Timer processTimer;
         private System.Windows.Forms.Timer animTimer;
         private static readonly HttpClient http = new HttpClient();
         private BlockerForm? activeBlocker = null;
+        private ToolStripMenuItem? itemHeartbeat = null;
 
         // Estado do Ícone Dinâmico e Animação
         private Icon baseIcon = SystemIcons.Application;
@@ -90,11 +92,14 @@ namespace HubParatechDesktop
                 Icon = baseIcon,
                 ContextMenuStrip = new ContextMenuStrip(),
                 Visible = !isStealthMode,
-                Text = "Hub Paratech v2.5.9 - Monitorando"
+                Text = "Hub Paratech v2.6.0 - Inicializando..."
             };
 
-            var itemVersao = new ToolStripMenuItem("Hub Paratech v2.5.9") { Enabled = false, Font = new Font(Control.DefaultFont, FontStyle.Bold) };
+            var itemVersao = new ToolStripMenuItem("Hub Paratech v2.6.0") { Enabled = false, Font = new Font(Control.DefaultFont, FontStyle.Bold) };
             trayIcon.ContextMenuStrip.Items.Add(itemVersao);
+
+            itemHeartbeat = new ToolStripMenuItem("🟡 Conectando ao Portal...") { Enabled = false };
+            trayIcon.ContextMenuStrip.Items.Add(itemHeartbeat);
             trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
 
             // Menu: Monitor em Tempo Real
@@ -109,8 +114,19 @@ namespace HubParatechDesktop
             trayIcon.ContextMenuStrip.Items.Add("Ver Status Interno", null, (s, e) => {
                 string procs = targetProcesses.Count > 0 ? string.Join(", ", targetProcesses) : "Nenhum processo restrito";
                 string syncTxt = lastSync > DateTime.MinValue ? lastSync.ToString("dd/MM/yyyy HH:mm:ss") : "Pendente";
-                string msg = $"Status Operacional do Hub Paratech v2.5.9:\n\n" +
+                
+                var elapsed = DateTime.Now - lastSync;
+                var remaining = TimeSpan.FromMinutes(15) - elapsed;
+                string countdownTxt = lastSync > DateTime.MinValue
+                    ? (remaining.TotalSeconds > 0 
+                        ? $"{(int)remaining.TotalMinutes:D2}:{remaining.Seconds:D2} restantes" 
+                        : "Sincronizando agora...")
+                    : "Aguardando primeiro sinal";
+
+                string msg = $"Status Operacional do Hub Paratech v2.6.0:\n\n" +
                              $"• Situação do Sistema: {(isBlocked ? "BLOQUEADO" : "LIBERADO / REGULAR")}\n" +
+                             $"• Cadência do Batimento: 15 minutos (com tolerância de 2 min no Portal)\n" +
+                             $"• Próxima Sincronização: {countdownTxt}\n" +
                              $"• Processos Alvo: {procs}\n" +
                              $"• Modo de Operação: {currentModoProcessamento.ToUpper()}\n" +
                              $"• Modo Oculto: {(isStealthMode ? "ATIVADO (Invisível ao cliente)" : "DESATIVADO (Ícone visível)")}\n" +
@@ -146,7 +162,7 @@ namespace HubParatechDesktop
 
             if (!isStealthMode)
             {
-                trayIcon.ShowBalloonTip(3000, "Hub Paratech v2.5.7", "Monitoramento em tempo real ativo em todas as pastas e subpastas.", ToolTipIcon.Info);
+                trayIcon.ShowBalloonTip(3000, "Hub Paratech v2.6.0", "Monitoramento em tempo real ativo em todas as pastas e subpastas.", ToolTipIcon.Info);
             }
             EnableAutoStart();
 
@@ -158,11 +174,17 @@ namespace HubParatechDesktop
             animTimer = new System.Windows.Forms.Timer { Interval = 280 };
             animTimer.Tick += AnimTimer_Tick;
 
-            // Timer para sincronizar com a nuvem a cada 45 segundos (mantém status Online em tempo real)
+            // Timer para sincronizar com a nuvem a cada 15 minutos (com renovação de cronômetro regressivo no Hub)
             syncTimer = new System.Windows.Forms.Timer();
-            syncTimer.Interval = 45000;
+            syncTimer.Interval = 15 * 60 * 1000; // 900.000 ms (15 minutos)
             syncTimer.Tick += async (s, e) => await SyncWithServer();
             syncTimer.Start();
+
+            // Timer de 1 segundo para atualizar o cronômetro regressivo do pulso (15 min) na interface local
+            countdownTimer = new System.Windows.Forms.Timer();
+            countdownTimer.Interval = 1000;
+            countdownTimer.Tick += (s, e) => UpdateCountdownUi();
+            countdownTimer.Start();
 
             // Timer para monitoramento de bloqueio financeiro
             processTimer = new System.Windows.Forms.Timer();
@@ -239,6 +261,39 @@ namespace HubParatechDesktop
             catch { }
         }
 
+        private void UpdateCountdownUi()
+        {
+            try
+            {
+                if (isStealthMode || isCurrentlySyncing) return;
+
+                if (lastSync == DateTime.MinValue)
+                {
+                    SetTrayText("Hub Paratech v2.6.0 - Conectando...");
+                    if (itemHeartbeat != null) itemHeartbeat.Text = "🟡 Conectando ao Portal...";
+                    return;
+                }
+
+                var elapsed = DateTime.Now - lastSync;
+                var totalInterval = TimeSpan.FromMinutes(15);
+                var remaining = totalInterval - elapsed;
+
+                if (remaining.TotalSeconds > 0)
+                {
+                    string mmss = $"{(int)remaining.TotalMinutes:D2}:{remaining.Seconds:D2}";
+                    SetTrayText($"Hub Paratech v2.6.0 | Próx: {mmss}");
+                    if (itemHeartbeat != null) itemHeartbeat.Text = $"🟢 Online • Próximo pulso em: {mmss}";
+                }
+                else
+                {
+                    int atrasoSec = (int)Math.Abs(remaining.TotalSeconds);
+                    SetTrayText("Hub Paratech v2.6.0 | Enviando pulso...");
+                    if (itemHeartbeat != null) itemHeartbeat.Text = $"🟡 Sincronizando pulso (+{atrasoSec}s)...";
+                }
+            }
+            catch { }
+        }
+
         private void HandleSyncStatusChanged(object? sender, XmlSyncEventArgs e)
         {
             try
@@ -254,7 +309,7 @@ namespace HubParatechDesktop
                     isCurrentlySyncing = false;
                     animTimer.Stop();
                     trayIcon.Icon = baseIcon;
-                    SetTrayText("Hub Paratech v2.5.9 - Monitorando");
+                    UpdateCountdownUi();
                 }
             }
             catch { }
@@ -410,6 +465,10 @@ namespace HubParatechDesktop
             catch (Exception)
             {
                 // Mantém o estado cacheado em caso de instabilidade de internet
+            }
+            finally
+            {
+                UpdateCountdownUi();
             }
         }
 
