@@ -14,7 +14,7 @@ interface ClienteMei {
   id: string
   razao_social: string
   nome_fantasia?: string
-  cnpj_cpf: string
+  cnpj: string
   telefone?: string
   is_ativo: boolean
   dia_vencimento?: number
@@ -66,7 +66,7 @@ export default function MeiSimplesPage() {
       const { data: clientesData, error: cliErr } = await supabase
         .from('clientes')
         .select(`
-          id, razao_social, nome_fantasia, cnpj_cpf, telefone, is_ativo, 
+          id, razao_social, nome_fantasia, cnpj, telefone, is_ativo, 
           dia_vencimento, valor_mensalidade, dias_carencia, hub_token, 
           nome_sistema_utilizado,
           configuracoes_hub (
@@ -155,7 +155,7 @@ export default function MeiSimplesPage() {
       const matchBusca = !termo || 
         c.razao_social.toLowerCase().includes(termo) ||
         (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(termo)) ||
-        c.cnpj_cpf.includes(termo) ||
+        (c.cnpj && c.cnpj.toLowerCase().includes(termo)) ||
         c.hub_token.toLowerCase().includes(termo)
 
       if (!matchBusca) return false
@@ -469,11 +469,18 @@ export default function MeiSimplesPage() {
                     <tr key={cliente.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition">
                       {/* Empresa */}
                       <td className="p-3.5">
-                        <div className="font-bold text-slate-900 dark:text-white">
-                          {cliente.nome_fantasia || cliente.razao_social}
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900 dark:text-white">
+                            {cliente.nome_fantasia || cliente.razao_social}
+                          </span>
+                          {cliente.nome_sistema_utilizado && (
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                              {cliente.nome_sistema_utilizado}
+                            </span>
+                          )}
                         </div>
                         <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
-                          <span>{formatarCnpjCpf(cliente.cnpj_cpf)}</span>
+                          <span>{formatarCnpjCpf(cliente.cnpj) || cliente.cnpj}</span>
                           {cliente.telefone && (
                             <span className="flex items-center gap-1 text-slate-400">
                               • <Phone className="w-3 h-3" /> {cliente.telefone}
