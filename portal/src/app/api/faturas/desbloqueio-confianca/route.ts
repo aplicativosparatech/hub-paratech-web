@@ -3,12 +3,43 @@ import { createAdminClient } from '@/utils/supabase/admin'
 
 export async function POST(request: Request) {
   try {
-    const { fatura_id } = await request.json()
-    if (!fatura_id) {
-      return NextResponse.json({ error: 'ID da fatura não informado' }, { status: 400 })
+    const body = await request.json()
+    const { fatura_id, token } = body
+    if (!fatura_id && !token) {
+      return NextResponse.json({ error: 'ID da fatura ou token não informado' }, { status: 400 })
     }
 
     const supabase = createAdminClient()
+
+    let targetFaturaId = fatura_id
+
+    // Se passou token, localiza a fatura pendente mais antiga do cliente associado ao token
+    if (!targetFaturaId && token) {
+      const { data: cliente } = await supabase
+        .from('clientes')
+        .select('id')
+        .eq('hub_token', token)
+        .single()
+
+      if (!cliente) {
+        return NextResponse.json({ error: 'Cliente não encontrado para o token informado' }, { status: 404 })
+      }
+
+      const { data: faturaPendente } = await supabase
+        .from('faturas')
+        .select('id')
+        .eq('cliente_id', cliente.id)
+        .eq('status', 'pendente')
+        .order('data_vencimento', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+
+      if (!faturaPendente) {
+        return NextResponse.json({ error: 'Nenhuma fatura pendente encontrada para desbloqueio' }, { status: 400 })
+      }
+
+      targetFaturaId = faturaPendente.id
+    }
 
     // 1. Busca configurações globais do portal
     const { data: configGeral } = await supabase
@@ -25,7 +56,7 @@ export async function POST(request: Request) {
     const { data: fatura, error: fatError } = await supabase
       .from('faturas')
       .select('id, confianca_qtd, desbloqueio_confianca_em, status, clientes(razao_social, nome_fantasia)')
-      .eq('id', fatura_id)
+      .eq('id', targetFaturaId)
       .single()
 
     if (fatError || !fatura) {

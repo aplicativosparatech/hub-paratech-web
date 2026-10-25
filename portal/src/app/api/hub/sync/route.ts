@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     // 1. Busca o cliente com campos de tolerância e encargos
     const { data: cliente } = await supabase
       .from('clientes')
-      .select('id, nome_sistema_utilizado, is_ativo, data_inicio_monitoramento, numero_inicial_nfe, numero_inicial_nfce, numero_inicial_nfse, numero_inicial_cte, numero_inicial_mdfe, dias_carencia')
+      .select('id, razao_social, nome_fantasia, nome_sistema_utilizado, is_ativo, data_inicio_monitoramento, numero_inicial_nfe, numero_inicial_nfce, numero_inicial_nfse, numero_inicial_cte, numero_inicial_mdfe, dias_carencia')
       .eq('hub_token', token)
       .single()
     if (!cliente) return NextResponse.json({ error: 'Cliente não encontrado' }, { status: 404 })
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     // 2. Busca configuração do Hub (pastas, exes, tolerância)
     const { data: config } = await supabase
       .from('configuracoes_hub')
-      .select('offline_secret, exes_monitorados, pastas_vendas, pastas_compras, modo_processamento_xml, dias_tolerancia_bloqueio')
+      .select('offline_secret, exes_monitorados, pastas_vendas, pastas_compras, modo_processamento_xml, dias_tolerancia_bloqueio, mensagem_bloqueio, dias_aviso_previo')
       .eq('cliente_id', cliente.id)
       .maybeSingle()
 
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
         ? Number(config.dias_tolerancia_bloqueio)
         : Number(configGeral?.global_dias_carencia ?? 3)
 
-    // 4. Verifica faturas pendentes
+    // 4. Verifica faturas pendentes (Vencidas ou Próximas)
     const hoje = new Date().toISOString().split('T')[0]
     const { data: faturaVencida } = await supabase
       .from('faturas')
@@ -70,6 +70,55 @@ export async function POST(request: Request) {
        }
     }
 
+    // Se não tiver vencida, busca a próxima fatura a vencer para avisos preventivos
+    let faturaAviso = null
+    if (!faturaVencida) {
+      const diasAviso = Number(config?.dias_aviso_previo ?? 7)
+      const dataLimiteAviso = new Date()
+      dataLimiteAviso.setDate(dataLimiteAviso.getDate() + diasAviso)
+      const dataLimiteIso = dataLimiteAviso.toISOString().split('T')[0]
+
+      const { data: faturaProx } = await supabase
+        .from('faturas')
+        .select('id, valor, qr_code_payload, data_vencimento')
+        .eq('cliente_id', cliente.id)
+        .eq('status', 'pendente')
+        .gte('data_vencimento', hoje)
+        .lte('data_vencimento', dataLimiteIso)
+        .order('data_vencimento', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+
+      if (faturaProx) {
+        let pixProx = faturaProx.qr_code_payload
+        if (!pixProx) {
+          const host = request.headers.get('host')
+          const protocol = host?.includes('localhost') ? 'http' : 'https'
+          try {
+            const resPix = await fetch(`${protocol}://${host}/api/pagamentos/gerar-pix`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ hub_token: token, fatura_id: faturaProx.id })
+            })
+            const pixData = await resPix.json()
+            if (pixData.qr_code_payload) pixProx = pixData.qr_code_payload
+          } catch (_) {}
+        }
+
+        const dtVenc = new Date(faturaProx.data_vencimento + 'T12:00:00Z')
+        const dtHoje = new Date()
+        const diasRestantes = Math.max(0, Math.ceil((dtVenc.getTime() - dtHoje.getTime()) / (1000 * 60 * 60 * 24)))
+
+        faturaAviso = {
+          id: faturaProx.id,
+          valor: faturaProx.valor,
+          pix_payload: pixProx || '',
+          data_vencimento: faturaProx.data_vencimento,
+          dias_restantes: diasRestantes
+        }
+      }
+    }
+
     let isBloqueado = !cliente.is_ativo;
 
     // Regra de Bloqueio: respeita os dias de carência (Cliente > Global) e fins de semana/feriados
@@ -95,9 +144,13 @@ export async function POST(request: Request) {
       }
     }
 
+    const nomeEmpresa = cliente.nome_fantasia || cliente.razao_social || cliente.nome_sistema_utilizado || 'Cliente Paratech'
+
     const responseData = {
       bloqueado: isBloqueado,
       motivo: !cliente.is_ativo ? 'administrativo' : (faturaVencida ? 'inadimplencia' : null),
+      mensagem_bloqueio: config?.mensagem_bloqueio || 'SISTEMA BLOQUEADO. Por favor, regularize sua mensalidade.',
+      cliente_nome: nomeEmpresa,
       executavel: cliente.nome_sistema_utilizado,
       executaveis: config?.exes_monitorados || [],
       pastas_vendas: config?.pastas_vendas || [],
@@ -111,11 +164,13 @@ export async function POST(request: Request) {
       numero_inicial_cte: cliente.numero_inicial_cte || 1,
       numero_inicial_mdfe: cliente.numero_inicial_mdfe || 1,
       fatura: faturaVencida ? {
+        id: faturaVencida.id,
         valor: faturaVencida.valor,
         pix_payload: finalPix || 'ERRO_PIX',
         data_vencimento: faturaVencida.data_vencimento,
-        cliente_nome: cliente.nome_sistema_utilizado || 'Cliente Paratech'
-      } : null
+        cliente_nome: nomeEmpresa
+      } : null,
+      fatura_aviso: faturaAviso
     }
 
     // Registra heartbeat do Hub (Online)

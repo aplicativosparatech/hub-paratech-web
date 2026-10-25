@@ -7,7 +7,7 @@ import {
   LogOut, BarChart3, Receipt, FileDown, PlugZap, UserCircle,
   Menu, X, Sliders, ShieldCheck, Sparkles, Database,
   Maximize2, Minimize2, Sun, Moon, Palette, ScanText, GraduationCap, Inbox,
-  PanelLeftClose, PanelLeftOpen, Bell, ChevronDown
+  PanelLeftClose, PanelLeftOpen, Bell, ChevronDown, Store
 } from 'lucide-react'
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/utils/supabase/client'
@@ -206,6 +206,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     const rotasProtegidas = [
       { prefixo: '/dashboard/minhas-faturas', modulo: 'faturas', nome: 'Minhas Faturas' },
       { prefixo: '/dashboard/faturas', modulo: 'faturas', nome: 'Faturas' },
+      { prefixo: '/dashboard/mei-simples', modulo: '_admin_only', nome: 'MEI Simples' },
       { prefixo: '/dashboard/notas-fiscais/saidas/correcao', modulo: 'notas_fiscais_correcao', nome: 'Correção de Notas Fiscais' },
       { prefixo: '/dashboard/notas-fiscais', modulo: 'notas_fiscais', nome: 'Notas Fiscais' },
       { prefixo: '/dashboard/distribuicao-dfe', modulo: 'distribuicao_dfe', nome: 'Distribuição de DF-e' },
@@ -372,6 +373,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             )}
             <NavItem href="/dashboard/contabilidades" icon={Building2} label="Contabilidades" />
             <NavItem href="/dashboard/clientes" icon={Users} label="Clientes" />
+            <NavItem href="/dashboard/mei-simples" icon={Store} label="MEI Simples" />
             <NavItem href="/dashboard/faturas" icon={Receipt} label="Faturas" />
 
             {/* TÓPICO 3: SISTEMA */}
@@ -659,6 +661,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         label: 'Gestão',
         isActive: pathname.startsWith('/dashboard/contabilidades') ||
                   pathname.startsWith('/dashboard/clientes') ||
+                  pathname.startsWith('/dashboard/mei-simples') ||
                   pathname.startsWith('/dashboard/faturas') ||
                   pathname.startsWith('/dashboard/minhas-faturas') ||
                   pathname.startsWith('/dashboard/meus-clientes'),
@@ -679,6 +682,14 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
               icon: Users,
               iconColor: 'text-emerald-600 dark:text-emerald-400',
               iconBg: 'bg-emerald-50 dark:bg-emerald-950/60'
+            },
+            {
+              href: '/dashboard/mei-simples',
+              label: 'MEI Simples',
+              desc: 'Assinaturas, licenças e bloqueios do MEI',
+              icon: Store,
+              iconColor: 'text-indigo-600 dark:text-indigo-400',
+              iconBg: 'bg-indigo-50 dark:bg-indigo-950/60'
             },
             {
               href: '/dashboard/faturas',

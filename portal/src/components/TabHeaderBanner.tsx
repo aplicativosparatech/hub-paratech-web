@@ -7,6 +7,7 @@ const BANNER_MAP: Record<string, string> = {
   '/dashboard': '/banners/dashboard.webp',
   '/dashboard/contabilidades': '/banners/contabilidades.webp',
   '/dashboard/clientes': '/banners/clientes.webp',
+  '/dashboard/mei-simples': '/banners/clientes.webp',
   '/dashboard/faturas': '/banners/faturas.webp',
   '/dashboard/minhas-faturas': '/banners/faturas.webp',
   '/dashboard/notas-fiscais': '/banners/notas-fiscais.webp',
