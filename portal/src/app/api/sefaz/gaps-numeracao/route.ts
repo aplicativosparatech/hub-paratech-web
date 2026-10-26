@@ -160,6 +160,7 @@ export async function GET(request: Request) {
       protocolo?: string
       data_registro?: string
       ultimaEmissaoProxima?: string
+      data_emissao?: string
     }
 
     const gaps: GapItem[] = []
@@ -221,7 +222,8 @@ export async function GET(request: Request) {
           motivo,
           protocolo,
           data_registro: dataRegistro,
-          ultimaEmissaoProxima: dataReferencia || undefined
+          ultimaEmissaoProxima: dataReferencia || undefined,
+          data_emissao: dataReferencia || dataRegistro || undefined
         })
       }
 

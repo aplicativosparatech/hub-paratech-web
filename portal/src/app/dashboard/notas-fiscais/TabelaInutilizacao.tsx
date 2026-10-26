@@ -27,6 +27,7 @@ interface GapItem {
   protocolo?: string
   data_registro?: string
   ultimaEmissaoProxima?: string
+  data_emissao?: string
 }
 
 interface ErroProcessamentoItem {
@@ -38,6 +39,44 @@ interface ErroProcessamentoItem {
   codigo: string
   motivo: string
   dataHora: string
+}
+
+function formatarDataHora(isoString?: string | null) {
+  if (!isoString) return { data: '', hora: '', full: '-' }
+  try {
+    const d = new Date(isoString)
+    if (isNaN(d.getTime())) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(isoString)) {
+        const [ano, mes, dia] = isoString.split('-')
+        return { data: `${dia}/${mes}/${ano}`, hora: '', full: `${dia}/${mes}/${ano}` }
+      }
+      return { data: isoString, hora: '', full: isoString }
+    }
+    const data = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    return { data, hora, full: `${data} ${hora}` }
+  } catch {
+    return { data: '', hora: '', full: '-' }
+  }
+}
+
+function extrairDataYMD(isoString?: string | null): string {
+  if (!isoString) return ''
+  try {
+    const d = new Date(isoString)
+    if (isNaN(d.getTime())) {
+      if (/^\d{4}-\d{2}-\d{2}/.test(isoString)) {
+        return isoString.substring(0, 10)
+      }
+      return ''
+    }
+    const ano = d.getFullYear()
+    const mes = String(d.getMonth() + 1).padStart(2, '0')
+    const dia = String(d.getDate()).padStart(2, '0')
+    return `${ano}-${mes}-${dia}`
+  } catch {
+    return ''
+  }
 }
 
 export default function TabelaInutilizacao() {
@@ -84,6 +123,9 @@ export default function TabelaInutilizacao() {
   const [filtroStatus, setFiltroStatus] = useState<'todos' | 'PENDENTE' | 'HOMOLOGADO' | 'UTILIZADA_SEFAZ'>('todos')
   const [buscaTermo, setBuscaTermo] = useState('')
   const [abaExibicao, setAbaExibicao] = useState<'gaps' | 'historico' | 'erros'>('gaps')
+  const [filtroCompetencia, setFiltroCompetencia] = useState<string>('todas')
+  const [dataInicio, setDataInicio] = useState<string>('')
+  const [dataFim, setDataFim] = useState<string>('')
 
   // Modais e Estados de Ação
   const [modalInutilizar, setModalInutilizar] = useState<{
@@ -543,21 +585,149 @@ export default function TabelaInutilizacao() {
     await carregarGaps()
   }
 
+  // Lista de competências disponíveis (últimos 12 meses + meses detectados nos dados)
+  const opcoesCompetencia = useMemo(() => {
+    const lista: { label: string; valor: string; dataIni: string; dataFim: string }[] = []
+    const mapaValores = new Set<string>()
+
+    const hoje = new Date()
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1)
+      const ano = d.getFullYear()
+      const mes = String(d.getMonth() + 1).padStart(2, '0')
+      const valor = `${ano}-${mes}`
+      const ultimoDia = new Date(ano, d.getMonth() + 1, 0).getDate()
+      const dataIni = `${ano}-${mes}-01`
+      const dataFim = `${ano}-${mes}-${String(ultimoDia).padStart(2, '0')}`
+
+      const nomeMes = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+      const label = nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1)
+
+      lista.push({ label, valor, dataIni, dataFim })
+      mapaValores.add(valor)
+    }
+
+    const registrarCompetencia = (iso?: string) => {
+      const ymd = extrairDataYMD(iso)
+      if (!ymd) return
+      const part = ymd.substring(0, 7)
+      if (/^\d{4}-\d{2}$/.test(part) && !mapaValores.has(part)) {
+        mapaValores.add(part)
+        const [anoStr, mesStr] = part.split('-')
+        const ano = parseInt(anoStr, 10)
+        const mes = parseInt(mesStr, 10)
+        const d = new Date(ano, mes - 1, 1)
+        const ultimoDia = new Date(ano, mes, 0).getDate()
+        const dataIni = `${part}-01`
+        const dataFim = `${part}-${String(ultimoDia).padStart(2, '0')}`
+        const nomeMes = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+        const label = nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1)
+        lista.push({ label, valor: part, dataIni, dataFim })
+      }
+    }
+
+    gaps.forEach(g => {
+      registrarCompetencia(g.data_emissao || g.ultimaEmissaoProxima || g.data_registro)
+    })
+    historico.forEach(h => {
+      registrarCompetencia(h.data_hora || h.created_at)
+    })
+
+    return lista.sort((a, b) => b.valor.localeCompare(a.valor))
+  }, [gaps, historico])
+
+  const verificarCompetenciaCorrespondente = (ini: string, fim: string) => {
+    if (!ini && !fim) {
+      setFiltroCompetencia('todas')
+      return
+    }
+    const match = opcoesCompetencia.find(c => c.dataIni === ini && c.dataFim === fim)
+    if (match) {
+      setFiltroCompetencia(match.valor)
+    } else {
+      setFiltroCompetencia('custom')
+    }
+  }
+
+  const handleMudarCompetencia = (compValor: string) => {
+    setFiltroCompetencia(compValor)
+    if (compValor === 'todas') {
+      setDataInicio('')
+      setDataFim('')
+    } else {
+      const comp = opcoesCompetencia.find(c => c.valor === compValor)
+      if (comp) {
+        setDataInicio(comp.dataIni)
+        setDataFim(comp.dataFim)
+      }
+    }
+  }
+
+  const handleMudarDataInicio = (val: string) => {
+    setDataInicio(val)
+    verificarCompetenciaCorrespondente(val, dataFim)
+  }
+
+  const handleMudarDataFim = (val: string) => {
+    setDataFim(val)
+    verificarCompetenciaCorrespondente(dataInicio, val)
+  }
+
+  const handleLimparFiltrosData = () => {
+    setFiltroCompetencia('todas')
+    setDataInicio('')
+    setDataFim('')
+  }
+
   // Filtragem dos gaps na tela
   const gapsFiltrados = useMemo(() => {
     return gaps.filter(g => {
       if (filtroModelo !== 'todos' && g.modelo !== filtroModelo) return false
       if (filtroStatus !== 'todos' && g.status !== filtroStatus) return false
+
+      const dtStr = g.data_emissao || g.ultimaEmissaoProxima || g.data_registro
+      if (dataInicio || dataFim) {
+        if (!dtStr) return false
+        const dataItem = extrairDataYMD(dtStr)
+        if (dataInicio && dataItem < dataInicio) return false
+        if (dataFim && dataItem > dataFim) return false
+      }
+
       if (buscaTermo.trim()) {
         const t = buscaTermo.trim().toLowerCase()
         const faixa = `${g.nNFIni} a ${g.nNFFin}`.toLowerCase()
         const serie = `série ${g.serie}`.toLowerCase()
         const motivo = (g.motivo || '').toLowerCase()
-        if (!faixa.includes(t) && !serie.includes(t) && !motivo.includes(t)) return false
+        const dFmt = formatarDataHora(dtStr).full.toLowerCase()
+        if (!faixa.includes(t) && !serie.includes(t) && !motivo.includes(t) && !dFmt.includes(t)) return false
       }
       return true
     })
-  }, [gaps, filtroModelo, filtroStatus, buscaTermo])
+  }, [gaps, filtroModelo, filtroStatus, buscaTermo, dataInicio, dataFim])
+
+  // Resumo dinâmico baseado nos gaps filtrados
+  const resumoFiltrado = useMemo(() => {
+    const totalGaps = gapsFiltrados.length
+    let totalNumerosFaltantes = 0
+    let pendentes = 0
+    let homologadas = 0
+    let utilizadasSefaz = 0
+
+    gapsFiltrados.forEach(g => {
+      totalNumerosFaltantes += g.quantidade
+      if (g.status === 'PENDENTE') pendentes += g.quantidade
+      else if (g.status === 'HOMOLOGADO') homologadas += g.quantidade
+      else if (g.status === 'UTILIZADA_SEFAZ') utilizadasSefaz += g.quantidade
+    })
+
+    return {
+      totalGaps,
+      totalNumerosFaltantes,
+      pendentes,
+      homologadas,
+      utilizadasSefaz
+    }
+  }, [gapsFiltrados])
 
   // Itens pendentes elegíveis para seleção
   const pendentesVisiveis = useMemo(() => {
@@ -584,8 +754,55 @@ export default function TabelaInutilizacao() {
 
   // Histórico contendo exclusivamente inutilizações homologadas/confirmadas pela SEFAZ
   const historicoHomologado = useMemo(() => {
-    return historico.filter(h => ['102', '204', '563'].includes(h.status_sefaz))
-  }, [historico])
+    return historico.filter(h => {
+      if (!['102', '204', '563'].includes(h.status_sefaz)) return false
+      if (filtroModelo !== 'todos' && h.modelo !== filtroModelo) return false
+
+      const dtStr = h.data_hora || h.created_at
+      if (dataInicio || dataFim) {
+        if (!dtStr) return false
+        const dataItem = extrairDataYMD(dtStr)
+        if (dataInicio && dataItem < dataInicio) return false
+        if (dataFim && dataItem > dataFim) return false
+      }
+
+      if (buscaTermo.trim()) {
+        const t = buscaTermo.trim().toLowerCase()
+        const faixa = `${h.numero_inicial} a ${h.numero_final}`.toLowerCase()
+        const serie = `série ${h.serie}`.toLowerCase()
+        const prot = (h.protocolo || '').toLowerCase()
+        const motivo = (h.motivo_sefaz || '').toLowerCase()
+        const dFmt = formatarDataHora(dtStr).full.toLowerCase()
+        if (!faixa.includes(t) && !serie.includes(t) && !prot.includes(t) && !motivo.includes(t) && !dFmt.includes(t)) return false
+      }
+      return true
+    })
+  }, [historico, filtroModelo, dataInicio, dataFim, buscaTermo])
+
+  // Ocorrências e erros com filtros aplicados
+  const errosFiltrados = useMemo(() => {
+    return errosProcessamento.filter(e => {
+      if (filtroModelo !== 'todos' && e.modelo !== filtroModelo) return false
+
+      if (dataInicio || dataFim) {
+        if (!e.dataHora) return false
+        const dataItem = extrairDataYMD(e.dataHora)
+        if (dataInicio && dataItem < dataInicio) return false
+        if (dataFim && dataItem > dataFim) return false
+      }
+
+      if (buscaTermo.trim()) {
+        const t = buscaTermo.trim().toLowerCase()
+        const faixa = `${e.nNFIni} a ${e.nNFFin}`.toLowerCase()
+        const serie = `série ${e.serie}`.toLowerCase()
+        const motivo = (e.motivo || '').toLowerCase()
+        const cod = (e.codigo || '').toLowerCase()
+        const dFmt = formatarDataHora(e.dataHora).full.toLowerCase()
+        if (!faixa.includes(t) && !serie.includes(t) && !motivo.includes(t) && !cod.includes(t) && !dFmt.includes(t)) return false
+      }
+      return true
+    })
+  }, [errosProcessamento, filtroModelo, dataInicio, dataFim, buscaTermo])
 
   // Hook de Ordenação e Redimensionamento - Quebras de Sequência
   const {
@@ -606,7 +823,8 @@ export default function TabelaInutilizacao() {
       serie: 90,
       faixa: 180,
       quantidade: 80,
-      ano: 80,
+      ano: 75,
+      data_emissao: 160,
       diagnostico: 280,
       acoes: 140
     },
@@ -616,6 +834,7 @@ export default function TabelaInutilizacao() {
       nNFIni: (g: any) => g.nNFIni,
       quantidade: (g: any) => g.quantidade,
       ano: (g: any) => g.ano,
+      data_emissao: (g: any) => g.data_emissao || g.ultimaEmissaoProxima || g.data_registro || '',
       diagnostico: (g: any) => g.status
     }
   })
@@ -662,7 +881,7 @@ export default function TabelaInutilizacao() {
     columnWidths: colWidthsErros,
     handleResizeColumn: handleResizeErros
   } = useTableFeatures({
-    data: errosProcessamento,
+    data: errosFiltrados,
     tableId: 'inut_erros',
     defaultSortKey: 'dataHora',
     defaultSortDirection: 'desc',
@@ -828,27 +1047,27 @@ export default function TabelaInutilizacao() {
       {/* Cards de Resumo KPI */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className={`rounded-xl p-4 border shadow-sm transition ${
-          resumo.totalNumerosFaltantes === 0
+          resumoFiltrado.totalNumerosFaltantes === 0
             ? 'bg-emerald-50/50 border-emerald-200'
             : 'bg-white border-slate-200'
         }`}>
           <span className={`text-[11px] font-bold uppercase tracking-wider block mb-1 ${
-            resumo.totalNumerosFaltantes === 0 ? 'text-emerald-800' : 'text-slate-500'
+            resumoFiltrado.totalNumerosFaltantes === 0 ? 'text-emerald-800' : 'text-slate-500'
           }`}>
             Numerações Pendentes
           </span>
           <div className="flex items-baseline gap-2">
             <span className={`text-2xl font-black ${
-              resumo.totalNumerosFaltantes === 0 ? 'text-emerald-700' : 'text-slate-900'
+              resumoFiltrado.totalNumerosFaltantes === 0 ? 'text-emerald-700' : 'text-slate-900'
             }`}>
-              {resumo.totalNumerosFaltantes}
+              {resumoFiltrado.totalNumerosFaltantes}
             </span>
             <span className={`text-xs font-medium ${
-              resumo.totalNumerosFaltantes === 0 ? 'text-emerald-600 font-bold' : 'text-slate-400'
+              resumoFiltrado.totalNumerosFaltantes === 0 ? 'text-emerald-600 font-bold' : 'text-slate-400'
             }`}>
-              {resumo.totalNumerosFaltantes === 0
-                ? `todas as ${resumo.homologadas} regularizadas`
-                : `em ${resumo.totalGaps} quebras`}
+              {resumoFiltrado.totalNumerosFaltantes === 0
+                ? `todas as ${resumoFiltrado.homologadas} regularizadas`
+                : `em ${resumoFiltrado.totalGaps} quebras`}
             </span>
           </div>
         </div>
@@ -858,7 +1077,7 @@ export default function TabelaInutilizacao() {
             Pendentes de Inutilização
           </span>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-black text-amber-700">{resumo.pendentes}</span>
+            <span className="text-2xl font-black text-amber-700">{resumoFiltrado.pendentes}</span>
             <span className="text-xs text-amber-600 font-medium">aguardando envio</span>
           </div>
         </div>
@@ -868,7 +1087,7 @@ export default function TabelaInutilizacao() {
             Constam na SEFAZ (Falta XML)
           </span>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-black text-red-700">{resumo.utilizadasSefaz}</span>
+            <span className="text-2xl font-black text-red-700">{resumoFiltrado.utilizadasSefaz}</span>
             <span className="text-xs text-red-600 font-medium">localizar no PDV</span>
           </div>
         </div>
@@ -878,7 +1097,7 @@ export default function TabelaInutilizacao() {
             Homologadas pela SEFAZ
           </span>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-black text-emerald-700">{resumo.homologadas}</span>
+            <span className="text-2xl font-black text-emerald-700">{resumoFiltrado.homologadas}</span>
             <span className="text-xs text-emerald-600 font-medium">regularizadas</span>
           </div>
         </div>
@@ -916,7 +1135,8 @@ export default function TabelaInutilizacao() {
       )}
 
       {/* Abas de Navegação (Gaps vs Histórico vs Erros) e Filtros */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        {/* Abas */}
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
           <button
             type="button"
@@ -927,7 +1147,7 @@ export default function TabelaInutilizacao() {
                 : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
-            Quebras de Sequência ({gaps.length})
+            Quebras de Sequência ({gapsFiltrados.length})
           </button>
 
           <button
@@ -948,33 +1168,86 @@ export default function TabelaInutilizacao() {
             className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition ${
               abaExibicao === 'erros'
                 ? 'bg-red-600 text-white shadow-sm'
-                : errosProcessamento.length > 0 
+                : errosFiltrados.length > 0 
                   ? 'bg-red-100 text-red-800 hover:bg-red-200' 
                   : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
             <AlertOctagon size={13} />
-            Erros / Ocorrências ({errosProcessamento.length})
+            Erros / Ocorrências ({errosFiltrados.length})
           </button>
         </div>
 
-        {/* Filtros de Modelo, Status e Busca */}
+        {/* Filtros: Competência, Período, Modelo, Status e Busca */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Filtro por Competência */}
+          <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 shadow-xs">
+            <Calendar size={13} className="text-slate-400 shrink-0" />
+            <select
+              value={filtroCompetencia}
+              onChange={(e) => handleMudarCompetencia(e.target.value)}
+              className="text-xs bg-transparent border-none text-slate-700 font-medium outline-none cursor-pointer pr-1"
+              title="Filtrar por competência (mês/ano)"
+            >
+              <option value="todas">Todas as Competências</option>
+              {filtroCompetencia === 'custom' && (
+                <option value="custom">Período Personalizado</option>
+              )}
+              {opcoesCompetencia.map(c => (
+                <option key={c.valor} value={c.valor}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filtro por Período (De / Até) */}
+          <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-slate-700 shadow-xs">
+            <span className="text-[11px] font-semibold text-slate-400">De:</span>
+            <input
+              type="date"
+              value={dataInicio}
+              onChange={(e) => handleMudarDataInicio(e.target.value)}
+              className="text-xs bg-transparent text-slate-700 outline-none w-28 cursor-pointer py-0.5"
+              title="Data de emissão inicial"
+            />
+            <span className="text-[11px] font-semibold text-slate-400">Até:</span>
+            <input
+              type="date"
+              value={dataFim}
+              onChange={(e) => handleMudarDataFim(e.target.value)}
+              className="text-xs bg-transparent text-slate-700 outline-none w-28 cursor-pointer py-0.5"
+              title="Data de emissão final"
+            />
+            {(dataInicio || dataFim) && (
+              <button
+                type="button"
+                onClick={handleLimparFiltrosData}
+                title="Limpar filtro de período"
+                className="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-slate-100 transition"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+
+          {/* Filtro Modelo */}
           <select
             value={filtroModelo}
             onChange={(e: any) => setFiltroModelo(e.target.value)}
-            className="text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700"
+            className="text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 shadow-xs font-medium cursor-pointer"
           >
             <option value="todos">Todos os Modelos</option>
             <option value="55">NF-e (Mod 55)</option>
             <option value="65">NFC-e (Mod 65)</option>
           </select>
 
+          {/* Filtro Status (Apenas na aba de quebras) */}
           {abaExibicao === 'gaps' && (
             <select
               value={filtroStatus}
               onChange={(e: any) => setFiltroStatus(e.target.value)}
-              className="text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700"
+              className="text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 shadow-xs font-medium cursor-pointer"
             >
               <option value="todos">Todos os Status</option>
               <option value="PENDENTE">Pendentes</option>
@@ -983,6 +1256,7 @@ export default function TabelaInutilizacao() {
             </select>
           )}
 
+          {/* Campo de Busca */}
           <div className="relative">
             <Search size={13} className="absolute left-2.5 top-2.5 text-slate-400" />
             <input
@@ -990,7 +1264,7 @@ export default function TabelaInutilizacao() {
               placeholder="Buscar numeração..."
               value={buscaTermo}
               onChange={(e) => setBuscaTermo(e.target.value)}
-              className="pl-8 pr-3 py-1 text-xs border border-slate-200 rounded-lg w-40 focus:w-56 transition-all"
+              className="pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg w-36 sm:w-48 focus:w-56 transition-all shadow-xs"
             />
           </div>
         </div>
@@ -1096,6 +1370,17 @@ export default function TabelaInutilizacao() {
                       minWidth={65}
                     />
                     <ResizableSortableTh
+                      columnId="data_emissao"
+                      label="Data / Hora Emissão"
+                      sortKey="data_emissao"
+                      currentSortKey={sortKeyGaps}
+                      currentSortDirection={sortDirGaps}
+                      onSort={handleSortGaps}
+                      width={colWidthsGaps.data_emissao}
+                      onResize={handleResizeGaps}
+                      minWidth={140}
+                    />
+                    <ResizableSortableTh
                       columnId="diagnostico"
                       label="Diagnóstico / Situação SEFAZ"
                       sortKey="diagnostico"
@@ -1173,6 +1458,21 @@ export default function TabelaInutilizacao() {
 
                         <td className="py-3 px-4 font-mono text-slate-500">
                           20{gap.ano}
+                        </td>
+
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          {(() => {
+                            const d = formatarDataHora(gap.data_emissao || gap.ultimaEmissaoProxima || gap.data_registro)
+                            if (!d.data) return <span className="text-slate-400 italic text-[11px]">Não identificada</span>
+                            return (
+                              <div className="flex flex-col">
+                                <span className="font-bold text-slate-800 text-xs">{d.data}</span>
+                                {d.hora && (
+                                  <span className="text-[11px] font-mono text-slate-500">{d.hora}</span>
+                                )}
+                              </div>
+                            )
+                          })()}
                         </td>
 
                         <td className="py-3 px-4">
