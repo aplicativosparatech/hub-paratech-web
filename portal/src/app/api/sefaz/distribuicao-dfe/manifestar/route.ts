@@ -61,6 +61,7 @@ export async function POST(request: Request) {
       cStat: string
       xMotivo: string
       teveXml: boolean
+      xmlCompleto?: string
     }> = []
 
     let totalOk = 0
@@ -110,7 +111,8 @@ export async function POST(request: Request) {
           success: res.success,
           cStat: res.cStat,
           xMotivo: res.xMotivo,
-          teveXml: Boolean(res.xmlCompleto)
+          teveXml: Boolean(res.xmlCompleto),
+          xmlCompleto: res.xmlCompleto || undefined
         })
       } catch (itemErr: any) {
         resultados.push({

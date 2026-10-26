@@ -80,6 +80,7 @@ export interface DfeNotaItem {
   serie: string
   emitente_cnpj: string
   emitente_nome: string
+  nome_emitente?: string
   emitente_ie?: string
   destinatario_cnpj?: string
   valor: number
@@ -91,6 +92,7 @@ export interface DfeNotaItem {
   tem_xml: boolean
   storage_path?: string
   origem: 'sefaz_dfe' | 'nfe_entradas'
+  xml_completo?: string
 }
 
 export interface InfoSincronizacaoNsu {
@@ -553,6 +555,7 @@ export async function executarConsultaDfeCompleta(params: {
           serie: ent.serie || String(parseInt(ent.chave.substring(22, 25), 10) || 1),
           emitente_cnpj: ent.cnpj_emitente || ent.chave.substring(6, 20),
           emitente_nome: 'Fornecedor Registrado (Entrada)',
+          nome_emitente: 'Fornecedor Registrado (Entrada)',
           valor: parseFloat(String(ent.valor || 0)),
           data_emissao: ent.data_emissao || new Date().toISOString(),
           tipo_documento: '55',
@@ -579,6 +582,7 @@ export async function executarConsultaDfeCompleta(params: {
         serie: dest.serie || '1',
         emitente_cnpj: dest.emitente_cnpj || exist?.emitente_cnpj || '',
         emitente_nome: dest.emitente_nome || exist?.emitente_nome || 'Fornecedor',
+        nome_emitente: dest.emitente_nome || exist?.emitente_nome || 'Fornecedor',
         emitente_ie: dest.emitente_ie,
         destinatario_cnpj: dest.destinatario_cnpj,
         valor: parseFloat(String(dest.valor || 0)),
@@ -589,7 +593,8 @@ export async function executarConsultaDfeCompleta(params: {
         protocolo: dest.protocolo,
         tem_xml: Boolean(dest.xml_completo || dest.storage_path || exist?.storage_path),
         storage_path: dest.storage_path || exist?.storage_path,
-        origem: 'sefaz_dfe'
+        origem: 'sefaz_dfe',
+        xml_completo: dest.xml_completo || ''
       })
     }
   }

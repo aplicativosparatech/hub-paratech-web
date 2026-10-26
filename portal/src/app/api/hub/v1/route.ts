@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { executarConsultaDfeCompleta } from '@/utils/sefazDfeService'
+import { executarConsultaDfeCompleta, gerarXmlResumoDfe } from '@/utils/sefazDfeService'
 import { auditarLoteProdutos } from '@/utils/tributario/auditorEngine'
 import { APP_VERSION } from '@/utils/version'
 
@@ -21,6 +21,7 @@ export async function GET() {
       { action: 'upload_xml', desc: 'Ingestão e processamento de XMLs de NF-e, NFC-e, CT-e e MDF-e' },
       { action: 'consultar_dfe', desc: 'Consulta em tempo real notas de fornecedores emitidas contra o CNPJ na SEFAZ Nacional' },
       { action: 'manifestar_dfe', desc: 'Manifestação do destinatário na SEFAZ (Ciência, Confirmação, etc.)' },
+      { action: 'obter_xml', desc: 'Recuperação e download do XML completo de notas destinadas ou emitidas' },
       { action: 'status_sefaz', desc: 'Disponibilidade e tempo de resposta dos servidores da SEFAZ por UF' },
       { action: 'inutilizar_numeracao', desc: 'Inutilização oficial de faixas de NF-e e NFC-e na SEFAZ' },
       { action: 'corrigir_nota', desc: 'Emissão de Carta de Correção Eletrônica (CC-e) na SEFAZ' },
@@ -108,7 +109,7 @@ export async function POST(request: Request) {
     }
 
     // Validação de token para ações restritas
-    if (!cliente && ['upload_xml', 'consultar_dfe', 'manifestar_dfe', 'inutilizar_numeracao', 'corrigir_nota'].includes(action)) {
+    if (!cliente && ['upload_xml', 'consultar_dfe', 'manifestar_dfe', 'obter_xml', 'download_xml', 'baixar_xml', 'inutilizar_numeracao', 'corrigir_nota'].includes(action)) {
       return NextResponse.json({
         success: false,
         action,
@@ -173,6 +174,72 @@ export async function POST(request: Request) {
       })
     }
 
+    // 2.1 OBTER_XML / BAIXAR_XML
+    if (action === 'obter_xml' || action === 'download_xml' || action === 'baixar_xml') {
+      const chave = (body.params?.chave || body.chave || '').trim()
+      const id = (body.params?.id || body.id || '').trim()
+
+      if (!chave && !id) {
+        return NextResponse.json({ success: false, error: 'Parâmetro chave ou id é obrigatório.' }, { status: 400 })
+      }
+
+      // 1. Busca em dfe_notas_destinadas
+      let query = supabaseAdmin.from('dfe_notas_destinadas').select('*').eq('cliente_id', cliente.id)
+      if (chave) query = query.eq('chave', chave)
+      if (id) query = query.eq('id', id)
+      const { data: dfeNota } = await query.maybeSingle()
+
+      let xmlContent = dfeNota?.xml_completo || null
+
+      // 2. Se não encontrou ou não tem xml_completo, busca em nfe_entradas
+      if (!xmlContent) {
+        let qEnt = supabaseAdmin.from('nfe_entradas').select('*').eq('cliente_id', cliente.id)
+        if (chave) qEnt = qEnt.eq('chave', chave)
+        if (id) qEnt = qEnt.eq('id', id)
+        const { data: entNota } = await qEnt.maybeSingle()
+
+        if (entNota?.storage_path) {
+          const { data: fileBlob } = await supabaseAdmin.storage.from('xmls').download(entNota.storage_path)
+          if (fileBlob) {
+            xmlContent = await fileBlob.text()
+          }
+        }
+      }
+
+      // 3. Se ainda não tem, mas a nota está em dfe_notas_destinadas, gera resumo canônico
+      if (!xmlContent && dfeNota) {
+        xmlContent = gerarXmlResumoDfe({
+          chave: dfeNota.chave,
+          numero: dfeNota.numero,
+          serie: dfeNota.serie,
+          emitente_cnpj: dfeNota.emitente_cnpj,
+          emitente_nome: dfeNota.emitente_nome,
+          emitente_ie: dfeNota.emitente_ie,
+          destinatario_cnpj: dfeNota.destinatario_cnpj || cliente.cnpj,
+          valor: dfeNota.valor,
+          data_emissao: dfeNota.data_emissao,
+          protocolo: dfeNota.protocolo,
+          situacao_nfe: dfeNota.situacao_nfe
+        })
+      }
+
+      if (!xmlContent) {
+        return NextResponse.json({ success: false, error: 'XML não localizado para a nota solicitada.' }, { status: 404 })
+      }
+
+      return NextResponse.json({
+        success: true,
+        action,
+        data: {
+          chave: chave || dfeNota?.chave,
+          numero: dfeNota?.numero,
+          emitente_nome: dfeNota?.emitente_nome,
+          manifestacao_status: dfeNota?.manifestacao_status,
+          xml: xmlContent
+        }
+      })
+    }
+
     // 3. MANIFESTAR_DFE
     if (action === 'manifestar_dfe') {
       const chave = body.params?.chave || body.chave
@@ -190,8 +257,13 @@ export async function POST(request: Request) {
       })
       const dataManifest = await resManifest.json()
 
+      // Se liberou o XML na SEFAZ, anexa na raiz de data para consumo direto
+      if (dataManifest.resultados?.[0]?.xmlCompleto) {
+        dataManifest.xml = dataManifest.resultados[0].xmlCompleto
+      }
+
       return NextResponse.json({
-        success: resManifest.ok,
+        success: resManifest.ok && dataManifest.success,
         action: 'manifestar_dfe',
         data: dataManifest
       })
