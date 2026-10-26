@@ -4,7 +4,8 @@ import { useEffect, useState, useMemo } from 'react'
 import { 
   Store, Users, CheckCircle2, AlertTriangle, XCircle, Search, 
   RefreshCw, Plus, Copy, Lock, Unlock, Zap, DollarSign, Clock, 
-  KeyRound, QrCode, FileText, Check, ShieldAlert, Phone, UserPlus, UserMinus
+  KeyRound, QrCode, FileText, Check, ShieldAlert, Phone, UserPlus, UserMinus,
+  Image as ImageIcon, Cloud, ShoppingCart, Receipt, Sparkles, Package, ExternalLink, Trash2
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
@@ -27,6 +28,15 @@ interface ClienteMei {
     ultima_sincronizacao?: string
     dias_tolerancia_bloqueio?: number
     mensagem_bloqueio?: string
+    banner_url?: string
+    support_whatsapp?: string
+    feature_sugestao_tributaria?: boolean
+    feature_nuvem_produtos?: boolean
+    feature_loja_virtual?: boolean
+    feature_nfce?: boolean
+    feature_nfe?: boolean
+    feature_contas_pagar?: boolean
+    feature_estoque_avancado?: boolean
   }
   fatura_atual?: {
     id: string
@@ -61,6 +71,15 @@ export default function MeiSimplesPage() {
   const [editDiasCarencia, setEditDiasCarencia] = useState(3)
   const [editOfflineSecret, setEditOfflineSecret] = useState('')
   const [editMensagemBloqueio, setEditMensagemBloqueio] = useState('')
+  const [editBannerUrl, setEditBannerUrl] = useState('')
+  const [editSupportWhatsapp, setEditSupportWhatsapp] = useState('')
+  const [editFeatureSugestaoTributaria, setEditFeatureSugestaoTributaria] = useState(true)
+  const [editFeatureNuvemProdutos, setEditFeatureNuvemProdutos] = useState(true)
+  const [editFeatureLojaVirtual, setEditFeatureLojaVirtual] = useState(false)
+  const [editFeatureNfce, setEditFeatureNfce] = useState(true)
+  const [editFeatureNfe, setEditFeatureNfe] = useState(true)
+  const [editFeatureContasPagar, setEditFeatureContasPagar] = useState(true)
+  const [editFeatureEstoqueAvancado, setEditFeatureEstoqueAvancado] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [now, setNow] = useState<number>(() => Date.now())
 
@@ -83,7 +102,8 @@ export default function MeiSimplesPage() {
           dia_vencimento, valor_mensalidade, dias_carencia, hub_token, 
           nome_sistema_utilizado,
           configuracoes_hub (
-            offline_secret, ultima_sincronizacao, dias_tolerancia_bloqueio, mensagem_bloqueio
+            offline_secret, ultima_sincronizacao, dias_tolerancia_bloqueio, mensagem_bloqueio, banner_url, support_whatsapp,
+            feature_sugestao_tributaria, feature_nuvem_produtos, feature_loja_virtual, feature_nfce, feature_nfe, feature_contas_pagar, feature_estoque_avancado
           )
         `)
         .ilike('nome_sistema_utilizado', '%mei%')
@@ -251,6 +271,15 @@ export default function MeiSimplesPage() {
     setEditDiasCarencia(cliente.dias_carencia ?? 3)
     setEditOfflineSecret(cliente.configuracoes_hub?.offline_secret || '123456')
     setEditMensagemBloqueio(cliente.configuracoes_hub?.mensagem_bloqueio || 'SISTEMA BLOQUEADO. Por favor, regularize sua mensalidade.')
+    setEditBannerUrl(cliente.configuracoes_hub?.banner_url || '')
+    setEditSupportWhatsapp(cliente.configuracoes_hub?.support_whatsapp || '')
+    setEditFeatureSugestaoTributaria(cliente.configuracoes_hub?.feature_sugestao_tributaria !== false)
+    setEditFeatureNuvemProdutos(cliente.configuracoes_hub?.feature_nuvem_produtos !== false)
+    setEditFeatureLojaVirtual(cliente.configuracoes_hub?.feature_loja_virtual === true)
+    setEditFeatureNfce(cliente.configuracoes_hub?.feature_nfce !== false)
+    setEditFeatureNfe(cliente.configuracoes_hub?.feature_nfe !== false)
+    setEditFeatureContasPagar(cliente.configuracoes_hub?.feature_contas_pagar !== false)
+    setEditFeatureEstoqueAvancado(cliente.configuracoes_hub?.feature_estoque_avancado !== false)
     setModalEditarOpen(true)
   }
 
@@ -280,6 +309,15 @@ export default function MeiSimplesPage() {
           cliente_id: clienteSelecionado.id,
           offline_secret: editOfflineSecret.trim(),
           mensagem_bloqueio: editMensagemBloqueio.trim(),
+          banner_url: editBannerUrl.trim(),
+          support_whatsapp: editSupportWhatsapp.trim(),
+          feature_sugestao_tributaria: editFeatureSugestaoTributaria,
+          feature_nuvem_produtos: editFeatureNuvemProdutos,
+          feature_loja_virtual: editFeatureLojaVirtual,
+          feature_nfce: editFeatureNfce,
+          feature_nfe: editFeatureNfe,
+          feature_contas_pagar: editFeatureContasPagar,
+          feature_estoque_avancado: editFeatureEstoqueAvancado,
           dias_tolerancia_bloqueio: editDiasCarencia,
           dia_vencimento: editDiaVencimento,
           valor_mensalidade: parseFloat(editValorMensalidade.replace(',', '.'))
@@ -780,107 +818,376 @@ export default function MeiSimplesPage() {
 
       {/* 5. MODAL DE EDIÇÃO DE ASSINATURA */}
       {modalEditarOpen && clienteSelecionado && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-                <Store className="w-4 h-4 text-blue-600" />
-                Parâmetros da Assinatura MEI Simples
-              </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="w-full max-w-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            {/* Header Sticky */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/50 dark:bg-slate-900/50">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-blue-100 dark:bg-blue-950/70 text-blue-600 rounded-xl">
+                  <Store className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                    Parâmetros da Assinatura MEI Simples
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    {clienteSelecionado.razao_social}
+                  </p>
+                </div>
+              </div>
               <button 
                 onClick={() => setModalEditarOpen(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-white"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition"
               >
                 ✕
               </button>
             </div>
 
-            <div className="p-4 space-y-4 text-xs">
+            {/* Body Scrollable */}
+            <div className="p-5 space-y-6 overflow-y-auto grow text-xs">
+              {/* BLOCO 1: COBRANÇA E ACESSO */}
               <div>
-                <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Empresa</label>
-                <input
-                  type="text"
-                  disabled
-                  value={clienteSelecionado.razao_social}
-                  className="w-full p-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg border border-slate-200 dark:border-slate-700 font-medium"
-                />
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                  <DollarSign className="w-3.5 h-3.5 text-blue-600" />
+                  Cobrança & Parâmetros de Licenciamento
+                </h4>
+                <div className="bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-200/70 dark:border-slate-800 space-y-3.5">
+                  <div>
+                    <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Empresa Licenciada</label>
+                    <input
+                      type="text"
+                      disabled
+                      value={clienteSelecionado.razao_social}
+                      className="w-full p-2.5 bg-slate-100 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 rounded-lg border border-slate-200 dark:border-slate-700 font-medium"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Dia de Vencimento</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="31"
+                        value={editDiaVencimento}
+                        onChange={e => setEditDiaVencimento(Number(e.target.value))}
+                        className="w-full p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg border border-slate-200 dark:border-slate-700"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Mensalidade (R$)</label>
+                      <input
+                        type="text"
+                        value={editValorMensalidade}
+                        onChange={e => setEditValorMensalidade(e.target.value)}
+                        className="w-full p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg border border-slate-200 dark:border-slate-700 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Carência / Tolerância (Dias)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="30"
+                        value={editDiasCarencia}
+                        onChange={e => setEditDiasCarencia(Number(e.target.value))}
+                        className="w-full p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg border border-slate-200 dark:border-slate-700"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Chave Secreta Offline</label>
+                      <input
+                        type="text"
+                        value={editOfflineSecret}
+                        onChange={e => setEditOfflineSecret(e.target.value)}
+                        placeholder="Ex: 849201"
+                        className="w-full p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg border border-slate-200 dark:border-slate-700 font-mono font-bold text-blue-600"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Mensagem de Bloqueio na Tela do App</label>
+                    <textarea
+                      rows={2}
+                      value={editMensagemBloqueio}
+                      onChange={e => setEditMensagemBloqueio(e.target.value)}
+                      className="w-full p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg border border-slate-200 dark:border-slate-700"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Dia de Vencimento</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="31"
-                    value={editDiaVencimento}
-                    onChange={e => setEditDiaVencimento(Number(e.target.value))}
-                    className="w-full p-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg border border-slate-200 dark:border-slate-700"
-                  />
-                </div>
+              {/* BLOCO 2: BANNER PROMOCIONAL / GIF */}
+              <div>
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                  <ImageIcon className="w-3.5 h-3.5 text-indigo-600" />
+                  Banner Superior do MEI Simples (Imagem ou GIF)
+                </h4>
+                <div className="bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-200/70 dark:border-slate-800 space-y-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="font-semibold text-slate-700 dark:text-slate-300">URL do Banner (WebP, PNG, JPG ou GIF Animado)</label>
+                      {editBannerUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setEditBannerUrl('')}
+                          className="text-[11px] text-rose-500 hover:text-rose-600 font-semibold flex items-center gap-1"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          Restaurar Padrão
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={editBannerUrl}
+                        onChange={e => setEditBannerUrl(e.target.value)}
+                        placeholder="https://... ou caminho de imagem/GIF (em branco = padrão institucional de Contabilidade)"
+                        className="grow p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg border border-slate-200 dark:border-slate-700 font-mono text-xs"
+                      />
+                      {editBannerUrl && (
+                        <a
+                          href={editBannerUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-3 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 flex items-center justify-center shrink-0"
+                          title="Abrir imagem em nova aba"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Este banner é exibido no topo da tela inicial do MEI Simples. Deixe em branco para manter o banner padrão de Contabilidade.
+                    </p>
+                  </div>
 
-                <div>
-                  <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Mensalidade (R$)</label>
+                  {/* Preview do Banner */}
+                  <div className="pt-1">
+                    <span className="text-[11px] font-semibold text-slate-500 block mb-1.5">Visualização Prévia:</span>
+                    <div className="h-16 w-full rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700 bg-slate-900 flex items-center justify-center relative shadow-inner">
+                      {editBannerUrl ? (
+                        <img
+                          src={editBannerUrl}
+                          alt="Banner MEI Simples"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none'
+                          }}
+                        />
+                      ) : (
+                        <div className="text-center px-4">
+                          <span className="text-[11px] text-blue-400 font-bold block">Banner Padrão de Contabilidade Ativo</span>
+                          <span className="text-[10px] text-slate-400">Arte nativa embutida com assessoria fiscal e contábil.</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* BLOCO 3: SUPORTE WHATSAPP */}
+              <div>
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                  <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                  Canais de Atendimento & Suporte
+                </h4>
+                <div className="bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-200/70 dark:border-slate-800 space-y-1.5">
+                  <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">WhatsApp(s) de Suporte (Rodapé do App)</label>
                   <input
                     type="text"
-                    value={editValorMensalidade}
-                    onChange={e => setEditValorMensalidade(e.target.value)}
-                    className="w-full p-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg border border-slate-200 dark:border-slate-700 font-mono"
+                    value={editSupportWhatsapp}
+                    onChange={e => setEditSupportWhatsapp(e.target.value)}
+                    placeholder="Ex: (37) 92000-7857 ou múltiplos: (37) 92000-7857, (37) 99999-0000"
+                    className="w-full p-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg border border-slate-200 dark:border-slate-700 font-mono text-xs"
                   />
+                  <p className="text-[11px] text-slate-500">
+                    Utilizado pelo botão fixo do rodapé do MEI Simples. Se houver 1 número, o chat abre diretamente. Se houver mais de um, o app abre seletor modal com os canais disponíveis.
+                  </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Carência / Tolerância (Dias)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="30"
-                    value={editDiasCarencia}
-                    onChange={e => setEditDiasCarencia(Number(e.target.value))}
-                    className="w-full p-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg border border-slate-200 dark:border-slate-700"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Chave Secreta Offline</label>
-                  <input
-                    type="text"
-                    value={editOfflineSecret}
-                    onChange={e => setEditOfflineSecret(e.target.value)}
-                    placeholder="Ex: 849201"
-                    className="w-full p-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg border border-slate-200 dark:border-slate-700 font-mono font-bold text-blue-600"
-                  />
-                </div>
-              </div>
-
+              {/* BLOCO 4: RESTRIÇÃO DE RECURSOS (FEATURE FLAGS) */}
               <div>
-                <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Mensagem de Bloqueio na Tela do App</label>
-                <textarea
-                  rows={2}
-                  value={editMensagemBloqueio}
-                  onChange={e => setEditMensagemBloqueio(e.target.value)}
-                  className="w-full p-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg border border-slate-200 dark:border-slate-700"
-                />
+                <div className="flex items-center justify-between mb-2.5">
+                  <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                    Recursos & Restrições do Plano MEI Simples
+                  </h4>
+                  <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 text-[10px] font-bold rounded-full border border-amber-300 dark:border-amber-800">
+                    Controle de Plano
+                  </span>
+                </div>
+
+                <div className="bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-200/70 dark:border-slate-800 divide-y divide-slate-200/70 dark:divide-slate-800">
+                  {/* Recurso 1: Sugestão de Tributação */}
+                  <label className="flex items-start justify-between gap-4 py-3 cursor-pointer first:pt-0">
+                    <div className="space-y-0.5">
+                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <Sparkles className="w-4 h-4 text-amber-500" />
+                        <span>Sugestão de Tributação Inteligente (IA & OCR Fiscal)</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Sugere automaticamente NCM, CEST, CFOP, CSOSN e alíquotas na importação de notas fiscais XML e no cadastro de produtos.
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={editFeatureSugestaoTributaria}
+                      onChange={e => setEditFeatureSugestaoTributaria(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 mt-1 cursor-pointer"
+                    />
+                  </label>
+
+                  {/* Recurso 2: Importação de Produtos da Nuvem */}
+                  <label className="flex items-start justify-between gap-4 py-3 cursor-pointer">
+                    <div className="space-y-0.5">
+                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <Cloud className="w-4 h-4 text-cyan-600" />
+                        <span>Importação de Produtos da Nuvem Paratech</span>
+                        <span className="px-1.5 py-0.2 bg-cyan-100 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-400 text-[9px] font-bold rounded">Em breve</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Permite consultar e importar o catálogo completo de produtos pré-classificados da nuvem diretamente para o estoque do cliente.
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={editFeatureNuvemProdutos}
+                      onChange={e => setEditFeatureNuvemProdutos(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 mt-1 cursor-pointer"
+                    />
+                  </label>
+
+                  {/* Recurso 3: Loja Virtual / Delivery */}
+                  <label className="flex items-start justify-between gap-4 py-3 cursor-pointer">
+                    <div className="space-y-0.5">
+                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <ShoppingCart className="w-4 h-4 text-violet-600" />
+                        <span>Loja Virtual & Catálogo Online de Pedidos</span>
+                        <span className="px-1.5 py-0.2 bg-violet-100 dark:bg-violet-950/60 text-violet-700 dark:text-violet-400 text-[9px] font-bold rounded">Em breve</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Habilita a vitrine online e a recepção de pedidos web (delivery) integrados diretamente na frente de caixa.
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={editFeatureLojaVirtual}
+                      onChange={e => setEditFeatureLojaVirtual(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 mt-1 cursor-pointer"
+                    />
+                  </label>
+
+                  {/* Recurso 4: Emissão NFC-e */}
+                  <label className="flex items-start justify-between gap-4 py-3 cursor-pointer">
+                    <div className="space-y-0.5">
+                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <Receipt className="w-4 h-4 text-emerald-600" />
+                        <span>Emissão de Cupom Fiscal Eletrônico (NFC-e mod. 65)</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Permite a transmissão em tempo real à SEFAZ e impressão térmica com QR-Code 2.0.
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={editFeatureNfce}
+                      onChange={e => setEditFeatureNfce(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 mt-1 cursor-pointer"
+                    />
+                  </label>
+
+                  {/* Recurso 5: Emissão NF-e */}
+                  <label className="flex items-start justify-between gap-4 py-3 cursor-pointer">
+                    <div className="space-y-0.5">
+                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <FileText className="w-4 h-4 text-blue-600" />
+                        <span>Emissão de Nota Fiscal Eletrônica (NF-e mod. 55)</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Permite a emissão, faturamento e exportação de XML de NF-e mercantil para empresas e órgãos públicos.
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={editFeatureNfe}
+                      onChange={e => setEditFeatureNfe(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 mt-1 cursor-pointer"
+                    />
+                  </label>
+
+                  {/* Recurso 6: Contas a Pagar */}
+                  <label className="flex items-start justify-between gap-4 py-3 cursor-pointer">
+                    <div className="space-y-0.5">
+                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <DollarSign className="w-4 h-4 text-rose-600" />
+                        <span>Módulo de Contas a Pagar & Despesas</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Habilita a gestão financeira de títulos, contas a pagar geradas por entradas de notas e compras.
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={editFeatureContasPagar}
+                      onChange={e => setEditFeatureContasPagar(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 mt-1 cursor-pointer"
+                    />
+                  </label>
+
+                  {/* Recurso 7: Controle Avançado de Estoque */}
+                  <label className="flex items-start justify-between gap-4 py-3 cursor-pointer last:pb-0">
+                    <div className="space-y-0.5">
+                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <Package className="w-4 h-4 text-indigo-600" />
+                        <span>Controle Avançado de Estoque & Fator de Conversão</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Habilita cálculo de custo médio, conversão de fardos/caixas em unidades e alerta de estoque mínimo.
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={editFeatureEstoqueAvancado}
+                      onChange={e => setEditFeatureEstoqueAvancado(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 mt-1 cursor-pointer"
+                    />
+                  </label>
+                </div>
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800">
-              <button
-                onClick={() => setModalEditarOpen(false)}
-                className="px-3.5 py-1.5 rounded-lg border border-slate-300 text-slate-700 dark:text-slate-300 text-xs font-semibold"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={salvarEdicao}
-                disabled={salvando}
-                className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition flex items-center gap-1.5"
-              >
-                {salvando ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                <span>Salvar Parâmetros</span>
-              </button>
+            {/* Footer Sticky */}
+            <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 shrink-0">
+              <span className="text-[11px] text-slate-500">
+                Os parâmetros são sincronizados com o app via Hub.
+              </span>
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setModalEditarOpen(false)}
+                  className="px-3.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={salvarEdicao}
+                  disabled={salvando}
+                  className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+                >
+                  {salvando ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  <span>Salvar Parâmetros</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

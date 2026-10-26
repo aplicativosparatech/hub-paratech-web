@@ -19,10 +19,10 @@ export async function POST(request: Request) {
       .single()
     if (!cliente) return NextResponse.json({ error: 'Cliente não encontrado' }, { status: 404 })
 
-    // 2. Busca configuração do Hub (pastas, exes, tolerância)
+    // 2. Busca configuração do Hub (pastas, exes, tolerância, banner, whatsapp, features)
     const { data: config } = await supabase
       .from('configuracoes_hub')
-      .select('offline_secret, exes_monitorados, pastas_vendas, pastas_compras, modo_processamento_xml, dias_tolerancia_bloqueio, mensagem_bloqueio, dias_aviso_previo')
+      .select('offline_secret, exes_monitorados, pastas_vendas, pastas_compras, modo_processamento_xml, dias_tolerancia_bloqueio, mensagem_bloqueio, dias_aviso_previo, banner_url, support_whatsapp, feature_sugestao_tributaria, feature_nuvem_produtos, feature_loja_virtual, feature_nfce, feature_nfe, feature_contas_pagar, feature_estoque_avancado')
       .eq('cliente_id', cliente.id)
       .maybeSingle()
 
@@ -163,6 +163,17 @@ export async function POST(request: Request) {
       numero_inicial_nfse: cliente.numero_inicial_nfse || 1,
       numero_inicial_cte: cliente.numero_inicial_cte || 1,
       numero_inicial_mdfe: cliente.numero_inicial_mdfe || 1,
+      banner_url: config?.banner_url || null,
+      support_whatsapp: config?.support_whatsapp || null,
+      features: {
+        sugestao_tributaria: config?.feature_sugestao_tributaria ?? true,
+        nuvem_produtos: config?.feature_nuvem_produtos ?? true,
+        loja_virtual: config?.feature_loja_virtual ?? false,
+        nfce: config?.feature_nfce ?? true,
+        nfe: config?.feature_nfe ?? true,
+        contas_pagar: config?.feature_contas_pagar ?? true,
+        estoque_avancado: config?.feature_estoque_avancado ?? true,
+      },
       fatura: faturaVencida ? {
         id: faturaVencida.id,
         valor: faturaVencida.valor,
