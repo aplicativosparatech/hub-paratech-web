@@ -7,6 +7,7 @@ import { FileText, Plus, X, Pencil, Trash2, RefreshCw, Zap, DollarSign } from 'l
 import toast from 'react-hot-toast'
 import ResizableSortableTh from '@/components/ui/ResizableSortableTh'
 import { useTableFeatures } from '@/hooks/useTableFeatures'
+import { formatarDuasCasasDecimais, parseValorDecimal } from '@/utils/money'
 
 export default function FaturasPage() {
   const [faturas, setFaturas] = useState<any[]>([])
@@ -108,7 +109,7 @@ export default function FaturasPage() {
 
       setCompetencia(mesComp)
       setDataVencimento(dataVenc)
-      setValor(valMensal ? String(valMensal) : '')
+      setValor(valMensal ? formatarDuasCasasDecimais(valMensal) : '')
     }
   }
 
@@ -117,7 +118,7 @@ export default function FaturasPage() {
     setSelectedCliente(f.cliente_id)
     setCompetencia(f.competencia)
     setDataVencimento(f.data_vencimento)
-    setValor(f.valor)
+    setValor(formatarDuasCasasDecimais(f.valor))
     setModalOpen(true)
   }
 
@@ -144,7 +145,7 @@ export default function FaturasPage() {
         cliente_id: selectedCliente,
         competencia,
         data_vencimento: dataVencimento,
-        valor: parseFloat(valor),
+        valor: parseValorDecimal(valor),
       }).eq('id', editingId)
       error = updateError
     } else {
@@ -152,7 +153,7 @@ export default function FaturasPage() {
         cliente_id: selectedCliente,
         competencia,
         data_vencimento: dataVencimento,
-        valor: parseFloat(valor),
+        valor: parseValorDecimal(valor),
         status: 'pendente'
       }])
       error = insertError
@@ -467,8 +468,20 @@ export default function FaturasPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Valor (R$)</label>
-                <input required type="number" step="0.01" className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={valor} onChange={e => setValor(e.target.value)} />
+                <input 
+                  required 
+                  type="text" 
+                  inputMode="decimal"
+                  placeholder="0,00"
+                  className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
+                  value={valor} 
+                  onChange={e => setValor(e.target.value)} 
+                  onBlur={e => {
+                    if (e.target.value) {
+                      setValor(formatarDuasCasasDecimais(e.target.value))
+                    }
+                  }}
+                />
               </div>
 
               <div className="flex gap-3 justify-end pt-4">

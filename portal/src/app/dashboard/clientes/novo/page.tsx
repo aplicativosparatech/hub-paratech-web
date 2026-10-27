@@ -30,6 +30,7 @@ import {
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { limparDocumento, formatarCnpjCpf, validarCnpj, validarCpf, isCnpjAlfanumerico } from '@/utils/cnpjAlfanumerico'
+import { formatarDuasCasasDecimais, parseValorDecimal } from '@/utils/money'
 import { SistemaAutocompleteInput, ERP_PADRAO } from '@/components/SistemaAutocompleteInput'
 import { FormAccordionCard } from '@/components/ui/FormAccordionCard'
 
@@ -573,10 +574,10 @@ export default function NovoClientePage() {
       is_ativo: formData.is_ativo,
       is_associacao: Boolean(formData.is_associacao),
       dia_vencimento: parseInt(String(formData.dia_vencimento)) || 10,
-      valor_mensalidade: clienteData.valor_mensalidade ? parseFloat(String(clienteData.valor_mensalidade).replace(',', '.')) : 0,
-      custo: clienteData.custo ? parseFloat(String(clienteData.custo).replace(',', '.')) : 0,
-      multa_atraso_percentual: formData.multa_atraso_percentual !== '' && formData.multa_atraso_percentual !== null ? parseFloat(String(formData.multa_atraso_percentual).replace(',', '.')) : null,
-      juros_mora_mensal_percentual: formData.juros_mora_mensal_percentual !== '' && formData.juros_mora_mensal_percentual !== null ? parseFloat(String(formData.juros_mora_mensal_percentual).replace(',', '.')) : null,
+      valor_mensalidade: parseValorDecimal(clienteData.valor_mensalidade),
+      custo: parseValorDecimal(clienteData.custo),
+      multa_atraso_percentual: formData.multa_atraso_percentual !== '' && formData.multa_atraso_percentual !== null ? parseValorDecimal(formData.multa_atraso_percentual) : null,
+      juros_mora_mensal_percentual: formData.juros_mora_mensal_percentual !== '' && formData.juros_mora_mensal_percentual !== null ? parseValorDecimal(formData.juros_mora_mensal_percentual) : null,
       dias_carencia: formData.dias_carencia !== '' && formData.dias_carencia !== null ? parseInt(String(formData.dias_carencia)) : null,
       data_inicio_monitoramento: formData.data_inicio_monitoramento || null,
       numero_inicial_nfe: parseInt(String(formData.numero_inicial_nfe)) || 1,
@@ -1114,13 +1115,17 @@ export default function NovoClientePage() {
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1">Valor da Mensalidade (R$)</label>
                   <input 
-                    type="number" 
-                    step="0.01" 
-                    min="0"
+                    type="text"
+                    inputMode="decimal"
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-semibold"
-                    placeholder="0.00"
+                    placeholder="0,00"
                     value={formData.valor_mensalidade} 
                     onChange={e => setFormData({...formData, valor_mensalidade: e.target.value})} 
+                    onBlur={e => {
+                      if (e.target.value) {
+                        setFormData(prev => ({ ...prev, valor_mensalidade: formatarDuasCasasDecimais(e.target.value) }))
+                      }
+                    }}
                   />
                   <p className="text-[11px] text-slate-500 mt-1">Valor cobrado mensalmente do cliente</p>
                 </div>
@@ -1128,19 +1133,23 @@ export default function NovoClientePage() {
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1">Custo do Cliente (R$)</label>
                   <input 
-                    type="number" 
-                    step="0.01" 
-                    min="0"
+                    type="text"
+                    inputMode="decimal"
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500 bg-slate-50/50 font-semibold text-rose-700"
-                    placeholder="0.00"
+                    placeholder="0,00"
                     value={formData.custo} 
                     onChange={e => setFormData({...formData, custo: e.target.value})} 
+                    onBlur={e => {
+                      if (e.target.value) {
+                        setFormData(prev => ({ ...prev, custo: formatarDuasCasasDecimais(e.target.value) }))
+                      }
+                    }}
                   />
                   <div className="flex items-center justify-between text-[11px] mt-1">
                     <span className="text-slate-500">Custo operacional</span>
                     {(formData.valor_mensalidade || formData.custo) && (
                       <span className="font-semibold text-blue-700 font-mono">
-                        Lucro: {((parseFloat(String(formData.valor_mensalidade || 0).replace(',', '.')) || 0) - (parseFloat(String(formData.custo || 0).replace(',', '.')) || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        Lucro: {(parseValorDecimal(formData.valor_mensalidade) - parseValorDecimal(formData.custo)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </span>
                     )}
                   </div>
@@ -1212,13 +1221,17 @@ export default function NovoClientePage() {
                     </label>
                     <div className="relative">
                       <input 
-                        type="number" 
-                        step="0.01" 
-                        min="0"
+                        type="text" 
+                        inputMode="decimal"
                         className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-bold text-slate-900 pr-10 text-sm"
-                        placeholder="Padrão Global: 2.00%"
+                        placeholder="Padrão Global: 2,00%"
                         value={formData.multa_atraso_percentual} 
                         onChange={e => setFormData({...formData, multa_atraso_percentual: e.target.value})} 
+                        onBlur={e => {
+                          if (e.target.value) {
+                            setFormData(prev => ({ ...prev, multa_atraso_percentual: formatarDuasCasasDecimais(e.target.value) }))
+                          }
+                        }}
                       />
                       <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">%</span>
                     </div>
@@ -1231,13 +1244,17 @@ export default function NovoClientePage() {
                     </label>
                     <div className="relative">
                       <input 
-                        type="number" 
-                        step="0.01" 
-                        min="0"
+                        type="text" 
+                        inputMode="decimal"
                         className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-bold text-slate-900 pr-16 text-sm"
-                        placeholder="Padrão Global: 1.00%"
+                        placeholder="Padrão Global: 1,00%"
                         value={formData.juros_mora_mensal_percentual} 
                         onChange={e => setFormData({...formData, juros_mora_mensal_percentual: e.target.value})} 
+                        onBlur={e => {
+                          if (e.target.value) {
+                            setFormData(prev => ({ ...prev, juros_mora_mensal_percentual: formatarDuasCasasDecimais(e.target.value) }))
+                          }
+                        }}
                       />
                       <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">% a.m.</span>
                     </div>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Trash2, X, Copy, RefreshCw, Search, Upload, DollarSign, TrendingDown, TrendingUp, Eye, EyeOff, KeyRound } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Copy, RefreshCw, Search, Upload, DollarSign, TrendingDown, TrendingUp, Eye, EyeOff, KeyRound, Laptop } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { limparDocumento, formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
@@ -62,7 +62,7 @@ export default function ClientesPage() {
 
     let query = supabase
       .from('clientes')
-      .select('*, contabilidades ( razao_social )')
+      .select('*, contabilidades ( razao_social ), configuracoes_hub ( ultima_sincronizacao )')
       .order('created_at', { ascending: false })
 
     if (role === 'contabilidade' && roleData?.contabilidade_id) {
@@ -183,7 +183,7 @@ export default function ClientesPage() {
       certificado: 170,
       contabilidade: 180,
       status: 100,
-      token: 140,
+      token: 180,
       acoes: 120
     },
     customExtractors: {
@@ -457,7 +457,7 @@ export default function ClientesPage() {
                 onSort={handleSort}
                 width={columnWidths.token}
                 onResize={handleResizeColumn}
-                minWidth={120}
+                minWidth={150}
               />
               <ResizableSortableTh
                 columnId="acoes"
@@ -652,12 +652,76 @@ export default function ClientesPage() {
                         {c.is_ativo ? 'Ativo' : 'Inativo'}
                       </span>
                     </td>
-                    <td className="p-4">
-                      <div className="flex items-center gap-1">
-                        <code className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded max-w-[120px] truncate">{c.hub_token}</code>
-                        <button onClick={() => copyToken(c.hub_token)} className="p-1 text-slate-400 hover:text-blue-600" title="Copiar Token">
-                          <Copy size={14} />
-                        </button>
+                    <td className="p-4 align-top">
+                      <div className="flex flex-col gap-1.5 min-w-[130px]">
+                        {/* Token do Hub com botão de cópia */}
+                        <div className="flex items-center gap-1">
+                          <code className="text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded font-mono max-w-[120px] truncate" title={c.hub_token}>
+                            {c.hub_token || 'Sem Token'}
+                          </code>
+                          {c.hub_token && (
+                            <button 
+                              onClick={() => copyToken(c.hub_token)} 
+                              className="p-1 text-slate-400 hover:text-blue-600 transition cursor-pointer" 
+                              title="Copiar Token do Hub"
+                            >
+                              <Copy size={13} />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Sistema em Uso (Nome do Sistema Monitorado) */}
+                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700" title={`Sistema Monitorado: ${c.nome_sistema_utilizado || 'Não definido'}`}>
+                          <Laptop size={12} className="text-blue-600 shrink-0" />
+                          <span className="truncate max-w-[140px]">
+                            {c.nome_sistema_utilizado || <span className="text-slate-400 font-normal italic">Não definido</span>}
+                          </span>
+                        </div>
+
+                        {/* Status do Hub: ONLINE ou OFFLINE */}
+                        <div>
+                          {(() => {
+                            const hubCfg = Array.isArray(c.configuracoes_hub) ? c.configuracoes_hub[0] : c.configuracoes_hub
+                            const ultimaSync = hubCfg?.ultima_sincronizacao || c.ultima_sincronizacao_hub
+                            let isOnline = false
+                            let tempoStatus = 'Nunca conectou'
+
+                            if (ultimaSync) {
+                              const syncDate = new Date(ultimaSync).getTime()
+                              const diffMs = Date.now() - syncDate
+                              const diffMin = Math.floor(diffMs / 60000)
+
+                              if (diffMin <= 15) {
+                                isOnline = true
+                                tempoStatus = 'Online'
+                              } else if (diffMin < 60) {
+                                tempoStatus = `${diffMin}m atrás`
+                              } else if (diffMin < 1440) {
+                                tempoStatus = `${Math.floor(diffMin / 60)}h atrás`
+                              } else {
+                                tempoStatus = `${Math.floor(diffMin / 1440)}d atrás`
+                              }
+                            }
+
+                            return isOnline ? (
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 w-fit">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                ONLINE
+                              </span>
+                            ) : (
+                              <span 
+                                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200 w-fit" 
+                                title={ultimaSync ? `Última sincronização: ${new Date(ultimaSync).toLocaleString('pt-BR')}` : 'Nunca sincronizou'}
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                                OFFLINE
+                                {tempoStatus !== 'Nunca conectou' && (
+                                  <span className="text-[9px] text-slate-400 font-normal">({tempoStatus})</span>
+                                )}
+                              </span>
+                            )
+                          })()}
+                        </div>
                       </div>
                     </td>
                   <td className="p-4 text-right">
