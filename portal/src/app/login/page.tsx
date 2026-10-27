@@ -51,7 +51,7 @@ export default function LoginPage() {
     setError(null)
 
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
+      email: email.trim().toLowerCase(),
       password,
     })
 
@@ -137,8 +137,11 @@ export default function LoginPage() {
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
+                onChange={(e) => setEmail(e.target.value.toLowerCase())}
+                onBlur={(e) => setEmail(e.target.value.trim().toLowerCase())}
+                autoCapitalize="none"
+                spellCheck={false}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 lowercase"
                 placeholder="seu@email.com"
                 required
               />

@@ -680,8 +680,11 @@ export default function IntegracoesPage() {
                 <input
                   type="email"
                   value={resend.credenciais?.remetente_email || ''}
-                  onChange={e => handleCredencialChange('resend', 'remetente_email', e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  onChange={e => handleCredencialChange('resend', 'remetente_email', e.target.value.toLowerCase())}
+                  onBlur={e => handleCredencialChange('resend', 'remetente_email', e.target.value.trim().toLowerCase())}
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  className="w-full bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none lowercase"
                   placeholder="fiscal@seudominio.com.br ou onboarding@resend.dev"
                 />
                 <p className="text-[11px] text-slate-500 mt-1">
@@ -721,8 +724,11 @@ export default function IntegracoesPage() {
                 type="email"
                 placeholder="Seu e-mail de teste (ex: seuemail@gmail.com)"
                 value={testEmail}
-                onChange={e => setTestEmail(e.target.value)}
-                className="flex-1 bg-white border border-indigo-300 px-4 py-2.5 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm shadow-xs"
+                onChange={e => setTestEmail(e.target.value.toLowerCase())}
+                onBlur={e => setTestEmail(e.target.value.trim().toLowerCase())}
+                autoCapitalize="none"
+                spellCheck={false}
+                className="flex-1 bg-white border border-indigo-300 px-4 py-2.5 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm shadow-xs lowercase"
               />
               <button
                 type="button"

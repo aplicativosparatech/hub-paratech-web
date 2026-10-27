@@ -30,6 +30,7 @@ import toast from 'react-hot-toast'
 import CertificadoAlertaBanner from '@/components/CertificadoAlertaBanner'
 import { limparDocumento, formatarCnpjCpf, validarCnpj, validarCpf, isCnpjAlfanumerico } from '@/utils/cnpjAlfanumerico'
 import { formatarDuasCasasDecimais, parseValorDecimal } from '@/utils/money'
+import { sanitizarNomeArquivoStorage } from '@/utils/storageUtils'
 import { SistemaAutocompleteInput, ERP_PADRAO } from '@/components/SistemaAutocompleteInput'
 import { FormAccordionCard } from '@/components/ui/FormAccordionCard'
 
@@ -198,7 +199,7 @@ export default function EditarClientePage() {
           whatsapp_cobranca: d.whatsapp_cobranca || '',
           nome_contato: d.nome_contato || '',
           cpf_contato: d.cpf_contato || '',
-          email_fiscal: d.email_fiscal || '',
+          email_fiscal: d.email_fiscal ? d.email_fiscal.toLowerCase().trim() : '',
           certificado_url: d.certificado_url || '',
           certificado_senha: d.certificado_senha || '',
           certificado_validade: d.certificado_validade ? d.certificado_validade.split('T')[0] : '',
@@ -223,7 +224,7 @@ export default function EditarClientePage() {
           multa_atraso_percentual: formatarDuasCasasDecimais(d.multa_atraso_percentual),
           juros_mora_mensal_percentual: formatarDuasCasasDecimais(d.juros_mora_mensal_percentual),
           dias_carencia: d.dias_carencia !== undefined && d.dias_carencia !== null ? String(d.dias_carencia) : '',
-          login_email: d.login_email || '',
+          login_email: d.login_email ? d.login_email.toLowerCase().trim() : '',
           login_senha: d.login_senha || '',
           is_ativo: d.is_ativo !== undefined ? d.is_ativo : true,
           logo_url: d.logo_url || '',
@@ -348,7 +349,7 @@ export default function EditarClientePage() {
         nome_fantasia: data.nome_fantasia || data.razao_social || prev.nome_fantasia,
         whatsapp: prev.whatsapp || data.whatsapp || '',
         whatsapp_cobranca: prev.whatsapp_cobranca || data.whatsapp || '',
-        email_fiscal: prev.email_fiscal || data.email || '',
+        email_fiscal: prev.email_fiscal || (data.email ? data.email.toLowerCase().trim() : ''),
         ramo_atividade: prev.ramo_atividade || data.ramo_atividade || '',
         cep: data.cep || prev.cep || '',
         logradouro: data.logradouro || prev.logradouro || '',
@@ -568,8 +569,11 @@ export default function EditarClientePage() {
 
     let finalLogoUrl = formData.logo_url
     if (logoFile) {
-      const fileName = `${Date.now()}_${logoFile.name}`
-      const { error: uploadError } = await supabase.storage.from('logos').upload(fileName, logoFile)
+      const fileName = sanitizarNomeArquivoStorage(logoFile.name, `cliente_${params.id}`)
+      const { error: uploadError } = await supabase.storage.from('logos').upload(fileName, logoFile, {
+        upsert: true,
+        contentType: logoFile.type || 'image/png'
+      })
       if (uploadError) {
         toast.error('Erro ao enviar logo: ' + uploadError.message)
         setSaving(false)
@@ -622,7 +626,8 @@ export default function EditarClientePage() {
       certificado_validade: clienteData.certificado_validade || null,
       certificado_url: finalCertUrl,
       logo_url: finalLogoUrl,
-      login_email: login_email && login_email.trim() !== '' ? login_email.trim() : null,
+      email_fiscal: clienteData.email_fiscal ? clienteData.email_fiscal.trim().toLowerCase() : null,
+      login_email: login_email && login_email.trim() !== '' ? login_email.trim().toLowerCase() : null,
       login_senha: login_senha && login_senha.trim() !== '' ? login_senha.trim() : null
     }
 
@@ -682,7 +687,7 @@ export default function EditarClientePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: login_email,
+          email: login_email.trim().toLowerCase(),
           password: login_senha && login_senha.trim() !== '' ? login_senha : undefined,
           role: 'cliente',
           entity_id: params.id
@@ -1396,9 +1401,12 @@ export default function EditarClientePage() {
               <input 
                 type="email" 
                 placeholder="fiscal@empresa.com.br" 
+                autoCapitalize="none"
+                spellCheck={false}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
                 value={formData.email_fiscal} 
-                onChange={e => setFormData({...formData, email_fiscal: e.target.value})} 
+                onChange={e => setFormData({...formData, email_fiscal: e.target.value.toLowerCase()})} 
+                onBlur={e => setFormData(prev => ({...prev, email_fiscal: e.target.value.trim().toLowerCase()}))}
               />
             </div>
           </div>
@@ -1810,10 +1818,13 @@ export default function EditarClientePage() {
               <label className="block text-sm font-semibold text-slate-700 mb-1">E-mail de Login</label>
               <input 
                 type="email" 
+                autoCapitalize="none"
+                spellCheck={false}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
                 placeholder="cliente@empresa.com"
                 value={formData.login_email} 
-                onChange={e => setFormData({...formData, login_email: e.target.value})} 
+                onChange={e => setFormData({...formData, login_email: e.target.value.toLowerCase()})} 
+                onBlur={e => setFormData(prev => ({...prev, login_email: e.target.value.trim().toLowerCase()}))}
               />
               <p className="text-[11px] text-slate-500 mt-1">E-mail para autenticação no portal do cliente</p>
             </div>

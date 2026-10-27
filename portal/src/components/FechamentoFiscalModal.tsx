@@ -1261,8 +1261,11 @@ export default function FechamentoFiscalModal({
                     type="email"
                     placeholder="Ex: fiscal@empresa.com.br"
                     value={prefs.envioEmail || ''}
-                    onChange={e => setPrefs(p => ({ ...p, envioEmail: e.target.value }))}
-                    className="w-full bg-white border border-slate-300 rounded-xl pl-8 pr-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    onChange={e => setPrefs(p => ({ ...p, envioEmail: e.target.value.toLowerCase() }))}
+                    onBlur={e => setPrefs(p => ({ ...p, envioEmail: (p.envioEmail || '').trim().toLowerCase() }))}
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    className="w-full bg-white border border-slate-300 rounded-xl pl-8 pr-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none lowercase"
                   />
                   <Mail size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
                 </div>

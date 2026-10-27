@@ -7,6 +7,7 @@ import { ArrowLeft, Building2, Save, Search, Eye, EyeOff, UserCheck, MapPin, Sen
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { limparDocumento, formatarCnpjCpf, validarCnpj, isCnpjAlfanumerico } from '@/utils/cnpjAlfanumerico'
+import { sanitizarNomeArquivoStorage } from '@/utils/storageUtils'
 
 export default function NovaContabilidadePage() {
   const router = useRouter()
@@ -146,8 +147,11 @@ export default function NovaContabilidadePage() {
 
     let finalLogoUrl = ''
     if (logoFile) {
-      const fileName = `${Date.now()}_${logoFile.name}`
-      const { error: uploadError } = await supabase.storage.from('logos').upload(fileName, logoFile)
+      const fileName = sanitizarNomeArquivoStorage(logoFile.name, 'contab_nova')
+      const { error: uploadError } = await supabase.storage.from('logos').upload(fileName, logoFile, {
+        upsert: true,
+        contentType: logoFile.type || 'image/png'
+      })
       if (uploadError) {
         toast.error('Erro ao enviar logo: ' + uploadError.message)
         setLoading(false)
@@ -160,14 +164,15 @@ export default function NovaContabilidadePage() {
     
     const payload = {
       ...contabData,
+      email_contato: contabData.email_contato?.trim().toLowerCase() || null,
       whatsapp_arquivos_fiscais: contabData.whatsapp_arquivos_fiscais?.trim() || null,
-      email_arquivos_fiscais: contabData.email_arquivos_fiscais?.trim() || null,
+      email_arquivos_fiscais: contabData.email_arquivos_fiscais?.trim().toLowerCase() || null,
       receber_arquivos_whatsapp: Boolean(contabData.receber_arquivos_whatsapp),
       receber_arquivos_email: Boolean(contabData.receber_arquivos_email),
       admin_permite_envio_whatsapp: Boolean(contabData.admin_permite_envio_whatsapp),
       admin_permite_envio_email: Boolean(contabData.admin_permite_envio_email),
       logo_url: finalLogoUrl,
-      login_email: login_email && login_email.trim() !== '' ? login_email.trim() : null,
+      login_email: login_email && login_email.trim() !== '' ? login_email.trim().toLowerCase() : null,
       login_senha: login_senha && login_senha.trim() !== '' ? login_senha.trim() : null
     }
 
@@ -186,7 +191,7 @@ export default function NovaContabilidadePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: login_email,
+          email: login_email.trim().toLowerCase(),
           password: login_senha,
           role: 'contabilidade',
           entity_id: contabResult.id
@@ -272,9 +277,16 @@ export default function NovaContabilidadePage() {
 
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">E-mail Comercial / Contato</label>
-                <input type="email" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                <input 
+                  type="email" 
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 lowercase"
                   placeholder="contato@contabilidade.com"
-                  value={formData.email_contato} onChange={e => setFormData({...formData, email_contato: e.target.value})} />
+                  value={formData.email_contato} 
+                  onChange={e => setFormData({...formData, email_contato: e.target.value.toLowerCase()})} 
+                  onBlur={e => setFormData(prev => ({...prev, email_contato: e.target.value.trim().toLowerCase()}))}
+                  autoCapitalize="none"
+                  spellCheck={false}
+                />
               </div>
 
               <div>
@@ -408,9 +420,12 @@ export default function NovaContabilidadePage() {
                         <input 
                           type="email" 
                           placeholder="Ex: fiscal@contabilidade.com (Se vazio, usa o principal)" 
-                          className="w-full px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50/50 text-xs font-medium"
+                          className="w-full px-3.5 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50/50 text-xs font-medium lowercase"
                           value={formData.email_arquivos_fiscais} 
-                          onChange={e => setFormData({ ...formData, email_arquivos_fiscais: e.target.value })} 
+                          onChange={e => setFormData({ ...formData, email_arquivos_fiscais: e.target.value.toLowerCase() })} 
+                          onBlur={e => setFormData(prev => ({ ...prev, email_arquivos_fiscais: e.target.value.trim().toLowerCase() }))}
+                          autoCapitalize="none"
+                          spellCheck={false}
                         />
                       </div>
                     </div>
@@ -522,9 +537,16 @@ export default function NovaContabilidadePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">E-mail de Login</label>
-                <input type="email" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+                <input 
+                  type="email" 
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 lowercase"
                   placeholder="contador@contabilidade.com"
-                  value={formData.login_email} onChange={e => setFormData({...formData, login_email: e.target.value})} />
+                  value={formData.login_email} 
+                  onChange={e => setFormData({...formData, login_email: e.target.value.toLowerCase()})} 
+                  onBlur={e => setFormData(prev => ({...prev, login_email: e.target.value.trim().toLowerCase()}))}
+                  autoCapitalize="none"
+                  spellCheck={false}
+                />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Senha de Login</label>

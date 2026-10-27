@@ -26,6 +26,7 @@ import {
 import CertificadoAlertaBanner from '@/components/CertificadoAlertaBanner'
 import { FormAccordionCard } from '@/components/ui/FormAccordionCard'
 import { SistemaAutocompleteInput } from '@/components/SistemaAutocompleteInput'
+import { sanitizarNomeArquivoStorage } from '@/utils/storageUtils'
 
 export default function MeuPerfilPage() {
   const supabase = createClient()
@@ -242,8 +243,11 @@ export default function MeuPerfilPage() {
       // 1. Upload de Logo se alterado
       let finalLogoUrl = formData.logo_url
       if (logoFile) {
-        const fileName = `${Date.now()}_${logoFile.name}`
-        const { error: uploadError } = await supabase.storage.from('logos').upload(fileName, logoFile)
+        const fileName = sanitizarNomeArquivoStorage(logoFile.name, `perfil_${entityId || 'user'}`)
+        const { error: uploadError } = await supabase.storage.from('logos').upload(fileName, logoFile, {
+          upsert: true,
+          contentType: logoFile.type || 'image/png'
+        })
         if (uploadError) {
           toast.error('Erro ao enviar logomarca: ' + uploadError.message)
           setSaving(false)
@@ -266,7 +270,7 @@ export default function MeuPerfilPage() {
           cpf_contato: formData.cpf_contato,
           whatsapp: formData.whatsapp,
           whatsapp_cobranca: formData.whatsapp_cobranca?.trim() || null,
-          email_fiscal: formData.email_fiscal,
+          email_fiscal: formData.email_fiscal?.trim().toLowerCase() || null,
           cep: formData.cep,
           logradouro: formData.logradouro,
           numero: formData.numero,
@@ -284,7 +288,7 @@ export default function MeuPerfilPage() {
         const payload = {
           razao_social: formData.razao_social,
           nome_fantasia: formData.nome_fantasia,
-          email_contato: formData.email_contato,
+          email_contato: formData.email_contato?.trim().toLowerCase() || null,
           telefone: formData.telefone,
           whatsapp: formData.whatsapp,
           nome_responsavel: formData.nome_responsavel,
@@ -298,7 +302,7 @@ export default function MeuPerfilPage() {
           cidade: formData.cidade,
           uf: formData.uf,
           whatsapp_arquivos_fiscais: formData.whatsapp_arquivos_fiscais?.trim() || null,
-          email_arquivos_fiscais: formData.email_arquivos_fiscais?.trim() || null,
+          email_arquivos_fiscais: formData.email_arquivos_fiscais?.trim().toLowerCase() || null,
           receber_arquivos_whatsapp: formData.admin_permite_envio_whatsapp ? Boolean(formData.receber_arquivos_whatsapp) : false,
           receber_arquivos_email: formData.admin_permite_envio_email ? Boolean(formData.receber_arquivos_email) : false,
           logo_url: finalLogoUrl
@@ -719,9 +723,12 @@ export default function MeuPerfilPage() {
                   <input 
                     type="email" 
                     placeholder="financeiro@empresa.com" 
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm font-medium"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm font-medium lowercase"
                     value={formData.email_fiscal || ''} 
-                    onChange={e => setFormData({ ...formData, email_fiscal: e.target.value })} 
+                    onChange={e => setFormData({ ...formData, email_fiscal: e.target.value.toLowerCase() })} 
+                    onBlur={e => setFormData({ ...formData, email_fiscal: e.target.value.trim().toLowerCase() })}
+                    autoCapitalize="none"
+                    spellCheck={false}
                   />
                 </div>
               </div>
@@ -844,9 +851,12 @@ export default function MeuPerfilPage() {
                     <label className="block text-xs font-bold text-slate-700 mb-1.5">E-mail Comercial</label>
                     <input 
                       type="email" 
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm font-medium"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm font-medium lowercase"
                       value={formData.email_contato || ''} 
-                      onChange={e => setFormData({ ...formData, email_contato: e.target.value })} 
+                      onChange={e => setFormData({ ...formData, email_contato: e.target.value.toLowerCase() })} 
+                      onBlur={e => setFormData({ ...formData, email_contato: e.target.value.trim().toLowerCase() })}
+                      autoCapitalize="none"
+                      spellCheck={false}
                     />
                   </div>
 
@@ -986,9 +996,12 @@ export default function MeuPerfilPage() {
                         <input 
                           type="email" 
                           placeholder="Ex: fiscal@escritorio.com (Se vazio, usa o principal)" 
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50/50 text-sm font-medium"
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50/50 text-sm font-medium lowercase"
                           value={formData.email_arquivos_fiscais || ''} 
-                          onChange={e => setFormData({ ...formData, email_arquivos_fiscais: e.target.value })} 
+                          onChange={e => setFormData({ ...formData, email_arquivos_fiscais: e.target.value.toLowerCase() })} 
+                          onBlur={e => setFormData({ ...formData, email_arquivos_fiscais: e.target.value.trim().toLowerCase() })}
+                          autoCapitalize="none"
+                          spellCheck={false}
                         />
                         <p className="text-[11px] text-slate-500">
                           Status atual: <strong className={formData.receber_arquivos_email ? 'text-blue-600' : 'text-slate-500'}>
