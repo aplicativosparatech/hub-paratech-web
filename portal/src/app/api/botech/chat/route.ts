@@ -19,11 +19,12 @@ export async function POST(request: Request) {
       try {
         const { data: integracoes } = await supabase
           .from('integracoes')
-          .select('credenciais')
+          .select('credenciais, provedor, is_ativo')
           .eq('is_ativo', true)
           .or('provedor.eq.gemini,provedor.eq.google');
         if (integracoes && integracoes.length > 0) {
-          geminiKey = integracoes[0].credenciais?.api_key || integracoes[0].credenciais?.token || '';
+          const creds = integracoes[0].credenciais || {};
+          geminiKey = (creds.api_key || creds.apiKey || creds.token || '').trim();
         }
       } catch (err) {
         console.warn('Erro ao carregar chave do Gemini no banco:', err);

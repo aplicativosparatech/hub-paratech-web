@@ -253,7 +253,28 @@ export class DatabaseAuditor {
   }
 
   /**
-   * 4. Consulta de Clientes agrupados por Sistema Paratech (MEI, Tech Slim, Tech Pro, Gastro, Pes.Ai)
+   * Função utilitária para padronizar e agrupar nomes de sistemas reais cadastrados
+   */
+  static normalizarNomeSistema(sistemaBruto?: string | null): string {
+    if (!sistemaBruto) return 'NÃO DEFINIDO';
+    const s = sistemaBruto.trim().toUpperCase().replace(/\s+/g, ' ');
+    if (s.includes('BARTECH')) return 'BARTECH';
+    if (s.includes('GDOOR') && s.includes('SLIM') || s === 'GDOORSLIM') return 'GDOOR SLIM';
+    if (s.includes('GDOOR') && s.includes('PRO') || s === 'GDOORPRO') return 'GDOOR PRO';
+    if (s.includes('MEI')) return 'MEI SIMPLES';
+    if (s.includes('ZWEB')) return 'ZWEB';
+    if (s.includes('PDV')) return 'PDV+';
+    if (s.includes('PARATECH')) return 'PARATECH ERP';
+    if (s.includes('BARZIN')) return 'BARZIN';
+    if (s.includes('NAVI')) return 'NAVI VENDAS';
+    if (s.includes('SIEDFOOD')) return 'SIEDFOOD';
+    if (s.includes('GASTRO')) return 'GASTRO';
+    if (s.includes('PES')) return 'PES.AI';
+    return s;
+  }
+
+  /**
+   * 4. Consulta de Clientes agrupados por Sistema Real Monitorado (Bartech, Gdoor Slim, Pro, Zweb, MEI, etc.)
    */
   async consultarSistemasParatech(contexto: ContextoAuditoriaSegura, sistemaFiltro?: string) {
     if (contexto.userRole !== 'admin') {
@@ -262,7 +283,7 @@ export class DatabaseAuditor {
 
     let query = this.supabase
       .from('clientes')
-      .select('id, razao_social, nome_fantasia, cnpj, nome_sistema_utilizado, valor_mensalidade, is_ativo, configuracoes_hub(ultima_sincronizacao)')
+      .select('id, razao_social, nome_fantasia, cnpj, nome_sistema_utilizado, valor_mensalidade, is_ativo, cidade, uf, configuracoes_hub(ultima_sincronizacao)')
       .order('razao_social', { ascending: true });
 
     if (sistemaFiltro) {
@@ -272,29 +293,19 @@ export class DatabaseAuditor {
     const { data: clientes } = await query;
     const lista = clientes || [];
 
-    const contagem: Record<string, { total: number; ativos: number; mrr: number }> = {
-      'MEI_SIMPLES': { total: 0, ativos: 0, mrr: 0 },
-      'TECH_SLIM': { total: 0, ativos: 0, mrr: 0 },
-      'TECH_PRO': { total: 0, ativos: 0, mrr: 0 },
-      'GASTRO': { total: 0, ativos: 0, mrr: 0 },
-      'PES_AI': { total: 0, ativos: 0, mrr: 0 },
-      'OUTROS': { total: 0, ativos: 0, mrr: 0 }
-    };
+    const contagem: Record<string, { total: number; ativos: number; mrr: number; clientes: string[] }> = {};
 
     lista.forEach(c => {
-      const sis = (c.nome_sistema_utilizado || '').toUpperCase();
-      let key = 'OUTROS';
-      if (sis.includes('MEI')) key = 'MEI_SIMPLES';
-      else if (sis.includes('SLIM')) key = 'TECH_SLIM';
-      else if (sis.includes('PRO')) key = 'TECH_PRO';
-      else if (sis.includes('GASTRO') || sis.includes('FOOD') || sis.includes('BAR')) key = 'GASTRO';
-      else if (sis.includes('PES')) key = 'PES_AI';
-
-      contagem[key].total++;
-      if (c.is_ativo) {
-        contagem[key].ativos++;
-        contagem[key].mrr += Number(c.valor_mensalidade || 0);
+      const sisPadrao = DatabaseAuditor.normalizarNomeSistema(c.nome_sistema_utilizado);
+      if (!contagem[sisPadrao]) {
+        contagem[sisPadrao] = { total: 0, ativos: 0, mrr: 0, clientes: [] };
       }
+      contagem[sisPadrao].total++;
+      if (c.is_ativo) {
+        contagem[sisPadrao].ativos++;
+        contagem[sisPadrao].mrr += Number(c.valor_mensalidade || 0);
+      }
+      contagem[sisPadrao].clientes.push(c.nome_fantasia || c.razao_social);
     });
 
     return {
@@ -305,7 +316,10 @@ export class DatabaseAuditor {
         nome: c.nome_fantasia || c.razao_social,
         cnpj: c.cnpj,
         sistema: c.nome_sistema_utilizado || 'Não Definido',
+        sistemaPadrao: DatabaseAuditor.normalizarNomeSistema(c.nome_sistema_utilizado),
         isAtivo: c.is_ativo,
+        cidade: c.cidade,
+        uf: c.uf,
         mensalidade: Number(c.valor_mensalidade || 0)
       }))
     };

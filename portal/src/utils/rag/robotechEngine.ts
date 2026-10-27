@@ -41,7 +41,7 @@ export async function processarRobotechRAG(
   // 1. Preparar Contexto de Segurança Multi-Tenancy
   const { data: todosClientes } = await supabase
     .from('clientes')
-    .select('id, razao_social, nome_fantasia, cnpj, regime_tributario, dia_vencimento, valor_mensalidade, nome_sistema_utilizado, is_ativo');
+    .select('id, razao_social, nome_fantasia, cnpj, regime_tributario, dia_vencimento, valor_mensalidade, nome_sistema_utilizado, is_ativo, cidade, uf');
   const listaGeral = todosClientes || [];
 
   const idsAutorizados = new Set<string>();
@@ -145,25 +145,76 @@ export async function processarRobotechRAG(
       ).join('\n') + '\n';
   }
 
-  // D) Sistemas Paratech (MEI, Slim, Pro, Gastro, Pes.Ai)
-  if (msgNorm.includes('sistema') || msgNorm.includes('slim') || msgNorm.includes('pro') || msgNorm.includes('gastro') || msgNorm.includes('pes.ai') || msgNorm.includes('mei simples')) {
+  // D) Identificação e Auditoria de Sistemas Monitorados (BARTECH, GDOOR SLIM, GDOOR PRO, ZWEB, PDV+, etc.)
+  const sistemasConhecidos = [
+    { termo: 'bartech', nome: 'BARTECH' },
+    { termo: 'siedfood', nome: 'SIEDFOOD' },
+    { termo: 'gdoor slim', nome: 'GDOOR SLIM' },
+    { termo: 'gdoorslim', nome: 'GDOOR SLIM' },
+    { termo: 'slim', nome: 'GDOOR SLIM' },
+    { termo: 'gdoor pro', nome: 'GDOOR PRO' },
+    { termo: 'gdoorpro', nome: 'GDOOR PRO' },
+    { termo: 'pro', nome: 'GDOOR PRO' },
+    { termo: 'gdoor', nome: 'GDOOR' },
+    { termo: 'pdv+', nome: 'PDV+' },
+    { termo: 'pdv', nome: 'PDV+' },
+    { termo: 'zweb', nome: 'ZWEB' },
+    { termo: 'barzin', nome: 'BARZIN' },
+    { termo: 'gastro', nome: 'GASTRO' },
+    { termo: 'mei simples', nome: 'MEI SIMPLES' },
+    { termo: 'mei_simples', nome: 'MEI SIMPLES' },
+    { termo: 'mei', nome: 'MEI SIMPLES' },
+    { termo: 'navi', nome: 'NAVI VENDAS' },
+    { termo: 'pes.ai', nome: 'PES.AI' },
+    { termo: 'pes ai', nome: 'PES.AI' },
+    { termo: 'paratech', nome: 'PARATECH ERP' }
+  ];
+
+  let sistemaFiltroDetectado: string | null = null;
+  for (const s of sistemasConhecidos) {
+    if (msgNorm.includes(s.termo)) {
+      sistemaFiltroDetectado = s.nome;
+      break;
+    }
+  }
+
+  let clientesDoSistemaDetectado: any[] = [];
+  if (sistemaFiltroDetectado) {
+    clientesDoSistemaDetectado = listaGeral.filter(c => {
+      if (!idsAutorizados.has(c.id)) return false;
+      const sisPadrao = DatabaseAuditor.normalizarNomeSistema(c.nome_sistema_utilizado);
+      const sisRaw = (c.nome_sistema_utilizado || '').toLowerCase();
+      return sisPadrao === sistemaFiltroDetectado || sisRaw.includes(sistemaFiltroDetectado.toLowerCase());
+    });
+
+    contextoDadosBanco += `\n[CLIENTES REAIS MONITORADOS NO SISTEMA "${sistemaFiltroDetectado}" (Total: ${clientesDoSistemaDetectado.length} empresas encontradas no banco)]:\n` +
+      (clientesDoSistemaDetectado.length > 0
+        ? clientesDoSistemaDetectado.map((c, i) =>
+            `${i + 1}. Nome: ${c.nome_fantasia || c.razao_social} | CNPJ: ${c.cnpj} | Sistema Monitorado: ${c.nome_sistema_utilizado} | Status: ${c.is_ativo ? 'Ativo' : 'Inativo/Bloqueado'} | Cidade/UF: ${c.cidade || '—'}/${c.uf || '—'} | Mensalidade: R$ ${Number(c.valor_mensalidade || 0).toFixed(2)}`
+          ).join('\n')
+        : `Nenhuma empresa cadastrada com o sistema "${sistemaFiltroDetectado}".`
+      ) + '\n';
+  }
+
+  // Visão geral de Sistemas Paratech e ERPs Monitorados
+  if (msgNorm.includes('sistema') || msgNorm.includes('erp') || msgNorm.includes('monitorado') || msgNorm.includes('carteira') || msgNorm.includes('quantos clientes')) {
     if (contextoUsuario.userRole === 'admin') {
       const resSistemas = await auditor.consultarSistemasParatech(contextoSeguro);
       if (resSistemas && 'distribuicao' in resSistemas && resSistemas.distribuicao) {
-        contextoDadosBanco += `\n[DISTRIBUIÇÃO DE CLIENTES POR SISTEMA PARATECH]:\n` +
+        contextoDadosBanco += `\n[DISTRIBUIÇÃO REAL DE CLIENTES POR SISTEMA MONITORADO]:\n` +
           Object.entries(resSistemas.distribuicao).map(([k, v]) => 
-            `- ${k.replace('_', ' ')}: ${v.total} clientes (${v.ativos} ativos) | MRR: R$ ${v.mrr.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+            `- ${k}: ${v.total} clientes (${v.ativos} ativos) | MRR: R$ ${v.mrr.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
           ).join('\n') + '\n';
       }
     }
   }
 
-  // E) Se pediu listagem de empresas
-  if (msgNorm.includes('listar') || msgNorm.includes('liste') || msgNorm.includes('quais empresas') || msgNorm.includes('carteira')) {
+  // E) Se pediu listagem de empresas / clientes
+  if (msgNorm.includes('listar') || msgNorm.includes('liste') || msgNorm.includes('quais empresas') || msgNorm.includes('quais clientes') || msgNorm.includes('todos os clientes') || msgNorm.includes('todas as empresas')) {
     const permitidas = listaGeral.filter(c => idsAutorizados.has(c.id));
-    contextoDadosBanco += `\n[LISTAGEM REAL DE TODAS AS EMPRESAS CLIENTES (${permitidas.length} empresas)]:\n` +
-      permitidas.map((c, i) => 
-        `${i + 1}. Nome: ${c.nome_fantasia || c.razao_social} | CNPJ: ${c.cnpj} | Sistema: ${c.nome_sistema_utilizado || '—'} | Regime: ${c.regime_tributario || 'Simples'} | Status: ${c.is_ativo ? 'Ativo' : 'Bloqueado'}`
+    contextoDadosBanco += `\n[LISTAGEM REAL DE TODAS AS EMPRESAS CLIENTES (${permitidas.length} empresas no banco)]:\n` +
+      permitidas.slice(0, 50).map((c, i) => 
+        `${i + 1}. Nome: ${c.nome_fantasia || c.razao_social} | CNPJ: ${c.cnpj} | Sistema Monitorado: ${c.nome_sistema_utilizado || '—'} | Regime: ${c.regime_tributario || 'Simples'} | Status: ${c.is_ativo ? 'Ativo' : 'Bloqueado'}`
       ).join('\n') + '\n';
   }
 
@@ -177,10 +228,11 @@ ${contextoArtigosFiscal}
 ${contextoDadosBanco}
 
 DIRETRIZES DE RESPOSTA OBRIGATÓRIAS:
-1. PRECISÃO MATEMÁTICA E FISCAL ABSOLUTA: Baseie suas conclusões rigorosamente nos dados reais fornecidos acima. Nunca invente ou arredonde números.
-2. ESTRUTURAÇÃO VISUAL PREMIUM: Use negritos, listas com marcadores limpos, tabelas em markdown quando houver comparativos e badges de status.
+1. PRECISÃO MATEMÁTICA E AUDITORIA ABSOLUTA: Baseie suas conclusões rigorosamente nos dados reais fornecidos acima. Nunca invente ou arredonde números. Se o usuário perguntou sobre clientes de um sistema específico (ex: BARTECH), liste nominalmente cada um com seu CNPJ e status ativo/bloqueado.
+2. ESTRUTURAÇÃO VISUAL PREMIUM: Use negritos, listas com marcadores limpos, tabelas em markdown quando houver comparativos e badges de status (ex: 🟢 Ativo, 🔴 Inativo).
 3. CONSELHOS TRIBUTÁRIOS PRÁTICOS: Quando falar sobre produtos monofásicos ou Reforma Tributária, explique a economia gerada ou a ação preventiva recomendada.
 4. BOTÕES DE AÇÃO: Sempre que oportuno, forneça um botão de atalho no formato exato:
+   - [ACTION:NAVIGATE|/dashboard/clientes|👥 Ver Clientes no Hub]
    - [ACTION:NAVIGATE|/dashboard/relatorios|👉 Ir para Relatórios Fiscais]
    - [ACTION:NAVIGATE|/dashboard/corretor-tributario|⚖️ Ir para Analisador Tributário]
    - [ACTION:NAVIGATE|/dashboard/faturas|💳 Ver Faturas e PIX]
@@ -205,10 +257,11 @@ DIRETRIZES DE RESPOSTA OBRIGATÓRIAS:
     contents.push({ role: 'user', parts: [{ text: mensagem }] });
 
     const modelos = [
-      'gemini-2.0-flash',
-      'gemini-1.5-flash',
-      'gemini-3.5-flash',
-      'gemini-flash-latest'
+      'gemini-flash-lite-latest',
+      'gemini-3-flash-preview',
+      'gemini-3.8-flash',
+      'gemini-flash-latest',
+      'gemini-2.5-flash-lite'
     ];
 
     for (const mod of modelos) {
@@ -248,15 +301,23 @@ DIRETRIZES DE RESPOSTA OBRIGATÓRIAS:
     }
   }
 
-  // 5. FALLBACK INTELIGENTE CASO A IA DEMORE OU ESTEJA SEM CHAVE
-  let respostaFallback = '### 🤖 Relatório de Auditoria & Conhecimento Robotech:\n\n';
-  if (contextoDadosBanco) {
-    respostaFallback += `Consultei as bases do sistema em tempo real:\n\n${contextoDadosBanco}\n\n`;
-  }
-  if (contextoArtigosFiscal) {
-    respostaFallback += `### 📚 Base Jurídica e Normativa:\n\n${contextoArtigosFiscal}\n\n`;
-  }
-  if (!contextoDadosBanco && !contextoArtigosFiscal) {
+  // 5. FALLBACK INTELIGENTE E DETERMINÍSTICO CASO A IA DEMORE OU ESTEJA SEM CHAVE
+  let respostaFallback = '';
+  if (sistemaFiltroDetectado && clientesDoSistemaDetectado.length > 0) {
+    respostaFallback = `### 🤖 Relatório de Auditoria Robotech:\n\n` +
+      `Consultei a base de clientes do **Hub Paratech** em tempo real e identifiquei **${clientesDoSistemaDetectado.length} clientes** cadastrados com o sistema monitorado **${sistemaFiltroDetectado}** (todos ativos):\n\n` +
+      clientesDoSistemaDetectado.map((c, i) =>
+        `${i + 1}. **${c.nome_fantasia || c.razao_social}** (CNPJ: \`${c.cnpj}\`) — Status: ${c.is_ativo ? '🟢 Ativo' : '🔴 Inativo'} | Cidade: ${c.cidade || '—'}/${c.uf || '—'}`
+      ).join('\n') + `\n\n` +
+      `[ACTION:NAVIGATE|/dashboard/clientes|👥 Ver Todos os Clientes no Hub]`;
+  } else if (contextoDadosBanco) {
+    respostaFallback = `### 🤖 Relatório de Auditoria Robotech:\n\n` +
+      `Consultei as bases do sistema em tempo real:\n\n${contextoDadosBanco}\n\n` +
+      `[ACTION:NAVIGATE|/dashboard/clientes|👥 Abrir Gestão de Clientes]`;
+  } else if (contextoArtigosFiscal) {
+    respostaFallback = `### 🤖 Robotech - Base Jurídica e Normativa:\n\n${contextoArtigosFiscal}\n\n` +
+      `[ACTION:NAVIGATE|/dashboard/relatorios|👉 Ir para Relatórios Fiscais]`;
+  } else {
     respostaFallback = `Olá! Sou o **Robotech**, assistente fiscal e analista inteligente da Paratech. Posso auditar suas notas fiscais, calcular vendas por PIX/Cartão/Dinheiro, apurar monofásicos para desconto no Simples Nacional e esclarecer regras da Reforma Tributária (LC 214/2025). O que você gostaria de auditar agora?`;
   }
 
