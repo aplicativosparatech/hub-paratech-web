@@ -7,7 +7,8 @@ import {
   LogOut, BarChart3, Receipt, FileDown, PlugZap, UserCircle,
   Menu, X, Sliders, ShieldCheck, Sparkles, Database,
   Maximize2, Minimize2, Sun, Moon, Palette, ScanText, GraduationCap, Inbox,
-  PanelLeftClose, PanelLeftOpen, Bell, ChevronDown, Store
+  PanelLeftClose, PanelLeftOpen, Bell, ChevronDown, Store,
+  MonitorCheck, Zap, UtensilsCrossed, Scale
 } from 'lucide-react'
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/utils/supabase/client'
@@ -207,6 +208,10 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
       { prefixo: '/dashboard/minhas-faturas', modulo: 'faturas', nome: 'Minhas Faturas' },
       { prefixo: '/dashboard/faturas', modulo: 'faturas', nome: 'Faturas' },
       { prefixo: '/dashboard/mei-simples', modulo: '_admin_only', nome: 'MEI Simples' },
+      { prefixo: '/dashboard/tech-slim', modulo: '_admin_only', nome: 'Tech Slim' },
+      { prefixo: '/dashboard/tech-pro', modulo: '_admin_only', nome: 'Tech Pro' },
+      { prefixo: '/dashboard/gastro', modulo: '_admin_only', nome: 'Gastro' },
+      { prefixo: '/dashboard/pes-ai', modulo: '_admin_only', nome: 'Pes.Ai' },
       { prefixo: '/dashboard/notas-fiscais/saidas/correcao', modulo: 'notas_fiscais_correcao', nome: 'Correção de Notas Fiscais' },
       { prefixo: '/dashboard/notas-fiscais', modulo: 'notas_fiscais', nome: 'Notas Fiscais' },
       { prefixo: '/dashboard/distribuicao-dfe', modulo: 'distribuicao_dfe', nome: 'Distribuição de DF-e' },
@@ -373,7 +378,6 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             )}
             <NavItem href="/dashboard/contabilidades" icon={Building2} label="Contabilidades" />
             <NavItem href="/dashboard/clientes" icon={Users} label="Clientes" />
-            <NavItem href="/dashboard/mei-simples" icon={Store} label="MEI Simples" />
             <NavItem href="/dashboard/faturas" icon={Receipt} label="Faturas" />
 
             {/* TÓPICO 3: SISTEMA */}
@@ -396,7 +400,19 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             <NavItem href="/dashboard/saneador-arquivos" icon={Database} label="Saneador de Arquivos" />
             <NavItem href="/dashboard/sugestor-tributario" icon={ScanText} label="Sugestor Tributário" />
 
-            {/* TÓPICO 5: ÁREA TÉCNICA */}
+            {/* TÓPICO 5: PARATECH SISTEMAS */}
+            {!isCollapsed ? (
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Paratech Sistemas</div>
+            ) : (
+              <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+            )}
+            <NavItem href="/dashboard/mei-simples" icon={Store} label="MEI Simples" />
+            <NavItem href="/dashboard/tech-slim" icon={MonitorCheck} label="Tech Slim" />
+            <NavItem href="/dashboard/tech-pro" icon={Zap} label="Tech Pro" />
+            <NavItem href="/dashboard/gastro" icon={UtensilsCrossed} label="Gastro" />
+            <NavItem href="/dashboard/pes-ai" icon={Scale} label="Pes.Ai" />
+
+            {/* TÓPICO 6: ÁREA TÉCNICA */}
             {!isCollapsed ? (
               <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Área Técnica</div>
             ) : (
@@ -408,7 +424,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             <NavItem href="/dashboard/configuracoes" icon={Settings} label="Configurações Hub" />
             <NavItem href="/dashboard/integracoes" icon={PlugZap} label="Integrações & APIs" />
 
-            {/* TÓPICO 6: AJUDA */}
+            {/* TÓPICO 7: AJUDA */}
             {!isCollapsed ? (
               <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Ajuda</div>
             ) : (
@@ -661,7 +677,6 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         label: 'Gestão',
         isActive: pathname.startsWith('/dashboard/contabilidades') ||
                   pathname.startsWith('/dashboard/clientes') ||
-                  pathname.startsWith('/dashboard/mei-simples') ||
                   pathname.startsWith('/dashboard/faturas') ||
                   pathname.startsWith('/dashboard/minhas-faturas') ||
                   pathname.startsWith('/dashboard/meus-clientes'),
@@ -682,14 +697,6 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
               icon: Users,
               iconColor: 'text-emerald-600 dark:text-emerald-400',
               iconBg: 'bg-emerald-50 dark:bg-emerald-950/60'
-            },
-            {
-              href: '/dashboard/mei-simples',
-              label: 'MEI Simples',
-              desc: 'Assinaturas, licenças e bloqueios do MEI',
-              icon: Store,
-              iconColor: 'text-indigo-600 dark:text-indigo-400',
-              iconBg: 'bg-indigo-50 dark:bg-indigo-950/60'
             },
             {
               href: '/dashboard/faturas',
@@ -786,6 +793,59 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             iconColor: 'text-teal-600 dark:text-teal-400',
             iconBg: 'bg-teal-50 dark:bg-teal-950/60'
           }] : [])
+        ]
+      },
+      {
+        id: 'paratech_sistemas',
+        label: 'Paratech Sistemas',
+        isActive: pathname.startsWith('/dashboard/mei-simples') ||
+                  pathname.startsWith('/dashboard/tech-slim') ||
+                  pathname.startsWith('/dashboard/tech-pro') ||
+                  pathname.startsWith('/dashboard/gastro') ||
+                  pathname.startsWith('/dashboard/pes-ai'),
+        items: [
+          ...(role === 'admin' ? [
+            {
+              href: '/dashboard/mei-simples',
+              label: 'MEI Simples',
+              desc: 'Assinaturas, licenças e bloqueios do MEI',
+              icon: Store,
+              iconColor: 'text-indigo-600 dark:text-indigo-400',
+              iconBg: 'bg-indigo-50 dark:bg-indigo-950/60'
+            },
+            {
+              href: '/dashboard/tech-slim',
+              label: 'Tech Slim',
+              desc: 'Frente de caixa e emissão fiscal NFC-e rápida',
+              icon: MonitorCheck,
+              iconColor: 'text-blue-600 dark:text-blue-400',
+              iconBg: 'bg-blue-50 dark:bg-blue-950/60'
+            },
+            {
+              href: '/dashboard/tech-pro',
+              label: 'Tech Pro',
+              desc: 'Gestão empresarial completa, estoque e NFe/CTe',
+              icon: Zap,
+              iconColor: 'text-amber-600 dark:text-amber-400',
+              iconBg: 'bg-amber-50 dark:bg-amber-950/60'
+            },
+            {
+              href: '/dashboard/gastro',
+              label: 'Gastro',
+              desc: 'Food service, comandas, mesas e delivery',
+              icon: UtensilsCrossed,
+              iconColor: 'text-orange-600 dark:text-orange-400',
+              iconBg: 'bg-orange-50 dark:bg-orange-950/60'
+            },
+            {
+              href: '/dashboard/pes-ai',
+              label: 'Pes.Ai',
+              desc: 'Automação inteligente de pesagem e visão por IA',
+              icon: Scale,
+              iconColor: 'text-purple-600 dark:text-purple-400',
+              iconBg: 'bg-purple-50 dark:bg-purple-950/60'
+            }
+          ] : [])
         ]
       },
       {
