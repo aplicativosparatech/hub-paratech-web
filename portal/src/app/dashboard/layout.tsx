@@ -7,8 +7,8 @@ import {
   LogOut, BarChart3, Receipt, FileDown, PlugZap, UserCircle,
   Menu, X, Sliders, ShieldCheck, Sparkles, Database,
   Maximize2, Minimize2, Sun, Moon, Palette, ScanText, GraduationCap, Inbox,
-  PanelLeftClose, PanelLeftOpen, Bell, ChevronDown, Store,
-  MonitorCheck, Zap, UtensilsCrossed, Scale
+  PanelLeftClose, PanelLeftOpen, Bell, ChevronDown, ChevronRight, Store,
+  MonitorCheck, Zap, UtensilsCrossed, Scale, Lock, Unlock
 } from 'lucide-react'
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/utils/supabase/client'
@@ -70,6 +70,97 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     setIsCollapsed(prev => {
       const next = !prev
       localStorage.setItem('hub_sidebar_collapsed', String(next))
+      return next
+    })
+  }
+
+  // Controle de Sanfona (Accordion) e Cadeado no Menu Lateral Clássico
+  const [isMenuLocked, setIsMenuLocked] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('hub_menu_locked') === 'true'
+  })
+
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
+    if (typeof window === 'undefined') {
+      return { gestao: true, sistema: true, extras: true, paratech_sistemas: true, tecnica: false, ajuda: false }
+    }
+    const saved = localStorage.getItem('hub_sidebar_sections_state')
+    if (saved) {
+      try { return JSON.parse(saved) } catch (_) {}
+    }
+    return { gestao: true, sistema: true, extras: true, paratech_sistemas: true, tecnica: false, ajuda: false }
+  })
+
+  const toggleMenuLock = () => {
+    setIsMenuLocked(prev => {
+      const next = !prev
+      localStorage.setItem('hub_menu_locked', String(next))
+      if (next) {
+        toast('Menus bloqueados abertos! Todas as opções ficarão sempre visíveis.', { icon: '🔒' })
+      } else {
+        toast('Modo Sanfona ativado! Clique nos tópicos para recolher ou expandir.', { icon: '🔓' })
+      }
+      return next
+    })
+  }
+
+  const isSectionOpen = (sectionId: string): boolean => {
+    // Se o cadeado estiver ativado, todos os menus ficam travados abertos
+    if (isMenuLocked) return true
+
+    // Garante que o tópico da rota atual sempre fique visível
+    if (sectionId === 'gestao' && (
+      pathname.startsWith('/dashboard/contabilidades') ||
+      pathname.startsWith('/dashboard/clientes') ||
+      pathname.startsWith('/dashboard/faturas') ||
+      pathname.startsWith('/dashboard/minhas-faturas') ||
+      pathname.startsWith('/dashboard/meus-clientes')
+    )) return true
+
+    if (sectionId === 'sistema' && (
+      pathname.startsWith('/dashboard/notas-fiscais') ||
+      pathname.startsWith('/dashboard/distribuicao-dfe') ||
+      pathname.startsWith('/dashboard/relatorios') ||
+      pathname.startsWith('/dashboard/corretor-tributario')
+    )) return true
+
+    if (sectionId === 'extras' && (
+      pathname.startsWith('/dashboard/saneador-arquivos') ||
+      pathname.startsWith('/dashboard/sugestor-tributario')
+    )) return true
+
+    if (sectionId === 'paratech_sistemas' && (
+      pathname.startsWith('/dashboard/mei-simples') ||
+      pathname.startsWith('/dashboard/tech-slim') ||
+      pathname.startsWith('/dashboard/tech-pro') ||
+      pathname.startsWith('/dashboard/gastro') ||
+      pathname.startsWith('/dashboard/pes-ai')
+    )) return true
+
+    if (sectionId === 'tecnica' && (
+      pathname.startsWith('/dashboard/permissoes') ||
+      pathname.startsWith('/dashboard/aparencia') ||
+      pathname.startsWith('/dashboard/configuracoes-portal') ||
+      pathname.startsWith('/dashboard/configuracoes') ||
+      pathname.startsWith('/dashboard/integracoes') ||
+      pathname.startsWith('/dashboard/meu-perfil')
+    )) return true
+
+    if (sectionId === 'ajuda' && pathname.startsWith('/dashboard/tutorial')) return true
+
+    return openSections[sectionId] !== false
+  }
+
+  const toggleSection = (sectionId: string) => {
+    if (isMenuLocked) {
+      toast('Os menus estão travados abertos. Destranque o cadeado no topo para usar a sanfona.', { icon: '🔒' })
+      return
+    }
+
+    setOpenSections(prev => {
+      const current = prev[sectionId] !== false
+      const next = { ...prev, [sectionId]: !current }
+      localStorage.setItem('hub_sidebar_sections_state', JSON.stringify(next))
       return next
     })
   }
@@ -309,6 +400,51 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     )
   }
 
+  // Componente de Cabeçalho de Categoria / Seção com Sanfona e Cadeado
+  const MenuSectionHeader = ({ 
+    id, 
+    label, 
+    itemCount 
+  }: { 
+    id: string
+    label: string
+    itemCount?: number 
+  }) => {
+    if (isCollapsed) {
+      return <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+    }
+
+    const isOpen = isSectionOpen(id)
+
+    return (
+      <button
+        type="button"
+        onClick={() => toggleSection(id)}
+        className="w-full flex items-center justify-between px-3 py-1.5 mt-3 mb-1 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider rounded-lg hover:bg-slate-100/80 dark:hover:bg-slate-800/60 hover:text-slate-700 dark:hover:text-slate-300 transition-all cursor-pointer group select-none text-left"
+        title={isMenuLocked ? `${label} (Fixado Aberto pelo Cadeado)` : isOpen ? `Clique para recolher ${label}` : `Clique para expandir ${label}`}
+      >
+        <div className="flex items-center gap-1.5 truncate">
+          <span className="truncate">{label}</span>
+          {!isOpen && itemCount !== undefined && (
+            <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded-full bg-slate-200/80 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+              {itemCount}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {isMenuLocked ? (
+            <Lock size={11} className="text-slate-400/70 dark:text-slate-600" />
+          ) : (
+            <ChevronDown 
+              size={13} 
+              className={`transition-transform duration-200 ${isOpen ? 'rotate-0 text-blue-500 dark:text-blue-400' : '-rotate-90 text-slate-400'}`} 
+            />
+          )}
+        </div>
+      </button>
+    )
+  }
+
   const SidebarContent = () => (
     <>
       <div className={`p-4 ${isCollapsed ? 'p-3 text-center' : 'lg:p-5'} pb-3 border-b border-slate-100 dark:border-slate-800/80 flex items-start justify-between`}>
@@ -359,9 +495,35 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
       </div>
       
       <nav className={`flex-1 ${isCollapsed ? 'px-2' : 'px-3 lg:px-4'} space-y-1 mt-2 overflow-y-auto custom-scrollbar`}>
-        {/* TÓPICO 1: VISÃO GERAL */}
+        {/* TÓPICO 1: VISÃO GERAL COM CADEADO DE TRAVA / MODO SANFONA */}
         {!isCollapsed ? (
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-2">Visão Geral</div>
+          <div className="flex items-center justify-between px-3 mt-2 mb-1.5">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Visão Geral</span>
+            <button
+              type="button"
+              onClick={toggleMenuLock}
+              title={isMenuLocked 
+                ? "Cadeado Trancado: Todos os submenus estão travados abertos. Clique para ativar a Sanfona." 
+                : "Cadeado Aberto: Modo Sanfona ativo. Clique para travar todos os submenus abertos."}
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer shadow-2xs ${
+                isMenuLocked
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300 border border-blue-200/90 dark:border-blue-800 hover:bg-blue-100'
+                  : 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100'
+              }`}
+            >
+              {isMenuLocked ? (
+                <>
+                  <Lock size={10} className="text-blue-600 dark:text-blue-400" />
+                  <span>Fixado Aberto</span>
+                </>
+              ) : (
+                <>
+                  <Unlock size={10} className="text-amber-600 dark:text-amber-400" />
+                  <span>Sanfona</span>
+                </>
+              )}
+            </button>
+          </div>
         ) : (
           <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
         )}
@@ -371,66 +533,66 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         {role === 'admin' && (
           <>
             {/* TÓPICO 2: GESTÃO */}
-            {!isCollapsed ? (
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Gestão</div>
-            ) : (
-              <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+            <MenuSectionHeader id="gestao" label="Gestão" itemCount={3} />
+            {(isCollapsed || isSectionOpen('gestao')) && (
+              <div className="space-y-1 animate-in fade-in duration-150">
+                <NavItem href="/dashboard/contabilidades" icon={Building2} label="Contabilidades" />
+                <NavItem href="/dashboard/clientes" icon={Users} label="Clientes" />
+                <NavItem href="/dashboard/faturas" icon={Receipt} label="Faturas" />
+              </div>
             )}
-            <NavItem href="/dashboard/contabilidades" icon={Building2} label="Contabilidades" />
-            <NavItem href="/dashboard/clientes" icon={Users} label="Clientes" />
-            <NavItem href="/dashboard/faturas" icon={Receipt} label="Faturas" />
 
             {/* TÓPICO 3: SISTEMA */}
-            {!isCollapsed ? (
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Sistema</div>
-            ) : (
-              <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+            <MenuSectionHeader id="sistema" label="Sistema" itemCount={4} />
+            {(isCollapsed || isSectionOpen('sistema')) && (
+              <div className="space-y-1 animate-in fade-in duration-150">
+                <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Notas Fiscais" />
+                <NavItem href="/dashboard/distribuicao-dfe" icon={Inbox} label="Distribuição de DF-e" />
+                <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
+                <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Analisador Tributário" />
+              </div>
             )}
-            <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Notas Fiscais" />
-            <NavItem href="/dashboard/distribuicao-dfe" icon={Inbox} label="Distribuição de DF-e" />
-            <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
-            <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Analisador Tributário" />
 
             {/* TÓPICO 4: EXTRAS */}
-            {!isCollapsed ? (
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Extras</div>
-            ) : (
-              <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+            <MenuSectionHeader id="extras" label="Extras" itemCount={2} />
+            {(isCollapsed || isSectionOpen('extras')) && (
+              <div className="space-y-1 animate-in fade-in duration-150">
+                <NavItem href="/dashboard/saneador-arquivos" icon={Database} label="Saneador de Arquivos" />
+                <NavItem href="/dashboard/sugestor-tributario" icon={ScanText} label="Sugestor Tributário" />
+              </div>
             )}
-            <NavItem href="/dashboard/saneador-arquivos" icon={Database} label="Saneador de Arquivos" />
-            <NavItem href="/dashboard/sugestor-tributario" icon={ScanText} label="Sugestor Tributário" />
 
             {/* TÓPICO 5: PARATECH SISTEMAS */}
-            {!isCollapsed ? (
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Paratech Sistemas</div>
-            ) : (
-              <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+            <MenuSectionHeader id="paratech_sistemas" label="Paratech Sistemas" itemCount={5} />
+            {(isCollapsed || isSectionOpen('paratech_sistemas')) && (
+              <div className="space-y-1 animate-in fade-in duration-150">
+                <NavItem href="/dashboard/mei-simples" icon={Store} label="MEI Simples" />
+                <NavItem href="/dashboard/tech-slim" icon={MonitorCheck} label="Tech Slim" />
+                <NavItem href="/dashboard/tech-pro" icon={Zap} label="Tech Pro" />
+                <NavItem href="/dashboard/gastro" icon={UtensilsCrossed} label="Gastro" />
+                <NavItem href="/dashboard/pes-ai" icon={Scale} label="Pes.Ai" />
+              </div>
             )}
-            <NavItem href="/dashboard/mei-simples" icon={Store} label="MEI Simples" />
-            <NavItem href="/dashboard/tech-slim" icon={MonitorCheck} label="Tech Slim" />
-            <NavItem href="/dashboard/tech-pro" icon={Zap} label="Tech Pro" />
-            <NavItem href="/dashboard/gastro" icon={UtensilsCrossed} label="Gastro" />
-            <NavItem href="/dashboard/pes-ai" icon={Scale} label="Pes.Ai" />
 
             {/* TÓPICO 6: ÁREA TÉCNICA */}
-            {!isCollapsed ? (
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Área Técnica</div>
-            ) : (
-              <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+            <MenuSectionHeader id="tecnica" label="Área Técnica" itemCount={5} />
+            {(isCollapsed || isSectionOpen('tecnica')) && (
+              <div className="space-y-1 animate-in fade-in duration-150">
+                <NavItem href="/dashboard/permissoes" icon={ShieldCheck} label="Permissões" />
+                <NavItem href="/dashboard/aparencia" icon={Palette} label="Aparência" />
+                <NavItem href="/dashboard/configuracoes-portal" icon={Sliders} label="Configurações do Portal" />
+                <NavItem href="/dashboard/configuracoes" icon={Settings} label="Configurações Hub" />
+                <NavItem href="/dashboard/integracoes" icon={PlugZap} label="Integrações & APIs" />
+              </div>
             )}
-            <NavItem href="/dashboard/permissoes" icon={ShieldCheck} label="Permissões" />
-            <NavItem href="/dashboard/aparencia" icon={Palette} label="Aparência" />
-            <NavItem href="/dashboard/configuracoes-portal" icon={Sliders} label="Configurações do Portal" />
-            <NavItem href="/dashboard/configuracoes" icon={Settings} label="Configurações Hub" />
-            <NavItem href="/dashboard/integracoes" icon={PlugZap} label="Integrações & APIs" />
 
             {/* TÓPICO 7: AJUDA */}
-            {!isCollapsed ? (
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Ajuda</div>
-            ) : (
-              <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+            <MenuSectionHeader id="ajuda" label="Ajuda" itemCount={1} />
+            {(isCollapsed || isSectionOpen('ajuda')) && (
+              <div className="space-y-1 animate-in fade-in duration-150">
+                <NavItem href="/dashboard/tutorial" icon={GraduationCap} label="Tutorial & Tour IA" />
+              </div>
             )}
-            <NavItem href="/dashboard/tutorial" icon={GraduationCap} label="Tutorial & Tour IA" />
           </>
         )}
 
@@ -440,67 +602,67 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             {/* TÓPICO 2: GESTÃO */}
             {canAccess('faturas') && (
               <>
-                {!isCollapsed ? (
-                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Gestão</div>
-                ) : (
-                  <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+                <MenuSectionHeader id="gestao" label="Gestão" itemCount={1} />
+                {(isCollapsed || isSectionOpen('gestao')) && (
+                  <div className="space-y-1 animate-in fade-in duration-150">
+                    <NavItem href="/dashboard/minhas-faturas" icon={Receipt} label="Minhas Faturas" />
+                  </div>
                 )}
-                <NavItem href="/dashboard/minhas-faturas" icon={Receipt} label="Minhas Faturas" />
               </>
             )}
 
             {/* TÓPICO 3: SISTEMA */}
             {(canAccess('notas_fiscais') || canAccess('distribuicao_dfe') || canAccess('relatorios') || canAccess('corretor_tributario')) && (
               <>
-                {!isCollapsed ? (
-                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Sistema</div>
-                ) : (
-                  <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+                <MenuSectionHeader id="sistema" label="Sistema" />
+                {(isCollapsed || isSectionOpen('sistema')) && (
+                  <div className="space-y-1 animate-in fade-in duration-150">
+                    {canAccess('notas_fiscais') && <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Minhas Notas Fiscais" />}
+                    {canAccess('distribuicao_dfe') && <NavItem href="/dashboard/distribuicao-dfe" icon={Inbox} label="Distribuição de DF-e" />}
+                    {(canAccess('relatorios') || canAccess('relatorios_resumo') || canAccess('relatorios_monofasicos') || canAccess('relatorios_auditoria')) && (
+                      <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
+                    )}
+                    {canAccess('corretor_tributario') && <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Analisador Tributário" />}
+                  </div>
                 )}
-                {canAccess('notas_fiscais') && <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Minhas Notas Fiscais" />}
-                {canAccess('distribuicao_dfe') && <NavItem href="/dashboard/distribuicao-dfe" icon={Inbox} label="Distribuição de DF-e" />}
-                {(canAccess('relatorios') || canAccess('relatorios_resumo') || canAccess('relatorios_monofasicos') || canAccess('relatorios_auditoria')) && (
-                  <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
-                )}
-                {canAccess('corretor_tributario') && <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Analisador Tributário" />}
               </>
             )}
 
             {/* TÓPICO 4: EXTRAS */}
             {(canAccess('saneador_arquivos') || canAccess('sugestor_tributario')) && (
               <>
-                {!isCollapsed ? (
-                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Extras</div>
-                ) : (
-                  <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+                <MenuSectionHeader id="extras" label="Extras" />
+                {(isCollapsed || isSectionOpen('extras')) && (
+                  <div className="space-y-1 animate-in fade-in duration-150">
+                    {canAccess('saneador_arquivos') && <NavItem href="/dashboard/saneador-arquivos" icon={Database} label="Saneador de Arquivos" />}
+                    {canAccess('sugestor_tributario') && <NavItem href="/dashboard/sugestor-tributario" icon={ScanText} label="Sugestor Tributário" />}
+                  </div>
                 )}
-                {canAccess('saneador_arquivos') && <NavItem href="/dashboard/saneador-arquivos" icon={Database} label="Saneador de Arquivos" />}
-                {canAccess('sugestor_tributario') && <NavItem href="/dashboard/sugestor-tributario" icon={ScanText} label="Sugestor Tributário" />}
               </>
             )}
 
             {/* TÓPICO 5: ÁREA TÉCNICA */}
             {(canAccess('aparencia') || canAccess('configuracoes_hub') || canAccess('integracoes') || canAccess('meu_perfil')) && (
               <>
-                {!isCollapsed ? (
-                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Área Técnica</div>
-                ) : (
-                  <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+                <MenuSectionHeader id="tecnica" label="Área Técnica" />
+                {(isCollapsed || isSectionOpen('tecnica')) && (
+                  <div className="space-y-1 animate-in fade-in duration-150">
+                    {canAccess('aparencia') && <NavItem href="/dashboard/aparencia" icon={Palette} label="Aparência" />}
+                    {canAccess('configuracoes_hub') && <NavItem href="/dashboard/configuracoes" icon={Settings} label="Configurações Hub" />}
+                    {canAccess('integracoes') && <NavItem href="/dashboard/integracoes" icon={PlugZap} label="Integrações (APIs)" />}
+                    {canAccess('meu_perfil') && <NavItem href="/dashboard/meu-perfil" icon={UserCircle} label="Meu Perfil" />}
+                  </div>
                 )}
-                {canAccess('aparencia') && <NavItem href="/dashboard/aparencia" icon={Palette} label="Aparência" />}
-                {canAccess('configuracoes_hub') && <NavItem href="/dashboard/configuracoes" icon={Settings} label="Configurações Hub" />}
-                {canAccess('integracoes') && <NavItem href="/dashboard/integracoes" icon={PlugZap} label="Integrações (APIs)" />}
-                {canAccess('meu_perfil') && <NavItem href="/dashboard/meu-perfil" icon={UserCircle} label="Meu Perfil" />}
               </>
             )}
 
             {/* TÓPICO 6: AJUDA */}
-            {!isCollapsed ? (
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Ajuda</div>
-            ) : (
-              <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+            <MenuSectionHeader id="ajuda" label="Ajuda" itemCount={1} />
+            {(isCollapsed || isSectionOpen('ajuda')) && (
+              <div className="space-y-1 animate-in fade-in duration-150">
+                <NavItem href="/dashboard/tutorial" icon={GraduationCap} label="Tutorial & Tour IA" />
+              </div>
             )}
-            <NavItem href="/dashboard/tutorial" icon={GraduationCap} label="Tutorial & Tour IA" />
           </>
         )}
 
@@ -510,67 +672,67 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             {/* TÓPICO 2: GESTÃO */}
             {canAccess('contabilidade_meus_clientes') && (
               <>
-                {!isCollapsed ? (
-                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Gestão</div>
-                ) : (
-                  <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+                <MenuSectionHeader id="gestao" label="Gestão" itemCount={1} />
+                {(isCollapsed || isSectionOpen('gestao')) && (
+                  <div className="space-y-1 animate-in fade-in duration-150">
+                    <NavItem href="/dashboard/meus-clientes" icon={Users} label="Meus Clientes" />
+                  </div>
                 )}
-                <NavItem href="/dashboard/meus-clientes" icon={Users} label="Meus Clientes" />
               </>
             )}
 
             {/* TÓPICO 3: SISTEMA */}
             {(canAccess('notas_fiscais') || canAccess('distribuicao_dfe') || canAccess('relatorios') || canAccess('corretor_tributario')) && (
               <>
-                {!isCollapsed ? (
-                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Sistema</div>
-                ) : (
-                  <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+                <MenuSectionHeader id="sistema" label="Sistema" />
+                {(isCollapsed || isSectionOpen('sistema')) && (
+                  <div className="space-y-1 animate-in fade-in duration-150">
+                    {canAccess('notas_fiscais') && <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Notas Fiscais (XMLs)" />}
+                    {canAccess('distribuicao_dfe') && <NavItem href="/dashboard/distribuicao-dfe" icon={Inbox} label="Distribuição de DF-e" />}
+                    {(canAccess('relatorios') || canAccess('relatorios_resumo') || canAccess('relatorios_monofasicos') || canAccess('relatorios_auditoria')) && (
+                      <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
+                    )}
+                    {canAccess('corretor_tributario') && <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Analisador Tributário" />}
+                  </div>
                 )}
-                {canAccess('notas_fiscais') && <NavItem href="/dashboard/notas-fiscais" icon={FileDown} label="Notas Fiscais (XMLs)" />}
-                {canAccess('distribuicao_dfe') && <NavItem href="/dashboard/distribuicao-dfe" icon={Inbox} label="Distribuição de DF-e" />}
-                {(canAccess('relatorios') || canAccess('relatorios_resumo') || canAccess('relatorios_monofasicos') || canAccess('relatorios_auditoria')) && (
-                  <NavItem href="/dashboard/relatorios" icon={BarChart3} label="Relatórios" />
-                )}
-                {canAccess('corretor_tributario') && <NavItem href="/dashboard/corretor-tributario" icon={Sparkles} label="Analisador Tributário" />}
               </>
             )}
 
             {/* TÓPICO 4: EXTRAS */}
             {(canAccess('saneador_arquivos') || canAccess('sugestor_tributario')) && (
               <>
-                {!isCollapsed ? (
-                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Extras</div>
-                ) : (
-                  <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+                <MenuSectionHeader id="extras" label="Extras" />
+                {(isCollapsed || isSectionOpen('extras')) && (
+                  <div className="space-y-1 animate-in fade-in duration-150">
+                    {canAccess('saneador_arquivos') && <NavItem href="/dashboard/saneador-arquivos" icon={Database} label="Saneador de Arquivos" />}
+                    {canAccess('sugestor_tributario') && <NavItem href="/dashboard/sugestor-tributario" icon={ScanText} label="Sugestor Tributário" />}
+                  </div>
                 )}
-                {canAccess('saneador_arquivos') && <NavItem href="/dashboard/saneador-arquivos" icon={Database} label="Saneador de Arquivos" />}
-                {canAccess('sugestor_tributario') && <NavItem href="/dashboard/sugestor-tributario" icon={ScanText} label="Sugestor Tributário" />}
               </>
             )}
 
             {/* TÓPICO 5: ÁREA TÉCNICA */}
             {(canAccess('aparencia') || canAccess('configuracoes_hub') || canAccess('integracoes') || canAccess('meu_perfil')) && (
               <>
-                {!isCollapsed ? (
-                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Área Técnica</div>
-                ) : (
-                  <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+                <MenuSectionHeader id="tecnica" label="Área Técnica" />
+                {(isCollapsed || isSectionOpen('tecnica')) && (
+                  <div className="space-y-1 animate-in fade-in duration-150">
+                    {canAccess('aparencia') && <NavItem href="/dashboard/aparencia" icon={Palette} label="Aparência" />}
+                    {canAccess('configuracoes_hub') && <NavItem href="/dashboard/configuracoes" icon={Settings} label="Configurações Hub" />}
+                    {canAccess('integracoes') && <NavItem href="/dashboard/integracoes" icon={PlugZap} label="Integrações & APIs" />}
+                    {canAccess('meu_perfil') && <NavItem href="/dashboard/meu-perfil" icon={Building2} label="Perfil do Escritório" />}
+                  </div>
                 )}
-                {canAccess('aparencia') && <NavItem href="/dashboard/aparencia" icon={Palette} label="Aparência" />}
-                {canAccess('configuracoes_hub') && <NavItem href="/dashboard/configuracoes" icon={Settings} label="Configurações Hub" />}
-                {canAccess('integracoes') && <NavItem href="/dashboard/integracoes" icon={PlugZap} label="Integrações & APIs" />}
-                {canAccess('meu_perfil') && <NavItem href="/dashboard/meu-perfil" icon={Building2} label="Perfil do Escritório" />}
               </>
             )}
 
             {/* TÓPICO 6: AJUDA */}
-            {!isCollapsed ? (
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-3 mt-4">Ajuda</div>
-            ) : (
-              <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
+            <MenuSectionHeader id="ajuda" label="Ajuda" itemCount={1} />
+            {(isCollapsed || isSectionOpen('ajuda')) && (
+              <div className="space-y-1 animate-in fade-in duration-150">
+                <NavItem href="/dashboard/tutorial" icon={GraduationCap} label="Tutorial & Tour IA" />
+              </div>
             )}
-            <NavItem href="/dashboard/tutorial" icon={GraduationCap} label="Tutorial & Tour IA" />
           </>
         )}
       </nav>
