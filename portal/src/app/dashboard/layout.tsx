@@ -420,24 +420,24 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
       <button
         type="button"
         onClick={() => toggleSection(id)}
-        className="w-full flex items-center justify-between px-3 py-1.5 mt-3 mb-1 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider rounded-lg hover:bg-slate-100/80 dark:hover:bg-slate-800/60 hover:text-slate-700 dark:hover:text-slate-300 transition-all cursor-pointer group select-none text-left"
+        className="w-full flex items-center justify-between px-3 py-1.5 mt-3 mb-1 text-[11px] font-black text-black dark:text-white uppercase tracking-wider rounded-lg hover:bg-slate-100/80 dark:hover:bg-slate-800/60 transition-all cursor-pointer group select-none text-left"
         title={isMenuLocked ? `${label} (Fixado Aberto pelo Cadeado)` : isOpen ? `Clique para recolher ${label}` : `Clique para expandir ${label}`}
       >
         <div className="flex items-center gap-1.5 truncate">
-          <span className="truncate">{label}</span>
+          <span className="truncate text-black dark:text-white">{label}</span>
           {!isOpen && itemCount !== undefined && (
-            <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded-full bg-slate-200/80 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+            <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded-full bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
               {itemCount}
             </span>
           )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
           {isMenuLocked ? (
-            <Lock size={11} className="text-slate-400/70 dark:text-slate-600" />
+            <Lock size={11} className="text-black/70 dark:text-white/70" />
           ) : (
             <ChevronDown 
               size={13} 
-              className={`transition-transform duration-200 ${isOpen ? 'rotate-0 text-blue-500 dark:text-blue-400' : '-rotate-90 text-slate-400'}`} 
+              className={`transition-transform duration-200 ${isOpen ? 'rotate-0 text-black dark:text-white' : '-rotate-90 text-slate-500 dark:text-slate-400'}`} 
             />
           )}
         </div>
@@ -498,7 +498,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         {/* TÓPICO 1: VISÃO GERAL COM CADEADO DE TRAVA / MODO SANFONA */}
         {!isCollapsed ? (
           <div className="flex items-center justify-between px-3 mt-2 mb-1.5">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Visão Geral</span>
+            <span className="text-[11px] font-black text-black dark:text-white uppercase tracking-wider">Visão Geral</span>
             <button
               type="button"
               onClick={toggleMenuLock}
@@ -1316,7 +1316,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                       {/* Dropdown Suspenso com Submenu */}
                       {isOpen && (
                         <div className="absolute left-0 top-full mt-1.5 w-72 sm:w-80 bg-white dark:bg-[#0B1120] border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 py-1.5 mb-1 border-b border-slate-100 dark:border-slate-800/80">
+                          <div className="text-[10px] font-black uppercase tracking-wider text-black dark:text-white px-3 py-1.5 mb-1 border-b border-slate-100 dark:border-slate-800/80">
                             {topic.label}
                           </div>
                           <div className="space-y-1">
