@@ -640,8 +640,24 @@ export default function RelatoriosPage() {
         contabilidade_nome: currentCli.contabilidade_nome
       }
 
+      // Se houver dados auditados de monofásicos no XML, sincroniza o consolidado para exportação fiel
+      const monofasicoAuditoria = modoMonofasicoCard === 'cst'
+        ? (totaisMonofasicos?.valor_regular ?? auditData.consolidado?.geral?.total_monofasico ?? 0)
+        : (totaisMonofasicos?.valor_total ?? auditData.consolidado?.geral?.total_monofasico ?? 0)
+
+      const faturadoConsolidado = auditData.consolidado?.geral?.total_faturado || 0
+      const tributavelConsolidado = Math.max(0, faturadoConsolidado - monofasicoAuditoria)
+
       const payloadDados = {
         ...auditData,
+        consolidado: {
+          ...auditData.consolidado,
+          geral: {
+            ...auditData.consolidado?.geral,
+            total_monofasico: monofasicoAuditoria > 0 ? monofasicoAuditoria : (auditData.consolidado?.geral?.total_monofasico || 0),
+            total_tributavel_restante: monofasicoAuditoria > 0 ? tributavelConsolidado : (auditData.consolidado?.geral?.total_tributavel_restante || 0)
+          }
+        },
         certificados: (userRole === 'cliente' 
           ? clientes.filter(c => c.id === selectedCliente) 
           : clientes
@@ -1158,23 +1174,76 @@ export default function RelatoriosPage() {
                 </div>
               </div>
 
-              <div className="p-6 rounded-xl bg-slate-50 border border-slate-200">
-                <h4 className="text-base font-bold text-slate-800 mb-4">Segregação do Simples Nacional</h4>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center pb-2 border-b border-slate-200 text-sm">
-                    <span className="text-slate-600 font-medium">Faturamento Bruto:</span>
-                    <span className="font-bold text-slate-800">R$ {(consolidado?.geral?.total_faturado || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+              {(() => {
+                const monofasicoAuditoria = modoMonofasicoCard === 'cst'
+                  ? (totaisMonofasicos?.valor_regular ?? consolidado?.geral?.total_monofasico ?? 0)
+                  : (totaisMonofasicos?.valor_total ?? consolidado?.geral?.total_monofasico ?? 0)
+                const faturado = consolidado?.geral?.total_faturado || 0
+                const baseRestante = Math.max(0, faturado - monofasicoAuditoria)
+
+                return (
+                  <div className="p-6 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+                    <div>
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                        <h4 className="text-base font-bold text-slate-800">Segregação do Simples Nacional</h4>
+                        {/* Seletor Sincronizado NCM x CST 04/06 */}
+                        <div className="flex items-center gap-1 bg-amber-100/90 p-0.5 rounded-lg border border-amber-300/80 text-[10px] font-bold">
+                          <button
+                            type="button"
+                            onClick={() => setModoMonofasicoCard('ncm')}
+                            className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
+                              modoMonofasicoCard === 'ncm' 
+                                ? 'bg-amber-600 text-white shadow-2xs font-extrabold' 
+                                : 'text-amber-800 hover:text-amber-950'
+                            }`}
+                            title="Deduzir o valor total apurado por NCM Monofásico na legislação"
+                          >
+                            Por NCM
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setModoMonofasicoCard('cst')}
+                            className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
+                              modoMonofasicoCard === 'cst' 
+                                ? 'bg-amber-600 text-white shadow-2xs font-extrabold' 
+                                : 'text-amber-800 hover:text-amber-950'
+                            }`}
+                            title="Deduzir apenas o valor emitido formalmente com CST 04 ou 06 nos XMLs"
+                          >
+                            Por CST 04/06
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center pb-2 border-b border-slate-200 text-sm">
+                          <span className="text-slate-600 font-medium">Faturamento Bruto:</span>
+                          <span className="font-bold text-slate-800">R$ {faturado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between items-center pb-2 border-b border-slate-200 text-sm">
+                          <span className="text-amber-700 font-medium flex items-center gap-1">
+                            (-) Monofásicos a Deduzir ({modoMonofasicoCard === 'cst' ? 'Declarado CST 04/06' : 'Total por NCM'}):
+                          </span>
+                          <span className="font-bold text-amber-700">- R$ {monofasicoAuditoria.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between items-center pt-2 font-bold text-base text-blue-700">
+                          <span>Base Tributável Restante:</span>
+                          <span>R$ {baseRestante.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {modoMonofasicoCard === 'cst' && (totaisMonofasicos?.valor_divergente ?? 0) > 0 && (
+                      <div className="mt-4 pt-3 border-t border-amber-200/80 text-[11px] text-amber-800 bg-amber-50/70 p-2.5 rounded-lg flex items-start gap-1.5">
+                        <Sparkles size={14} className="text-amber-600 shrink-0 mt-0.5" />
+                        <span>
+                          <strong>Oportunidade Fiscal:</strong> Existem <strong>R$ {(totaisMonofasicos?.valor_divergente || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong> em produtos com NCM Monofásico emitidos com CST divergente (01/49/99). Ao retificar, a base de cálculo cai para <strong>R$ {Math.max(0, faturado - (totaisMonofasicos?.valor_total || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>, gerando economia extra de ~R$ {(totaisMonofasicos?.estimativa_economia_simples || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} no DAS.
+                        </span>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex justify-between items-center pb-2 border-b border-slate-200 text-sm">
-                    <span className="text-amber-700 font-medium">(-) Monofásicos a Deduzir:</span>
-                    <span className="font-bold text-amber-700">- R$ {(consolidado?.geral?.total_monofasico || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="flex justify-between items-center pt-2 font-bold text-base text-blue-700">
-                    <span>Base Tributável Restante:</span>
-                    <span>R$ {(consolidado?.geral?.total_tributavel_restante || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                </div>
-              </div>
+                )
+              })()}
             </div>
 
             {/* PAINEL DE MODALIDADES DE PAGAMENTO RECEBIDAS */}
