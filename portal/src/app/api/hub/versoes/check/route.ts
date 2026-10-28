@@ -24,6 +24,7 @@ export async function GET(request: Request) {
     const buildNumberAtual = parseInt(searchParams.get('build_number') || searchParams.get('build') || '0', 10)
     const clienteId = searchParams.get('cliente_id')
     const cnpj = searchParams.get('cnpj')
+    const token = searchParams.get('token') || searchParams.get('hub_token')
     const nomeComputador = searchParams.get('nome_computador') || searchParams.get('pc_name') || 'Estação Principal'
     const sistemaOperacional = searchParams.get('so') || searchParams.get('os') || 'Windows'
     const politicaLocal = (searchParams.get('politica') || searchParams.get('modo') || 'informativa').toLowerCase()
@@ -52,12 +53,21 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Erro ao buscar versões' }, { status: 500 })
     }
 
-    // 2. Identifica o cliente se foi informado CNPJ ou ID para checar política personalizada
+    // 2. Identifica o cliente se foi informado Token, CNPJ ou ID para checar política personalizada
     let clienteEncontrado: any = null
-    if (clienteId) {
+    if (token) {
+      const { data: c } = await supabase
+        .from('clientes')
+        .select('id, razao_social, politica_atualizacao')
+        .eq('hub_token', token)
+        .maybeSingle()
+      if (c) clienteEncontrado = c
+    }
+
+    if (!clienteEncontrado && clienteId) {
       const { data: c } = await supabase.from('clientes').select('id, razao_social, politica_atualizacao').eq('id', clienteId).single()
       clienteEncontrado = c
-    } else if (cnpj) {
+    } else if (!clienteEncontrado && cnpj) {
       const cnpjLimpo = cnpj.replace(/\D/g, '')
       const { data: c } = await supabase.from('clientes').select('id, razao_social, politica_atualizacao').ilike('cnpj', `%${cnpjLimpo}%`).limit(1).maybeSingle()
       clienteEncontrado = c
@@ -73,25 +83,43 @@ export async function GET(request: Request) {
     const ipOrigem = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
     const targetClienteId = clienteEncontrado?.id || (clienteId || null)
 
-    supabase
-      .from('telemetria_versoes_clientes')
-      .upsert(
-        {
-          cliente_id: targetClienteId,
-          sistema_id: sistemaId.toLowerCase(),
-          versao_atual: versaoAtual,
-          build_number_atual: buildNumberAtual,
-          politica_configurada: politicaEfetiva,
-          nome_computador: nomeComputador,
-          sistema_operacional: sistemaOperacional,
-          ip_origem: ipOrigem,
-          ultima_checagem: new Date().toISOString()
-        },
-        { onConflict: 'cliente_id, sistema_id, nome_computador' }
-      )
-      .then(({ error: errTele }) => {
-        if (errTele) console.warn('Aviso: Falha ao registrar telemetria de versão:', errTele.message)
-      })
+    const payloadTelemetria = {
+      cliente_id: targetClienteId,
+      sistema_id: sistemaId.toLowerCase(),
+      versao_atual: versaoAtual,
+      build_number_atual: buildNumberAtual,
+      politica_configurada: politicaEfetiva,
+      nome_computador: nomeComputador,
+      sistema_operacional: sistemaOperacional,
+      ip_origem: ipOrigem,
+      ultima_checagem: new Date().toISOString()
+    }
+
+    // Se houver cliente_id, usa o onConflict oficial, senão busca e atualiza
+    if (targetClienteId) {
+      supabase
+        .from('telemetria_versoes_clientes')
+        .upsert(payloadTelemetria, { onConflict: 'cliente_id, sistema_id, nome_computador' })
+        .then(({ error: errTele }) => {
+          if (errTele) console.warn('Aviso telemetria:', errTele.message)
+        })
+    } else {
+      supabase
+        .from('telemetria_versoes_clientes')
+        .select('id')
+        .eq('sistema_id', sistemaId.toLowerCase())
+        .eq('nome_computador', nomeComputador)
+        .is('cliente_id', null)
+        .limit(1)
+        .maybeSingle()
+        .then(({ data: existing }) => {
+          if (existing?.id) {
+            supabase.from('telemetria_versoes_clientes').update(payloadTelemetria).eq('id', existing.id).then(() => {})
+          } else {
+            supabase.from('telemetria_versoes_clientes').insert([payloadTelemetria]).then(() => {})
+          }
+        })
+    }
 
     // 4. Se não há nenhuma versão cadastrada ainda para o sistema
     if (!versoes || versoes.length === 0) {
