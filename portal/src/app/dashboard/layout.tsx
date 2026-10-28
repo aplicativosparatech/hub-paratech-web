@@ -8,7 +8,7 @@ import {
   Menu, X, Sliders, ShieldCheck, Sparkles, Database,
   Maximize2, Minimize2, Sun, Moon, Palette, ScanText, GraduationCap, Inbox,
   PanelLeftClose, PanelLeftOpen, Bell, ChevronDown, ChevronRight, Store,
-  MonitorCheck, Zap, UtensilsCrossed, Scale, Lock, Unlock
+  MonitorCheck, Zap, UtensilsCrossed, Scale, Lock, Unlock, Rocket
 } from 'lucide-react'
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/utils/supabase/client'
@@ -964,9 +964,18 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                   pathname.startsWith('/dashboard/tech-slim') ||
                   pathname.startsWith('/dashboard/tech-pro') ||
                   pathname.startsWith('/dashboard/gastro') ||
-                  pathname.startsWith('/dashboard/pes-ai'),
+                  pathname.startsWith('/dashboard/pes-ai') ||
+                  pathname.startsWith('/dashboard/versoes'),
         items: [
           ...(role === 'admin' ? [
+            {
+              href: '/dashboard/versoes',
+              label: 'Atualizações & Versões',
+              desc: 'Central de versões e auto-update dos sistemas',
+              icon: Rocket,
+              iconColor: 'text-emerald-600 dark:text-emerald-400',
+              iconBg: 'bg-emerald-50 dark:bg-emerald-950/60'
+            },
             {
               href: '/dashboard/mei-simples',
               label: 'MEI Simples',
