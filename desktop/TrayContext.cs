@@ -148,6 +148,10 @@ namespace HubParatechDesktop
             trayIcon.ContextMenuStrip.Items.Add("Configurações...", null, SetupToken);
             trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
 
+            trayIcon.ContextMenuStrip.Items.Add("Verificar Atualizações...", null, async (s, e) => {
+                await UpdateManager.CheckForUpdatesAsync(ConfigManager.Load().HubToken, isManualCheck: true, trayIcon: trayIcon);
+            });
+
             trayIcon.ContextMenuStrip.Items.Add("Sobre o Hub Paratech...", null, (s, e) => {
                 new AboutForm(ConfigManager.Load().HubToken, lastSync, currentModoProcessamento).ShowDialog();
             });
@@ -194,6 +198,12 @@ namespace HubParatechDesktop
 
             // Faz a primeira sincronização instantaneamente
             _ = SyncWithServer();
+
+            // Checagem em background de novas versões do Hub Paratech
+            _ = Task.Run(async () => {
+                await Task.Delay(5000);
+                await UpdateManager.CheckForUpdatesAsync(config.HubToken, isManualCheck: false, trayIcon: trayIcon);
+            });
         }
 
         private void InitializeIconFrames()
