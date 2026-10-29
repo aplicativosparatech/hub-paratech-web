@@ -130,6 +130,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     )) return true
 
     if (sectionId === 'paratech_sistemas' && (
+      pathname.startsWith('/dashboard/versoes') ||
       pathname.startsWith('/dashboard/mei-simples') ||
       pathname.startsWith('/dashboard/tech-slim') ||
       pathname.startsWith('/dashboard/tech-pro') ||
@@ -298,6 +299,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     const rotasProtegidas = [
       { prefixo: '/dashboard/minhas-faturas', modulo: 'faturas', nome: 'Minhas Faturas' },
       { prefixo: '/dashboard/faturas', modulo: 'faturas', nome: 'Faturas' },
+      { prefixo: '/dashboard/versoes', modulo: '_admin_only', nome: 'Atualizações & Versões' },
       { prefixo: '/dashboard/mei-simples', modulo: '_admin_only', nome: 'MEI Simples' },
       { prefixo: '/dashboard/tech-slim', modulo: '_admin_only', nome: 'Tech Slim' },
       { prefixo: '/dashboard/tech-pro', modulo: '_admin_only', nome: 'Tech Pro' },
@@ -563,9 +565,10 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             )}
 
             {/* TÓPICO 5: PARATECH SISTEMAS */}
-            <MenuSectionHeader id="paratech_sistemas" label="Paratech Sistemas" itemCount={5} />
+            <MenuSectionHeader id="paratech_sistemas" label="Paratech Sistemas" itemCount={6} />
             {(isCollapsed || isSectionOpen('paratech_sistemas')) && (
               <div className="space-y-1 animate-in fade-in duration-150">
+                <NavItem href="/dashboard/versoes" icon={Rocket} label="Atualizações & Versões" />
                 <NavItem href="/dashboard/mei-simples" icon={Store} label="MEI Simples" />
                 <NavItem href="/dashboard/tech-slim" icon={MonitorCheck} label="Tech Slim" />
                 <NavItem href="/dashboard/tech-pro" icon={Zap} label="Tech Pro" />
