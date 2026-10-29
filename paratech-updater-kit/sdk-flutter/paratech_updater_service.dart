@@ -3,8 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import '../data/mei_database.dart';
+import '../data/app_version.dart';
 
 class ParatechUpdateInfo {
   final bool temAtualizacao;
@@ -83,14 +85,14 @@ class ParatechUpdaterService extends ChangeNotifier {
   void initialize({
     required MeiDatabase database,
     String sistemaId = 'mei_simples',
-    String versaoAtual = '1.0.0',
-    int buildNumberAtual = 1,
+    String? versaoAtual,
+    int? buildNumberAtual,
     BuildContext? context,
   }) {
     _database = database;
     _sistemaId = sistemaId;
-    _versaoAtual = versaoAtual;
-    _buildNumberAtual = buildNumberAtual;
+    _versaoAtual = versaoAtual ?? AppVersion.version;
+    _buildNumberAtual = buildNumberAtual ?? AppVersion.buildNumber;
 
     if (database.db.path == ':memory:') return;
 
@@ -135,8 +137,7 @@ class ParatechUpdaterService extends ChangeNotifier {
       final modoLocal = await getModoAtualizacao();
       String cnpj = '';
       if (_database != null) {
-        final issuer = await _database!.getIssuerProfile();
-        cnpj = issuer?['cnpj']?.toString() ?? '';
+        cnpj = (await _database!.getSetting('issuer_cnpj') ?? '').replaceAll(RegExp(r'\D'), '');
       }
 
       String pcName = 'Estacao Principal';
@@ -146,11 +147,19 @@ class ParatechUpdaterService extends ChangeNotifier {
         }
       } catch (_) {}
 
+      String hubToken = '';
+      try {
+        const storage = FlutterSecureStorage();
+        final t = await storage.read(key: 'mei_simples.hub.token');
+        if (t != null) hubToken = t;
+      } catch (_) {}
+
       final uri = Uri.parse(_defaultApiUrl).replace(queryParameters: {
         'sistema_id': _sistemaId,
         'versao_atual': _versaoAtual,
         'build_number': _buildNumberAtual.toString(),
         'cnpj': cnpj,
+        'token': hubToken,
         'nome_computador': pcName,
         'politica': modoLocal,
         'so': Platform.operatingSystem,
@@ -261,6 +270,14 @@ class ParatechUpdaterService extends ChangeNotifier {
     }
   }
 
+  void exibirDialogoManual(BuildContext context) {
+    if (_info != null && _info!.temAtualizacao) {
+      _exibirDialogoAtualizacao(context, _info!);
+    } else {
+      verificarAtualizacoes(context: context, exibirAvisoSeAtualizado: true);
+    }
+  }
+
   void _exibirDialogoAtualizacao(BuildContext context, ParatechUpdateInfo info) {
     showDialog(
       context: context,
@@ -296,10 +313,10 @@ class _UpdateModalDialogState extends State<_UpdateModalDialog> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.emerald.shade50,
+              color: const Color(0xFFECFDF5),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(Icons.rocket_launch_rounded, color: Colors.emerald.shade700, size: 26),
+            child: const Icon(Icons.rocket_launch_rounded, color: Color(0xFF059669), size: 26),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -378,7 +395,7 @@ class _UpdateModalDialogState extends State<_UpdateModalDialog> {
             if (_baixando) ...[
               const Text(
                 'Baixando e preparando atualização...',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.emerald),
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF059669)),
               ),
               const SizedBox(height: 8),
               ListenableBuilder(
@@ -389,7 +406,7 @@ class _UpdateModalDialogState extends State<_UpdateModalDialog> {
                       LinearProgressIndicator(
                         value: widget.updater.downloadProgress > 0 ? widget.updater.downloadProgress : null,
                         backgroundColor: Colors.grey.shade200,
-                        color: Colors.emerald,
+                        color: const Color(0xFF10B981),
                         borderRadius: BorderRadius.circular(8),
                         minHeight: 8,
                       ),
@@ -416,7 +433,7 @@ class _UpdateModalDialogState extends State<_UpdateModalDialog> {
         if (!_baixando)
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.emerald.shade700,
+              backgroundColor: const Color(0xFF059669),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
