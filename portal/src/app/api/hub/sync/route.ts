@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     // 1. Busca o cliente com campos de tolerância e encargos
     const { data: cliente } = await supabase
       .from('clientes')
-      .select('id, razao_social, nome_fantasia, nome_sistema_utilizado, is_ativo, data_inicio_monitoramento, numero_inicial_nfe, numero_inicial_nfce, numero_inicial_nfse, numero_inicial_cte, numero_inicial_mdfe, dias_carencia')
+      .select('id, razao_social, nome_fantasia, nome_sistema_utilizado, is_ativo, data_inicio_monitoramento, numero_inicial_nfe, numero_inicial_nfce, numero_inicial_nfse, numero_inicial_cte, numero_inicial_mdfe, dias_carencia, valor_mensalidade, dia_vencimento')
       .eq('hub_token', token)
       .single()
     if (!cliente) return NextResponse.json({ error: 'Cliente não encontrado' }, { status: 404 })
@@ -157,6 +157,8 @@ export async function POST(request: Request) {
       pastas_compras: config?.pastas_compras || [],
       offline_secret: config?.offline_secret || '123456',
       modo_processamento: config?.modo_processamento_xml || 'hub',
+      valor_mensalidade: Number(cliente.valor_mensalidade || 0),
+      dia_vencimento: Number(cliente.dia_vencimento || 10),
       data_inicio_monitoramento: cliente.data_inicio_monitoramento || null,
       numero_inicial_nfe: cliente.numero_inicial_nfe || 1,
       numero_inicial_nfce: cliente.numero_inicial_nfce || 1,

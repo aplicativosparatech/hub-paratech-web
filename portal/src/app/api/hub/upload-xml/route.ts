@@ -160,6 +160,7 @@ export async function POST(request: Request) {
     const destMatch = xmlString.match(/<dest[^>]*>([\s\S]*?)<\/dest>/)
     const destXml = destMatch ? destMatch[1] : ''
     const cnpjDestinatario = extractTag(destXml, 'CNPJ') || extractTag(destXml, 'CPF')
+    const xNomeDestinatario = extractTag(destXml, 'xNome')
 
     // Limpeza de caracteres especiais preservando caracteres alfanuméricos de CNPJs novos (IN RFB 2.229/2024)
     const cleanClienteDoc = limparDocumento(cliente.cnpj)
@@ -400,6 +401,9 @@ export async function POST(request: Request) {
       valor_monofasico: valorMonofasico || 0,
       cnpj_emitente: cnpjEmitente || null,
       cnpj_destinatario: cnpjDestinatario || null,
+      destinatario_nome: xNomeDestinatario || (tipoPasta === 'vendas' && mod === '65' && !cnpjDestinatario ? 'Consumidor Final' : null),
+      destinatario_documento: cnpjDestinatario || null,
+      emitente_nome: xNomeEmitente || null,
       cnpj_divergente: isCnpjDivergente,
       motivo_divergencia: isCnpjDivergente ? motivoDivergencia : null,
       status_correcao: statusCorrecao

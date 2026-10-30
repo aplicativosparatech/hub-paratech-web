@@ -8,7 +8,7 @@ import {
   RefreshCw, X, Trash2, AlertTriangle, ArrowRight, 
   Calendar, Filter, Search, Clock, RotateCcw, CheckCircle2, Download,
   Printer, ExternalLink, Copy, Check, FileText, Globe, Sparkles,
-  CheckSquare, Square
+  CheckSquare, Square, User
 } from 'lucide-react'
 import JSZip from 'jszip'
 import toast from 'react-hot-toast'
@@ -60,6 +60,14 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
 
   const [notas, setNotas] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Cache dinâmico de dados enriquecidos de Destinatário e Emitente (obtidos do XML ou API)
+  const [destinatariosMap, setDestinatariosMap] = useState<Record<string, {
+    destinatario_nome: string | null
+    destinatario_documento: string | null
+    emitente_nome?: string | null
+    emitente_documento?: string | null
+  }>>({})
 
   // Paginação local da tabela
   const [currentPage, setCurrentPage] = useState<number>(1)
@@ -335,21 +343,30 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
         if (!num.includes(term) && !chave.includes(term)) return false
       }
 
-      // 4. Busca Geral (CNPJ, Emitente, Valor)
+      // 4. Busca Geral (CNPJ, Emitente, Destinatário, Número, Chave, Valor)
       if (buscaGeral.trim()) {
         const term = buscaGeral.trim().toLowerCase()
-        const emit = String(n.cnpj_emitente || '').toLowerCase()
+        const emit = String(n.cnpj_emitente || destinatariosMap[n.id]?.emitente_nome || '').toLowerCase()
+        const destNome = String(n.destinatario_nome || n.cliente || destinatariosMap[n.id]?.destinatario_nome || (tabela.startsWith('nfce_') ? 'consumidor final' : '')).toLowerCase()
+        const destDoc = String(n.destinatario_documento || n.cnpj_destinatario || destinatariosMap[n.id]?.destinatario_documento || '').toLowerCase()
         const num = String(n.numero || '').toLowerCase()
         const chave = String(n.chave || '').toLowerCase()
         const valor = String(n.valor || '').toLowerCase()
-        if (!emit.includes(term) && !num.includes(term) && !chave.includes(term) && !valor.includes(term)) {
+        if (
+          !emit.includes(term) && 
+          !destNome.includes(term) && 
+          !destDoc.includes(term) && 
+          !num.includes(term) && 
+          !chave.includes(term) && 
+          !valor.includes(term)
+        ) {
           return false
         }
       }
 
       return true
     })
-  }, [notasOficiaisValidas, filtroMes, dataInicio, dataFim, buscaNumero, buscaGeral])
+  }, [notasOficiaisValidas, filtroMes, dataInicio, dataFim, buscaNumero, buscaGeral, destinatariosMap])
 
   // Resetar para página 1 e limpar seleção ao alterar qualquer filtro
   useEffect(() => {
@@ -372,19 +389,21 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     defaultSortDirection: 'desc',
     initialWidths: {
       select: 48,
-      numero: 110,
-      chave: isSaida ? 380 : 320,
+      numero: 100,
+      chave: isSaida ? 300 : 250,
       emitente: 220,
-      valor: 120,
-      emissao: 130,
-      transmissao: 130,
-      assinatura: 100,
-      acoes: 160
+      destinatario: 220,
+      valor: 110,
+      emissao: 125,
+      transmissao: 125,
+      assinatura: 85,
+      acoes: 150
     },
     customExtractors: {
       numero: (n: any) => Number(String(n.numero || '0').replace(/\D/g, '')),
       chave: (n: any) => n.chave || '',
-      emitente: (n: any) => n.cnpj_emitente || (n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : '') || '',
+      emitente: (n: any) => destinatariosMap[n.id]?.emitente_nome || n.cnpj_emitente || (n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : '') || '',
+      destinatario: (n: any) => destinatariosMap[n.id]?.destinatario_nome || n.destinatario_nome || n.cliente || (tabela.startsWith('nfce_') ? 'Consumidor Final' : '') || '',
       valor: (n: any) => Number(n.valor || 0),
       emissao: (n: any) => n.data_emissao || '',
       transmissao: (n: any) => n.data_transmissao || '',
@@ -397,6 +416,37 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     const start = (currentPage - 1) * pageSize
     return notasOrdenadas.slice(start, start + pageSize)
   }, [notasOrdenadas, currentPage, pageSize])
+
+  // Efeito para enriquecer os dados de Destinatário e Emitente das notas exibidas na página
+  useEffect(() => {
+    if (notasPaginadas.length === 0) return
+
+    const faltantes = notasPaginadas.filter(n => {
+      if (destinatariosMap[n.id]) return false
+      if (n.destinatario_nome) return false
+      // Se for NFC-e e não tiver documento no banco, já exibimos Consumidor Final de forma instantânea
+      if (tabela.startsWith('nfce_') && !n.cnpj_destinatario && !n.destinatario_documento) return false
+      return true
+    }).map(n => n.id)
+
+    if (faltantes.length === 0) return
+
+    let cancelado = false
+    fetch('/api/notas-fiscais/destinatarios', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: faltantes, tabela })
+    })
+      .then(res => res.json())
+      .then(json => {
+        if (!cancelado && json && json.dados) {
+          setDestinatariosMap(prev => ({ ...prev, ...json.dados }))
+        }
+      })
+      .catch(e => console.warn('Erro ao carregar dados de destinatário:', e))
+
+    return () => { cancelado = true }
+  }, [notasPaginadas, tabela])
 
   const syncInfo = formatRelativeSync(ultimaSincronizacaoHub)
 
@@ -827,7 +877,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                 {!isSaida && (
                   <ResizableSortableTh
                     columnId="emitente"
-                    label="Emitente (CNPJ / CPF)"
+                    label="Emitente (Fornecedor)"
                     sortKey="emitente"
                     currentSortKey={sortKey}
                     currentSortDirection={sortDirection}
@@ -837,6 +887,17 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                     minWidth={150}
                   />
                 )}
+                <ResizableSortableTh
+                  columnId="destinatario"
+                  label={tabela.startsWith('nfce_') ? "Destinatário / Consumidor" : "Destinatário"}
+                  sortKey="destinatario"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.destinatario}
+                  onResize={handleResizeColumn}
+                  minWidth={150}
+                />
                 <ResizableSortableTh
                   columnId="valor"
                   label="Valor (R$)"
@@ -896,7 +957,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
             <tbody>
               {notasFiltradas.length === 0 ? (
                 <tr>
-                  <td colSpan={isSaida ? 8 : 9} className="py-12 px-6 text-center text-slate-500">
+                  <td colSpan={isSaida ? 9 : 10} className="py-12 px-6 text-center text-slate-500">
                     <p className="font-semibold text-slate-700 text-base">
                       {temFiltroAtivo 
                         ? 'Nenhuma nota encontrada com os filtros selecionados.' 
@@ -936,6 +997,11 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                 const cleanChaveCnpj = n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : ''
                 const emitenteDoc = n.cnpj_emitente || cleanChaveCnpj
                 const cleanEmit = limparDocumento(emitenteDoc)
+
+                const destInfo = destinatariosMap[n.id]
+                const destinatarioNome = destInfo?.destinatario_nome || n.destinatario_nome || n.cliente || null
+                const destinatarioDoc = destInfo?.destinatario_documento || n.destinatario_documento || n.cnpj_destinatario || null
+                const emitenteNome = destInfo?.emitente_nome || n.emitente_nome || null
 
                 let isDivergente = false
                 let motivoDivergencia = n.motivo_divergencia || ''
@@ -1011,9 +1077,14 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                     </td>
                     {!isSaida && (
                       <td className="p-3.5 font-mono text-xs overflow-hidden">
-                        <div className={`truncate ${isDivergente ? 'text-red-700 font-bold' : 'text-slate-800 font-medium'}`} title={formatDoc(emitenteDoc)}>
-                          {formatDoc(emitenteDoc)}
+                        <div className={`truncate ${isDivergente ? 'text-red-700 font-bold' : 'text-slate-800 font-semibold'}`} title={emitenteNome || formatDoc(emitenteDoc)}>
+                          {emitenteNome || formatDoc(emitenteDoc)}
                         </div>
+                        {emitenteNome && (
+                          <div className="text-[11px] font-mono text-slate-400 mt-0.5 truncate" title={formatDoc(emitenteDoc)}>
+                            {formatDoc(emitenteDoc)}
+                          </div>
+                        )}
                         {isDivergente && (
                           <div className="text-[10px] text-red-600 mt-0.5 font-sans truncate" title={motivoDivergencia || 'Emitente diverge da regra fiscal'}>
                             {motivoDivergencia || `CNPJ diverge da regra`}
@@ -1021,6 +1092,35 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                         )}
                       </td>
                     )}
+                    {/* Coluna de Destinatário */}
+                    <td className="p-3.5 text-xs overflow-hidden">
+                      {destinatarioNome ? (
+                        <div>
+                          <div className="truncate font-semibold text-slate-800" title={destinatarioNome}>
+                            {destinatarioNome}
+                          </div>
+                          {destinatarioDoc && (
+                            <div className="text-[11px] font-mono text-slate-400 mt-0.5 truncate" title={formatDoc(destinatarioDoc)}>
+                              {formatDoc(destinatarioDoc)}
+                            </div>
+                          )}
+                        </div>
+                      ) : destinatarioDoc ? (
+                        <div>
+                          <div className="truncate font-mono font-semibold text-slate-700" title={formatDoc(destinatarioDoc)}>
+                            {formatDoc(destinatarioDoc)}
+                          </div>
+                          <div className="text-[10px] text-slate-400 mt-0.5">Cliente Identificado</div>
+                        </div>
+                      ) : tabela.startsWith('nfce_') ? (
+                        <div className="flex items-center gap-1.5 text-slate-500">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0"></span>
+                          <span className="font-medium text-slate-600 text-xs truncate">Consumidor Final</span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
                     <td className="p-3.5 font-medium overflow-hidden whitespace-nowrap">
                       R$ {Number(n.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
@@ -1213,6 +1313,48 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                 </button>
               </div>
             </div>
+
+            {/* Bloco de Informações do Destinatário */}
+            {(() => {
+              const modalDestInfo = destinatariosMap[modalConsulta.nota.id]
+              const modalDestNome = modalDestInfo?.destinatario_nome || modalConsulta.nota.destinatario_nome || modalConsulta.nota.cliente || null
+              const modalDestDoc = modalDestInfo?.destinatario_documento || modalConsulta.nota.destinatario_documento || modalConsulta.nota.cnpj_destinatario || null
+              const modalEmitNome = modalDestInfo?.emitente_nome || modalConsulta.nota.emitente_nome || null
+              const modalEmitDoc = modalDestInfo?.emitente_documento || modalConsulta.nota.cnpj_emitente || null
+
+              return (
+                <div className="mb-5 p-4 rounded-2xl bg-blue-50/70 border border-blue-200/80 space-y-2.5">
+                  <div className="flex items-center justify-between text-xs font-bold text-blue-900 uppercase tracking-wider">
+                    <span className="flex items-center gap-1.5">
+                      <User size={13} className="text-blue-600" />
+                      Destinatário / Cliente:
+                    </span>
+                    <span className="text-[10px] font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-md">
+                      {tabela.startsWith('nfce_') ? 'Cupom ao Consumidor (Mod 65)' : tabela === 'nfe_entradas' ? 'Empresa Destinatária' : 'Destinatário (Mod 55)'}
+                    </span>
+                  </div>
+
+                  <div className="text-sm font-bold text-slate-800">
+                    {modalDestNome || (tabela.startsWith('nfce_') ? 'Consumidor Final (Sem identificação de CPF)' : 'Não identificado')}
+                  </div>
+
+                  {modalDestDoc && (
+                    <div className="text-xs font-mono text-slate-600 flex items-center gap-1">
+                      <span>CPF / CNPJ:</span>
+                      <strong className="text-slate-800 font-bold">{formatDoc(modalDestDoc)}</strong>
+                    </div>
+                  )}
+
+                  {!isSaida && modalEmitNome && (
+                    <div className="pt-2 border-t border-blue-200/60 text-xs text-slate-600">
+                      <span className="font-semibold text-slate-700">Emitente (Fornecedor):</span>{' '}
+                      <span className="font-bold text-slate-900">{modalEmitNome}</span>
+                      {modalEmitDoc && <span className="font-mono text-slate-500 ml-1">({formatDoc(modalEmitDoc)})</span>}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
 
             {/* Opções de Portais Oficiais */}
             <div className="space-y-3 mb-6">
