@@ -63,7 +63,14 @@ export async function POST(request: Request) {
         try {
           await sendWhatsAppMessage({
             to: cliente.whatsapp,
-            message: `✅ *Pagamento Confirmado!*\n\nOlá, ${cliente.nome_fantasia || cliente.razao_social}! Confirmamos o recebimento da sua fatura no valor de ${valorFormatado} referente a ${refMes}.\n\nSeu sistema está liberado para uso. Muito obrigado pela parceria!`
+            message: `✅ *Pagamento Confirmado!*\n\nOlá, ${cliente.nome_fantasia || cliente.razao_social}! Confirmamos o recebimento da sua fatura no valor de ${valorFormatado} referente a ${refMes}.\n\nSeu sistema está liberado para uso. Muito obrigado pela parceria!`,
+            remetente: 'Sistema (Webhook InfinitePay)',
+            destinatarioTipo: 'cliente',
+            destinatarioNome: cliente.nome_fantasia || cliente.razao_social,
+            motivo: 'Confirmação de Pagamento Pix',
+            modelo: '4. Ao Pagar (Cliente)',
+            clienteId: cliente?.id,
+            faturaId: fatura?.id,
           })
         } catch (e: any) {
           console.error('Erro ao notificar cliente via WhatsApp:', e.message)
@@ -76,7 +83,14 @@ export async function POST(request: Request) {
         try {
           await sendWhatsAppMessage({
             to: adminPhone,
-            message: `💰 *Novo Pagamento Recebido (InfinitePay)!*\n\n• *Cliente:* ${cliente?.nome_fantasia || cliente?.razao_social}\n• *Valor:* ${valorFormatado}\n• *Referência:* ${refMes}\n• *Fatura ID:* ${fatura.id.split('-')[0]}\n\nStatus do Hub: Liberado no sistema.`
+            message: `💰 *Novo Pagamento Recebido (InfinitePay)!*\n\n• *Cliente:* ${cliente?.nome_fantasia || cliente?.razao_social}\n• *Valor:* ${valorFormatado}\n• *Referência:* ${refMes}\n• *Fatura ID:* ${fatura.id.split('-')[0]}\n\nStatus do Hub: Liberado no sistema.`,
+            remetente: 'Sistema (Webhook InfinitePay)',
+            destinatarioTipo: 'admin',
+            destinatarioNome: 'Administrador Paratech',
+            motivo: `Novo Pagamento (${cliente?.nome_fantasia || cliente?.razao_social})`,
+            modelo: '5. Ao Pagar (Admin)',
+            clienteId: cliente?.id,
+            faturaId: fatura?.id,
           })
         } catch (e: any) {
           console.error('Erro ao notificar admin via WhatsApp:', e.message)
@@ -99,7 +113,14 @@ export async function POST(request: Request) {
         try {
           await sendWhatsAppMessage({
             to: cliente.whatsapp,
-            message: `Olá, ${cliente.nome_fantasia || cliente.razao_social}. Notamos que você iniciou o pagamento da sua fatura de ${valorFormatado}, mas a operação não foi concluída.\n\nPrecisa de ajuda com o Pix ou deseja um novo link? Estamos à disposição para ajudar!`
+            message: `Olá, ${cliente.nome_fantasia || cliente.razao_social}. Notamos que você iniciou o pagamento da sua fatura de ${valorFormatado}, mas a operação não foi concluída.\n\nPrecisa de ajuda com o Pix ou deseja um novo link? Estamos à disposição para ajudar!`,
+            remetente: 'Sistema (Webhook InfinitePay)',
+            destinatarioTipo: 'cliente',
+            destinatarioNome: cliente.nome_fantasia || cliente.razao_social,
+            motivo: 'Abandono de Checkout Pix',
+            modelo: '6. Abandono de Pix',
+            clienteId: cliente?.id,
+            faturaId: fatura?.id,
           })
         } catch (e: any) {
           console.error('Erro ao enviar aviso de abandono via WhatsApp:', e.message)

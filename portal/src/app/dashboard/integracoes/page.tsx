@@ -7,6 +7,7 @@ import { createClient } from '@/utils/supabase/client'
 import { useTableFeatures } from '@/hooks/useTableFeatures'
 import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
 import CardApisHubParatech from '@/components/CardApisHubParatech'
+import CardLogsWhatsApp from '@/components/CardLogsWhatsApp'
 
 type Integracao = {
   id: string;
@@ -32,6 +33,25 @@ export default function IntegracoesPage() {
   const [resultadoTesteAlterdata, setResultadoTesteAlterdata] = useState<any>(null)
   const [logsAlterdata, setLogsAlterdata] = useState<any[]>([])
   const [loadingLogsAlterdata, setLoadingLogsAlterdata] = useState(false)
+  const [cronAtivo, setCronAtivo] = useState(true)
+
+  const handleToggleCron = async (novoEstado: boolean) => {
+    setCronAtivo(novoEstado)
+    const tId = toast.loading(novoEstado ? 'Ativando disparos automáticos do Cron...' : 'Pausando disparos automáticos do Cron...')
+    try {
+      const res = await fetch('/api/whatsapp/logs', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cron_ativo: novoEstado })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Falha ao atualizar Cron')
+      toast.success(data.message, { id: tId })
+    } catch (err: any) {
+      setCronAtivo(!novoEstado)
+      toast.error('Erro ao atualizar Cron: ' + err.message, { id: tId })
+    }
+  }
 
   const {
     sortedData: logsAlterdataOrdenados,
@@ -143,6 +163,18 @@ export default function IntegracoesPage() {
       } else if (data) {
         setIntegracoes(data)
       }
+
+      // Carrega estado do cron de WhatsApp
+      try {
+        const { data: cfg } = await supabase
+          .from('configuracoes_portal_geral')
+          .select('cron_whatsapp_ativo')
+          .eq('id', 1)
+          .maybeSingle()
+        if (cfg && typeof cfg.cron_whatsapp_ativo === 'boolean') {
+          setCronAtivo(cfg.cron_whatsapp_ativo)
+        }
+      } catch (_) {}
       setIsLoading(false)
     }
     loadData()
@@ -1595,9 +1627,29 @@ export default function IntegracoesPage() {
                   Estes são os disparos programados que o robô envia automaticamente aos clientes.
                 </p>
               </div>
-              <span className="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-semibold rounded-full border border-emerald-100">
-                Ativo no Cron (08:00 Diário)
-              </span>
+              {/* Toggle Interativo do Cron */}
+              <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 px-3.5 py-1.5 rounded-xl shadow-2xs">
+                <div className="text-right">
+                  <div className="flex items-center justify-end gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${cronAtivo ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></span>
+                    <span className={`text-xs font-bold ${cronAtivo ? 'text-emerald-700' : 'text-slate-500'}`}>
+                      {cronAtivo ? 'Ativo no Cron (08:00 Diário)' : 'Crons Desativados (Pausados)'}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 block mt-0.5">
+                    {cronAtivo ? 'Disparos automáticos ligados' : 'Nenhuma mensagem automática sairá'}
+                  </span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={cronAtivo}
+                    onChange={() => handleToggleCron(!cronAtivo)}
+                  />
+                  <div className="w-12 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[3px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                </label>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1688,6 +1740,9 @@ export default function IntegracoesPage() {
 
             </div>
           </div>
+
+          {/* Registro de Todas as Mensagens Enviadas (WhatsApp Logs) */}
+          <CardLogsWhatsApp onDataLoaded={(_, ativo) => setCronAtivo(ativo)} />
         </div>
       )}
 

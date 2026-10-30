@@ -20,14 +20,37 @@ export async function GET(request: Request) {
       }
     }
 
-    // 1. Busca configurações globais de juros, multa e carência
+    // 1. Busca configurações globais de juros, multa, carência e estado do Cron
     const { data: configGeral } = await supabase
       .from('configuracoes_portal_geral')
-      .select('global_multa_atraso_percentual, global_juros_mora_mensal_percentual, global_dias_carencia')
+      .select('global_multa_atraso_percentual, global_juros_mora_mensal_percentual, global_dias_carencia, cron_whatsapp_ativo')
       .eq('id', 1)
       .maybeSingle()
 
-    // 2. Busca todas as Faturas Pendentes (que não estão Pagas nem Canceladas)
+    // 2. Busca a API de WhatsApp Ativa
+    const { data: wppApis } = await supabase
+      .from('integracoes')
+      .select('*')
+      .eq('tipo', 'whatsapp')
+      .eq('is_ativo', true)
+      .maybeSingle()
+    
+    if (!wppApis) {
+      return NextResponse.json({ message: 'Nenhuma API de WhatsApp ativa encontrada. Abortando alertas.' })
+    }
+
+    // Verifica se os Crons de WhatsApp estão ativados pelo Administrador
+    const isCronAtivo = configGeral?.cron_whatsapp_ativo ?? (wppApis?.credenciais?.cron_ativo !== false)
+    if (!isCronAtivo) {
+      return NextResponse.json({
+        success: true,
+        cron_ativo: false,
+        message: 'Crons de WhatsApp estão temporariamente desativados pelo Administrador nas configurações de integrações.',
+        disparos: []
+      })
+    }
+
+    // 3. Busca todas as Faturas Pendentes (que não estão Pagas nem Canceladas)
     const { data: faturas, error: faturaError } = await supabase
       .from('faturas')
       .select(`
@@ -40,18 +63,6 @@ export async function GET(request: Request) {
       .eq('status', 'pendente')
 
     if (faturaError) throw faturaError
-
-    // 3. Busca a API de WhatsApp Ativa
-    const { data: wppApis } = await supabase
-      .from('integracoes')
-      .select('*')
-      .eq('tipo', 'whatsapp')
-      .eq('is_ativo', true)
-      .single()
-    
-    if (!wppApis) {
-      return NextResponse.json({ message: 'Nenhuma API de WhatsApp ativa encontrada. Abortando alertas.' })
-    }
 
     const disparosRealizados = []
     const modoContagem = wppApis?.credenciais?.modo_contagem_bloqueio || 'bloqueio_real'
@@ -104,19 +115,27 @@ export async function GET(request: Request) {
       }
 
       let mensagem = null
+      let motivo = 'Cobrança'
+      let modelo = 'Régua de Cobrança'
 
       // REGRA 1: 5 dias antes (Fatura disponível)
       if (diferencaDias === 5) {
+        motivo = 'Pré-Vencimento (5 dias antes)'
+        modelo = '1. Fatura Disponível'
         mensagem = `Olá! A fatura ${fatura.id.split('-')[0]} — Sistema Comercial, referente a ${fatura.competencia || 'este mês'}, da empresa ${cliente.nome_fantasia || cliente.razao_social}, já está disponível.\n• *Valor:* ${valorFormatado}\n• *Vencimento:* ${dataVencimentoFormatada}${pixBloco}\n\nPague via Pix para confirmação imediata!`
       }
       
       // REGRA 2: No dia do Vencimento Efetivo
       else if (diferencaDias === 0) {
+        motivo = 'No Vencimento'
+        modelo = '2. Lembrete de Vencimento'
         mensagem = `Olá! Sua fatura do Sistema Comercial vence hoje, ${dataVencimentoFormatada}.\n• *Valor:* ${valorFormatado}\n\nPara evitar o bloqueio previsto para ${dataBloqueioFormatada}, regularize o pagamento. Faltam ${diasParaBloqueio} dia(s) de tolerância.${pixBloco}`
       }
       
       // REGRA 3: Atrasado, mas antes do bloqueio efetivo
       else if (diferencaDias < 0 && diasParaBloqueio >= 0) {
+        motivo = 'Cobrança em Atraso (Regressiva)'
+        modelo = '3. Atraso & Regressiva'
         if (diasParaBloqueio === 0) {
            mensagem = `Olá. Ainda não identificamos o pagamento da fatura ${fatura.id.split('-')[0]} da empresa ${cliente.nome_fantasia || cliente.razao_social}. Vencimento: ${dataVencimentoFormatada}.\n\n⚠️ O prazo de tolerância para regularizar o pagamento antes do bloqueio TERMINA HOJE.\n• *Valor:* ${valorFormatado}${textoEncargos}${pixBloco}\n\nSe já pagou, favor desconsiderar.`
         } else {
@@ -126,6 +145,8 @@ export async function GET(request: Request) {
       
       // REGRA 4: Já passou da data de bloqueio efetiva
       else if (diasParaBloqueio < 0) {
+        motivo = 'Aviso de Bloqueio por Inadimplência'
+        modelo = 'Aviso de Bloqueio'
         mensagem = `⚠️ *AVISO DE BLOQUEIO* ⚠️\nO prazo de tolerância previsto terminou em ${dataBloqueioFormatada}. Seu sistema pode ter sido bloqueado por pendência financeira.\n\n• *Valor Atualizado:* ${valorFormatado}${textoEncargos}${pixBloco}\n\nO desbloqueio ocorre de forma 100% automática em segundos após a confirmação do Pix.`
       }
 
@@ -133,12 +154,20 @@ export async function GET(request: Request) {
         try {
           await sendWhatsAppMessage({
             to: cliente.whatsapp,
-            message: mensagem
+            message: mensagem,
+            remetente: 'Robô Automático (Cron)',
+            destinatarioTipo: 'cliente',
+            destinatarioNome: cliente.nome_fantasia || cliente.razao_social,
+            motivo,
+            modelo,
+            clienteId: cliente.id,
+            faturaId: fatura.id,
           })
 
           disparosRealizados.push({
             cliente: cliente.nome_fantasia || cliente.razao_social,
             whatsapp: cliente.whatsapp,
+            motivo,
             regra: diferencaDias,
             status: 'enviado'
           })
@@ -146,6 +175,7 @@ export async function GET(request: Request) {
           disparosRealizados.push({
             cliente: cliente.nome_fantasia || cliente.razao_social,
             whatsapp: cliente.whatsapp,
+            motivo,
             regra: diferencaDias,
             status: 'falha',
             erro: err.message
@@ -196,7 +226,13 @@ export async function GET(request: Request) {
           try {
             await sendWhatsAppMessage({
               to: cli.whatsapp,
-              message: msgCert
+              message: msgCert,
+              remetente: 'Robô Automático (Cron)',
+              destinatarioTipo: 'cliente',
+              destinatarioNome: cli.nome_fantasia || cli.razao_social,
+              motivo: `Vencimento de Certificado Digital (${diasParaVencerCert} dias)`,
+              modelo: 'Alerta Certificado Digital A1',
+              clienteId: cli.id,
             })
             disparosRealizados.push({
               cliente: cli.nome_fantasia || cli.razao_social,
@@ -226,7 +262,14 @@ export async function GET(request: Request) {
             try {
               await sendWhatsAppMessage({
                 to: contab.whatsapp,
-                message: msgContab
+                message: msgContab,
+                remetente: 'Robô Automático (Cron)',
+                destinatarioTipo: 'contabilidade',
+                destinatarioNome: contab.razao_social,
+                motivo: `Alerta Fiscal de Certificado (${cli.razao_social})`,
+                modelo: 'Aviso para Contabilidade (Certificado A1)',
+                contabilidadeId: contab.id,
+                clienteId: cli.id,
               })
               disparosRealizados.push({
                 cliente: cli.razao_social,

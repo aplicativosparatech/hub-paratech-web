@@ -125,7 +125,13 @@ export async function POST(request: Request) {
     // 6. Dispara mensagem usando a API ativa do WhatsApp
     await sendWhatsAppMessage({
       to: targetPhone,
-      message: mensagem
+      message: mensagem,
+      remetente: 'Administrador (Manual)',
+      destinatarioTipo: 'contabilidade',
+      destinatarioNome: `Contabilidade (${nomeEmpresa})`,
+      motivo: `Fechamento Fiscal Manual (${compFormatada})`,
+      modelo: 'Fechamento Fiscal Completo',
+      clienteId: cliente_id || undefined,
     })
 
     return NextResponse.json({

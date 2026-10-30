@@ -13,7 +13,12 @@ export async function POST(request: Request) {
 
     const result = await sendWhatsAppMessage({
       to: phone,
-      message: testMessage
+      message: testMessage,
+      remetente: 'Administrador (Manual)',
+      destinatarioTipo: 'admin',
+      destinatarioNome: 'Administrador Paratech',
+      motivo: 'Teste Manual de Conexão',
+      modelo: 'Teste de API WhatsApp'
     })
 
     return NextResponse.json({ success: true, result })

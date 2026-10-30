@@ -122,7 +122,14 @@ export async function POST(request: Request) {
         try {
           await sendWhatsAppMessage({
             to: cliente.whatsapp,
-            message: `✅ *Pagamento Confirmado!*\n\nOlá, ${cliente.nome_fantasia || cliente.razao_social}!\nConfirmamos o recebimento da sua fatura no valor de ${valorFormatado} referente a ${refMes} via Mercado Pago (Pix).\n\nSeu sistema está liberado para uso. Muito obrigado pela parceria!`
+            message: `✅ *Pagamento Confirmado!*\n\nOlá, ${cliente.nome_fantasia || cliente.razao_social}!\nConfirmamos o recebimento da sua fatura no valor de ${valorFormatado} referente a ${refMes} via Mercado Pago (Pix).\n\nSeu sistema está liberado para uso. Muito obrigado pela parceria!`,
+            remetente: 'Sistema (Webhook Mercado Pago)',
+            destinatarioTipo: 'cliente',
+            destinatarioNome: cliente.nome_fantasia || cliente.razao_social,
+            motivo: 'Confirmação de Pagamento Pix',
+            modelo: '4. Ao Pagar (Cliente)',
+            clienteId: cliente?.id,
+            faturaId: fatura?.id,
           })
         } catch (e: any) {
           console.error('Erro ao enviar WhatsApp de confirmação ao cliente:', e.message)
@@ -135,7 +142,14 @@ export async function POST(request: Request) {
         try {
           await sendWhatsAppMessage({
             to: adminPhone,
-            message: `💰 *Novo Pagamento Recebido (Mercado Pago)!*\n\n• *Cliente:* ${cliente?.nome_fantasia || cliente?.razao_social}\n• *Valor:* ${valorFormatado}\n• *Competência:* ${refMes}\n• *Fatura:* ${fatura.id.split('-')[0]}\n• *Status Hub:* Liberado no sistema.`
+            message: `💰 *Novo Pagamento Recebido (Mercado Pago)!*\n\n• *Cliente:* ${cliente?.nome_fantasia || cliente?.razao_social}\n• *Valor:* ${valorFormatado}\n• *Competência:* ${refMes}\n• *Fatura:* ${fatura.id.split('-')[0]}\n• *Status Hub:* Liberado no sistema.`,
+            remetente: 'Sistema (Webhook Mercado Pago)',
+            destinatarioTipo: 'admin',
+            destinatarioNome: 'Administrador Paratech',
+            motivo: `Novo Pagamento (${cliente?.nome_fantasia || cliente?.razao_social})`,
+            modelo: '5. Ao Pagar (Admin)',
+            clienteId: cliente?.id,
+            faturaId: fatura?.id,
           })
         } catch (e: any) {
           console.error('Erro ao avisar admin via WhatsApp:', e.message)

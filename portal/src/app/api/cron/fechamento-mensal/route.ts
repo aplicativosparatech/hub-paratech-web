@@ -31,6 +31,22 @@ export async function GET(request: Request) {
   const nomeCompetencia = `${nomesMeses[mesComp - 1]} de ${anoComp} (${String(mesComp).padStart(2, '0')}/${anoComp})`
 
   try {
+    // 0. Verifica se o cron de WhatsApp está ativo
+    const { data: configGeral } = await supabase
+      .from('configuracoes_portal_geral')
+      .select('cron_whatsapp_ativo')
+      .eq('id', 1)
+      .maybeSingle()
+
+    if (configGeral?.cron_whatsapp_ativo === false) {
+      return NextResponse.json({
+        success: true,
+        cron_ativo: false,
+        message: 'Disparos automáticos do Cron estão pausados pelo Administrador.',
+        disparos: []
+      })
+    }
+
     // 1. Busca todos os agendamentos ativos na tabela 'integracoes'
     const { data: agendamentos, error: errAgendamentos } = await supabase
       .from('integracoes')
@@ -150,7 +166,13 @@ export async function GET(request: Request) {
       try {
         await sendWhatsAppMessage({
           to: phoneWithDdi,
-          message: msg
+          message: msg,
+          remetente: 'Robô Automático (Cron)',
+          destinatarioTipo: 'contabilidade',
+          destinatarioNome: cred.nome_contabilidade || `Contabilidade (${nomeEmpresa})`,
+          motivo: `Fechamento Fiscal - ${nomeEmpresa} (${competenciaStr})`,
+          modelo: 'Fechamento Fiscal Mensal',
+          clienteId: cliente.id,
         })
 
         disparosRealizados.push({

@@ -1,12 +1,70 @@
 import { createAdminClient } from '@/utils/supabase/admin'
 
-interface SendMessageOptions {
+export interface SendWhatsAppMessageOptions {
   to: string; // Número com DDD, ex: 5511999999999
   message: string;
+  remetente?: string; // ex: 'Robô Automático (Cron)', 'Sistema (Webhook)', 'Administrador (Manual)'
+  destinatarioTipo?: 'cliente' | 'contabilidade' | 'admin' | 'outro';
+  destinatarioNome?: string;
+  motivo?: string;
+  modelo?: string;
+  clienteId?: string;
+  contabilidadeId?: string;
+  faturaId?: string;
 }
 
-export async function sendWhatsAppMessage({ to, message }: SendMessageOptions) {
+async function saveWhatsAppLog(supabase: any, logData: {
+  remetente?: string;
+  destinatarioTipo?: string;
+  destinatarioNome?: string;
+  destinatarioNumero: string;
+  motivo?: string;
+  modelo?: string;
+  mensagem: string;
+  provedor?: string;
+  status: 'sucesso' | 'falha';
+  erro?: string;
+  respostaApi?: any;
+  clienteId?: string;
+  contabilidadeId?: string;
+  faturaId?: string;
+}) {
+  try {
+    await supabase.from('whatsapp_logs').insert({
+      remetente: logData.remetente || 'Robô Automático (Cron)',
+      destinatario_tipo: logData.destinatarioTipo || 'cliente',
+      destinatario_nome: logData.destinatarioNome || null,
+      destinatario_numero: logData.destinatarioNumero,
+      motivo: logData.motivo || 'Disparo Avulso',
+      modelo: logData.modelo || 'Mensagem Direta',
+      mensagem: logData.mensagem,
+      provedor: logData.provedor || null,
+      status: logData.status,
+      erro: logData.erro || null,
+      resposta_api: logData.respostaApi || null,
+      cliente_id: logData.clienteId || null,
+      contabilidade_id: logData.contabilidadeId || null,
+      fatura_id: logData.faturaId || null,
+    })
+  } catch (logErr) {
+    console.error('Aviso: Falha ao salvar log de WhatsApp no banco:', logErr)
+  }
+}
+
+export async function sendWhatsAppMessage({
+  to,
+  message,
+  remetente,
+  destinatarioTipo = 'cliente',
+  destinatarioNome,
+  motivo,
+  modelo,
+  clienteId,
+  contabilidadeId,
+  faturaId,
+}: SendWhatsAppMessageOptions) {
   const supabase = createAdminClient()
+  const cleanNumber = to.replace(/\D/g, '')
 
   // 1. Busca a integração ativa do WhatsApp
   const { data: integracao, error } = await supabase
@@ -17,13 +75,25 @@ export async function sendWhatsAppMessage({ to, message }: SendMessageOptions) {
     .single()
 
   if (error || !integracao) {
-    throw new Error('Nenhuma API de WhatsApp está ativa no sistema.')
+    const errMsg = 'Nenhuma API de WhatsApp está ativa no sistema.'
+    await saveWhatsAppLog(supabase, {
+      remetente,
+      destinatarioTipo,
+      destinatarioNome,
+      destinatarioNumero: cleanNumber || to,
+      motivo,
+      modelo,
+      mensagem: message,
+      status: 'falha',
+      erro: errMsg,
+      clienteId,
+      contabilidadeId,
+      faturaId,
+    })
+    throw new Error(errMsg)
   }
 
   const { provedor, credenciais } = integracao
-
-  // Formata o número: remove caracteres não numéricos
-  const cleanNumber = to.replace(/\D/g, '')
 
   // 2. Disparo conforme o provedor ativo
   if (provedor === 'uazapi') {
@@ -31,79 +101,168 @@ export async function sendWhatsAppMessage({ to, message }: SendMessageOptions) {
     const token = credenciais?.token
 
     if (!endpoint || !token) {
-      throw new Error('Uazapi configurada sem URL base ou Token de acesso.')
+      const errMsg = 'Uazapi configurada sem URL base ou Token de acesso.'
+      await saveWhatsAppLog(supabase, {
+        remetente,
+        destinatarioTipo,
+        destinatarioNome,
+        destinatarioNumero: cleanNumber,
+        motivo,
+        modelo,
+        mensagem: message,
+        provedor,
+        status: 'falha',
+        erro: errMsg,
+        clienteId,
+        contabilidadeId,
+        faturaId,
+      })
+      throw new Error(errMsg)
     }
 
-    // 1ª Tentativa: Rota oficial e padrão da Uazapi (uazapiGO) é POST /send/text
-    // Payload: { number: "5537999786187", text: "mensagem" }
-    // Header: token: "<token>"
     const primaryUrl = `${endpoint}/send/text`
     
-    const response = await fetch(primaryUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'token': token,
-        'apikey': token,
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        number: cleanNumber,
-        text: message
+    try {
+      const response = await fetch(primaryUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'token': token,
+          'apikey': token,
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          number: cleanNumber,
+          text: message
+        })
       })
-    })
 
-    if (response.ok) {
-      return await response.json()
-    }
-
-    // Se o status for 404 ou 405 na rota padrão, tenta as alternativas legadas de Wuzapi/Baileys
-    if (response.status === 404 || response.status === 405) {
-      // Fallback 1: Wuzapi original /chat/send/text com Phone / Body
-      try {
-        const fallbackUrl1 = `${endpoint}/chat/send/text`
-        const fallbackResp1 = await fetch(fallbackUrl1, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'token': token,
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            Phone: cleanNumber,
-            Body: message
-          })
+      if (response.ok) {
+        const responseData = await response.json()
+        await saveWhatsAppLog(supabase, {
+          remetente,
+          destinatarioTipo,
+          destinatarioNome,
+          destinatarioNumero: cleanNumber,
+          motivo,
+          modelo,
+          mensagem: message,
+          provedor,
+          status: 'sucesso',
+          respostaApi: responseData,
+          clienteId,
+          contabilidadeId,
+          faturaId,
         })
-        if (fallbackResp1.ok) {
-          return await fallbackResp1.json()
-        }
-      } catch (_) {}
+        return responseData
+      }
 
-      // Fallback 2: /message/send-text ou /message/sendText
-      try {
-        const fallbackUrl2 = `${endpoint}/message/send-text`
-        const fallbackResp2 = await fetch(fallbackUrl2, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'token': token,
-            'apikey': token,
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            number: cleanNumber,
-            text: message
+      // Se 404 ou 405 na rota principal, tenta fallbacks legados
+      if (response.status === 404 || response.status === 405) {
+        // Fallback 1: Wuzapi original /chat/send/text
+        try {
+          const fallbackResp1 = await fetch(`${endpoint}/chat/send/text`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'token': token,
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ Phone: cleanNumber, Body: message })
           })
-        })
-        if (fallbackResp2.ok) {
-          return await fallbackResp2.json()
-        }
-      } catch (_) {}
-    }
+          if (fallbackResp1.ok) {
+            const data1 = await fallbackResp1.json()
+            await saveWhatsAppLog(supabase, {
+              remetente,
+              destinatarioTipo,
+              destinatarioNome,
+              destinatarioNumero: cleanNumber,
+              motivo,
+              modelo,
+              mensagem: message,
+              provedor,
+              status: 'sucesso',
+              respostaApi: data1,
+              clienteId,
+              contabilidadeId,
+              faturaId,
+            })
+            return data1
+          }
+        } catch (_) {}
 
-    // Se todas falharem, reporta o erro detalhado da rota principal
-    const errorText = await response.text()
-    throw new Error(`Erro ao enviar mensagem via Uazapi: ${errorText}`)
+        // Fallback 2: /message/send-text
+        try {
+          const fallbackResp2 = await fetch(`${endpoint}/message/send-text`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'token': token,
+              'apikey': token,
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ number: cleanNumber, text: message })
+          })
+          if (fallbackResp2.ok) {
+            const data2 = await fallbackResp2.json()
+            await saveWhatsAppLog(supabase, {
+              remetente,
+              destinatarioTipo,
+              destinatarioNome,
+              destinatarioNumero: cleanNumber,
+              motivo,
+              modelo,
+              mensagem: message,
+              provedor,
+              status: 'sucesso',
+              respostaApi: data2,
+              clienteId,
+              contabilidadeId,
+              faturaId,
+            })
+            return data2
+          }
+        } catch (_) {}
+      }
+
+      const errorText = await response.text()
+      const fullError = `Erro ao enviar mensagem via Uazapi: ${errorText}`
+      await saveWhatsAppLog(supabase, {
+        remetente,
+        destinatarioTipo,
+        destinatarioNome,
+        destinatarioNumero: cleanNumber,
+        motivo,
+        modelo,
+        mensagem: message,
+        provedor,
+        status: 'falha',
+        erro: fullError,
+        clienteId,
+        contabilidadeId,
+        faturaId,
+      })
+      throw new Error(fullError)
+    } catch (err: any) {
+      if (!err.message?.startsWith('Erro ao enviar')) {
+        await saveWhatsAppLog(supabase, {
+          remetente,
+          destinatarioTipo,
+          destinatarioNome,
+          destinatarioNumero: cleanNumber,
+          motivo,
+          modelo,
+          mensagem: message,
+          provedor,
+          status: 'falha',
+          erro: err.message,
+          clienteId,
+          contabilidadeId,
+          faturaId,
+        })
+      }
+      throw err
+    }
   } 
   
   else if (provedor === 'evolution') {
@@ -112,29 +271,98 @@ export async function sendWhatsAppMessage({ to, message }: SendMessageOptions) {
     const instance = credenciais?.instance
 
     if (!endpoint || !apiKey || !instance) {
-      throw new Error('Evolution API configurada sem Endpoint, API Key ou Nome da Instância.')
+      const errMsg = 'Evolution API configurada sem Endpoint, API Key ou Nome da Instância.'
+      await saveWhatsAppLog(supabase, {
+        remetente,
+        destinatarioTipo,
+        destinatarioNome,
+        destinatarioNumero: cleanNumber,
+        motivo,
+        modelo,
+        mensagem: message,
+        provedor,
+        status: 'falha',
+        erro: errMsg,
+        clienteId,
+        contabilidadeId,
+        faturaId,
+      })
+      throw new Error(errMsg)
     }
 
     const url = `${endpoint}/message/sendText/${instance}`
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': apiKey
-      },
-      body: JSON.stringify({
-        number: cleanNumber,
-        text: message
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': apiKey
+        },
+        body: JSON.stringify({
+          number: cleanNumber,
+          text: message
+        })
       })
-    })
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Erro ao enviar mensagem via Evolution API: ${errorText}`)
+      if (!response.ok) {
+        const errorText = await response.text()
+        const fullError = `Erro ao enviar mensagem via Evolution API: ${errorText}`
+        await saveWhatsAppLog(supabase, {
+          remetente,
+          destinatarioTipo,
+          destinatarioNome,
+          destinatarioNumero: cleanNumber,
+          motivo,
+          modelo,
+          mensagem: message,
+          provedor,
+          status: 'falha',
+          erro: fullError,
+          clienteId,
+          contabilidadeId,
+          faturaId,
+        })
+        throw new Error(fullError)
+      }
+
+      const responseData = await response.json()
+      await saveWhatsAppLog(supabase, {
+        remetente,
+        destinatarioTipo,
+        destinatarioNome,
+        destinatarioNumero: cleanNumber,
+        motivo,
+        modelo,
+        mensagem: message,
+        provedor,
+        status: 'sucesso',
+        respostaApi: responseData,
+        clienteId,
+        contabilidadeId,
+        faturaId,
+      })
+      return responseData
+    } catch (err: any) {
+      if (!err.message?.startsWith('Erro ao enviar')) {
+        await saveWhatsAppLog(supabase, {
+          remetente,
+          destinatarioTipo,
+          destinatarioNome,
+          destinatarioNumero: cleanNumber,
+          motivo,
+          modelo,
+          mensagem: message,
+          provedor,
+          status: 'falha',
+          erro: err.message,
+          clienteId,
+          contabilidadeId,
+          faturaId,
+        })
+      }
+      throw err
     }
-
-    return await response.json()
   }
 
   throw new Error(`Provedor desconhecido: ${provedor}`)
