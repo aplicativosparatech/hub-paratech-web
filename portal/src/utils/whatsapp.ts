@@ -34,48 +34,76 @@ export async function sendWhatsAppMessage({ to, message }: SendMessageOptions) {
       throw new Error('Uazapi configurada sem URL base ou Token de acesso.')
     }
 
-    // Uazapi padrão (Baileys/Wuzapi) aceita POST /chat/send/text ou /message/sendText
-    // Adaptamos para cobrir os padrões mais comuns da Uazapi
-    const url = `${endpoint}/chat/send/text`
+    // 1ª Tentativa: Rota oficial e padrão da Uazapi (uazapiGO) é POST /send/text
+    // Payload: { number: "5537999786187", text: "mensagem" }
+    // Header: token: "<token>"
+    const primaryUrl = `${endpoint}/send/text`
     
-    const response = await fetch(url, {
+    const response = await fetch(primaryUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'token': token,
+        'apikey': token,
         'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify({
-        Phone: cleanNumber,
-        Body: message
+        number: cleanNumber,
+        text: message
       })
     })
 
-    if (!response.ok) {
-      // Fallback para rota alternativa de Wuzapi se a primeira falhar
-      const fallbackUrl = `${endpoint}/message/sendText`
-      const fallbackResponse = await fetch(fallbackUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': token,
-          'token': token,
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          number: cleanNumber,
-          text: message
-        })
-      })
-
-      if (!fallbackResponse.ok) {
-        const errorText = await fallbackResponse.text()
-        throw new Error(`Erro ao enviar mensagem via Uazapi: ${errorText}`)
-      }
-      return await fallbackResponse.json()
+    if (response.ok) {
+      return await response.json()
     }
 
-    return await response.json()
+    // Se o status for 404 ou 405 na rota padrão, tenta as alternativas legadas de Wuzapi/Baileys
+    if (response.status === 404 || response.status === 405) {
+      // Fallback 1: Wuzapi original /chat/send/text com Phone / Body
+      try {
+        const fallbackUrl1 = `${endpoint}/chat/send/text`
+        const fallbackResp1 = await fetch(fallbackUrl1, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'token': token,
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            Phone: cleanNumber,
+            Body: message
+          })
+        })
+        if (fallbackResp1.ok) {
+          return await fallbackResp1.json()
+        }
+      } catch (_) {}
+
+      // Fallback 2: /message/send-text ou /message/sendText
+      try {
+        const fallbackUrl2 = `${endpoint}/message/send-text`
+        const fallbackResp2 = await fetch(fallbackUrl2, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'token': token,
+            'apikey': token,
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            number: cleanNumber,
+            text: message
+          })
+        })
+        if (fallbackResp2.ok) {
+          return await fallbackResp2.json()
+        }
+      } catch (_) {}
+    }
+
+    // Se todas falharem, reporta o erro detalhado da rota principal
+    const errorText = await response.text()
+    throw new Error(`Erro ao enviar mensagem via Uazapi: ${errorText}`)
   } 
   
   else if (provedor === 'evolution') {
