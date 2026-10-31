@@ -35,7 +35,19 @@ export default function GatewaysPage() {
     if (error) {
       toast.error('Erro ao salvar: ' + error.message)
     } else {
-      toast.success(`Configuração da ${provedor} salva!`)
+      // Sincroniza na tabela integracoes
+      await supabase.from('integracoes').upsert({
+        provedor,
+        tipo: 'gateway',
+        is_ativo: payload.is_ativo,
+        credenciais: {
+          api_key: payload.api_key || payload.client_secret || '',
+          wallet_id: payload.wallet_id || '',
+          chave_pix: payload.wallet_id || ''
+        }
+      }, { onConflict: 'provedor' })
+
+      toast.success(`Configuração da ${provedor} salva com sucesso!`)
     }
     setSaving(false)
   }

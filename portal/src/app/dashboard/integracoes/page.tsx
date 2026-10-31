@@ -381,6 +381,16 @@ export default function IntegracoesPage() {
             if (error) throw error
           }
         }
+
+        // Sincroniza em gateways para manter paridade entre tabelas
+        if (i.tipo === 'gateway') {
+          await supabase.from('gateways').upsert({
+            provedor: i.provedor,
+            is_ativo: i.is_ativo,
+            api_key: cleanCreds.api_key || cleanCreds.secret_key || null,
+            wallet_id: cleanCreds.wallet_id || cleanCreds.chave_pix || cleanCreds.infinite_tag || null
+          }, { onConflict: 'provedor' })
+        }
       }
       toast.success('Configurações salvas com sucesso!', { id: loadingToast })
     } catch (error: any) {

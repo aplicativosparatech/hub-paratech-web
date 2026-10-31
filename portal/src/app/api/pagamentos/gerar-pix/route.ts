@@ -5,7 +5,7 @@ import { obterOuGerarPixFatura } from '@/utils/pix'
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { hub_token, fatura_id } = body
+    const { hub_token, fatura_id, force, forcar } = body
 
     if (!fatura_id) {
       return NextResponse.json({ error: 'Parâmetro obrigatório ausente: fatura_id.' }, { status: 400 })
@@ -45,14 +45,17 @@ export async function POST(request: Request) {
     }
 
     // 2. Gerar ou reutilizar Pix via utilitário centralizado
-    const pixResult = await obterOuGerarPixFatura(fatura_id)
+    const pixResult = await obterOuGerarPixFatura(fatura_id, {
+      forcarRegeneracao: Boolean(force || forcar)
+    })
 
     return NextResponse.json({
       qr_code_payload: pixResult.qr_code_payload,
       qr_code_base64: pixResult.qr_code_base64,
       valor: pixResult.valor,
       modo_simulacao: pixResult.modo_simulacao,
-      provedor: pixResult.provedor
+      provedor: pixResult.provedor,
+      mensagem: pixResult.mensagem
     })
   } catch (error: any) {
     console.error('Erro ao gerar PIX:', error)

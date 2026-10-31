@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { calculateEffectiveDates } from '@/utils/businessDays'
+import { obterOuGerarPixFatura } from '@/utils/pix'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -52,22 +53,15 @@ export async function POST(request: Request) {
       .limit(1)
       .maybeSingle()
 
-    // Se houver fatura vencida, gera ou atualiza o QR Code via rota interna de pagamentos
+    // Se houver fatura vencida, gera ou atualiza o QR Code (regenera se for mock)
     let finalPix = faturaVencida?.qr_code_payload
-    if (faturaVencida && !finalPix) {
-       const host = request.headers.get('host')
-       const protocol = host?.includes('localhost') ? 'http' : 'https'
-       try {
-         const resPix = await fetch(`${protocol}://${host}/api/pagamentos/gerar-pix`, {
-           method: 'POST',
-           headers: { 'Content-Type': 'application/json' },
-           body: JSON.stringify({ hub_token: token, fatura_id: faturaVencida.id })
-         })
-         const pixData = await resPix.json()
-         if (pixData.qr_code_payload) finalPix = pixData.qr_code_payload
-       } catch (errPix) {
-         console.error('Erro ao acionar gerar-pix no sync:', errPix)
-       }
+    if (faturaVencida && (!finalPix || finalPix.includes('mock-hubparatech'))) {
+      try {
+        const pixData = await obterOuGerarPixFatura(faturaVencida.id)
+        if (pixData.qr_code_payload) finalPix = pixData.qr_code_payload
+      } catch (errPix) {
+        console.error('Erro ao acionar obterOuGerarPixFatura no sync:', errPix)
+      }
     }
 
     // Se não tiver vencida, busca a próxima fatura a vencer para avisos preventivos
@@ -91,16 +85,9 @@ export async function POST(request: Request) {
 
       if (faturaProx) {
         let pixProx = faturaProx.qr_code_payload
-        if (!pixProx) {
-          const host = request.headers.get('host')
-          const protocol = host?.includes('localhost') ? 'http' : 'https'
+        if (!pixProx || pixProx.includes('mock-hubparatech')) {
           try {
-            const resPix = await fetch(`${protocol}://${host}/api/pagamentos/gerar-pix`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ hub_token: token, fatura_id: faturaProx.id })
-            })
-            const pixData = await resPix.json()
+            const pixData = await obterOuGerarPixFatura(faturaProx.id)
             if (pixData.qr_code_payload) pixProx = pixData.qr_code_payload
           } catch (_) {}
         }
