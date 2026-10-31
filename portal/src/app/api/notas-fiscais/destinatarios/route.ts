@@ -15,6 +15,13 @@ function extractTag(xml: string, tag: string): string {
   return match ? match[1].trim() : ''
 }
 
+function normalizeText(text?: string | null): string {
+  return (text || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json()
@@ -43,13 +50,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ dados: resultado })
     }
 
-    // 2. Buscar registros no banco de dados para os faltantes
+    // 2. Buscar registros no banco de dados para os faltantes (apenas colunas existentes)
     const { data: notas, error } = await supabaseAdmin
       .from(tabela)
-      .select('id, storage_path, chave, numero, cnpj_emitente, cnpj_destinatario, motivo_sefaz')
+      .select('id, storage_path, chave, numero, cnpj_emitente, motivo_sefaz')
       .in('id', idsFaltantes)
 
     if (error || !notas) {
+      console.error('Erro ao buscar notas em /api/notas-fiscais/destinatarios:', error?.message)
       return NextResponse.json({ dados: resultado })
     }
 
@@ -59,13 +67,13 @@ export async function POST(request: Request) {
         const cacheKey = `${tabela}:${n.id}`
 
         // Detecção preliminar de ambiente pelo motivo_sefaz se houver
-        const motivoLower = (n.motivo_sefaz || '').toLowerCase()
-        const isHomologacaoMotivo = motivoLower.includes('homologacao') || motivoLower.includes('sem valor fiscal')
+        const motivoNorm = normalizeText(n.motivo_sefaz)
+        const isHomologacaoMotivo = motivoNorm.includes('homolog') || motivoNorm.includes('sem valor fiscal')
 
         if (!n.storage_path) {
           const info = {
             destinatario_nome: tabela.startsWith('nfce_') ? 'Consumidor Final' : null,
-            destinatario_documento: n.cnpj_destinatario || null,
+            destinatario_documento: null,
             emitente_nome: null,
             emitente_documento: n.cnpj_emitente || null,
             ambiente: isHomologacaoMotivo ? ('homologacao' as const) : ('producao' as const)
@@ -86,25 +94,25 @@ export async function POST(request: Request) {
 
             // Extração do ambiente de emissão (tpAmb: 1 = Produção, 2 = Homologação)
             const tpAmb = extractTag(xmlString, 'tpAmb')
-            const xmlLower = xmlString.toLowerCase()
+            const xmlNorm = normalizeText(xmlString)
             const isHomolog = tpAmb === '2' || 
               xmlString.includes('<tpAmb>2</tpAmb>') || 
-              xmlLower.includes('homologacao') || 
-              xmlLower.includes('sem valor fiscal')
+              xmlNorm.includes('homolog') || 
+              xmlNorm.includes('sem valor fiscal')
             const ambiente: 'producao' | 'homologacao' = isHomolog ? 'homologacao' : 'producao'
 
             // Extração de destinatário (<dest>)
             const destMatch = xmlString.match(/<dest[^>]*>([\s\S]*?)<\/dest>/)
-            const destXml = destMatch ? destMatch[1] : ''
-            const destDoc = extractTag(destXml, 'CNPJ') || extractTag(destXml, 'CPF') || n.cnpj_destinatario || null
-            const rawDestNome = extractTag(destXml, 'xNome')
+            const destXmlText: string = destMatch ? destMatch[1] : ''
+            const destDoc = extractTag(destXmlText, 'CNPJ') || extractTag(destXmlText, 'CPF') || null
+            const rawDestNome = extractTag(destXmlText, 'xNome')
             const destNome = rawDestNome || (tabela.startsWith('nfce_') ? (destDoc ? null : 'Consumidor Final') : null)
 
             // Extração de emitente (<emit>)
             const emitMatch = xmlString.match(/<emit[^>]*>([\s\S]*?)<\/emit>/)
-            const emitXml = emitMatch ? emitMatch[1] : ''
-            const emitDoc = extractTag(emitXml, 'CNPJ') || extractTag(emitXml, 'CPF') || n.cnpj_emitente || null
-            const emitNome = extractTag(emitXml, 'xNome') || extractTag(emitXml, 'xFant') || null
+            const emitXmlText: string = emitMatch ? emitMatch[1] : ''
+            const emitDoc = extractTag(emitXmlText, 'CNPJ') || extractTag(emitXmlText, 'CPF') || n.cnpj_emitente || null
+            const emitNome = extractTag(emitXmlText, 'xNome') || extractTag(emitXmlText, 'xFant') || null
 
             const info = {
               destinatario_nome: destNome || (tabela.startsWith('nfce_') ? 'Consumidor Final' : null),
@@ -125,7 +133,7 @@ export async function POST(request: Request) {
         // Fallback caso falhe o download
         const info = {
           destinatario_nome: tabela.startsWith('nfce_') ? 'Consumidor Final' : null,
-          destinatario_documento: n.cnpj_destinatario || null,
+          destinatario_documento: null,
           emitente_nome: null,
           emitente_documento: n.cnpj_emitente || null,
           ambiente: isHomologacaoMotivo ? ('homologacao' as const) : ('producao' as const)

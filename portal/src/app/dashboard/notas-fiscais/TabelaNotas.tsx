@@ -1037,13 +1037,19 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                 const isSelected = selectedIds.includes(n.id)
 
                 // Detecção do ambiente (Homologação ou Produção)
-                const motivoLower = (n.motivo_sefaz || '').toLowerCase()
+                const motivoNorm = (n.motivo_sefaz || '')
+                  .normalize('NFD')
+                  .replace(/[\u0300-\u036f]/g, '')
+                  .toLowerCase()
+
                 const isHomolog = destInfo?.ambiente === 'homologacao' ||
-                  motivoLower.includes('homologacao') ||
-                  motivoLower.includes('sem valor fiscal')
+                  motivoNorm.includes('homolog') ||
+                  motivoNorm.includes('sem valor fiscal')
+
                 const isProd = destInfo?.ambiente === 'producao' ||
-                  (Boolean(n.motivo_sefaz) && !isHomolog && n.is_autorizada)
-                const ambienteNota = isHomolog ? 'homologacao' : (isProd ? 'producao' : (destInfo?.ambiente || (isHomolog ? 'homologacao' : 'producao')))
+                  (!isHomolog && Boolean(n.motivo_sefaz) && n.is_autorizada)
+
+                const ambienteNota = isHomolog ? 'homologacao' : (isProd ? 'producao' : (destInfo?.ambiente || 'producao'))
                 const serieCalculada = n.serie || (n.chave && n.chave.length === 44 ? String(parseInt(n.chave.substring(22, 25), 10) || 1) : '1')
 
                 return (
@@ -1371,10 +1377,13 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
               const modalEmitNome = modalDestInfo?.emitente_nome || modalConsulta.nota.emitente_nome || null
               const modalEmitDoc = modalDestInfo?.emitente_documento || modalConsulta.nota.cnpj_emitente || null
 
-              const modalMotivoLower = (modalConsulta.nota.motivo_sefaz || '').toLowerCase()
+              const modalMotivoNorm = (modalConsulta.nota.motivo_sefaz || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase()
               const modalIsHomolog = modalDestInfo?.ambiente === 'homologacao' ||
-                modalMotivoLower.includes('homologacao') ||
-                modalMotivoLower.includes('sem valor fiscal')
+                modalMotivoNorm.includes('homolog') ||
+                modalMotivoNorm.includes('sem valor fiscal')
               const modalAmbiente = modalIsHomolog ? 'homologacao' : (modalDestInfo?.ambiente === 'producao' ? 'producao' : (modalConsulta.nota.is_autorizada ? 'producao' : 'producao'))
 
               return (
