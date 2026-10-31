@@ -28,24 +28,31 @@ export async function createInfinitePayLink({
     throw new Error('InfinitePay não está configurada ou não está ativa.')
   }
 
-  const { client_id, secret_key } = integracao.credenciais || {}
+  const creds = integracao.credenciais || {}
+  const token = (creds.api_key || creds.api_token || creds.secret_key || creds.client_secret || '').trim()
+  const clientId = (creds.client_id || '').trim()
 
-  if (!client_id || !secret_key) {
-    throw new Error('Credenciais da InfinitePay incompletas no painel de integrações.')
+  if (!token) {
+    throw new Error('API Key / Token de API da InfinitePay não configurado no painel de integrações.')
   }
 
   // Chamada oficial à API da InfinitePay / Cloudwalk
-  // Em produção, usa as credenciais fornecidas para gerar o link ou QR Code Pix
+  // Em produção, usa o token/API Key para gerar o link ou QR Code Pix
   const url = 'https://api.infinitepay.io/v2/transactions'
 
   try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+      'X-Api-Key': token
+    }
+    if (clientId) {
+      headers['X-Client-Id'] = clientId
+    }
+
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${secret_key}`,
-        'X-Client-Id': client_id
-      },
+      headers,
       body: JSON.stringify({
         amount: Math.round(amount * 100), // Em centavos
         capture_method: 'pix',

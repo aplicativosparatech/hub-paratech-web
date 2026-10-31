@@ -540,13 +540,36 @@ export default function IntegracoesPage() {
                 </label>
               </div>
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Client ID</label>
-                  <input type="text" value={infinite.credenciais?.client_id || ''} onChange={e => handleCredencialChange('infinitepay', 'client_id', e.target.value)} className="w-full bg-slate-50 border border-slate-200 px-4 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="ip_client_..." />
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
+                  <span className="font-semibold">💡 Modelo Simplificado da InfinitePay:</span> A InfinitePay agora utiliza apenas a <strong>API Key (Token de API)</strong>. Não é mais necessário Client ID nem Secret Key.
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Secret Key</label>
-                  <input type="password" value={infinite.credenciais?.secret_key || ''} onChange={e => handleCredencialChange('infinitepay', 'secret_key', e.target.value)} className="w-full bg-slate-50 border border-slate-200 px-4 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="••••••••••••••••" />
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">API Key / Token de API (Obrigatório)</label>
+                  <input
+                    type="password"
+                    value={infinite.credenciais?.api_key || infinite.credenciais?.secret_key || ''}
+                    onChange={e => {
+                      handleCredencialChange('infinitepay', 'api_key', e.target.value)
+                      handleCredencialChange('infinitepay', 'secret_key', e.target.value)
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 px-4 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    placeholder="inchk_... ou seu Token de API da InfinitePay"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Cole aqui o Token de API gerado no app da InfinitePay em <em>Vendas &gt; Checkout &gt; Configurações</em>.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">InfiniteTag / Chave Pix / Wallet ID (Opcional)</label>
+                  <input
+                    type="text"
+                    value={infinite.credenciais?.wallet_id || infinite.credenciais?.infinite_tag || ''}
+                    onChange={e => {
+                      handleCredencialChange('infinitepay', 'wallet_id', e.target.value)
+                      handleCredencialChange('infinitepay', 'infinite_tag', e.target.value)
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 px-4 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    placeholder="Sua InfiniteTag ($sua_loja), CNPJ ou Chave Pix"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Utilizado para identificação e QR Code dinâmico Pix.</p>
                 </div>
               </div>
             </div>

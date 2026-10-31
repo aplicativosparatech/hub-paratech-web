@@ -61,24 +61,21 @@ export default function GatewaysPage() {
             </label>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2 bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
+              <span className="font-semibold">💡 Modelo da InfinitePay:</span> A InfinitePay agora utiliza apenas a <strong>API Key (Token de API)</strong>. Você não precisa de Client ID nem Client Secret para utilizar o gateway.
+            </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-slate-700 mb-1">API Key / Token Público</label>
-              <input type="text" className="w-full px-4 py-2 rounded-lg border border-slate-200"
-                value={inf.api_key || ''} onChange={e => setInf({...inf, api_key: e.target.value})} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Client ID</label>
-              <input type="text" className="w-full px-4 py-2 rounded-lg border border-slate-200"
-                value={inf.client_id || ''} onChange={e => setInf({...inf, client_id: e.target.value})} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Client Secret</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">API Key / Token de API (Obrigatório)</label>
               <input type="password" className="w-full px-4 py-2 rounded-lg border border-slate-200"
-                value={inf.client_secret || ''} onChange={e => setInf({...inf, client_secret: e.target.value})} />
+                placeholder="inchk_... ou seu Token de API da InfinitePay"
+                value={inf.api_key || inf.client_secret || ''}
+                onChange={e => setInf({...inf, api_key: e.target.value, client_secret: e.target.value})} />
+              <p className="text-xs text-slate-500 mt-1">Cole aqui o Token que você gerou no app da InfinitePay.</p>
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Wallet ID (Carteira PIX)</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">InfiniteTag / Chave PIX / Wallet ID (Opcional)</label>
               <input type="text" className="w-full px-4 py-2 rounded-lg border border-slate-200"
+                placeholder="Ex: $sua_loja, CNPJ ou chave PIX da sua conta InfinitePay"
                 value={inf.wallet_id || ''} onChange={e => setInf({...inf, wallet_id: e.target.value})} />
             </div>
           </div>

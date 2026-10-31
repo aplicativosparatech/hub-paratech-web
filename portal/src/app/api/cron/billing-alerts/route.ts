@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { sendWhatsAppMessage } from '@/utils/whatsapp'
 import { calculateEffectiveDates } from '@/utils/businessDays'
-import { gerarFaturasMensalistas } from '@/utils/billing'
+import { gerarFaturasMensalistas, executarRotinaPrimeiroDiaDoMes } from '@/utils/billing'
 import { calcularEncargosFatura } from '@/utils/billingCharges'
 
 export async function GET(request: Request) {
@@ -11,12 +11,12 @@ export async function GET(request: Request) {
   hoje.setHours(0, 0, 0, 0)
 
   try {
-    // 0. Se for dia 01, garante a geração/atualização automática das faturas dos clientes ativos mensalistas
+    // 0. Se for dia 01, executa a rotina automática de gerar todas as faturas e disparar WhatsApp
     if (hoje.getDate() === 1) {
       try {
-        await gerarFaturasMensalistas(hoje)
+        await executarRotinaPrimeiroDiaDoMes({ dataReferencia: hoje })
       } catch (err) {
-        console.error('Erro ao gerar faturas automaticamente no dia 01:', err)
+        console.error('Erro ao executar rotina do 1º dia do mês no Cron:', err)
       }
     }
 

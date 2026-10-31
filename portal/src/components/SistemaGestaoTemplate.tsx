@@ -744,10 +744,7 @@ export default function SistemaGestaoTemplate({ config }: { config: SistemaConfi
                             {isInadimplente ? 'Bloqueado (Fatura)' : 'Bloqueado (Admin)'}
                           </span>
                         ) : isConfianca ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-900">
-                            <Clock className="w-3 h-3" />
-                            Em Confiança (24h)
-                          </span>
+                          <ConfidenceCountdown desbloqueioEm={cliente.fatura_atual?.desbloqueio_confianca_em} horasDuracao={24} />
                         ) : (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900">
                             <CheckCircle2 className="w-3 h-3" />
@@ -837,7 +834,7 @@ export default function SistemaGestaoTemplate({ config }: { config: SistemaConfi
                           </button>
 
                           {/* Botão Desbloqueio Confiança */}
-                          {isInadimplente && (
+                          {isInadimplente && !isConfianca && (
                             <button
                               onClick={() => concederDesbloqueioConfianca(cliente)}
                               className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] shadow-xs cursor-pointer"
@@ -846,6 +843,9 @@ export default function SistemaGestaoTemplate({ config }: { config: SistemaConfi
                               <Zap className="w-3 h-3" />
                               <span>Confiança</span>
                             </button>
+                          )}
+                          {isConfianca && (
+                            <ConfidenceCountdown desbloqueioEm={cliente.fatura_atual?.desbloqueio_confianca_em} horasDuracao={24} />
                           )}
 
                           {/* Botão Editar Parâmetros */}
@@ -1167,5 +1167,73 @@ export default function SistemaGestaoTemplate({ config }: { config: SistemaConfi
         </div>
       )}
     </div>
+  )
+}
+
+function ConfidenceCountdown({
+  desbloqueioEm,
+  horasDuracao = 24
+}: {
+  desbloqueioEm?: string | null
+  horasDuracao?: number
+}) {
+  const [tempo, setTempo] = useState<{
+    ativo: boolean
+    texto: string
+    horas: number
+    minutos: number
+    segundos: number
+  }>({
+    ativo: false,
+    texto: '',
+    horas: 0,
+    minutos: 0,
+    segundos: 0
+  })
+
+  useEffect(() => {
+    function atualizar() {
+      if (!desbloqueioEm) {
+        setTempo({ ativo: false, texto: '', horas: 0, minutos: 0, segundos: 0 })
+        return
+      }
+      const dataInicio = new Date(desbloqueioEm).getTime()
+      if (isNaN(dataInicio)) {
+        setTempo({ ativo: false, texto: '', horas: 0, minutos: 0, segundos: 0 })
+        return
+      }
+      const dataFim = dataInicio + (horasDuracao * 3600 * 1000)
+      const agora = Date.now()
+      const diffMs = dataFim - agora
+
+      if (diffMs <= 0) {
+        setTempo({ ativo: false, texto: 'Expirado', horas: 0, minutos: 0, segundos: 0 })
+        return
+      }
+
+      const totalSeg = Math.floor(diffMs / 1000)
+      const horas = Math.floor(totalSeg / 3600)
+      const minutos = Math.floor((totalSeg % 3600) / 60)
+      const segundos = totalSeg % 60
+
+      const formatado = `${horas.toString().padStart(2, '0')}:${minutos.toString().padStart(2, '0')}:${segundos.toString().padStart(2, '0')}`
+      setTempo({ ativo: true, texto: formatado, horas, minutos, segundos })
+    }
+
+    atualizar()
+    const timer = setInterval(atualizar, 1000)
+    return () => clearInterval(timer)
+  }, [desbloqueioEm, horasDuracao])
+
+  if (!tempo.ativo) return null
+
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono font-bold bg-amber-100 text-amber-900 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300 dark:border-amber-700 shadow-xs animate-pulse"
+      title={`Desbloqueio em confiança ativo • Faltam ${tempo.horas}h ${tempo.minutos}m ${tempo.segundos}s`}
+    >
+      <Clock className="w-3 h-3 text-amber-600 shrink-0" />
+      <span>⏳ {tempo.texto}</span>
+    </span>
   )
 }

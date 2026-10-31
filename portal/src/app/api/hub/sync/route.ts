@@ -133,14 +133,49 @@ export async function POST(request: Request) {
     }
     
     // Regra de Desbloqueio em Confiança Parametrizável
-    if (faturaVencida && faturaVencida.desbloqueio_confianca_em) {
+    let confiancaInfo: {
+      ativo: boolean
+      fatura_id: string
+      desbloqueio_em: string
+      expira_em: string
+      horas_totais: number
+      segundos_restantes: number
+    } | null = null
+
+    // Procura fatura com desbloqueio em confiança ativo (seja a vencida principal ou outra pendente)
+    let faturaParaConfianca = faturaVencida
+    if (!faturaParaConfianca?.desbloqueio_confianca_em) {
+      const { data: fConf } = await supabase
+        .from('faturas')
+        .select('id, valor, valor_original, qr_code_payload, status, desbloqueio_confianca_em, confianca_qtd, data_vencimento')
+        .eq('cliente_id', cliente.id)
+        .eq('status', 'pendente')
+        .not('desbloqueio_confianca_em', 'is', null)
+        .order('desbloqueio_confianca_em', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (fConf?.desbloqueio_confianca_em) {
+        faturaParaConfianca = fConf
+      }
+    }
+
+    if (faturaParaConfianca && faturaParaConfianca.desbloqueio_confianca_em) {
       const horasPermitidas = Number(configGeral?.horas_desbloqueio_confianca ?? 24)
-      const dataDesbloqueio = new Date(faturaVencida.desbloqueio_confianca_em).getTime()
+      const dataDesbloqueio = new Date(faturaParaConfianca.desbloqueio_confianca_em).getTime()
       const agora = new Date().getTime()
       const horasPassadas = (agora - dataDesbloqueio) / (1000 * 60 * 60)
       
       if (horasPassadas <= horasPermitidas) {
         isBloqueado = false // Está dentro do período de tolerância em confiança concedido!
+        const expiraMs = dataDesbloqueio + horasPermitidas * 3600 * 1000
+        confiancaInfo = {
+          ativo: true,
+          fatura_id: faturaParaConfianca.id,
+          desbloqueio_em: faturaParaConfianca.desbloqueio_confianca_em,
+          expira_em: new Date(expiraMs).toISOString(),
+          horas_totais: horasPermitidas,
+          segundos_restantes: Math.max(0, Math.floor((expiraMs - agora) / 1000))
+        }
       }
     }
 
@@ -148,6 +183,7 @@ export async function POST(request: Request) {
 
     const responseData = {
       bloqueado: isBloqueado,
+      desbloqueio_confianca: confiancaInfo,
       motivo: !cliente.is_ativo ? 'administrativo' : (faturaVencida ? 'inadimplencia' : null),
       mensagem_bloqueio: config?.mensagem_bloqueio || 'SISTEMA BLOQUEADO. Por favor, regularize sua mensalidade.',
       cliente_nome: nomeEmpresa,
@@ -181,7 +217,9 @@ export async function POST(request: Request) {
         valor: faturaVencida.valor,
         pix_payload: finalPix || 'ERRO_PIX',
         data_vencimento: faturaVencida.data_vencimento,
-        cliente_nome: nomeEmpresa
+        cliente_nome: nomeEmpresa,
+        desbloqueio_confianca_em: faturaVencida.desbloqueio_confianca_em,
+        confianca_qtd: faturaVencida.confianca_qtd
       } : null,
       fatura_aviso: faturaAviso
     }

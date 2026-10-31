@@ -1,49 +1,111 @@
 import { createAdminClient } from '@/utils/supabase/admin'
+import { obterOuGerarPixFatura } from '@/utils/pix'
+import { sendWhatsAppMessage } from '@/utils/whatsapp'
+
+export const NOMES_MESES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+]
+
+export interface GerarFaturasOptions {
+  dataReferencia?: Date
+  competencia?: string
+  dispararWhatsapp?: boolean
+  baseUrl?: string
+}
+
+export interface FaturaDetalheItem {
+  clienteId: string
+  cliente: string
+  cnpj?: string
+  sistema?: string
+  telefone?: string
+  valor: number
+  vencimento: string
+  faturaId?: string
+  status: 'criada' | 'atualizada' | 'ja_existia' | 'paga_antecipada' | 'sem_mensalidade'
+  whatsappEnviado?: boolean
+  whatsappErro?: string
+}
 
 export interface GerarFaturasResult {
   totalClientesAtivos: number
   faturasCriadas: number
   faturasAtualizadas: number
   faturasIgnoradas: number
+  mensagensEnviadas: number
   competencia: string
-  detalhes: { 
-    cliente: string
-    valor: number
-    vencimento: string
-    status: 'criada' | 'atualizada' | 'ja_existia' | 'paga_antecipada' | 'sem_mensalidade' 
-  }[]
+  mesAnteriorReferencia: string
+  detalhes: FaturaDetalheItem[]
 }
 
 /**
- * Gera automaticamente as faturas do mês para todos os clientes ativos mensalistas.
- * - Se a fatura ainda não existir, cria com status 'pendente'.
- * - Se a fatura já existir previamente (ex: gerada por antecipação após pagamento anterior),
- *   verifica se o valor base da mensalidade ou a data de vencimento foi alterado no cadastro do cliente,
- *   atualizando-a automaticamente.
+ * Retorna a competência e o nome amigável do mês anterior.
+ * Exemplo: se competência é 11/2026, mês anterior é Outubro/2026 (10/2026).
  */
-export async function gerarFaturasMensalistas(dataReferencia: Date = new Date()): Promise<GerarFaturasResult> {
-  const supabase = createAdminClient()
+export function calcularCompetenciaEMesAnterior(dataReferencia: Date = new Date(), compStr?: string) {
+  let ano: number
+  let mesNum: number
 
-  // Mês e ano de referência da competência
-  const ano = dataReferencia.getFullYear()
-  const mesNum = dataReferencia.getMonth() + 1
+  if (compStr && compStr.includes('/')) {
+    const parts = compStr.split('/')
+    mesNum = parseInt(parts[0], 10)
+    ano = parseInt(parts[1], 10)
+  } else {
+    ano = dataReferencia.getFullYear()
+    mesNum = dataReferencia.getMonth() + 1
+  }
+
   const competencia = `${String(mesNum).padStart(2, '0')}/${ano}`
+
+  const mesAnteriorNum = mesNum === 1 ? 12 : mesNum - 1
+  const anoAnterior = mesNum === 1 ? ano - 1 : ano
+  const mesAnteriorNome = `${NOMES_MESES[mesAnteriorNum - 1]}/${anoAnterior}`
+  const mesAnteriorComp = `${String(mesAnteriorNum).padStart(2, '0')}/${anoAnterior}`
+
+  return { ano, mesNum, competencia, mesAnteriorNum, anoAnterior, mesAnteriorNome, mesAnteriorComp }
+}
+
+/**
+ * Gera automaticamente as faturas para todos os clientes ativos mensalistas.
+ * - Idempotente: não duplica faturas existentes para a mesma competência.
+ * - Suporta envio automático de WhatsApp com saudação pelo nome, identificação do sistema comercial,
+ *   referência ao mês anterior, link público de pagamento e Pix Copia e Cola.
+ */
+export async function gerarFaturasMensalistas(options: GerarFaturasOptions = {}): Promise<GerarFaturasResult> {
+  const supabase = createAdminClient()
+  const dataReferencia = options.dataReferencia || new Date()
+  const { ano, mesNum, competencia, mesAnteriorNome } = calcularCompetenciaEMesAnterior(dataReferencia, options.competencia)
+
+  const baseUrl = options.baseUrl || process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://hub.paratechsolucoes.com.br'
 
   // 1. Buscar todos os clientes ATIVOS
   const { data: clientes, error: cliError } = await supabase
     .from('clientes')
-    .select('id, razao_social, nome_fantasia, valor_mensalidade, dia_vencimento, is_ativo')
+    .select(`
+      id, razao_social, nome_fantasia, cnpj, valor_mensalidade, dia_vencimento, is_ativo,
+      nome_sistema_utilizado, nome_contato, whatsapp, whatsapp_cobranca
+    `)
     .eq('is_ativo', true)
 
   if (cliError) throw cliError
   if (!clientes || clientes.length === 0) {
-    return { totalClientesAtivos: 0, faturasCriadas: 0, faturasAtualizadas: 0, faturasIgnoradas: 0, competencia, detalhes: [] }
+    return {
+      totalClientesAtivos: 0,
+      faturasCriadas: 0,
+      faturasAtualizadas: 0,
+      faturasIgnoradas: 0,
+      mensagensEnviadas: 0,
+      competencia,
+      mesAnteriorReferencia: mesAnteriorNome,
+      detalhes: []
+    }
   }
 
   // 2. Buscar faturas já existentes nesta competência
   const { data: faturasExistentes, error: fatError } = await supabase
     .from('faturas')
-    .select('id, cliente_id, competencia, valor, valor_original, data_vencimento, status')
+    .select('id, cliente_id, competencia, valor, valor_original, data_vencimento, status, qr_code_payload')
     .eq('competencia', competencia)
 
   if (fatError) throw fatError
@@ -51,19 +113,26 @@ export async function gerarFaturasMensalistas(dataReferencia: Date = new Date())
   const faturasMap = new Map((faturasExistentes || []).map(f => [f.cliente_id, f]))
 
   const novasFaturas: any[] = []
-  const detalhes: GerarFaturasResult['detalhes'] = []
+  const detalhes: FaturaDetalheItem[] = []
   let faturasAtualizadas = 0
+  let mensagensEnviadas = 0
 
   // Último dia do mês para evitar datas inválidas (ex: 31 de fevereiro)
   const ultimoDiaDoMes = new Date(ano, mesNum, 0).getDate()
 
+  // 3. Processar cada cliente ativo
   for (const c of clientes) {
-    const nome = c.nome_fantasia || c.razao_social
+    const nomeExibicao = c.nome_fantasia || c.razao_social
     const valorCadastrado = Number(c.valor_mensalidade || 0)
+    const telefone = (c.whatsapp_cobranca || c.whatsapp || '').replace(/\D/g, '')
 
     if (valorCadastrado <= 0) {
       detalhes.push({
-        cliente: nome,
+        clienteId: c.id,
+        cliente: nomeExibicao,
+        cnpj: c.cnpj,
+        sistema: c.nome_sistema_utilizado,
+        telefone,
         valor: 0,
         vencimento: '-',
         status: 'sem_mensalidade'
@@ -77,18 +146,23 @@ export async function gerarFaturasMensalistas(dataReferencia: Date = new Date())
     const faturaExistente = faturasMap.get(c.id)
 
     if (faturaExistente) {
-      // Se a fatura já foi quitada antecipadamente pelo cliente
+      // Se a fatura já foi quitada antecipadamente
       if (faturaExistente.status === 'pago' || faturaExistente.status === 'paga') {
         detalhes.push({
-          cliente: nome,
+          clienteId: c.id,
+          cliente: nomeExibicao,
+          cnpj: c.cnpj,
+          sistema: c.nome_sistema_utilizado,
+          telefone,
           valor: Number(faturaExistente.valor),
           vencimento: faturaExistente.data_vencimento,
+          faturaId: faturaExistente.id,
           status: 'paga_antecipada'
         })
         continue
       }
 
-      // Se a fatura existe e está pendente: verificar se o valor base ou a data mudou no cadastro do cliente!
+      // Se existe e está pendente: verificar se o valor base ou data mudou
       const valorBaseAtual = Number(faturaExistente.valor_original ?? faturaExistente.valor)
       const mudouValor = Math.abs(valorBaseAtual - valorCadastrado) > 0.009
       const mudouVencimento = faturaExistente.data_vencimento !== dataVencimentoEsperada
@@ -100,22 +174,32 @@ export async function gerarFaturasMensalistas(dataReferencia: Date = new Date())
             valor: valorCadastrado,
             valor_original: valorCadastrado,
             data_vencimento: dataVencimentoEsperada,
-            qr_code_payload: null // reseta o Pix antigo para regenerar com novo valor/vencimento
+            qr_code_payload: null // reseta Pix para regenerar se necessário
           })
           .eq('id', faturaExistente.id)
 
         faturasAtualizadas++
         detalhes.push({
-          cliente: nome,
+          clienteId: c.id,
+          cliente: nomeExibicao,
+          cnpj: c.cnpj,
+          sistema: c.nome_sistema_utilizado,
+          telefone,
           valor: valorCadastrado,
           vencimento: dataVencimentoEsperada,
+          faturaId: faturaExistente.id,
           status: 'atualizada'
         })
       } else {
         detalhes.push({
-          cliente: nome,
+          clienteId: c.id,
+          cliente: nomeExibicao,
+          cnpj: c.cnpj,
+          sistema: c.nome_sistema_utilizado,
+          telefone,
           valor: Number(faturaExistente.valor),
           vencimento: faturaExistente.data_vencimento,
+          faturaId: faturaExistente.id,
           status: 'ja_existia'
         })
       }
@@ -133,16 +217,110 @@ export async function gerarFaturasMensalistas(dataReferencia: Date = new Date())
     })
 
     detalhes.push({
-      cliente: nome,
+      clienteId: c.id,
+      cliente: nomeExibicao,
+      cnpj: c.cnpj,
+      sistema: c.nome_sistema_utilizado,
+      telefone,
       valor: valorCadastrado,
       vencimento: dataVencimentoEsperada,
       status: 'criada'
     })
   }
 
+  // 4. Inserir novas faturas no banco
   if (novasFaturas.length > 0) {
-    const { error: insertError } = await supabase.from('faturas').insert(novasFaturas)
+    const { data: faturasInseridas, error: insertError } = await supabase
+      .from('faturas')
+      .insert(novasFaturas)
+      .select('id, cliente_id, valor, data_vencimento, competencia')
+
     if (insertError) throw insertError
+
+    // Atualiza os IDs gerados nos detalhes
+    if (faturasInseridas) {
+      for (const fi of faturasInseridas) {
+        const item = detalhes.find(d => d.clienteId === fi.cliente_id && d.status === 'criada')
+        if (item) item.faturaId = fi.id
+      }
+    }
+  }
+
+  // 5. Se solicitado envio de WhatsApp (ex: primeiro dia do mês ou botão Gerar Todas com checkbox)
+  if (options.dispararWhatsapp) {
+    for (const item of detalhes) {
+      if (item.status === 'sem_mensalidade' || item.status === 'paga_antecipada' || !item.faturaId) {
+        continue
+      }
+
+      const clienteObj = clientes.find(c => c.id === item.clienteId)
+      if (!clienteObj) continue
+
+      const telefone = (clienteObj.whatsapp_cobranca || clienteObj.whatsapp || '').replace(/\D/g, '')
+      if (telefone.length < 10) {
+        item.whatsappEnviado = false
+        item.whatsappErro = 'Telefone inválido ou não cadastrado'
+        continue
+      }
+
+      try {
+        // Assegura QR Code Pix
+        const pixResult = await obterOuGerarPixFatura(item.faturaId)
+        const pixPayload = pixResult.qr_code_payload
+
+        // Nome de saudação
+        const nomeCumprimento = clienteObj.nome_contato?.trim() || clienteObj.nome_fantasia?.trim() || clienteObj.razao_social?.trim() || 'Cliente'
+        const nomeSistema = clienteObj.nome_sistema_utilizado?.trim() || 'MEI Simples'
+
+        // Formatação de valores e datas
+        const valorFormatado = Number(item.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        const [anoV, mesV, diaV] = item.vencimento.split('-')
+        const vencimentoFormatado = `${diaV}/${mesV}/${anoV}`
+
+        const linkFatura = `${baseUrl}/fatura/${item.faturaId}`
+
+        const mensagem = [
+          `Olá, ${nomeCumprimento}! 👋`,
+          ``,
+          `Passando para enviar a fatura da mensalidade do seu *Sistema de Gerenciamento Comercial e Fiscal [${nomeSistema}]*, referente ao mês anterior (${mesAnteriorNome}).`,
+          ``,
+          `📄 *Detalhes da Fatura:*`,
+          `• *Competência:* ${competencia} (Serviços de ${mesAnteriorNome})`,
+          `• *Valor:* R$ ${valorFormatado}`,
+          `• *Vencimento:* ${vencimentoFormatado}`,
+          ``,
+          `🔗 *Acesse sua fatura online:*`,
+          `${linkFatura}`,
+          ``,
+          `🔑 *Código Pix Copia e Cola:*`,
+          `\`\`\`${pixPayload}\`\`\``,
+          ``,
+          `_Após o pagamento via Pix, a confirmação e liberação do seu sistema ocorrem de forma 100% automática em segundos._`,
+          ``,
+          `Ficamos à disposição para qualquer dúvida ou suporte!`,
+          `*Paratech Soluções em Software*`
+        ].join('\n')
+
+        await sendWhatsAppMessage({
+          to: telefone,
+          message: mensagem,
+          remetente: 'Robô Automático (1º Dia do Mês)',
+          destinatarioTipo: 'cliente',
+          destinatarioNome: clienteObj.nome_fantasia || clienteObj.razao_social,
+          motivo: 'Fatura Mensalidade (Dia 01)',
+          modelo: 'Aviso 1º Dia do Mês',
+          clienteId: clienteObj.id,
+          faturaId: item.faturaId
+        })
+
+        item.whatsappEnviado = true
+        mensagensEnviadas++
+      } catch (errWpp: any) {
+        console.error(`Erro ao enviar WhatsApp para ${clienteObj.razao_social}:`, errWpp)
+        item.whatsappEnviado = false
+        item.whatsappErro = errWpp.message || 'Erro no envio WhatsApp'
+      }
+    }
   }
 
   return {
@@ -150,7 +328,39 @@ export async function gerarFaturasMensalistas(dataReferencia: Date = new Date())
     faturasCriadas: novasFaturas.length,
     faturasAtualizadas,
     faturasIgnoradas: clientes.length - novasFaturas.length - faturasAtualizadas,
+    mensagensEnviadas,
     competencia,
+    mesAnteriorReferencia: mesAnteriorNome,
     detalhes
+  }
+}
+
+/**
+ * Rotina executada no 1º dia do mês:
+ * Gera todas as faturas faltantes da competência que se inicia e dispara mensagem de cobrança
+ * para todos os mensalistas via WhatsApp com link de pagamento e código Pix Copia e Cola.
+ */
+export async function executarRotinaPrimeiroDiaDoMes(options: { dataReferencia?: Date; forcar?: boolean; baseUrl?: string } = {}) {
+  const hoje = options.dataReferencia || new Date()
+
+  // Se não estiver forçado e não for dia 01, não executa
+  if (!options.forcar && hoje.getDate() !== 1) {
+    return {
+      executado: false,
+      motivo: `Hoje é dia ${hoje.getDate()}, rotina programada para rodar exclusivamente no dia 01 do mês.`,
+      resultado: null
+    }
+  }
+
+  const resultado = await gerarFaturasMensalistas({
+    dataReferencia: hoje,
+    dispararWhatsapp: true,
+    baseUrl: options.baseUrl
+  })
+
+  return {
+    executado: true,
+    motivo: 'Rotina do 1º dia do mês executada com sucesso.',
+    resultado
   }
 }
