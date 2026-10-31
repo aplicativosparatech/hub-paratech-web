@@ -7,6 +7,7 @@ const memCache = new Map<string, {
   destinatario_documento: string | null
   emitente_nome: string | null
   emitente_documento: string | null
+  ambiente: 'producao' | 'homologacao'
 }>()
 
 function extractTag(xml: string, tag: string): string {
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
     // 2. Buscar registros no banco de dados para os faltantes
     const { data: notas, error } = await supabaseAdmin
       .from(tabela)
-      .select('id, storage_path, chave, numero, cnpj_emitente, cnpj_destinatario')
+      .select('id, storage_path, chave, numero, cnpj_emitente, cnpj_destinatario, motivo_sefaz')
       .in('id', idsFaltantes)
 
     if (error || !notas) {
@@ -57,13 +58,17 @@ export async function POST(request: Request) {
       notas.map(async (n: any) => {
         const cacheKey = `${tabela}:${n.id}`
 
-        // Para NFC-e, se não houver storage_path, o padrão é Consumidor Final
+        // Detecção preliminar de ambiente pelo motivo_sefaz se houver
+        const motivoLower = (n.motivo_sefaz || '').toLowerCase()
+        const isHomologacaoMotivo = motivoLower.includes('homologacao') || motivoLower.includes('sem valor fiscal')
+
         if (!n.storage_path) {
           const info = {
             destinatario_nome: tabela.startsWith('nfce_') ? 'Consumidor Final' : null,
             destinatario_documento: n.cnpj_destinatario || null,
             emitente_nome: null,
-            emitente_documento: n.cnpj_emitente || null
+            emitente_documento: n.cnpj_emitente || null,
+            ambiente: isHomologacaoMotivo ? ('homologacao' as const) : ('producao' as const)
           }
           memCache.set(cacheKey, info)
           resultado[n.id] = info
@@ -79,23 +84,34 @@ export async function POST(request: Request) {
             const arrayBuffer = await fileData.arrayBuffer()
             const xmlString = Buffer.from(arrayBuffer).toString('utf-8')
 
+            // Extração do ambiente de emissão (tpAmb: 1 = Produção, 2 = Homologação)
+            const tpAmb = extractTag(xmlString, 'tpAmb')
+            const xmlLower = xmlString.toLowerCase()
+            const isHomolog = tpAmb === '2' || 
+              xmlString.includes('<tpAmb>2</tpAmb>') || 
+              xmlLower.includes('homologacao') || 
+              xmlLower.includes('sem valor fiscal')
+            const ambiente: 'producao' | 'homologacao' = isHomolog ? 'homologacao' : 'producao'
+
             // Extração de destinatário (<dest>)
             const destMatch = xmlString.match(/<dest[^>]*>([\s\S]*?)<\/dest>/)
             const destXml = destMatch ? destMatch[1] : ''
             const destDoc = extractTag(destXml, 'CNPJ') || extractTag(destXml, 'CPF') || n.cnpj_destinatario || null
-            const destNome = extractTag(destXml, 'xNome') || (tabela.startsWith('nfce_') ? (destDoc ? null : 'Consumidor Final') : null)
+            const rawDestNome = extractTag(destXml, 'xNome')
+            const destNome = rawDestNome || (tabela.startsWith('nfce_') ? (destDoc ? null : 'Consumidor Final') : null)
 
             // Extração de emitente (<emit>)
             const emitMatch = xmlString.match(/<emit[^>]*>([\s\S]*?)<\/emit>/)
             const emitXml = emitMatch ? emitMatch[1] : ''
             const emitDoc = extractTag(emitXml, 'CNPJ') || extractTag(emitXml, 'CPF') || n.cnpj_emitente || null
-            const emitNome = extractTag(emitXml, 'xNome') || null
+            const emitNome = extractTag(emitXml, 'xNome') || extractTag(emitXml, 'xFant') || null
 
             const info = {
               destinatario_nome: destNome || (tabela.startsWith('nfce_') ? 'Consumidor Final' : null),
               destinatario_documento: destDoc,
               emitente_nome: emitNome,
-              emitente_documento: emitDoc
+              emitente_documento: emitDoc,
+              ambiente
             }
 
             memCache.set(cacheKey, info)
@@ -106,12 +122,13 @@ export async function POST(request: Request) {
           console.warn('Erro ao processar XML da nota no storage:', n.id, e)
         }
 
-        // Fallback básico caso o download falhe
+        // Fallback caso falhe o download
         const info = {
           destinatario_nome: tabela.startsWith('nfce_') ? 'Consumidor Final' : null,
           destinatario_documento: n.cnpj_destinatario || null,
           emitente_nome: null,
-          emitente_documento: n.cnpj_emitente || null
+          emitente_documento: n.cnpj_emitente || null,
+          ambiente: isHomologacaoMotivo ? ('homologacao' as const) : ('producao' as const)
         }
         memCache.set(cacheKey, info)
         resultado[n.id] = info

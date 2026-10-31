@@ -67,6 +67,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     destinatario_documento: string | null
     emitente_nome?: string | null
     emitente_documento?: string | null
+    ambiente?: 'producao' | 'homologacao'
   }>>({})
 
   // Paginação local da tabela
@@ -417,17 +418,11 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     return notasOrdenadas.slice(start, start + pageSize)
   }, [notasOrdenadas, currentPage, pageSize])
 
-  // Efeito para enriquecer os dados de Destinatário e Emitente das notas exibidas na página
+  // Efeito para enriquecer os dados de Destinatário, Emitente e Ambiente (Produção/Homologação) das notas exibidas na página
   useEffect(() => {
     if (notasPaginadas.length === 0) return
 
-    const faltantes = notasPaginadas.filter(n => {
-      if (destinatariosMap[n.id]) return false
-      if (n.destinatario_nome) return false
-      // Se for NFC-e e não tiver documento no banco, já exibimos Consumidor Final de forma instantânea
-      if (tabela.startsWith('nfce_') && !n.cnpj_destinatario && !n.destinatario_documento) return false
-      return true
-    }).map(n => n.id)
+    const faltantes = notasPaginadas.filter(n => !destinatariosMap[n.id]).map(n => n.id)
 
     if (faltantes.length === 0) return
 
@@ -443,7 +438,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
           setDestinatariosMap(prev => ({ ...prev, ...json.dados }))
         }
       })
-      .catch(e => console.warn('Erro ao carregar dados de destinatário:', e))
+      .catch(e => console.warn('Erro ao carregar dados de destinatário/ambiente:', e))
 
     return () => { cancelado = true }
   }, [notasPaginadas, tabela])
@@ -1027,6 +1022,13 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
 
                 const isSelected = selectedIds.includes(n.id)
 
+                // Detecção do ambiente (Homologação ou Produção)
+                const motivoLower = (n.motivo_sefaz || '').toLowerCase()
+                const isHomolog = destInfo?.ambiente === 'homologacao' ||
+                  motivoLower.includes('homologacao') ||
+                  motivoLower.includes('sem valor fiscal')
+                const ambienteNota = isHomolog ? 'homologacao' : (destInfo?.ambiente === 'producao' ? 'producao' : (n.is_autorizada ? 'producao' : null))
+
                 return (
                   <tr 
                     key={n.id} 
@@ -1043,16 +1045,41 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                       />
                     </td>
                     <td className="p-3.5 font-mono overflow-hidden">
-                      <div className="flex items-center gap-2 truncate">
-                        <span className={isDivergente ? 'font-bold text-red-700' : 'text-slate-800 font-semibold'}>{n.numero || '—'}</span>
-                        {isDivergente && (
-                          <span 
-                            className="bg-red-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0"
-                            title={motivoDivergencia || 'Emitente não pertence à empresa cadastrada'}
-                          >
-                            ⚠️ Divergente
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className={isDivergente ? 'font-bold text-red-700' : 'text-slate-800 font-bold text-sm'}>
+                            {n.numero || '—'}
                           </span>
-                        )}
+                          {isDivergente && (
+                            <span 
+                              className="bg-red-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0"
+                              title={motivoDivergencia || 'Emitente não pertence à empresa cadastrada'}
+                            >
+                              ⚠️ Divergente
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Indicação visual de Ambiente: Homologação vs Produção */}
+                        <div>
+                          {ambienteNota === 'homologacao' ? (
+                            <span 
+                              className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs whitespace-nowrap"
+                              title="Nota emitida em Ambiente de Homologação (SEFAZ Teste - Sem Valor Fiscal)"
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                              Homologação
+                            </span>
+                          ) : (
+                            <span 
+                              className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap"
+                              title="Nota Oficial emitida em Ambiente de Produção com Valor Fiscal"
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                              Produção
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="p-3.5 font-mono text-xs text-slate-500 overflow-hidden" title={n.chave || ''}>
@@ -1322,8 +1349,30 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
               const modalEmitNome = modalDestInfo?.emitente_nome || modalConsulta.nota.emitente_nome || null
               const modalEmitDoc = modalDestInfo?.emitente_documento || modalConsulta.nota.cnpj_emitente || null
 
+              const modalMotivoLower = (modalConsulta.nota.motivo_sefaz || '').toLowerCase()
+              const modalIsHomolog = modalDestInfo?.ambiente === 'homologacao' ||
+                modalMotivoLower.includes('homologacao') ||
+                modalMotivoLower.includes('sem valor fiscal')
+              const modalAmbiente = modalIsHomolog ? 'homologacao' : (modalDestInfo?.ambiente === 'producao' ? 'producao' : (modalConsulta.nota.is_autorizada ? 'producao' : 'producao'))
+
               return (
                 <div className="mb-5 p-4 rounded-2xl bg-blue-50/70 border border-blue-200/80 space-y-2.5">
+                  {/* Ambiente da Nota Fiscal */}
+                  <div className="flex items-center justify-between pb-2 border-b border-blue-200/60 text-xs">
+                    <span className="font-semibold text-slate-600">Ambiente SEFAZ:</span>
+                    {modalAmbiente === 'homologacao' ? (
+                      <span className="inline-flex items-center gap-1.5 font-bold text-amber-800 bg-amber-100 border border-amber-300 px-2.5 py-0.5 rounded-lg text-[11px]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse"></span>
+                        Homologação (Sem Valor Fiscal - Teste)
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 rounded-lg text-[11px]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                        Produção (Documento Fiscal Oficial)
+                      </span>
+                    )}
+                  </div>
+
                   <div className="flex items-center justify-between text-xs font-bold text-blue-900 uppercase tracking-wider">
                     <span className="flex items-center gap-1.5">
                       <User size={13} className="text-blue-600" />
