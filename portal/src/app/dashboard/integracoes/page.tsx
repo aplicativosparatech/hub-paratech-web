@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { PlugZap, CreditCard, MessageCircle, Mail, Eye, EyeOff, Save, Send, Calendar, Sliders, Bell, FileText, CheckCircle2, AlertTriangle, Cpu, Sparkles, Bot, ExternalLink, RefreshCw, Check, ShieldCheck, Zap, Server, Database, Building2, Layers, FileSpreadsheet, Code2, ChevronRight } from 'lucide-react'
+import { PlugZap, CreditCard, MessageCircle, Mail, Eye, EyeOff, Save, Send, Calendar, Sliders, Bell, FileText, CheckCircle2, AlertTriangle, Cpu, Sparkles, Bot, ExternalLink, RefreshCw, Check, ShieldCheck, ShieldAlert, Zap, Server, Database, Building2, Layers, FileSpreadsheet, Code2, ChevronRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { createClient } from '@/utils/supabase/client'
 import { useTableFeatures } from '@/hooks/useTableFeatures'
 import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
 import CardApisHubParatech from '@/components/CardApisHubParatech'
 import CardLogsWhatsApp from '@/components/CardLogsWhatsApp'
+import ModalDisparoManualCobranca from '@/components/ModalDisparoManualCobranca'
 
 type Integracao = {
   id: string;
@@ -34,6 +35,31 @@ export default function IntegracoesPage() {
   const [logsAlterdata, setLogsAlterdata] = useState<any[]>([])
   const [loadingLogsAlterdata, setLoadingLogsAlterdata] = useState(false)
   const [cronAtivo, setCronAtivo] = useState(true)
+  const [keyLogsWpp, setKeyLogsWpp] = useState(0)
+  const [modalDisparo, setModalDisparo] = useState<{
+    isOpen: boolean
+    situacao: 'pre_vencimento' | 'no_vencimento' | 'atrasado_tolerancia' | 'bloqueado'
+    titulo: string
+    descricao: string
+  }>({
+    isOpen: false,
+    situacao: 'pre_vencimento',
+    titulo: '',
+    descricao: ''
+  })
+
+  const abrirModalDisparoManual = (
+    situacao: 'pre_vencimento' | 'no_vencimento' | 'atrasado_tolerancia' | 'bloqueado',
+    titulo: string,
+    descricao: string
+  ) => {
+    setModalDisparo({
+      isOpen: true,
+      situacao,
+      titulo,
+      descricao
+    })
+  }
 
   const handleToggleCron = async (novoEstado: boolean) => {
     setCronAtivo(novoEstado)
@@ -1687,7 +1713,7 @@ export default function IntegracoesPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               
-              {/* Modelo 1 */}
+              {/* Modelo 1: Pré-Vencimento */}
               <div className="bg-slate-50/70 rounded-xl p-5 border border-slate-200/80 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-3">
@@ -1699,9 +1725,20 @@ export default function IntegracoesPage() {
                     &quot;Olá, [Cliente]! A fatura [FAT-001] da empresa [Empresa] já está disponível. Valor: [R$ 150,00]. Vencimento: [Data]. Toque no link para pagar via Pix...&quot;
                   </p>
                 </div>
+                <div className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-400 font-medium">Envio manual:</span>
+                  <button
+                    type="button"
+                    onClick={() => abrirModalDisparoManual('pre_vencimento', '1. Pré-Vencimento (5 dias antes)', 'Envia a fatura e o código Pix para clientes com vencimento próximo')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-2xs hover:shadow transition cursor-pointer"
+                  >
+                    <Zap size={13} />
+                    <span>Disparar Manual Agora</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Modelo 2 */}
+              {/* Modelo 2: No Vencimento */}
               <div className="bg-slate-50/70 rounded-xl p-5 border border-slate-200/80 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-3">
@@ -1713,27 +1750,74 @@ export default function IntegracoesPage() {
                     &quot;Olá, [Cliente]! Sua fatura vence hoje, [Data]. Valor: [R$ 150,00]. Para evitar o bloqueio previsto para [Data_Bloqueio], regularize o pagamento. Faltam 5 dias...&quot;
                   </p>
                 </div>
+                <div className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-400 font-medium">Envio manual:</span>
+                  <button
+                    type="button"
+                    onClick={() => abrirModalDisparoManual('no_vencimento', '2. No Vencimento (Dia D)', 'Envia o lembrete de vencimento hoje com aviso da carência')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-2xs hover:shadow transition cursor-pointer"
+                  >
+                    <Zap size={13} />
+                    <span>Disparar Manual Agora</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Modelo 3 */}
+              {/* Modelo 3: Atraso & Regressiva */}
               <div className="bg-slate-50/70 rounded-xl p-5 border border-slate-200/80 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-bold text-red-600 bg-red-50 px-2.5 py-1 rounded-md">3. Atraso & Regressiva</span>
+                    <span className="text-xs font-bold text-orange-600 bg-orange-50 px-2.5 py-1 rounded-md">3. Atraso & Regressiva</span>
                     <span className="text-[11px] text-slate-400 font-medium">A partir do dia +1</span>
                   </div>
                   <h4 className="text-sm font-semibold text-slate-800 mb-2">Cobrança Progressiva</h4>
                   <p className="text-xs text-slate-600 font-mono bg-white p-3 rounded-lg border border-slate-200 leading-relaxed">
-                    &quot;Olá. Ainda não identificamos o pagamento. Para evitar o bloqueio previsto para [Data], faltam [X] dias. Regularize pelo link Pix abaixo...&quot;
+                    &quot;Olá, [Cliente]! Ainda não identificamos o pagamento. Para evitar o bloqueio previsto para [Data_Bloqueio], faltam [X] dias. Regularize pelo link Pix...&quot;
                   </p>
+                </div>
+                <div className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-400 font-medium">Envio manual:</span>
+                  <button
+                    type="button"
+                    onClick={() => abrirModalDisparoManual('atrasado_tolerancia', '3. Atraso & Regressiva', 'Envia cobrança em atraso alertando os dias restantes antes do bloqueio')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-2xs hover:shadow transition cursor-pointer"
+                  >
+                    <Zap size={13} />
+                    <span>Disparar Manual Agora</span>
+                  </button>
                 </div>
               </div>
 
-              {/* Modelo 4 */}
+              {/* Modelo 4: Bloqueio por Inadimplência */}
               <div className="bg-slate-50/70 rounded-xl p-5 border border-slate-200/80 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">4. Ao Pagar (Cliente)</span>
+                    <span className="text-xs font-bold text-red-600 bg-red-50 px-2.5 py-1 rounded-md">4. Bloqueio</span>
+                    <span className="text-[11px] text-slate-400 font-medium">Tolerância Expirada</span>
+                  </div>
+                  <h4 className="text-sm font-semibold text-slate-800 mb-2">Aviso de Bloqueio</h4>
+                  <p className="text-xs text-slate-600 font-mono bg-white p-3 rounded-lg border border-slate-200 leading-relaxed">
+                    &quot;🚨 AVISO DE BLOQUEIO POR PENDÊNCIA FINANCEIRA 🚨 Olá, [Cliente]! O prazo encerrou em [Data_Bloqueio]. Regularize via Pix para liberação instantânea...&quot;
+                  </p>
+                </div>
+                <div className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-400 font-medium">Envio manual:</span>
+                  <button
+                    type="button"
+                    onClick={() => abrirModalDisparoManual('bloqueado', '4. Bloqueio por Inadimplência', 'Envia notificação de suspensão do sistema com Pix para desbloqueio imediato')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-2xs hover:shadow transition cursor-pointer"
+                  >
+                    <Zap size={13} />
+                    <span>Disparar Manual Agora</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Modelo 5: Confirmação de Quitação (Cliente) */}
+              <div className="bg-slate-50/70 rounded-xl p-5 border border-slate-200/80 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">5. Ao Pagar (Cliente)</span>
                     <span className="text-[11px] text-slate-400 font-medium">Webhook Instantâneo</span>
                   </div>
                   <h4 className="text-sm font-semibold text-slate-800 mb-2">Confirmação de Pagamento</h4>
@@ -1741,13 +1825,16 @@ export default function IntegracoesPage() {
                     &quot;✅ Pagamento Confirmado! Olá, [Cliente]. Confirmamos o recebimento da fatura de [R$ 150,00]. Seu sistema está liberado para uso. Muito obrigado!&quot;
                   </p>
                 </div>
+                <div className="mt-4 pt-3 border-t border-slate-200 text-right">
+                  <span className="text-[11px] text-emerald-700 font-medium">Disparo Automático via Webhook</span>
+                </div>
               </div>
 
-              {/* Modelo 5 */}
+              {/* Modelo 6: Notificação ao Administrador */}
               <div className="bg-slate-50/70 rounded-xl p-5 border border-slate-200/80 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-md">5. Ao Pagar (Admin)</span>
+                    <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-md">6. Ao Pagar (Admin)</span>
                     <span className="text-[11px] text-slate-400 font-medium">Webhook Instantâneo</span>
                   </div>
                   <h4 className="text-sm font-semibold text-slate-800 mb-2">Notificação ao Administrador</h4>
@@ -1755,13 +1842,16 @@ export default function IntegracoesPage() {
                     &quot;💰 Novo Pagamento Recebido! Cliente: [Empresa] | Valor: [R$ 150,00] | Ref: [10/2026]. Status do Hub: Liberado no sistema.&quot;
                   </p>
                 </div>
+                <div className="mt-4 pt-3 border-t border-slate-200 text-right">
+                  <span className="text-[11px] text-indigo-700 font-medium">Notifica WhatsApp Interno Paratech</span>
+                </div>
               </div>
 
-              {/* Modelo 6 */}
+              {/* Modelo 7: Abandono de Pix */}
               <div className="bg-slate-50/70 rounded-xl p-5 border border-slate-200/80 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-bold text-purple-600 bg-purple-50 px-2.5 py-1 rounded-md">6. Abandono de Pix</span>
+                    <span className="text-xs font-bold text-purple-600 bg-purple-50 px-2.5 py-1 rounded-md">7. Abandono de Pix</span>
                     <span className="text-[11px] text-slate-400 font-medium">Checkout não concluído</span>
                   </div>
                   <h4 className="text-sm font-semibold text-slate-800 mb-2">Recuperação de Pagamento</h4>
@@ -1769,13 +1859,26 @@ export default function IntegracoesPage() {
                     &quot;Olá, [Cliente]. Notamos que você iniciou o pagamento da fatura de [R$ 150,00], mas a operação não foi concluída. Precisa de ajuda com o Pix?&quot;
                   </p>
                 </div>
+                <div className="mt-4 pt-3 border-t border-slate-200 text-right">
+                  <span className="text-[11px] text-purple-700 font-medium">Disparo Automático / Recuperação</span>
+                </div>
               </div>
 
             </div>
           </div>
 
+          {/* Modal de Disparo Manual em Massa */}
+          <ModalDisparoManualCobranca
+            isOpen={modalDisparo.isOpen}
+            onClose={() => setModalDisparo(prev => ({ ...prev, isOpen: false }))}
+            situacao={modalDisparo.situacao}
+            tituloSituacao={modalDisparo.titulo}
+            descricaoSituacao={modalDisparo.descricao}
+            onSucesso={() => setKeyLogsWpp(k => k + 1)}
+          />
+
           {/* Registro de Todas as Mensagens Enviadas (WhatsApp Logs) */}
-          <CardLogsWhatsApp onDataLoaded={(_, ativo) => setCronAtivo(ativo)} />
+          <CardLogsWhatsApp key={keyLogsWpp} onDataLoaded={(_, ativo) => setCronAtivo(ativo)} />
         </div>
       )}
 

@@ -4,35 +4,23 @@ import { sendWhatsAppMessage } from '@/utils/whatsapp'
 import { calculateEffectiveDates } from '@/utils/businessDays'
 import { calcularEncargosFatura } from '@/utils/billingCharges'
 import { obterOuGerarPixFatura } from '@/utils/pix'
+import {
+  gerarMensagemCobranca,
+  SituacaoCobranca,
+  OPCOES_SITUACAO,
+  DadosParaMensagem
+} from '@/utils/cobrancaTemplates'
 
-interface FaturaContexto {
-  condicao: 'bloqueado' | 'atrasado_tolerancia' | 'vence_hoje' | 'a_vencer' | 'pago' | 'sem_faturas'
-  tituloCondicao: string
-  modelo: string
-  motivo: string
-  mensagem: string
-  telefone: string
-  valor: number
-  valorFormatado: string
-  pixPayload: string
-  faturaId?: string
-  competencia?: string
-  dataVencimento?: string
-  dataBloqueio?: string
-  diferencaDias?: number
-  diasParaBloqueio?: number
-}
-
-async function prepararMensagemCliente(clienteId: string): Promise<FaturaContexto> {
+async function prepararContextoCliente(clienteId: string, situacaoForcada?: SituacaoCobranca | 'auto') {
   const supabase = createAdminClient()
   const hoje = new Date()
   hoje.setHours(0, 0, 0, 0)
 
-  // 1. Busca dados do Cliente
+  // 1. Busca dados do Cliente (incluindo nome_contato para [Cliente] e nome_fantasia/razao_social para [Empresa])
   const { data: cliente, error: cliError } = await supabase
     .from('clientes')
     .select(`
-      id, razao_social, nome_fantasia, whatsapp, whatsapp_cobranca,
+      id, razao_social, nome_fantasia, nome_contato, whatsapp, whatsapp_cobranca,
       dias_carencia, multa_atraso_percentual, juros_mora_mensal_percentual,
       valor_mensalidade, dia_vencimento
     `)
@@ -45,7 +33,7 @@ async function prepararMensagemCliente(clienteId: string): Promise<FaturaContext
 
   const telefoneDestino = (cliente.whatsapp_cobranca || cliente.whatsapp || '').trim()
 
-  // 2. Busca parâmetros globais
+  // 2. Busca parâmetros globais do portal
   const { data: configGeral } = await supabase
     .from('configuracoes_portal_geral')
     .select('global_multa_atraso_percentual, global_juros_mora_mensal_percentual, global_dias_carencia')
@@ -80,55 +68,41 @@ async function prepararMensagemCliente(clienteId: string): Promise<FaturaContext
   }
 
   const nomeEmpresa = cliente.nome_fantasia || cliente.razao_social || 'Empresa'
+  const nomeContato = cliente.nome_contato || nomeEmpresa
 
-  // Caso: Nenhuma fatura encontrada
+  // Caso: Nenhuma fatura encontrada no cadastro
   if (!fatura) {
     const valorMensal = Number(cliente.valor_mensalidade || 0)
     const valorFormatado = valorMensal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
     return {
-      condicao: 'sem_faturas',
+      condicaoReal: 'sem_faturas' as any,
+      situacaoAtiva: 'sem_faturas' as any,
       tituloCondicao: 'Sem Faturas Cadastradas',
       modelo: 'Aviso Geral',
       motivo: 'Aviso de Regularidade',
-      mensagem: `Olá, ${nomeEmpresa}! Confirmamos que seu cadastro na Paratech está regular e não há faturas pendentes de pagamento no momento. Qualquer dúvida estamos à disposição!`,
+      mensagem: `Olá, ${nomeContato}! Confirmamos que o cadastro da empresa ${nomeEmpresa} na Paratech está regular e não há faturas pendentes de pagamento no momento. Qualquer dúvida estamos à disposição!`,
       telefone: telefoneDestino,
       valor: valorMensal,
       valorFormatado,
-      pixPayload: ''
+      pixPayload: '',
+      faturaId: undefined as string | undefined,
+      opcoesSituacao: OPCOES_SITUACAO,
+      clienteNome: nomeContato,
+      empresaNome: nomeEmpresa
     }
   }
 
-  // Se for uma fatura já PAGA
-  if (isPago) {
-    const valorPago = Number(fatura.valor || cliente.valor_mensalidade || 0)
-    const valorFormatado = valorPago.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-    const refCompetencia = fatura.competencia || 'este mês'
-    return {
-      condicao: 'pago',
-      tituloCondicao: 'Fatura Quitada (Em Dia)',
-      modelo: '4. Ao Pagar (Cliente)',
-      motivo: 'Confirmação de Quitação / Em Dia',
-      mensagem: `✅ *PAGAMENTO EM DIA*\n\nOlá, *${nomeEmpresa}*!\nConfirmamos que sua fatura referente a *${refCompetencia}* no valor de *${valorFormatado}* está devidamente quitada.\n\nSeu sistema está operando normalmente. Agradecemos pela pontualidade e parceria!`,
-      telefone: telefoneDestino,
-      valor: valorPago,
-      valorFormatado,
-      pixPayload: fatura.qr_code_payload || '',
-      faturaId: fatura.id,
-      competencia: refCompetencia,
-      dataVencimento: fatura.data_vencimento
-    }
-  }
-
-  // Fatura PENDENTE: Garante QR Code Pix Oficial atualizado
+  // Fatura encontrada: Garante QR Code Pix Oficial Bacen (com chave Pix do Hub)
   let pixPayload = fatura.qr_code_payload
   if (!pixPayload || pixPayload.includes('mock-hubparatech')) {
     try {
       const pixRes = await obterOuGerarPixFatura(fatura.id)
       if (pixRes.qr_code_payload) {
         pixPayload = pixRes.qr_code_payload
+        fatura.qr_code_payload = pixPayload
       }
     } catch (errPix) {
-      console.warn('Erro ao obter/gerar pix oficial:', errPix)
+      console.warn('Erro ao obter/gerar Pix oficial Bacen:', errPix)
     }
   }
 
@@ -150,9 +124,6 @@ async function prepararMensagemCliente(clienteId: string): Promise<FaturaContext
     globalCarencia: configGeral?.global_dias_carencia
   })
 
-  const valorTotal = encargos.valorTotal
-  const valorFormatado = valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-
   // Cálculo de datas
   const { rawDueDate, targetCountdownDate } = calculateEffectiveDates(
     fatura.data_vencimento,
@@ -165,120 +136,73 @@ async function prepararMensagemCliente(clienteId: string): Promise<FaturaContext
 
   const dataVencimentoFormatada = rawDueDate.toLocaleDateString('pt-BR')
   const dataBloqueioFormatada = targetCountdownDate.toLocaleDateString('pt-BR')
-  const refCompetencia = fatura.competencia || 'este mês'
 
-  const pixBloco = pixPayload 
-    ? `\n\n🔑 *Pix Copia e Cola:*\n\`\`\`${pixPayload}\`\`\`` 
-    : ''
-
-  let textoEncargos = ''
-  if (encargos.emAtraso && (encargos.valorMulta > 0 || encargos.valorJuros > 0)) {
-    textoEncargos = ` (inclui R$ ${encargos.valorMulta.toFixed(2)} de multa e R$ ${encargos.valorJuros.toFixed(2)} de juros)`
+  // Identificação da Condição Real Atual
+  let condicaoReal: SituacaoCobranca = 'pre_vencimento'
+  if (isPago) {
+    condicaoReal = 'pago'
+  } else if (diasParaBloqueio < 0) {
+    condicaoReal = 'bloqueado'
+  } else if (diferencaDias < 0 && diasParaBloqueio >= 0) {
+    condicaoReal = 'atrasado_tolerancia'
+  } else if (diferencaDias === 0) {
+    condicaoReal = 'no_vencimento'
+  } else {
+    condicaoReal = 'pre_vencimento'
   }
 
-  // Identifica a Condição da Fatura
-  if (diasParaBloqueio < 0) {
-    // CONDIÇÃO 1: Bloqueado por Inadimplência
-    return {
-      condicao: 'bloqueado',
-      tituloCondicao: 'Bloqueado por Inadimplência',
-      modelo: 'Aviso de Bloqueio',
-      motivo: 'Aviso de Bloqueio por Inadimplência',
-      mensagem: `🚨 *AVISO DE BLOQUEIO POR PENDÊNCIA FINANCEIRA* 🚨\n\nOlá, *${nomeEmpresa}*!\nO prazo de tolerância para a fatura referente a *${refCompetencia}* encerrou em *${dataBloqueioFormatada}* e seu sistema pode ter sido bloqueado.\n\n• *Fatura:* ${fatura.id.split('-')[0]}\n• *Vencimento Original:* ${dataVencimentoFormatada}\n• *Valor Atualizado:* ${valorFormatado}${textoEncargos}${pixBloco}\n\n⚡ *Liberação Instantânea:* O sistema desbloqueia de forma 100% automática em segundos após a confirmação do Pix!`,
-      telefone: telefoneDestino,
-      valor: valorTotal,
-      valorFormatado,
-      pixPayload: pixPayload || '',
-      faturaId: fatura.id,
-      competencia: refCompetencia,
-      dataVencimento: dataVencimentoFormatada,
-      dataBloqueio: dataBloqueioFormatada,
-      diferencaDias,
-      diasParaBloqueio
-    }
+  // Se o usuário selecionou uma situação específica para teste ou envio manual
+  const situacaoEfetiva: SituacaoCobranca = (situacaoForcada && situacaoForcada !== 'auto')
+    ? situacaoForcada
+    : condicaoReal
+
+  // Monta objeto com todos os parâmetros para o modelo oficial
+  const dadosMensagem: DadosParaMensagem = {
+    cliente,
+    fatura: {
+      ...fatura,
+      qr_code_payload: pixPayload
+    },
+    encargos,
+    diasParaBloqueio,
+    diasCarenciaEfetivos,
+    dataVencimentoFormatada,
+    dataBloqueioFormatada
   }
 
-  if (diferencaDias < 0 && diasParaBloqueio >= 0) {
-    // CONDIÇÃO 2: Em Atraso, dentro do período de tolerância
-    const avisoTolerancia = diasParaBloqueio === 0
-      ? '⚠️ *O prazo de tolerância para regularizar TERMINA HOJE!*'
-      : `⏳ *Faltam apenas ${diasParaBloqueio} dia(s) de tolerância antes do bloqueio previsto para ${dataBloqueioFormatada}.*`
+  const resultadoMensagem = gerarMensagemCobranca(situacaoEfetiva, dadosMensagem)
 
-    return {
-      condicao: 'atrasado_tolerancia',
-      tituloCondicao: `Em Atraso (${diasParaBloqueio}d de tolerância)`,
-      modelo: '3. Atraso & Regressiva',
-      motivo: 'Cobrança em Atraso (Regressiva)',
-      mensagem: `⚠️ *AVISO DE FATURA EM ATRASO*\n\nOlá, *${nomeEmpresa}*!\nAinda não identificamos o pagamento da sua fatura referente a *${refCompetencia}*, que venceu em *${dataVencimentoFormatada}*.\n\n${avisoTolerancia}\n\n• *Valor Atual:* ${valorFormatado}${textoEncargos}${pixBloco}\n\nRegularize agora via Pix para evitar o bloqueio do sistema. (Se já pagou, favor desconsiderar).`,
-      telefone: telefoneDestino,
-      valor: valorTotal,
-      valorFormatado,
-      pixPayload: pixPayload || '',
-      faturaId: fatura.id,
-      competencia: refCompetencia,
-      dataVencimento: dataVencimentoFormatada,
-      dataBloqueio: dataBloqueioFormatada,
-      diferencaDias,
-      diasParaBloqueio
-    }
-  }
-
-  if (diferencaDias === 0) {
-    // CONDIÇÃO 3: No dia do Vencimento
-    return {
-      condicao: 'vence_hoje',
-      tituloCondicao: 'Vence Hoje',
-      modelo: '2. Lembrete de Vencimento',
-      motivo: 'Lembrete de Vencimento (Hoje)',
-      mensagem: `🔔 *LEMBRETE DE VENCIMENTO*\n\nOlá, *${nomeEmpresa}*!\nLembramos que a sua fatura do Sistema Comercial referente a *${refCompetencia}* vence *HOJE* (*${dataVencimentoFormatada}*).\n\n• *Valor:* ${valorFormatado}\n• *Data Limite de Tolerância:* ${dataBloqueioFormatada}${pixBloco}\n\nPara evitar encargos e bloqueios futuros, realize o pagamento via Pix até o final do dia!`,
-      telefone: telefoneDestino,
-      valor: valorTotal,
-      valorFormatado,
-      pixPayload: pixPayload || '',
-      faturaId: fatura.id,
-      competencia: refCompetencia,
-      dataVencimento: dataVencimentoFormatada,
-      dataBloqueio: dataBloqueioFormatada,
-      diferencaDias: 0,
-      diasParaBloqueio
-    }
-  }
-
-  // CONDIÇÃO 4: A Vencer / Pré-Vencimento (faltam X dias)
   return {
-    condicao: 'a_vencer',
-    tituloCondicao: `A Vencer (em ${diferencaDias} dias)`,
-    modelo: '1. Fatura Disponível',
-    motivo: `Pré-Vencimento (${diferencaDias} dias antes)`,
-    mensagem: `📄 *FATURA DISPONÍVEL*\n\nOlá, *${nomeEmpresa}*!\nA sua fatura referente a *${refCompetencia}* já está disponível para pagamento.\n\n• *Vencimento:* ${dataVencimentoFormatada} (em ${diferencaDias} dias)\n• *Valor:* ${valorFormatado}${pixBloco}\n\nPague antecipadamente com tranquilidade via Pix com baixa instantânea!`,
+    ...resultadoMensagem,
+    condicaoReal,
+    situacaoAtiva: situacaoEfetiva,
     telefone: telefoneDestino,
-    valor: valorTotal,
-    valorFormatado,
+    valor: encargos.valorTotal,
     pixPayload: pixPayload || '',
     faturaId: fatura.id,
-    competencia: refCompetencia,
-    dataVencimento: dataVencimentoFormatada,
-    dataBloqueio: dataBloqueioFormatada,
     diferencaDias,
-    diasParaBloqueio
+    opcoesSituacao: OPCOES_SITUACAO
   }
 }
 
-// GET: Retorna os dados da condição atual e a prévia da mensagem sem enviar
+// GET: Retorna os dados da condição atual e a prévia da mensagem (aceita ?situacao=...)
 export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await context.params
-    const dados = await prepararMensagemCliente(id)
+    const { searchParams } = new URL(request.url)
+    const situacao = (searchParams.get('situacao') || 'auto') as SituacaoCobranca | 'auto'
+
+    const dados = await prepararContextoCliente(id, situacao)
     return NextResponse.json({ success: true, ...dados })
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 400 })
   }
 }
 
-// POST: Realiza o envio imediato da mensagem pelo WhatsApp
+// POST: Realiza o envio imediato da mensagem pelo WhatsApp (aceita texto customizado e situação)
 export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> }
@@ -286,7 +210,9 @@ export async function POST(
   try {
     const { id } = await context.params
     const body = await request.json().catch(() => ({}))
-    const dados = await prepararMensagemCliente(id)
+    const situacaoParam = (body.situacao || 'auto') as SituacaoCobranca | 'auto'
+
+    const dados = await prepararContextoCliente(id, situacaoParam)
 
     const telefoneFinal = (body.telefone || dados.telefone || '').replace(/\D/g, '')
 
@@ -297,7 +223,10 @@ export async function POST(
       }, { status: 400 })
     }
 
-    const mensagemFinal = body.mensagem || dados.mensagem
+    // Usa a mensagem enviada pelo usuário no editor da prévia, ou o template gerado
+    const mensagemFinal = (body.mensagem && body.mensagem.trim().length > 0)
+      ? body.mensagem.trim()
+      : dados.mensagem
 
     // Envia a mensagem via integração ativa de WhatsApp
     await sendWhatsAppMessage({
@@ -305,7 +234,7 @@ export async function POST(
       message: mensagemFinal,
       remetente: 'Administrador (Manual - Enviar Agora)',
       destinatarioTipo: 'cliente',
-      destinatarioNome: body.destinatarioNome,
+      destinatarioNome: body.destinatarioNome || dados.clienteNome || dados.empresaNome,
       motivo: dados.motivo,
       modelo: dados.modelo,
       clienteId: id,
@@ -316,7 +245,8 @@ export async function POST(
       success: true,
       mensagemEnviada: mensagemFinal,
       telefone: telefoneFinal,
-      condicao: dados.condicao,
+      condicaoReal: dados.condicaoReal,
+      situacaoAtiva: dados.situacaoAtiva,
       tituloCondicao: dados.tituloCondicao,
       motivo: dados.motivo,
       modelo: dados.modelo

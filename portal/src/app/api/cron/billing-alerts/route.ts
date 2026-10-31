@@ -4,6 +4,8 @@ import { sendWhatsAppMessage } from '@/utils/whatsapp'
 import { calculateEffectiveDates } from '@/utils/businessDays'
 import { gerarFaturasMensalistas, executarRotinaPrimeiroDiaDoMes } from '@/utils/billing'
 import { calcularEncargosFatura } from '@/utils/billingCharges'
+import { obterOuGerarPixFatura } from '@/utils/pix'
+import { gerarMensagemCobranca, SituacaoCobranca, DadosParaMensagem } from '@/utils/cobrancaTemplates'
 
 export async function GET(request: Request) {
   const supabase = createAdminClient()
@@ -56,8 +58,8 @@ export async function GET(request: Request) {
       .select(`
         id, valor, valor_original, data_vencimento, status, qr_code_payload, competencia,
         clientes ( 
-          id, razao_social, nome_fantasia, whatsapp,
-          multa_atraso_percentual, juros_mora_mensal_percentual, dias_carencia
+          id, razao_social, nome_fantasia, nome_contato, whatsapp, whatsapp_cobranca,
+          multa_atraso_percentual, juros_mora_mensal_percentual, dias_carencia, is_ativo
         )
       `)
       .eq('status', 'pendente')
@@ -70,7 +72,10 @@ export async function GET(request: Request) {
     // 4. Processa cada fatura de acordo com a Régua de Cobrança e Carência
     for (const fatura of faturas || []) {
       const cliente: any = Array.isArray(fatura.clientes) ? fatura.clientes[0] : fatura.clientes
-      if (!cliente || !cliente.whatsapp) continue
+      if (!cliente || cliente.is_ativo === false) continue
+
+      const telefone = (cliente.whatsapp_cobranca || cliente.whatsapp || '').replace(/\D/g, '')
+      if (telefone.length < 10) continue
 
       // Prioridade da Carência / Tolerância: Cliente individual > Global
       const diasCarenciaEfetivos = (cliente.dias_carencia !== null && cliente.dias_carencia !== undefined)
@@ -102,64 +107,60 @@ export async function GET(request: Request) {
 
       const dataVencimentoFormatada = rawDueDate.toLocaleDateString('pt-BR')
       const dataBloqueioFormatada = targetCountdownDate.toLocaleDateString('pt-BR')
-      const valorCobrar = encargos.valorTotal
-      const valorFormatado = valorCobrar.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
-      const pixBloco = fatura.qr_code_payload 
-        ? `\n\n🔑 *Pix Copia e Cola:*\n\`\`\`${fatura.qr_code_payload}\`\`\`` 
-        : ''
-
-      let textoEncargos = ''
-      if (encargos.emAtraso && (encargos.valorMulta > 0 || encargos.valorJuros > 0)) {
-        textoEncargos = ` (inclui R$ ${encargos.valorMulta.toFixed(2)} de multa e R$ ${encargos.valorJuros.toFixed(2)} de juros)`
-      }
-
-      let mensagem = null
-      let motivo = 'Cobrança'
-      let modelo = 'Régua de Cobrança'
+      let situacao: SituacaoCobranca | null = null
 
       // REGRA 1: 5 dias antes (Fatura disponível)
       if (diferencaDias === 5) {
-        motivo = 'Pré-Vencimento (5 dias antes)'
-        modelo = '1. Fatura Disponível'
-        mensagem = `Olá! A fatura ${fatura.id.split('-')[0]} — Sistema Comercial, referente a ${fatura.competencia || 'este mês'}, da empresa ${cliente.nome_fantasia || cliente.razao_social}, já está disponível.\n• *Valor:* ${valorFormatado}\n• *Vencimento:* ${dataVencimentoFormatada}${pixBloco}\n\nPague via Pix para confirmação imediata!`
+        situacao = 'pre_vencimento'
       }
-      
       // REGRA 2: No dia do Vencimento Efetivo
       else if (diferencaDias === 0) {
-        motivo = 'No Vencimento'
-        modelo = '2. Lembrete de Vencimento'
-        mensagem = `Olá! Sua fatura do Sistema Comercial vence hoje, ${dataVencimentoFormatada}.\n• *Valor:* ${valorFormatado}\n\nPara evitar o bloqueio previsto para ${dataBloqueioFormatada}, regularize o pagamento. Faltam ${diasParaBloqueio} dia(s) de tolerância.${pixBloco}`
+        situacao = 'no_vencimento'
       }
-      
       // REGRA 3: Atrasado, mas antes do bloqueio efetivo
       else if (diferencaDias < 0 && diasParaBloqueio >= 0) {
-        motivo = 'Cobrança em Atraso (Regressiva)'
-        modelo = '3. Atraso & Regressiva'
-        if (diasParaBloqueio === 0) {
-           mensagem = `Olá. Ainda não identificamos o pagamento da fatura ${fatura.id.split('-')[0]} da empresa ${cliente.nome_fantasia || cliente.razao_social}. Vencimento: ${dataVencimentoFormatada}.\n\n⚠️ O prazo de tolerância para regularizar o pagamento antes do bloqueio TERMINA HOJE.\n• *Valor:* ${valorFormatado}${textoEncargos}${pixBloco}\n\nSe já pagou, favor desconsiderar.`
-        } else {
-           mensagem = `Olá. Ainda não identificamos o pagamento da fatura ${fatura.id.split('-')[0]} da empresa ${cliente.nome_fantasia || cliente.razao_social}. Vencimento original: ${dataVencimentoFormatada}.\n\nPara evitar o bloqueio previsto para ${dataBloqueioFormatada}, regularize o pagamento. Restam ${diasParaBloqueio} dia(s) de tolerância.\n• *Valor Atual:* ${valorFormatado}${textoEncargos}${pixBloco}\n\nSe já pagou, favor desconsiderar.`
-        }
+        situacao = 'atrasado_tolerancia'
       }
-      
       // REGRA 4: Já passou da data de bloqueio efetiva
       else if (diasParaBloqueio < 0) {
-        motivo = 'Aviso de Bloqueio por Inadimplência'
-        modelo = 'Aviso de Bloqueio'
-        mensagem = `⚠️ *AVISO DE BLOQUEIO* ⚠️\nO prazo de tolerância previsto terminou em ${dataBloqueioFormatada}. Seu sistema pode ter sido bloqueado por pendência financeira.\n\n• *Valor Atualizado:* ${valorFormatado}${textoEncargos}${pixBloco}\n\nO desbloqueio ocorre de forma 100% automática em segundos após a confirmação do Pix.`
+        situacao = 'bloqueado'
       }
 
-      if (mensagem) {
+      if (situacao) {
+        // Garante Pix oficial Bacen se necessário
+        let pixPayload = fatura.qr_code_payload
+        if (!pixPayload || pixPayload.includes('mock-hubparatech')) {
+          try {
+            const pixRes = await obterOuGerarPixFatura(fatura.id)
+            if (pixRes.qr_code_payload) {
+              pixPayload = pixRes.qr_code_payload
+              fatura.qr_code_payload = pixPayload
+            }
+          } catch (errPix) {
+            console.warn('Erro ao atualizar pix no cron:', errPix)
+          }
+        }
+
+        const msgObj = gerarMensagemCobranca(situacao, {
+          cliente,
+          fatura: { ...fatura, qr_code_payload: pixPayload },
+          encargos,
+          diasParaBloqueio,
+          diasCarenciaEfetivos,
+          dataVencimentoFormatada,
+          dataBloqueioFormatada
+        })
+
         try {
           await sendWhatsAppMessage({
-            to: cliente.whatsapp,
-            message: mensagem,
+            to: telefone,
+            message: msgObj.mensagem,
             remetente: 'Robô Automático (Cron)',
             destinatarioTipo: 'cliente',
-            destinatarioNome: cliente.nome_fantasia || cliente.razao_social,
-            motivo,
-            modelo,
+            destinatarioNome: msgObj.clienteNome || msgObj.empresaNome,
+            motivo: msgObj.motivo,
+            modelo: msgObj.modelo,
             clienteId: cliente.id,
             faturaId: fatura.id,
           })
@@ -167,7 +168,7 @@ export async function GET(request: Request) {
           disparosRealizados.push({
             cliente: cliente.nome_fantasia || cliente.razao_social,
             whatsapp: cliente.whatsapp,
-            motivo,
+            motivo: msgObj.motivo,
             regra: diferencaDias,
             status: 'enviado'
           })
@@ -175,7 +176,7 @@ export async function GET(request: Request) {
           disparosRealizados.push({
             cliente: cliente.nome_fantasia || cliente.razao_social,
             whatsapp: cliente.whatsapp,
-            motivo,
+            motivo: msgObj.motivo,
             regra: diferencaDias,
             status: 'falha',
             erro: err.message
