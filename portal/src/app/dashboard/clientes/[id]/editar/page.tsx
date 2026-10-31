@@ -28,6 +28,7 @@ import {
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import CertificadoAlertaBanner from '@/components/CertificadoAlertaBanner'
+import BotaoEnviarCobrancaWhatsApp from '@/components/BotaoEnviarCobrancaWhatsApp'
 import { limparDocumento, formatarCnpjCpf, validarCnpj, validarCpf, isCnpjAlfanumerico } from '@/utils/cnpjAlfanumerico'
 import { formatarDuasCasasDecimais, parseValorDecimal } from '@/utils/money'
 import { sanitizarNomeArquivoStorage } from '@/utils/storageUtils'
@@ -1409,6 +1410,15 @@ export default function EditarClientePage() {
                 onBlur={e => setFormData(prev => ({...prev, email_fiscal: e.target.value.trim().toLowerCase()}))}
               />
             </div>
+
+            {/* BOTÃO INSTANTÂNEO: ENVIAR AGORA DE ACORDO COM A CONDIÇÃO DA FATURA */}
+            {params.id && (
+              <BotaoEnviarCobrancaWhatsApp
+                clienteId={String(params.id)}
+                telefonePrincipal={formData.whatsapp_cobranca || formData.whatsapp}
+                nomeCliente={formData.nome_fantasia || formData.razao_social}
+              />
+            )}
           </div>
         </FormAccordionCard>
 
