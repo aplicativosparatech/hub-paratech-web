@@ -27,6 +27,17 @@ namespace HubParatechDesktop
         public long? numero_inicial_cte { get; set; }
         public long? numero_inicial_mdfe { get; set; }
         public FaturaSync? fatura { get; set; }
+        public DesbloqueioConfiancaSync? desbloqueio_confianca { get; set; }
+    }
+
+    public class DesbloqueioConfiancaSync
+    {
+        public bool ativo { get; set; }
+        public string? fatura_id { get; set; }
+        public string? desbloqueio_em { get; set; }
+        public string? expira_em { get; set; }
+        public int horas_totais { get; set; }
+        public int segundos_restantes { get; set; }
     }
 
     public class FaturaSync
@@ -60,6 +71,8 @@ namespace HubParatechDesktop
 
         // Estado cacheado
         private bool isBlocked = false;
+        private DesbloqueioConfiancaSync? currentConfianca = null;
+        private DateTime? confiancaExpiraEm = null;
         private List<string> targetProcesses = new List<string>();
         private string offlineSecret = "123456";
         private string pixPayload = "";
@@ -123,8 +136,13 @@ namespace HubParatechDesktop
                         : "Sincronizando agora...")
                     : "Aguardando primeiro sinal";
 
+                string confiancaTxt = (confiancaExpiraEm.HasValue && confiancaExpiraEm.Value > DateTime.Now)
+                    ? $"ATIVO (Faltam {(int)(confiancaExpiraEm.Value - DateTime.Now).TotalHours:D2}:{(confiancaExpiraEm.Value - DateTime.Now).Minutes:D2}:{(confiancaExpiraEm.Value - DateTime.Now).Seconds:D2} • Expira às {confiancaExpiraEm.Value:dd/MM/yyyy HH:mm:ss})"
+                    : "Inativo";
+
                 string msg = $"Status Operacional do Hub Paratech v2.6.0:\n\n" +
                              $"• Situação do Sistema: {(isBlocked ? "BLOQUEADO" : "LIBERADO / REGULAR")}\n" +
+                             $"• Desbloqueio em Confiança (24h): {confiancaTxt}\n" +
                              $"• Cadência do Batimento: 15 minutos (com tolerância de 2 min no Portal)\n" +
                              $"• Próxima Sincronização: {countdownTxt}\n" +
                              $"• Processos Alvo: {procs}\n" +
@@ -199,10 +217,20 @@ namespace HubParatechDesktop
             // Faz a primeira sincronização instantaneamente
             _ = SyncWithServer();
 
-            // Checagem em background de novas versões do Hub Paratech
+            // Checagem em background de novas versões do Hub Paratech (no startup e recorrente a cada 30 min)
             _ = Task.Run(async () => {
                 await Task.Delay(5000);
-                await UpdateManager.CheckForUpdatesAsync(config.HubToken, isManualCheck: false, trayIcon: trayIcon);
+                while (true)
+                {
+                    try
+                    {
+                        var currentCfg = ConfigManager.Load();
+                        await UpdateManager.CheckForUpdatesAsync(currentCfg.HubToken, isManualCheck: false, trayIcon: trayIcon);
+                    }
+                    catch { }
+
+                    await Task.Delay(TimeSpan.FromMinutes(30));
+                }
             });
         }
 
@@ -276,6 +304,33 @@ namespace HubParatechDesktop
             try
             {
                 if (isStealthMode || isCurrentlySyncing) return;
+
+                // Se houver desbloqueio em confiança ativo, exibe o timer regressivo com prioridade
+                if (confiancaExpiraEm.HasValue && confiancaExpiraEm.Value > DateTime.Now)
+                {
+                    var restConf = confiancaExpiraEm.Value - DateTime.Now;
+                    if (restConf.TotalSeconds > 0)
+                    {
+                        string confiancaTimer = $"{(int)restConf.TotalHours:D2}:{restConf.Minutes:D2}:{restConf.Seconds:D2}";
+                        SetTrayText($"Hub Paratech • ⏳ Confiança: {confiancaTimer}");
+                        if (itemHeartbeat != null)
+                        {
+                            itemHeartbeat.Text = $"⏳ Liberação em Confiança: {confiancaTimer} restantes";
+                        }
+                        LiveMonitorForm.ConfidenceTimerText = $"⏳ Confiança: {confiancaTimer} restantes";
+                        return;
+                    }
+                    else
+                    {
+                        confiancaExpiraEm = null;
+                        currentConfianca = null;
+                        LiveMonitorForm.ConfidenceTimerText = null;
+                    }
+                }
+                else
+                {
+                    LiveMonitorForm.ConfidenceTimerText = null;
+                }
 
                 if (lastSync == DateTime.MinValue)
                 {
@@ -412,6 +467,29 @@ namespace HubParatechDesktop
                             faturaValor = data.fatura.valor;
                             faturaVencimento = data.fatura.data_vencimento ?? "";
                             clienteNome = data.fatura.cliente_nome ?? "Cliente Paratech";
+                        }
+
+                        if (data.desbloqueio_confianca != null && data.desbloqueio_confianca.ativo)
+                        {
+                            currentConfianca = data.desbloqueio_confianca;
+                            if (!string.IsNullOrEmpty(data.desbloqueio_confianca.expira_em) && DateTime.TryParse(data.desbloqueio_confianca.expira_em, out var expDt))
+                            {
+                                confiancaExpiraEm = expDt.ToLocalTime();
+                            }
+                            else if (data.desbloqueio_confianca.segundos_restantes > 0)
+                            {
+                                confiancaExpiraEm = DateTime.Now.AddSeconds(data.desbloqueio_confianca.segundos_restantes);
+                            }
+                            else
+                            {
+                                confiancaExpiraEm = DateTime.Now.AddHours(24);
+                            }
+                        }
+                        else
+                        {
+                            currentConfianca = null;
+                            confiancaExpiraEm = null;
+                            LiveMonitorForm.ConfidenceTimerText = null;
                         }
                         lastSync = DateTime.Now;
                         

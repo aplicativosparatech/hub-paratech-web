@@ -8,6 +8,7 @@ import {
   Scale, HardDrive, Check, Clock, Globe, ArrowUpDown
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { createClient } from '@/utils/supabase/client'
 
 interface VersaoSistema {
   id: string
@@ -106,7 +107,44 @@ export default function CentralVersoesPage() {
     carregarDados()
   }, [])
 
-  // Upload do instalador (.exe)
+  // Upload do instalador (.exe) - Suporta arquivos grandes direto via Supabase Storage
+  const uploadArquivoParaStorage = async (file: File, sisId: string, ver: string): Promise<string> => {
+    const nomeLimpo = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+    const path = `${sisId}/${ver}_${Date.now()}_${nomeLimpo}`
+    const supabase = createClient()
+
+    // 1. Tenta upload direto pelo cliente Supabase do navegador (bypassa limite de 4.5MB da Vercel)
+    const { error: errUpload } = await supabase.storage
+      .from('instaladores')
+      .upload(path, file, {
+        cacheControl: '3600',
+        upsert: true
+      })
+
+    if (!errUpload) {
+      const { data: urlData } = supabase.storage
+        .from('instaladores')
+        .getPublicUrl(path)
+      return urlData.publicUrl
+    }
+
+    // 2. Fallback caso a sessão client-side falhe: tenta pela API interna
+    console.warn('Upload direto via client falhou, tentando fallback via API:', errUpload.message)
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('sistema_id', sisId)
+    formData.append('versao', ver)
+
+    const res = await fetch('/api/hub/versoes/upload', {
+      method: 'POST',
+      body: formData
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || errUpload.message)
+    return data.url
+  }
+
+  // Upload manual do instalador (.exe) acionado pelo botão Fazer Upload
   const handleUploadInstalador = async () => {
     if (!fileToUpload) return
     const sisFinal = formSistema === 'outro' ? formSistemaCustom.trim() : formSistema
@@ -117,20 +155,10 @@ export default function CentralVersoesPage() {
 
     try {
       setUploadingFile(true)
-      const formData = new FormData()
-      formData.append('file', fileToUpload)
-      formData.append('sistema_id', sisFinal)
-      formData.append('versao', formVersao || '1.0.0')
-
-      const res = await fetch('/api/hub/versoes/upload', {
-        method: 'POST',
-        body: formData
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Erro no upload')
-
-      setFormUrlDownload(data.url)
-      toast.success('Instalador enviado com sucesso!')
+      const tId = toast.loading(`Enviando ${fileToUpload.name} (${(fileToUpload.size / (1024 * 1024)).toFixed(1)} MB)...`)
+      const url = await uploadArquivoParaStorage(fileToUpload, sisFinal, formVersao.trim() || '1.0.0')
+      setFormUrlDownload(url)
+      toast.success('Instalador enviado com sucesso!', { id: tId })
     } catch (err: any) {
       toast.error('Erro no upload: ' + err.message)
     } finally {
@@ -148,13 +176,38 @@ export default function CentralVersoesPage() {
       return
     }
     if (!formVersao.trim()) {
-      toast.error('Digite a versão (ex: 1.0.1).')
+      toast.error('Digite a versão (ex: 1.0.1 ou 2.6.1).')
       return
     }
-    if (!formUrlDownload.trim()) {
+
+    let downloadUrlFinal = formUrlDownload.trim()
+
+    // Se o usuário selecionou um arquivo mas não clicou em "Fazer Upload" antes, faz agora automaticamente!
+    if (!downloadUrlFinal && fileToUpload) {
+      setUploadingFile(true)
+      const tId = toast.loading(`Fazendo upload do executável (${(fileToUpload.size / (1024 * 1024)).toFixed(1)} MB)...`)
+      try {
+        downloadUrlFinal = await uploadArquivoParaStorage(fileToUpload, sisFinal, formVersao.trim())
+        setFormUrlDownload(downloadUrlFinal)
+        toast.success('Arquivo enviado com sucesso!', { id: tId })
+      } catch (errUp: any) {
+        toast.error(`Falha no upload do arquivo: ${errUp.message}`, { id: tId })
+        setUploadingFile(false)
+        return
+      } finally {
+        setUploadingFile(false)
+      }
+    }
+
+    if (!downloadUrlFinal) {
       toast.error('Faça upload do arquivo .exe ou insira uma URL de download.')
       return
     }
+
+    // Calcula build number se vazio
+    const buildFinal = formBuild.trim() 
+      ? parseInt(formBuild.trim(), 10) 
+      : parseInt(formVersao.replace(/\D/g, '') || '1', 10)
 
     try {
       setSalvando(true)
@@ -164,18 +217,19 @@ export default function CentralVersoesPage() {
         body: JSON.stringify({
           sistema_id: sisFinal,
           versao: formVersao.trim(),
-          build_number: parseInt(formBuild || '1', 10),
+          build_number: buildFinal,
           obrigatoria: formObrigatoria,
-          url_download: formUrlDownload.trim(),
+          url_download: downloadUrlFinal,
           changelog: formChangelog.trim(),
-          canal: formCanal
+          canal: formCanal,
+          tamanho_bytes: fileToUpload?.size || null
         })
       })
 
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Erro ao salvar versão')
 
-      toast.success('Nova versão publicada com sucesso!')
+      toast.success(`Versão ${formVersao.trim()} publicada com sucesso!`)
       setModalNovaVersao(false)
       // Limpa form
       setFormVersao('')
@@ -633,14 +687,13 @@ export default function CentralVersoesPage() {
                   />
                 </div>
                 <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Build Number (Inteiro):</label>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Build Number (Opcional):</label>
                   <input
                     type="number"
-                    placeholder="ex: 101 ou 270"
+                    placeholder="ex: 261 (Automático)"
                     value={formBuild}
                     onChange={e => setFormBuild(e.target.value)}
                     className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono font-bold"
-                    required
                   />
                 </div>
               </div>
@@ -649,11 +702,22 @@ export default function CentralVersoesPage() {
               <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-2">
                 <label className="font-bold text-slate-800 dark:text-white block">Instalador / Executável (.exe):</label>
                 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                   <input
                     type="file"
                     accept=".exe,.zip,.msi"
-                    onChange={e => setFileToUpload(e.target.files?.[0] || null)}
+                    onChange={e => {
+                      const f = e.target.files?.[0] || null
+                      setFileToUpload(f)
+                      if (f && !formVersao) {
+                        // Tenta extrair versão do nome do arquivo (ex: HubParatech_v2.6.1.exe)
+                        const match = f.name.match(/v?(\d+\.\d+\.\d+)/i)
+                        if (match) {
+                          setFormVersao(match[1])
+                          setFormBuild(match[1].replace(/\D/g, ''))
+                        }
+                      }
+                    }}
                     className="text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer"
                   />
                   {fileToUpload && (
@@ -661,23 +725,22 @@ export default function CentralVersoesPage() {
                       type="button"
                       onClick={handleUploadInstalador}
                       disabled={uploadingFile}
-                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold flex items-center gap-1 cursor-pointer"
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold flex items-center gap-1 cursor-pointer text-xs"
                     >
                       {uploadingFile ? <RefreshCw size={13} className="animate-spin" /> : <UploadCloud size={13} />}
-                      {uploadingFile ? 'Enviando...' : 'Fazer Upload'}
+                      {uploadingFile ? 'Enviando...' : `Upload Direto (${(fileToUpload.size / (1024 * 1024)).toFixed(1)} MB)`}
                     </button>
                   )}
                 </div>
 
                 <div className="mt-2">
-                  <label className="text-[11px] text-slate-500 block mb-0.5">Ou URL Direta de Download:</label>
+                  <label className="text-[11px] text-slate-500 block mb-0.5">Ou URL Direta de Download (se já hospedado externamente):</label>
                   <input
                     type="url"
-                    placeholder="https://..."
+                    placeholder="https://... ou faça o upload do arquivo acima"
                     value={formUrlDownload}
                     onChange={e => setFormUrlDownload(e.target.value)}
                     className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-mono"
-                    required
                   />
                 </div>
               </div>

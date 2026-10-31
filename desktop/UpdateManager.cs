@@ -24,11 +24,25 @@ namespace HubParatechDesktop
 
     public static class UpdateManager
     {
-        private static readonly HttpClient http = new HttpClient { Timeout = TimeSpan.FromSeconds(25) };
+        private static readonly HttpClient http = new HttpClient { Timeout = TimeSpan.FromSeconds(35) };
         private const string CheckApiUrl = "https://hub-paratech-web.vercel.app/api/hub/versoes/check";
-        private const string VersaoAtual = "2.6.0";
-        private const int BuildNumberAtual = 260;
+        public const string VersaoAtual = "2.6.0";
+        public const int BuildNumberAtual = 260;
         private static bool isUpdating = false;
+
+        private static void LogUpdate(string message)
+        {
+            try
+            {
+                string tempDir = Path.Combine(Path.GetTempPath(), "ParatechUpdates");
+                Directory.CreateDirectory(tempDir);
+                string logFile = Path.Combine(tempDir, "update.log");
+                string logLine = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}{Environment.NewLine}";
+                File.AppendAllText(logFile, logLine);
+                Debug.WriteLine($"[UpdateManager] {message}");
+            }
+            catch { }
+        }
 
         public static async Task<ParatechUpdateInfo?> CheckForUpdatesAsync(string? token = null, bool isManualCheck = false, NotifyIcon? trayIcon = null)
         {
@@ -39,14 +53,31 @@ namespace HubParatechDesktop
                 string pcName = Environment.MachineName;
                 string query = $"?sistema_id=hub_desktop&versao_atual={VersaoAtual}&build_number={BuildNumberAtual}&nome_computador={Uri.EscapeDataString(pcName)}&so=Windows";
                 
+                if (!string.IsNullOrEmpty(token))
+                {
+                    query += $"&token={Uri.EscapeDataString(token)}";
+                }
+
+                LogUpdate($"Verificando novas versões em {CheckApiUrl}{query}...");
+
                 var resp = await http.GetAsync(CheckApiUrl + query);
-                if (!resp.IsSuccessStatusCode) return null;
+                if (!resp.IsSuccessStatusCode)
+                {
+                    LogUpdate($"Falha na consulta HTTP: {resp.StatusCode}");
+                    if (isManualCheck)
+                    {
+                        ParatechDialog.ShowWarning($"Servidor de versões respondeu com código {(int)resp.StatusCode}.", "Aviso");
+                    }
+                    return null;
+                }
 
                 string json = await resp.Content.ReadAsStringAsync();
                 var info = JsonSerializer.Deserialize<ParatechUpdateInfo>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
                 if (info != null && info.tem_atualizacao)
                 {
+                    LogUpdate($"Atualização encontrada! Versão mais recente: {info.versao_mais_recente} (Build {info.build_number_mais_recente}). Obrigatória: {info.obrigatoria}, Política: {info.politica_efetiva}");
+
                     if (info.obrigatoria || info.politica_efetiva == "automatica")
                     {
                         // Atualização silenciosa em background
@@ -68,7 +99,7 @@ namespace HubParatechDesktop
                         if (isManualCheck)
                         {
                             var result = MessageBox.Show(
-                                $"Nova versão {info.versao_mais_recente} disponível!\n\n" +
+                                $"Nova versão {info.versao_mais_recente} do Hub Paratech disponível!\n\n" +
                                 $"Novidades:\n{info.changelog ?? "• Melhorias gerais de sincronização e segurança."}\n\n" +
                                 $"Deseja atualizar agora?",
                                 "Atualização do Hub Paratech",
@@ -83,16 +114,20 @@ namespace HubParatechDesktop
                         }
                     }
                 }
-                else if (isManualCheck)
+                else
                 {
-                    ParatechDialog.ShowInfo($"O Hub Paratech já está na versão mais recente ({VersaoAtual}).", "Hub Atualizado");
+                    LogUpdate($"Sistema já está na versão mais recente ({VersaoAtual}).");
+                    if (isManualCheck)
+                    {
+                        ParatechDialog.ShowInfo($"O Hub Paratech já está na versão mais recente ({VersaoAtual}).", "Hub Atualizado");
+                    }
                 }
 
                 return info;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[UpdateManager] Erro ao checar atualizações: {ex.Message}");
+                LogUpdate($"Exceção ao checar atualizações: {ex.Message}");
                 if (isManualCheck)
                 {
                     ParatechDialog.ShowWarning($"Não foi possível checar atualizações no momento.\n{ex.Message}", "Aviso de Conexão");
@@ -111,9 +146,16 @@ namespace HubParatechDesktop
                 string tempDir = Path.Combine(Path.GetTempPath(), "ParatechUpdates");
                 Directory.CreateDirectory(tempDir);
 
-                string downloadedFile = Path.Combine(tempDir, $"HubUpdate_{info.versao_mais_recente}.exe");
-                
-                // Download do novo binário
+                string fileName = Path.GetFileName(new Uri(info.url_download).AbsolutePath);
+                if (string.IsNullOrEmpty(fileName) || !fileName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                {
+                    fileName = $"HubUpdate_{info.versao_mais_recente}.exe";
+                }
+
+                string downloadedFile = Path.Combine(tempDir, fileName);
+                LogUpdate($"Iniciando download do pacote a partir de: {info.url_download} -> {downloadedFile}");
+
+                // Download do novo binário com buffer
                 using (var response = await http.GetAsync(info.url_download, HttpCompletionOption.ResponseHeadersRead))
                 {
                     response.EnsureSuccessStatusCode();
@@ -123,26 +165,71 @@ namespace HubParatechDesktop
                     }
                 }
 
-                string currentExePath = Application.ExecutablePath;
-                string updaterBat = Path.Combine(tempDir, "apply_hub_update.bat");
+                long downloadedSize = new FileInfo(downloadedFile).Length;
+                LogUpdate($"Download concluído ({downloadedSize} bytes). Preparando substituição atômica...");
 
-                // Gera script de substituição atômica:
-                // Aguarda o processo atual encerrar, substitui o .exe e reabre
-                string batContent = $@"@echo off
+                string currentExePath = Application.ExecutablePath;
+                string processName = Path.GetFileNameWithoutExtension(currentExePath);
+                string updaterBat = Path.Combine(tempDir, "apply_hub_update.bat");
+                string logPath = Path.Combine(tempDir, "update.log");
+
+                bool isInstaller = fileName.IndexOf("setup", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                  fileName.IndexOf("instalador", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                  fileName.IndexOf("install", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                string batContent;
+                if (isInstaller)
+                {
+                    // Se for Instalador Setup (InnoSetup, etc.), executa silencioso
+                    batContent = $@"@echo off
+chcp 65001 > nul
+echo [%date% %time%] Aguardando encerramento do processo anterior... >> ""{logPath}""
+taskkill /f /im {processName}.exe > nul 2>&1
 timeout /t 2 /nobreak > nul
-:retry
-copy /y ""{downloadedFile}"" ""{currentExePath}"" > nul
-if errorlevel 1 (
-    timeout /t 1 /nobreak > nul
-    goto retry
-)
+echo [%date% %time%] Executando instalador silencioso... >> ""{logPath}""
+start /wait """" ""{downloadedFile}"" /SILENT /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+echo [%date% %time%] Instalador finalizado. Reiniciando aplicativo... >> ""{logPath}""
 start """" ""{currentExePath}""
 del ""{downloadedFile}"" > nul 2>&1
 del ""%~f0"" > nul 2>&1
 ";
-                File.WriteAllText(updaterBat, batContent);
+                }
+                else
+                {
+                    // Se for binário direto .exe, substitui atômico com retry
+                    batContent = $@"@echo off
+chcp 65001 > nul
+echo [%date% %time%] Aguardando encerramento de {processName}.exe... >> ""{logPath}""
+taskkill /f /im {processName}.exe > nul 2>&1
+timeout /t 2 /nobreak > nul
+set RETRY_COUNT=0
 
-                // Executa o script e encerra o app atual
+:retry
+set /a RETRY_COUNT+=1
+copy /y ""{downloadedFile}"" ""{currentExePath}"" > nul
+if errorlevel 1 (
+    echo [%date% %time%] Tentativa %RETRY_COUNT% falhou. Tentando novamente em 1s... >> ""{logPath}""
+    if %RETRY_COUNT% gtr 15 goto falha
+    timeout /t 1 /nobreak > nul
+    goto retry
+)
+
+echo [%date% %time%] Binario substituido com sucesso. Reiniciando... >> ""{logPath}""
+start """" ""{currentExePath}""
+del ""{downloadedFile}"" > nul 2>&1
+del ""%~f0"" > nul 2>&1
+exit
+
+:falha
+echo [%date% %time%] ERRO CRITICO: Nao foi possivel substituir o executavel apos 15 tentativas. >> ""{logPath}""
+start """" ""{currentExePath}""
+exit
+";
+                }
+
+                File.WriteAllText(updaterBat, batContent);
+                LogUpdate($"Script de aplicação gerado em {updaterBat}. Disparando e encerrando processo atual.");
+
                 ProcessStartInfo psi = new ProcessStartInfo
                 {
                     FileName = "cmd.exe",
@@ -157,7 +244,7 @@ del ""%~f0"" > nul 2>&1
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[UpdateManager] Erro na aplicação da atualização: {ex.Message}");
+                LogUpdate($"ERRO na aplicação da atualização: {ex.Message}");
                 isUpdating = false;
             }
         }
