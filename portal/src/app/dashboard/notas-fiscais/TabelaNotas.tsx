@@ -390,10 +390,11 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     defaultSortDirection: 'desc',
     initialWidths: {
       select: 48,
-      numero: 100,
-      chave: isSaida ? 300 : 250,
-      emitente: 220,
-      destinatario: 220,
+      numero: 90,
+      serie: 65,
+      chave: isSaida ? 260 : 210,
+      emitente: 200,
+      destinatario: 200,
       valor: 110,
       emissao: 125,
       transmissao: 125,
@@ -402,6 +403,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     },
     customExtractors: {
       numero: (n: any) => Number(String(n.numero || '0').replace(/\D/g, '')),
+      serie: (n: any) => Number(n.serie || (n.chave && n.chave.length === 44 ? parseInt(n.chave.substring(22, 25), 10) : 1) || 1),
       chave: (n: any) => n.chave || '',
       emitente: (n: any) => destinatariosMap[n.id]?.emitente_nome || n.cnpj_emitente || (n.chave && n.chave.length === 44 ? n.chave.substring(6, 20) : '') || '',
       destinatario: (n: any) => destinatariosMap[n.id]?.destinatario_nome || n.destinatario_nome || n.cliente || (tabela.startsWith('nfce_') ? 'Consumidor Final' : '') || '',
@@ -859,6 +861,18 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                   minWidth={80}
                 />
                 <ResizableSortableTh
+                  columnId="serie"
+                  label="Série"
+                  sortKey="serie"
+                  currentSortKey={sortKey}
+                  currentSortDirection={sortDirection}
+                  onSort={handleSort}
+                  width={columnWidths.serie || 65}
+                  onResize={handleResizeColumn}
+                  minWidth={55}
+                  align="center"
+                />
+                <ResizableSortableTh
                   columnId="chave"
                   label="Chave de Acesso"
                   sortKey="chave"
@@ -952,7 +966,7 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
             <tbody>
               {notasFiltradas.length === 0 ? (
                 <tr>
-                  <td colSpan={isSaida ? 9 : 10} className="py-12 px-6 text-center text-slate-500">
+                  <td colSpan={isSaida ? 10 : 11} className="py-12 px-6 text-center text-slate-500">
                     <p className="font-semibold text-slate-700 text-base">
                       {temFiltroAtivo 
                         ? 'Nenhuma nota encontrada com os filtros selecionados.' 
@@ -1027,7 +1041,10 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                 const isHomolog = destInfo?.ambiente === 'homologacao' ||
                   motivoLower.includes('homologacao') ||
                   motivoLower.includes('sem valor fiscal')
-                const ambienteNota = isHomolog ? 'homologacao' : (destInfo?.ambiente === 'producao' ? 'producao' : (n.is_autorizada ? 'producao' : null))
+                const isProd = destInfo?.ambiente === 'producao' ||
+                  (Boolean(n.motivo_sefaz) && !isHomolog && n.is_autorizada)
+                const ambienteNota = isHomolog ? 'homologacao' : (isProd ? 'producao' : (destInfo?.ambiente || (isHomolog ? 'homologacao' : 'producao')))
+                const serieCalculada = n.serie || (n.chave && n.chave.length === 44 ? String(parseInt(n.chave.substring(22, 25), 10) || 1) : '1')
 
                 return (
                   <tr 
@@ -1081,6 +1098,11 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
                           )}
                         </div>
                       </div>
+                    </td>
+                    <td className="p-3.5 font-mono text-xs text-center shrink-0">
+                      <span className="inline-block px-2 py-0.5 rounded-md font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                        {serieCalculada}
+                      </span>
                     </td>
                     <td className="p-3.5 font-mono text-xs text-slate-500 overflow-hidden" title={n.chave || ''}>
                       <div className="flex items-center gap-1.5 overflow-hidden">

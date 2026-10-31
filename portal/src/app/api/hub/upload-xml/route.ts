@@ -409,10 +409,17 @@ export async function POST(request: Request) {
       status_correcao: statusCorrecao
     }
 
+    // Detecção do ambiente (Homologação vs Produção)
+    const tpAmb = extractTag(xmlString, 'tpAmb')
+    const isHomologacaoXml = tpAmb === '2' || xmlString.includes('<tpAmb>2</tpAmb>') || (xMotivo || '').toLowerCase().includes('homologacao')
+    const motivoFinal = isHomologacaoXml 
+      ? ((xMotivo ? xMotivo : 'Autorizado o uso da NF-e') + ' (Homologação)') 
+      : (xMotivo || 'Autorizado o uso da NF-e')
+
     // Adiciona colunas extras se existirem na tabela
     if (serie) dbPayload.serie = serie
     if (cStat) dbPayload.cstat = cStat
-    if (xMotivo) dbPayload.motivo_sefaz = xMotivo
+    dbPayload.motivo_sefaz = motivoFinal
     if (nProt) dbPayload.protocolo = nProt
     let formasPagamentoFinal: any[] = []
     if (formasPagamentoJsonHub) {
@@ -431,9 +438,9 @@ export async function POST(request: Request) {
     const { error: dbError } = await supabaseAdmin.from(tabela).upsert(dbPayload, { onConflict: 'chave' })
 
     if (dbError) {
-      // Se falhar por causa de colunas novas ainda não criadas, faz fallback para o payload básico
-      console.warn('Erro ao inserir colunas extras, tentando payload básico:', dbError.message)
-      const fallbackPayload = {
+      // Se falhar por causa de colunas novas ainda não criadas, faz fallback para o payload compatível
+      console.warn('Erro ao inserir colunas extras, tentando payload compatível:', dbError.message)
+      const fallbackPayload: any = {
         cliente_id: cliente.id,
         numero: numero || null,
         chave: chave,
@@ -442,7 +449,13 @@ export async function POST(request: Request) {
         data_transmissao: transmissao || null,
         tem_assinatura: temAssinatura,
         is_autorizada: isAutorizada,
-        storage_path: filePath
+        storage_path: filePath,
+        serie: serie || (chave && chave.length === 44 ? String(parseInt(chave.substring(22, 25), 10) || 1) : '1'),
+        cstat: cStat || '100',
+        motivo_sefaz: motivoFinal,
+        protocolo: nProt || null,
+        cnpj_emitente: cnpjEmitente || null,
+        cnpj_destinatario: cnpjDestinatario || null
       }
       await supabaseAdmin.from(tabela).upsert(fallbackPayload, { onConflict: 'chave' })
     }
