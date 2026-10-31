@@ -86,6 +86,8 @@ async function prepararContextoCliente(clienteId: string, situacaoForcada?: Situ
       valorFormatado,
       pixPayload: '',
       faturaId: undefined as string | undefined,
+      linkFatura: '',
+      linkQrCode: '',
       opcoesSituacao: OPCOES_SITUACAO,
       clienteNome: nomeContato,
       empresaNome: nomeEmpresa
@@ -228,10 +230,15 @@ export async function POST(
       ? body.mensagem.trim()
       : dados.mensagem
 
-    // Envia a mensagem via integração ativa de WhatsApp
+    const mediaUrl = (body.enviarImagemQrCode !== false && dados.faturaId && dados.linkQrCode)
+      ? dados.linkQrCode
+      : undefined
+
+    // Envia a mensagem via integração ativa de WhatsApp (com imagem do QR Code se disponível)
     await sendWhatsAppMessage({
       to: telefoneFinal,
       message: mensagemFinal,
+      mediaUrl,
       remetente: 'Administrador (Manual - Enviar Agora)',
       destinatarioTipo: 'cliente',
       destinatarioNome: body.destinatarioNome || dados.clienteNome || dados.empresaNome,

@@ -2,7 +2,7 @@
  * Modelos Oficiais de Mensagens da Régua de Cobrança do Hub Paratech
  * Suporta interpolação de todas as variáveis do Hub:
  * [Cliente], [Empresa], [Fatura] / [FAT-001], [Competencia], [Valor],
- * [Data] / [Vencimento], [Data_Bloqueio], [Dias_Tolerancia], [Link_Pix], [Pix_Copia_Cola]
+ * [Data] / [Vencimento], [Data_Bloqueio], [Dias_Tolerancia], [Link_Pix], [Link_QRCode], [Pix_Copia_Cola]
  */
 
 export type SituacaoCobranca =
@@ -59,6 +59,7 @@ export interface MensagemGerada {
   dataVencimento: string
   dataBloqueio: string
   linkFatura: string
+  linkQrCode: string
   pixCopiaCola: string
   diasParaBloqueio: number
   diasCarencia: number
@@ -114,11 +115,22 @@ export function gerarMensagemCobranca(
   }
 
   const linkFatura = `${baseUrl}/fatura/${fatura.id}`
+  const linkQrCode = `${baseUrl}/api/fatura-publica/${fatura.id}/qrcode`
   const pixCopiaCola = (fatura.qr_code_payload || '').trim()
 
+  const bannerHeader = `🏢 *PARATECH TECNOLOGIA & SISTEMAS*\n─────────────────────────────\n`
+
+  const linksPagamento = [
+    `📄 *Visualizar Fatura Completa & QR Code:*`,
+    `${linkFatura}`,
+    ``,
+    `🖼️ *Abrir Imagem do QR Code Pix:*`,
+    `${linkQrCode}`
+  ].join('\n')
+
   const pixBloco = pixCopiaCola
-    ? `\n\n🔑 *Pix Copia e Cola:*\n\`\`\`${pixCopiaCola}\`\`\``
-    : ''
+    ? `\n\n${linksPagamento}\n\n🔑 *Pix Copia e Cola:*\n\`\`\`${pixCopiaCola}\`\`\``
+    : `\n\n${linksPagamento}`
 
   let textoEncargos = ''
   if (encargos?.emAtraso && ((encargos.valorMulta || 0) > 0 || (encargos.valorJuros || 0) > 0)) {
@@ -136,7 +148,7 @@ export function gerarMensagemCobranca(
       tituloCondicao = 'Fatura Disponível (Pré-Vencimento)'
       modelo = '1. Fatura Disponível'
       motivo = 'Pré-Vencimento (5 dias antes)'
-      mensagem = `Olá, *${clienteNome}*! 👋\nA fatura *[${faturaCodigo}]* da empresa *${empresaNome}* referente a *${competencia}* já está disponível.\n\n• *Valor:* ${valorFormatado}\n• *Vencimento:* ${dataVencimento}\n\n📄 *Toque no link para ver a fatura e pagar via Pix:*\n${linkFatura}${pixBloco}\n\nPague antecipadamente com tranquilidade via Pix com baixa instantânea no sistema!`
+      mensagem = `${bannerHeader}📄 *FATURA DISPONÍVEL*\n\nOlá, *${clienteNome}*! 👋\nA fatura *[${faturaCodigo}]* da empresa *${empresaNome}* referente a *${competencia}* já está disponível.\n\n• *Valor:* ${valorFormatado}\n• *Vencimento:* ${dataVencimento}${pixBloco}\n\nPague antecipadamente com tranquilidade via Pix com baixa instantânea no sistema!`
       break
     }
 
@@ -144,7 +156,7 @@ export function gerarMensagemCobranca(
       tituloCondicao = 'Vence Hoje (Lembrete)'
       modelo = '2. No Vencimento'
       motivo = 'Lembrete de Vencimento (Dia D)'
-      mensagem = `🔔 *LEMBRETE DE VENCIMENTO*\n\nOlá, *${clienteNome}*! Sua fatura *[${faturaCodigo}]* da empresa *${empresaNome}* vence hoje, *${dataVencimento}*.\n\n• *Valor:* ${valorFormatado}\n\nPara evitar o bloqueio previsto para *${dataBloqueio}*, regularize o pagamento. Faltam ${diasCarencia} dias de tolerância.\n\n🔗 *Acesse o link da sua fatura:*\n${linkFatura}${pixBloco}\n\n⚡ A liberação e compensação ocorrem de forma 100% automática em segundos após o Pix!`
+      mensagem = `${bannerHeader}🔔 *LEMBRETE DE VENCIMENTO*\n\nOlá, *${clienteNome}*! Sua fatura *[${faturaCodigo}]* da empresa *${empresaNome}* vence hoje, *${dataVencimento}*.\n\n• *Valor:* ${valorFormatado}\n\nPara evitar o bloqueio previsto para *${dataBloqueio}*, regularize o pagamento. Faltam ${diasCarencia} dias de tolerância.${pixBloco}\n\n⚡ A liberação e compensação ocorrem de forma 100% automática em segundos após o Pix!`
       break
     }
 
@@ -156,7 +168,7 @@ export function gerarMensagemCobranca(
       tituloCondicao = `Em Atraso (${diasParaBloqueio}d de tolerância)`
       modelo = '3. Atraso & Regressiva'
       motivo = 'Cobrança Progressiva (Em Atraso)'
-      mensagem = `⚠️ *AVISO DE FATURA EM ATRASO*\n\nOlá, *${clienteNome}*! Ainda não identificamos o pagamento da fatura *[${faturaCodigo}]* da empresa *${empresaNome}*, que venceu em *${dataVencimento}*.\n\nPara evitar a interrupção do sistema prevista para *${dataBloqueio}*, ${avisoDias}\n\n• *Valor Atualizado:* ${valorFormatado}${textoEncargos}\n\n🔗 *Regularize pelo link da fatura:*\n${linkFatura}${pixBloco}\n\nEvite encargos adicionais e a suspensão dos serviços. (Se já pagou, favor desconsiderar).`
+      mensagem = `${bannerHeader}⚠️ *AVISO DE FATURA EM ATRASO*\n\nOlá, *${clienteNome}*! Ainda não identificamos o pagamento da fatura *[${faturaCodigo}]* da empresa *${empresaNome}*, que venceu em *${dataVencimento}*.\n\nPara evitar a interrupção do sistema prevista para *${dataBloqueio}*, ${avisoDias}\n\n• *Valor Atualizado:* ${valorFormatado}${textoEncargos}${pixBloco}\n\nEvite encargos adicionais e a suspensão dos serviços. (Se já pagou, favor desconsiderar).`
       break
     }
 
@@ -164,7 +176,7 @@ export function gerarMensagemCobranca(
       tituloCondicao = 'Bloqueado por Inadimplência'
       modelo = '4. Aviso de Bloqueio'
       motivo = 'Aviso de Bloqueio por Inadimplência'
-      mensagem = `🚨 *AVISO DE BLOQUEIO POR PENDÊNCIA FINANCEIRA* 🚨\n\nOlá, *${clienteNome}*! O prazo de tolerância para a fatura *[${faturaCodigo}]* referente a *${competencia}* da empresa *${empresaNome}* encerrou em *${dataBloqueio}* e seu sistema pode ter sido bloqueado.\n\n• *Fatura:* ${faturaCodigo}\n• *Vencimento Original:* ${dataVencimento}\n• *Valor Atualizado:* ${valorFormatado}${textoEncargos}\n\n🔗 *Toque no link para regularizar agora:*\n${linkFatura}${pixBloco}\n\n⚡ *Liberação Instantânea:* O sistema desbloqueia de forma 100% automática em segundos após a confirmação do Pix!`
+      mensagem = `${bannerHeader}🚨 *AVISO DE BLOQUEIO POR PENDÊNCIA FINANCEIRA* 🚨\n\nOlá, *${clienteNome}*! O prazo de tolerância para a fatura *[${faturaCodigo}]* referente a *${competencia}* da empresa *${empresaNome}* encerrou em *${dataBloqueio}* e seu sistema pode ter sido bloqueado.\n\n• *Fatura:* ${faturaCodigo}\n• *Vencimento Original:* ${dataVencimento}\n• *Valor Atualizado:* ${valorFormatado}${textoEncargos}${pixBloco}\n\n⚡ *Liberação Instantânea:* O sistema desbloqueia de forma 100% automática em segundos após a confirmação do Pix!`
       break
     }
 
@@ -172,7 +184,7 @@ export function gerarMensagemCobranca(
       tituloCondicao = 'Fatura Quitada (Em Dia)'
       modelo = '5. Ao Pagar (Confirmação)'
       motivo = 'Confirmação de Quitação'
-      mensagem = `✅ *PAGAMENTO CONFIRMADO!*\n\nOlá, *${clienteNome}*! Confirmamos o recebimento da fatura *[${faturaCodigo}]* referente a *${competencia}* da empresa *${empresaNome}* no valor de *${valorFormatado}*.\n\nSeu sistema está liberado para uso normal. Muito obrigado pela pontualidade e parceria!\n\n*Paratech Soluções em Software*`
+      mensagem = `${bannerHeader}✅ *PAGAMENTO CONFIRMADO!*\n\nOlá, *${clienteNome}*! Confirmamos o recebimento da fatura *[${faturaCodigo}]* referente a *${competencia}* da empresa *${empresaNome}* no valor de *${valorFormatado}*.\n\nSeu sistema está liberado para uso normal. Muito obrigado pela pontualidade e parceria!\n\n*Paratech Soluções em Software*`
       break
     }
 
@@ -180,7 +192,7 @@ export function gerarMensagemCobranca(
       tituloCondicao = 'Abandono de Pix (Recuperação)'
       modelo = '6. Abandono de Pix'
       motivo = 'Recuperação de Pagamento'
-      mensagem = `Olá, *${clienteNome}*! Notamos que você iniciou o pagamento da fatura *[${faturaCodigo}]* da empresa *${empresaNome}* no valor de *${valorFormatado}*, mas a operação não foi concluída.\n\nPrecisa de ajuda com o Pix? Você pode concluir de forma rápida tocando no link abaixo:\n${linkFatura}${pixBloco}\n\nQualquer dúvida estamos à inteira disposição!`
+      mensagem = `${bannerHeader}Olá, *${clienteNome}*! Notamos que você iniciou o pagamento da fatura *[${faturaCodigo}]* da empresa *${empresaNome}* no valor de *${valorFormatado}*, mas a operação não foi concluída.\n\nPrecisa de ajuda com o Pix? Você pode concluir de forma rápida tocando no link abaixo:${pixBloco}\n\nQualquer dúvida estamos à inteira disposição!`
       break
     }
   }
@@ -199,6 +211,7 @@ export function gerarMensagemCobranca(
     dataVencimento,
     dataBloqueio,
     linkFatura,
+    linkQrCode,
     pixCopiaCola,
     diasParaBloqueio,
     diasCarencia

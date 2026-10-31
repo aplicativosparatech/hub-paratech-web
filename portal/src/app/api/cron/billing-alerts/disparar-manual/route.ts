@@ -226,6 +226,7 @@ export async function POST(request: Request) {
         await sendWhatsAppMessage({
           to: telefone,
           message: msgObj.mensagem,
+          mediaUrl: msgObj.linkQrCode,
           remetente: 'Administrador (Disparo Manual em Massa)',
           destinatarioTipo: 'cliente',
           destinatarioNome: msgObj.clienteNome || msgObj.empresaNome,

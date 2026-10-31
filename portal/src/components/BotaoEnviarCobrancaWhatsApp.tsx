@@ -37,6 +37,7 @@ export default function BotaoEnviarCobrancaWhatsApp({
   const [mensagemEditavel, setMensagemEditavel] = useState<string>('')
   const [mensagemOriginal, setMensagemOriginal] = useState<string>('')
   const [mostrarPrevia, setMostrarPrevia] = useState(true) // aberta por padrão para conferência
+  const [enviarImagemQrCode, setEnviarImagemQrCode] = useState(true)
   const [ultimoDisparo, setUltimoDisparo] = useState<string | null>(null)
 
   const carregarCondicao = async (situacao = situacaoSelecionada) => {
@@ -98,6 +99,7 @@ export default function BotaoEnviarCobrancaWhatsApp({
           telefone: telefoneDestino,
           mensagem: mensagemEditavel,
           situacao: situacaoSelecionada,
+          enviarImagemQrCode,
           destinatarioNome: nomeCliente || dadosCondicao?.clienteNome || dadosCondicao?.empresaNome
         })
       })
@@ -278,6 +280,43 @@ export default function BotaoEnviarCobrancaWhatsApp({
         </div>
       </div>
 
+      {/* Opção de Enviar Imagem do QR Code Anexa */}
+      <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-white rounded-xl border border-emerald-100 text-xs">
+        <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+          <input
+            type="checkbox"
+            checked={enviarImagemQrCode}
+            onChange={(e) => setEnviarImagemQrCode(e.target.checked)}
+            className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
+          />
+          <span>📸 Anexar imagem do QR Code Pix no WhatsApp (envio de mídia com legenda)</span>
+        </label>
+        <div className="flex items-center gap-2">
+          {dadosCondicao?.linkQrCode && (
+            <a
+              href={dadosCondicao.linkQrCode}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200 transition"
+            >
+              <span>🖼️ Ver Imagem do QR Code</span>
+              <ExternalLink size={10} />
+            </a>
+          )}
+          {dadosCondicao?.linkFatura && (
+            <a
+              href={dadosCondicao.linkFatura}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 hover:text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200 transition"
+            >
+              <span>📄 Ver Fatura Online</span>
+              <ExternalLink size={10} />
+            </a>
+          )}
+        </div>
+      </div>
+
       {/* Controles da Prévia & Botão de Envio */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
         <div className="flex items-center gap-3">
@@ -355,17 +394,30 @@ export default function BotaoEnviarCobrancaWhatsApp({
 
           <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
             <span>{mensagemEditavel.length} caracteres • {mensagemEditavel.split('\n').length} linhas</span>
-            {dadosCondicao?.linkFatura && (
-              <a
-                href={dadosCondicao.linkFatura}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-emerald-400 hover:underline"
-              >
-                <span>Testar Link Web da Fatura</span>
-                <ExternalLink size={10} />
-              </a>
-            )}
+            <div className="flex items-center gap-3">
+              {dadosCondicao?.linkQrCode && (
+                <a
+                  href={dadosCondicao.linkQrCode}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-emerald-400 hover:underline"
+                >
+                  <span>Ver Imagem QR Code</span>
+                  <ExternalLink size={10} />
+                </a>
+              )}
+              {dadosCondicao?.linkFatura && (
+                <a
+                  href={dadosCondicao.linkFatura}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-blue-400 hover:underline"
+                >
+                  <span>Testar Fatura Web</span>
+                  <ExternalLink size={10} />
+                </a>
+              )}
+            </div>
           </div>
         </div>
       )}

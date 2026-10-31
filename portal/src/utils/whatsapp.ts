@@ -3,6 +3,7 @@ import { createAdminClient } from '@/utils/supabase/admin'
 export interface SendWhatsAppMessageOptions {
   to: string; // Número com DDD, ex: 5511999999999
   message: string;
+  mediaUrl?: string; // URL pública da imagem (ex: QR Code ou logo)
   remetente?: string; // ex: 'Robô Automático (Cron)', 'Sistema (Webhook)', 'Administrador (Manual)'
   destinatarioTipo?: 'cliente' | 'contabilidade' | 'admin' | 'outro';
   destinatarioNome?: string;
@@ -54,6 +55,7 @@ async function saveWhatsAppLog(supabase: any, logData: {
 export async function sendWhatsAppMessage({
   to,
   message,
+  mediaUrl,
   remetente,
   destinatarioTipo = 'cliente',
   destinatarioNome,
@@ -118,6 +120,48 @@ export async function sendWhatsAppMessage({
         faturaId,
       })
       throw new Error(errMsg)
+    }
+
+    // Se tiver mediaUrl (ex: QR Code Pix ou Logo), tenta envio com mídia primeiro
+    if (mediaUrl) {
+      try {
+        const mediaResp = await fetch(`${endpoint}/send/media`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'token': token,
+            'apikey': token,
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            number: cleanNumber,
+            type: 'image',
+            url: mediaUrl,
+            caption: message
+          })
+        })
+        if (mediaResp.ok) {
+          const respData = await mediaResp.json()
+          await saveWhatsAppLog(supabase, {
+            remetente,
+            destinatarioTipo,
+            destinatarioNome,
+            destinatarioNumero: cleanNumber,
+            motivo,
+            modelo,
+            mensagem: message,
+            provedor,
+            status: 'sucesso',
+            respostaApi: respData,
+            clienteId,
+            contabilidadeId,
+            faturaId,
+          })
+          return respData
+        }
+      } catch (errMedia) {
+        console.warn('Falha no envio de mídia Uazapi, caindo para texto:', errMedia)
+      }
     }
 
     const primaryUrl = `${endpoint}/send/text`
@@ -288,6 +332,49 @@ export async function sendWhatsAppMessage({
         faturaId,
       })
       throw new Error(errMsg)
+    }
+
+    // Se tiver mediaUrl (ex: QR Code Pix ou Logo), tenta envio com imagem e legenda primeiro
+    if (mediaUrl) {
+      try {
+        const mediaUrlEndpoint = `${endpoint}/message/sendMedia/${instance}`
+        const mediaResp = await fetch(mediaUrlEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': apiKey
+          },
+          body: JSON.stringify({
+            number: cleanNumber,
+            mediaMessage: {
+              mediatype: 'image',
+              caption: message,
+              media: mediaUrl
+            }
+          })
+        })
+        if (mediaResp.ok) {
+          const respData = await mediaResp.json()
+          await saveWhatsAppLog(supabase, {
+            remetente,
+            destinatarioTipo,
+            destinatarioNome,
+            destinatarioNumero: cleanNumber,
+            motivo,
+            modelo,
+            mensagem: message,
+            provedor,
+            status: 'sucesso',
+            respostaApi: respData,
+            clienteId,
+            contabilidadeId,
+            faturaId,
+          })
+          return respData
+        }
+      } catch (errMedia) {
+        console.warn('Falha no envio de mídia Evolution API, caindo para texto:', errMedia)
+      }
     }
 
     const url = `${endpoint}/message/sendText/${instance}`
