@@ -43,66 +43,52 @@ export async function POST(request: Request) {
 
     // 4. Verifica faturas pendentes (Vencidas ou Próximas)
     const hoje = new Date().toISOString().split('T')[0]
-    const { data: faturaVencida } = await supabase
+    const { data: faturasPendentes } = await supabase
       .from('faturas')
       .select('id, valor, valor_original, qr_code_payload, status, desbloqueio_confianca_em, confianca_qtd, data_vencimento')
       .eq('cliente_id', cliente.id)
       .eq('status', 'pendente')
-      .lt('data_vencimento', hoje)
       .order('data_vencimento', { ascending: true })
-      .limit(1)
-      .maybeSingle()
 
-    // Se houver fatura vencida, gera ou atualiza o QR Code (regenera se for mock)
-    let finalPix = faturaVencida?.qr_code_payload
-    if (faturaVencida && (!finalPix || finalPix.includes('mock-hubparatech'))) {
+    // Fatura vencida mais antiga
+    const faturaVencida = faturasPendentes?.find(f => f.data_vencimento < hoje) || null
+
+    // Fatura pendente principal (se tiver vencida usa ela; senão usa a próxima pendente)
+    const faturaPrincipal = faturaVencida || faturasPendentes?.[0] || null
+
+    // Garante que o QR Code Pix oficial Bacen esteja gerado e com o valor exato da fatura
+    let finalPix = faturaPrincipal?.qr_code_payload
+    if (faturaPrincipal) {
       try {
-        const pixData = await obterOuGerarPixFatura(faturaVencida.id)
+        const pixData = await obterOuGerarPixFatura(faturaPrincipal.id)
         if (pixData.qr_code_payload) finalPix = pixData.qr_code_payload
       } catch (errPix) {
         console.error('Erro ao acionar obterOuGerarPixFatura no sync:', errPix)
       }
     }
 
-    // Se não tiver vencida, busca a próxima fatura a vencer para avisos preventivos
+    // Configura fatura de aviso prévio para faturas a vencer
     let faturaAviso = null
-    if (!faturaVencida) {
-      const diasAviso = Number(config?.dias_aviso_previo ?? 7)
-      const dataLimiteAviso = new Date()
-      dataLimiteAviso.setDate(dataLimiteAviso.getDate() + diasAviso)
-      const dataLimiteIso = dataLimiteAviso.toISOString().split('T')[0]
+    const faturaProx = faturasPendentes?.find(f => f.data_vencimento >= hoje) || null
+    if (faturaProx) {
+      const dtVenc = new Date(faturaProx.data_vencimento + 'T12:00:00Z')
+      const dtHoje = new Date()
+      const diasRestantes = Math.max(0, Math.ceil((dtVenc.getTime() - dtHoje.getTime()) / (1000 * 60 * 60 * 24)))
 
-      const { data: faturaProx } = await supabase
-        .from('faturas')
-        .select('id, valor, qr_code_payload, data_vencimento')
-        .eq('cliente_id', cliente.id)
-        .eq('status', 'pendente')
-        .gte('data_vencimento', hoje)
-        .lte('data_vencimento', dataLimiteIso)
-        .order('data_vencimento', { ascending: true })
-        .limit(1)
-        .maybeSingle()
+      let pixProx = faturaProx.qr_code_payload
+      if (!pixProx || pixProx.includes('mock-hubparatech')) {
+        try {
+          const pixData = await obterOuGerarPixFatura(faturaProx.id)
+          if (pixData.qr_code_payload) pixProx = pixData.qr_code_payload
+        } catch (_) {}
+      }
 
-      if (faturaProx) {
-        let pixProx = faturaProx.qr_code_payload
-        if (!pixProx || pixProx.includes('mock-hubparatech')) {
-          try {
-            const pixData = await obterOuGerarPixFatura(faturaProx.id)
-            if (pixData.qr_code_payload) pixProx = pixData.qr_code_payload
-          } catch (_) {}
-        }
-
-        const dtVenc = new Date(faturaProx.data_vencimento + 'T12:00:00Z')
-        const dtHoje = new Date()
-        const diasRestantes = Math.max(0, Math.ceil((dtVenc.getTime() - dtHoje.getTime()) / (1000 * 60 * 60 * 24)))
-
-        faturaAviso = {
-          id: faturaProx.id,
-          valor: faturaProx.valor,
-          pix_payload: pixProx || '',
-          data_vencimento: faturaProx.data_vencimento,
-          dias_restantes: diasRestantes
-        }
+      faturaAviso = {
+        id: faturaProx.id,
+        valor: faturaProx.valor,
+        pix_payload: pixProx || finalPix || '',
+        data_vencimento: faturaProx.data_vencimento,
+        dias_restantes: diasRestantes
       }
     }
 
@@ -166,6 +152,15 @@ export async function POST(request: Request) {
       }
     }
 
+    // 4. Busca as últimas faturas quitadas reais do cliente
+    const { data: faturasPagas } = await supabase
+      .from('faturas')
+      .select('id, competencia, valor, data_vencimento, data_pagamento, status')
+      .eq('cliente_id', cliente.id)
+      .eq('status', 'pago')
+      .order('data_pagamento', { ascending: false })
+      .limit(3)
+
     const nomeEmpresa = cliente.nome_fantasia || cliente.razao_social || cliente.nome_sistema_utilizado || 'Cliente Paratech'
 
     const responseData = {
@@ -190,6 +185,13 @@ export async function POST(request: Request) {
       numero_inicial_mdfe: cliente.numero_inicial_mdfe || 1,
       banner_url: config?.banner_url || null,
       support_whatsapp: config?.support_whatsapp || null,
+      ultimas_faturas_pagas: (faturasPagas || []).map(f => ({
+        id: f.id,
+        competencia: f.competencia,
+        valor: Number(f.valor),
+        data_vencimento: f.data_vencimento,
+        data_pagamento: f.data_pagamento
+      })),
       features: {
         sugestao_tributaria: config?.feature_sugestao_tributaria ?? true,
         nuvem_produtos: config?.feature_nuvem_produtos ?? true,
@@ -199,14 +201,14 @@ export async function POST(request: Request) {
         contas_pagar: config?.feature_contas_pagar ?? true,
         estoque_avancado: config?.feature_estoque_avancado ?? true,
       },
-      fatura: faturaVencida ? {
-        id: faturaVencida.id,
-        valor: faturaVencida.valor,
+      fatura: faturaPrincipal ? {
+        id: faturaPrincipal.id,
+        valor: faturaPrincipal.valor,
         pix_payload: finalPix || 'ERRO_PIX',
-        data_vencimento: faturaVencida.data_vencimento,
+        data_vencimento: faturaPrincipal.data_vencimento,
         cliente_nome: nomeEmpresa,
-        desbloqueio_confianca_em: faturaVencida.desbloqueio_confianca_em,
-        confianca_qtd: faturaVencida.confianca_qtd
+        desbloqueio_confianca_em: faturaPrincipal.desbloqueio_confianca_em,
+        confianca_qtd: faturaPrincipal.confianca_qtd
       } : null,
       fatura_aviso: faturaAviso
     }

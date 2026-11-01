@@ -97,13 +97,37 @@ export async function sendWhatsAppMessage({
 
   const { provedor, credenciais } = integracao
 
+  // Obtém a logo oficial da Paratech (Imagem 2) como cabeçalho de todas as mensagens
+  let effectiveMediaUrl = mediaUrl
+  if (!effectiveMediaUrl) {
+    try {
+      const fsMod = require("fs")
+      const pathMod = require("path")
+      const logoPath = pathMod.join(process.cwd(), "public", "logo-paratech-whatsapp.png")
+      if (fsMod.existsSync(logoPath)) {
+        const logoBuffer = fsMod.readFileSync(logoPath)
+        effectiveMediaUrl = "data:image/png;base64," + logoBuffer.toString("base64")
+      } else {
+        effectiveMediaUrl = "https://hub-paratech-web.vercel.app/logo-paratech-whatsapp.png"
+      }
+    } catch (_) {
+      effectiveMediaUrl = "https://hub-paratech-web.vercel.app/logo-paratech-whatsapp.png"
+    }
+  }
+
+  // Garante que o texto da mensagem tenha o cabeçalho oficial da Paratech
+  let formattedMessage = message
+  if (!formattedMessage.includes("PARATECH") && !formattedMessage.includes("🏢")) {
+    formattedMessage = "🏢 *PARATECH SOLUÇÕES & SISTEMAS*\n━━━━━━━━━━━━━━━━━━━━━━━━━\n\n" + formattedMessage
+  }
+
   // 2. Disparo conforme o provedor ativo
-  if (provedor === 'uazapi') {
-    const endpoint = credenciais?.endpoint?.replace(/\/+$/, '')
+  if (provedor === "uazapi") {
+    const endpoint = credenciais?.endpoint?.replace(/\/+$/, "")
     const token = credenciais?.token
 
     if (!endpoint || !token) {
-      const errMsg = 'Uazapi configurada sem URL base ou Token de acesso.'
+      const errMsg = "Uazapi configurada sem URL base ou Token de acesso."
       await saveWhatsAppLog(supabase, {
         remetente,
         destinatarioTipo,
@@ -111,9 +135,9 @@ export async function sendWhatsAppMessage({
         destinatarioNumero: cleanNumber,
         motivo,
         modelo,
-        mensagem: message,
+        mensagem: formattedMessage,
         provedor,
-        status: 'falha',
+        status: "falha",
         erro: errMsg,
         clienteId,
         contabilidadeId,
@@ -122,22 +146,22 @@ export async function sendWhatsAppMessage({
       throw new Error(errMsg)
     }
 
-    // Se tiver mediaUrl (ex: QR Code Pix ou Logo), tenta envio com mídia primeiro
-    if (mediaUrl) {
+    // Se tiver effectiveMediaUrl (Logo Paratech ou QR Code), envia com mídia primeiro
+    if (effectiveMediaUrl) {
       try {
         const mediaResp = await fetch(`${endpoint}/send/media`, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
-            'token': token,
-            'apikey': token,
-            'Authorization': `Bearer ${token}`
+            "Content-Type": "application/json",
+            "token": token,
+            "apikey": token,
+            "Authorization": `Bearer ${token}`
           },
           body: JSON.stringify({
             number: cleanNumber,
-            type: 'image',
-            url: mediaUrl,
-            caption: message
+            type: "image",
+            url: effectiveMediaUrl,
+            caption: formattedMessage
           })
         })
         if (mediaResp.ok) {
@@ -149,9 +173,9 @@ export async function sendWhatsAppMessage({
             destinatarioNumero: cleanNumber,
             motivo,
             modelo,
-            mensagem: message,
+            mensagem: formattedMessage,
             provedor,
-            status: 'sucesso',
+            status: "sucesso",
             respostaApi: respData,
             clienteId,
             contabilidadeId,
@@ -160,7 +184,7 @@ export async function sendWhatsAppMessage({
           return respData
         }
       } catch (errMedia) {
-        console.warn('Falha no envio de mídia Uazapi, caindo para texto:', errMedia)
+        console.warn("Falha no envio de mídia Uazapi, caindo para texto:", errMedia)
       }
     }
 
@@ -168,16 +192,16 @@ export async function sendWhatsAppMessage({
     
     try {
       const response = await fetch(primaryUrl, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'token': token,
-          'apikey': token,
-          'Authorization': `Bearer ${token}`
+          "Content-Type": "application/json",
+          "token": token,
+          "apikey": token,
+          "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify({
           number: cleanNumber,
-          text: message
+          text: formattedMessage
         })
       })
 
@@ -190,9 +214,9 @@ export async function sendWhatsAppMessage({
           destinatarioNumero: cleanNumber,
           motivo,
           modelo,
-          mensagem: message,
+          mensagem: formattedMessage,
           provedor,
-          status: 'sucesso',
+          status: "sucesso",
           respostaApi: responseData,
           clienteId,
           contabilidadeId,
@@ -203,16 +227,15 @@ export async function sendWhatsAppMessage({
 
       // Se 404 ou 405 na rota principal, tenta fallbacks legados
       if (response.status === 404 || response.status === 405) {
-        // Fallback 1: Wuzapi original /chat/send/text
         try {
           const fallbackResp1 = await fetch(`${endpoint}/chat/send/text`, {
-            method: 'POST',
+            method: "POST",
             headers: {
-              'Content-Type': 'application/json',
-              'token': token,
-              'Authorization': `Bearer ${token}`
+              "Content-Type": "application/json",
+              "token": token,
+              "Authorization": `Bearer ${token}`
             },
-            body: JSON.stringify({ Phone: cleanNumber, Body: message })
+            body: JSON.stringify({ Phone: cleanNumber, Body: formattedMessage })
           })
           if (fallbackResp1.ok) {
             const data1 = await fallbackResp1.json()
@@ -223,9 +246,9 @@ export async function sendWhatsAppMessage({
               destinatarioNumero: cleanNumber,
               motivo,
               modelo,
-              mensagem: message,
+              mensagem: formattedMessage,
               provedor,
-              status: 'sucesso',
+              status: "sucesso",
               respostaApi: data1,
               clienteId,
               contabilidadeId,
@@ -235,17 +258,16 @@ export async function sendWhatsAppMessage({
           }
         } catch (_) {}
 
-        // Fallback 2: /message/send-text
         try {
           const fallbackResp2 = await fetch(`${endpoint}/message/send-text`, {
-            method: 'POST',
+            method: "POST",
             headers: {
-              'Content-Type': 'application/json',
-              'token': token,
-              'apikey': token,
-              'Authorization': `Bearer ${token}`
+              "Content-Type": "application/json",
+              "token": token,
+              "apikey": token,
+              "Authorization": `Bearer ${token}`
             },
-            body: JSON.stringify({ number: cleanNumber, text: message })
+            body: JSON.stringify({ number: cleanNumber, text: formattedMessage })
           })
           if (fallbackResp2.ok) {
             const data2 = await fallbackResp2.json()
@@ -256,9 +278,9 @@ export async function sendWhatsAppMessage({
               destinatarioNumero: cleanNumber,
               motivo,
               modelo,
-              mensagem: message,
+              mensagem: formattedMessage,
               provedor,
-              status: 'sucesso',
+              status: "sucesso",
               respostaApi: data2,
               clienteId,
               contabilidadeId,
@@ -278,9 +300,9 @@ export async function sendWhatsAppMessage({
         destinatarioNumero: cleanNumber,
         motivo,
         modelo,
-        mensagem: message,
+        mensagem: formattedMessage,
         provedor,
-        status: 'falha',
+        status: "falha",
         erro: fullError,
         clienteId,
         contabilidadeId,
@@ -288,7 +310,7 @@ export async function sendWhatsAppMessage({
       })
       throw new Error(fullError)
     } catch (err: any) {
-      if (!err.message?.startsWith('Erro ao enviar')) {
+      if (!err.message?.startsWith("Erro ao enviar")) {
         await saveWhatsAppLog(supabase, {
           remetente,
           destinatarioTipo,
@@ -296,9 +318,9 @@ export async function sendWhatsAppMessage({
           destinatarioNumero: cleanNumber,
           motivo,
           modelo,
-          mensagem: message,
+          mensagem: formattedMessage,
           provedor,
-          status: 'falha',
+          status: "falha",
           erro: err.message,
           clienteId,
           contabilidadeId,
@@ -309,13 +331,13 @@ export async function sendWhatsAppMessage({
     }
   } 
   
-  else if (provedor === 'evolution') {
-    const endpoint = credenciais?.endpoint?.replace(/\/+$/, '')
+  else if (provedor === "evolution") {
+    const endpoint = credenciais?.endpoint?.replace(/\/+$/, "")
     const apiKey = credenciais?.api_key
     const instance = credenciais?.instance
 
     if (!endpoint || !apiKey || !instance) {
-      const errMsg = 'Evolution API configurada sem Endpoint, API Key ou Nome da Instância.'
+      const errMsg = "Evolution API configurada sem Endpoint, API Key ou Nome da Instância."
       await saveWhatsAppLog(supabase, {
         remetente,
         destinatarioTipo,
@@ -323,9 +345,9 @@ export async function sendWhatsAppMessage({
         destinatarioNumero: cleanNumber,
         motivo,
         modelo,
-        mensagem: message,
+        mensagem: formattedMessage,
         provedor,
-        status: 'falha',
+        status: "falha",
         erro: errMsg,
         clienteId,
         contabilidadeId,
@@ -334,22 +356,22 @@ export async function sendWhatsAppMessage({
       throw new Error(errMsg)
     }
 
-    // Se tiver mediaUrl (ex: QR Code Pix ou Logo), tenta envio com imagem e legenda primeiro
-    if (mediaUrl) {
+    // Se tiver effectiveMediaUrl (Logo Paratech ou QR Code), envia com mídia e legenda primeiro
+    if (effectiveMediaUrl) {
       try {
         const mediaUrlEndpoint = `${endpoint}/message/sendMedia/${instance}`
         const mediaResp = await fetch(mediaUrlEndpoint, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
-            'apikey': apiKey
+            "Content-Type": "application/json",
+            "apikey": apiKey
           },
           body: JSON.stringify({
             number: cleanNumber,
             mediaMessage: {
-              mediatype: 'image',
-              caption: message,
-              media: mediaUrl
+              mediatype: "image",
+              caption: formattedMessage,
+              media: effectiveMediaUrl
             }
           })
         })
@@ -362,9 +384,9 @@ export async function sendWhatsAppMessage({
             destinatarioNumero: cleanNumber,
             motivo,
             modelo,
-            mensagem: message,
+            mensagem: formattedMessage,
             provedor,
-            status: 'sucesso',
+            status: "sucesso",
             respostaApi: respData,
             clienteId,
             contabilidadeId,
@@ -373,7 +395,7 @@ export async function sendWhatsAppMessage({
           return respData
         }
       } catch (errMedia) {
-        console.warn('Falha no envio de mídia Evolution API, caindo para texto:', errMedia)
+        console.warn("Falha no envio de mídia Evolution API, caindo para texto:", errMedia)
       }
     }
 
@@ -381,14 +403,14 @@ export async function sendWhatsAppMessage({
 
     try {
       const response = await fetch(url, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'apikey': apiKey
+          "Content-Type": "application/json",
+          "apikey": apiKey
         },
         body: JSON.stringify({
           number: cleanNumber,
-          text: message
+          text: formattedMessage
         })
       })
 
@@ -402,9 +424,9 @@ export async function sendWhatsAppMessage({
           destinatarioNumero: cleanNumber,
           motivo,
           modelo,
-          mensagem: message,
+          mensagem: formattedMessage,
           provedor,
-          status: 'falha',
+          status: "falha",
           erro: fullError,
           clienteId,
           contabilidadeId,
@@ -421,9 +443,9 @@ export async function sendWhatsAppMessage({
         destinatarioNumero: cleanNumber,
         motivo,
         modelo,
-        mensagem: message,
+        mensagem: formattedMessage,
         provedor,
-        status: 'sucesso',
+        status: "sucesso",
         respostaApi: responseData,
         clienteId,
         contabilidadeId,
@@ -431,7 +453,7 @@ export async function sendWhatsAppMessage({
       })
       return responseData
     } catch (err: any) {
-      if (!err.message?.startsWith('Erro ao enviar')) {
+      if (!err.message?.startsWith("Erro ao enviar")) {
         await saveWhatsAppLog(supabase, {
           remetente,
           destinatarioTipo,
@@ -439,9 +461,9 @@ export async function sendWhatsAppMessage({
           destinatarioNumero: cleanNumber,
           motivo,
           modelo,
-          mensagem: message,
+          mensagem: formattedMessage,
           provedor,
-          status: 'falha',
+          status: "falha",
           erro: err.message,
           clienteId,
           contabilidadeId,

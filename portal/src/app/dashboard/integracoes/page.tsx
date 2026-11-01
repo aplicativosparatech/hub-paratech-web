@@ -23,6 +23,9 @@ export default function IntegracoesPage() {
   const [activeTab, setActiveTab] = useState<'gateways' | 'whatsapp' | 'email' | 'ia_mcp' | 'alterdata' | 'apis_hub'>('gateways')
   const [isLoading, setIsLoading] = useState(true)
   const [integracoes, setIntegracoes] = useState<Integracao[]>([])
+  const [adminPhone, setAdminPhone] = useState('')
+  const [isSavingAdminPhone, setIsSavingAdminPhone] = useState(false)
+  const [isTestingAdminWpp, setIsTestingAdminWpp] = useState(false)
   const [testPhone, setTestPhone] = useState('')
   const [isTestingWpp, setIsTestingWpp] = useState(false)
   const [testEmail, setTestEmail] = useState('')
@@ -138,6 +141,50 @@ export default function IntegracoesPage() {
     }
   }
 
+  const handleSalvarAdminPhone = async () => {
+    setIsSavingAdminPhone(true)
+    const tId = toast.loading('Salvando WhatsApp do Administrador...')
+    try {
+      const limpo = adminPhone.trim()
+      for (const prov of ['uazapi', 'evolution']) {
+        const it = getIntegracao(prov) as any
+        if (it?.id) {
+          const novasCreds = { ...(it.credenciais || {}), admin_whatsapp_number: limpo }
+          await supabase.from('integracoes').update({ credenciais: novasCreds }).eq('id', it.id)
+          updateIntegracaoLocal(prov, { credenciais: novasCreds })
+        }
+      }
+      toast.success('WhatsApp do Administrador salvo com sucesso!', { id: tId })
+    } catch (err: any) {
+      toast.error(`Erro ao salvar: ${err.message}`, { id: tId })
+    } finally {
+      setIsSavingAdminPhone(false)
+    }
+  }
+
+  const handleTestarAdminPhone = async () => {
+    if (!adminPhone) {
+      toast.error('Informe o número do WhatsApp do Administrador')
+      return
+    }
+    setIsTestingAdminWpp(true)
+    const tId = toast.loading('Enviando alerta de teste para o Administrador...')
+    try {
+      const res = await fetch('/api/whatsapp/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: adminPhone })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Falha ao enviar')
+      toast.success('Mensagem de teste enviada com sucesso para o Administrador!', { id: tId })
+    } catch (err: any) {
+      toast.error(`Erro: ${err.message}`, { id: tId })
+    } finally {
+      setIsTestingAdminWpp(false)
+    }
+  }
+
   const handleTestEmail = async () => {
     if (!testEmail || !testEmail.includes('@')) {
       toast.error('Digite um e-mail válido para o teste.')
@@ -188,6 +235,10 @@ export default function IntegracoesPage() {
         toast.error('Erro ao carregar integrações')
       } else if (data) {
         setIntegracoes(data)
+        const uaz = data.find(i => i.provedor === 'uazapi')
+        const evo = data.find(i => i.provedor === 'evolution')
+        const num = uaz?.credenciais?.admin_whatsapp_number || evo?.credenciais?.admin_whatsapp_number || ''
+        if (num) setAdminPhone(num)
       }
 
       // Carrega estado do cron de WhatsApp
@@ -634,6 +685,49 @@ export default function IntegracoesPage() {
         {/* ===================== ABA WHATSAPP ===================== */}
         {activeTab === 'whatsapp' && (
           <>
+            {/* Card de Destaque no Topo: WhatsApp do Administrador */}
+            <div className="col-span-full bg-gradient-to-r from-indigo-50/90 via-white to-blue-50/90 border-2 border-indigo-300 rounded-2xl p-6 sm:p-7 shadow-md">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                <div>
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 font-bold text-xs uppercase tracking-wide mb-2">
+                    <ShieldCheck size={14} /> Canal Interno de Notificações Paratech
+                  </div>
+                  <h3 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+                    📱 WhatsApp do Administrador (Alertas de Pagamentos Pix)
+                  </h3>
+                  <p className="text-sm text-slate-600 mt-1 max-w-3xl leading-relaxed">
+                    Cadastre o seu número de WhatsApp pessoal/administrativo. Quando um cliente pagar a mensalidade via Pix ou a fatura for quitada, o Hub Paratech enviará um comprovante instantâneo para você com o nome do cliente, valor recebido e dados da fatura.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 max-w-2xl">
+                <input 
+                  type="text" 
+                  placeholder="DDD + Seu Número de Admin (Ex: 5537999786187)" 
+                  value={adminPhone} 
+                  onChange={e => setAdminPhone(e.target.value)}
+                  className="flex-1 bg-white border-2 border-indigo-300 px-4 py-2.5 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-base font-semibold shadow-xs"
+                />
+                <button 
+                  type="button"
+                  onClick={handleSalvarAdminPhone}
+                  disabled={isSavingAdminPhone}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-2.5 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 text-sm disabled:opacity-50 cursor-pointer"
+                >
+                  <Save size={16} /> {isSavingAdminPhone ? 'Salvando...' : 'Salvar WhatsApp do Admin'}
+                </button>
+                <button 
+                  type="button"
+                  onClick={handleTestarAdminPhone}
+                  disabled={isTestingAdminWpp || !adminPhone}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 text-sm disabled:opacity-50 cursor-pointer"
+                >
+                  <Send size={16} /> {isTestingAdminWpp ? 'Testando...' : 'Testar Envio'}
+                </button>
+              </div>
+            </div>
+
             <div className={`bg-white rounded-2xl p-6 border-2 transition-all duration-300 ${evolution.is_ativo ? 'border-emerald-500 shadow-lg shadow-emerald-500/10' : 'border-slate-200'}`}>
               <div className="flex justify-between items-start mb-6">
                 <div>
@@ -1584,6 +1678,7 @@ export default function IntegracoesPage() {
           </div>
         </div>
       )}
+
 
       {/* Card de Teste em Tempo Real de WhatsApp */}
       {activeTab === 'whatsapp' && (

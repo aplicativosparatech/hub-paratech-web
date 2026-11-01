@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/utils/supabase/admin'
+import { getNextBusinessDay } from '@/utils/businessDays'
 
 export interface EncargosFaturaResult {
   valorBase: number
@@ -162,9 +163,12 @@ export async function gerarProximaFaturaAposPagamento(faturaQuitadaId: string) {
   }
 
   // 5. Calcula data de vencimento da próxima fatura
+  // REGRA DE DIAS ÚTEIS: Se cair em sábado, domingo ou feriado nacional brasileiro, prorroga para o próximo dia útil
   const ultimoDiaDoMes = new Date(proximoAno, proximoMes, 0).getDate()
   const diaVenc = Math.min(Math.max(cliente.dia_vencimento || 10, 1), ultimoDiaDoMes)
-  const dataVencimento = `${proximoAno}-${String(proximoMes).padStart(2, '0')}-${String(diaVenc).padStart(2, '0')}`
+  const dataTentativa = new Date(proximoAno, proximoMes - 1, diaVenc)
+  const dataUtil = getNextBusinessDay(dataTentativa)
+  const dataVencimento = `${dataUtil.getFullYear()}-${String(dataUtil.getMonth() + 1).padStart(2, '0')}-${String(dataUtil.getDate()).padStart(2, '0')}`
 
   // 6. Insere a nova fatura da competência seguinte
   const { data: novaFatura, error: insError } = await supabase

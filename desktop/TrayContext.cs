@@ -436,7 +436,24 @@ namespace HubParatechDesktop
                     var data = JsonSerializer.Deserialize<SyncResponse>(resJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                     if (data != null)
                     {
+                        bool eraBloqueado = isBlocked;
                         isBlocked = data.bloqueado;
+
+                        // Se o sistema estava bloqueado e acabou de ser liberado (pagamento confirmado)
+                        if (eraBloqueado && !isBlocked)
+                        {
+                            if (activeBlocker != null && !activeBlocker.IsDisposed)
+                            {
+                                try { activeBlocker.Invoke((Action)(() => activeBlocker.Close())); } catch { }
+                                activeBlocker = null;
+                            }
+                            try
+                            {
+                                trayIcon.ShowBalloonTip(7000, "🎉 Pagamento Confirmado!", "Parabéns! Sua mensalidade foi quitada com sucesso e o sistema está 100% liberado.\nMuito obrigado pela parceria com a Paratech!", ToolTipIcon.Info);
+                            }
+                            catch { }
+                        }
+
                         targetProcesses.Clear();
                         
                         if (!string.IsNullOrWhiteSpace(data.executavel)) 

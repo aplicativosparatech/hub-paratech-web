@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createAdminClient } from '@/utils/supabase/admin'
-import { gerarProximaFaturaAposPagamento } from '@/utils/billingCharges'
+import { confirmarPagamentoFatura } from '@/utils/paymentConfirmation'
 
 export async function POST(request: Request) {
   try {
@@ -9,34 +8,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'ID da fatura não informado' }, { status: 400 })
     }
 
-    const supabase = createAdminClient()
-
-    // 1. Atualiza a fatura para "pago"
-    const { data: fatura, error: updError } = await supabase
-      .from('faturas')
-      .update({
-        status: 'pago',
-        data_pagamento: new Date().toISOString(),
-        provedor_pagamento: 'manual'
-      })
-      .eq('id', fatura_id)
-      .select('id, cliente_id, competencia')
-      .single()
-
-    if (updError) throw updError
-
-    // 2. Aciona regra de antecipação: Gera a próxima fatura no momento do pagamento
-    let proximaFatura = null
-    try {
-      proximaFatura = await gerarProximaFaturaAposPagamento(fatura_id)
-    } catch (errAnt: any) {
-      console.error('Erro ao gerar próxima fatura após baixa manual:', errAnt.message)
-    }
+    const resultado = await confirmarPagamentoFatura(fatura_id, {
+      provedor: 'manual_simulacao',
+      notificarCliente: true,
+      notificarAdmin: true
+    })
 
     return NextResponse.json({
       success: true,
       mensagem: 'Pagamento registrado com sucesso!',
-      proximaFatura
+      proximaFatura: resultado.proximaFatura
     })
 
   } catch (error: any) {

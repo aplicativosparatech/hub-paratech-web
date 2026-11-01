@@ -150,7 +150,11 @@ export async function obterOuGerarPixFatura(
     fatura.qr_code_payload.includes('mock-hubparatech') || 
     fatura.provedor_pagamento === 'mock'
 
-  if (fatura.qr_code_payload && !encargos.emAtraso && !options?.forcarRegeneracao && !isMockAntigo) {
+  const valorFormatadoEsperado = valorCobrar.toFixed(2)
+  const tag54Esperada = `54${String(valorFormatadoEsperado.length).padStart(2, '0')}${valorFormatadoEsperado}`
+  const valorMudouNoPayload = fatura.qr_code_payload ? !fatura.qr_code_payload.includes(tag54Esperada) : true
+
+  if (fatura.qr_code_payload && !encargos.emAtraso && !options?.forcarRegeneracao && !isMockAntigo && !valorMudouNoPayload) {
     return {
       qr_code_payload: fatura.qr_code_payload,
       valor: valorCobrar,

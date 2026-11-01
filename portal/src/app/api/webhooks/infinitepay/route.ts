@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { confirmarPagamentoFatura } from '@/utils/paymentConfirmation'
 import { sendWhatsAppMessage } from '@/utils/whatsapp'
-import { gerarProximaFaturaAposPagamento } from '@/utils/billingCharges'
 
 export async function POST(request: Request) {
   try {
@@ -16,99 +16,105 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
+    console.log('Webhook InfinitePay recebido:', JSON.stringify(body))
+
     const supabase = createAdminClient()
 
-    // Estrutura de dados comumente enviada por webhooks da InfinitePay
-    const event = body.event || body.type || 'transaction.paid'
-    const invoiceId = body.metadata?.invoice_id || body.data?.metadata?.invoice_id || body.invoice_id
-    const amount = (body.amount || body.data?.amount || 0) / (body.amount > 1000 ? 100 : 1)
+    // Estrutura de dados comumente enviada por webhooks da InfinitePay / CloudWalk
+    const event = body.event || body.type || body.status || 'transaction.paid'
+    
+    // Extrai o valor pago
+    let rawAmount = body.amount ?? body.data?.amount ?? body.value ?? body.data?.value ?? 0
+    if (typeof rawAmount === 'string') rawAmount = parseFloat(rawAmount.replace(',', '.'))
+    const amount = rawAmount > 500 ? rawAmount / 100 : rawAmount // se vier em centavos
 
-    if (!invoiceId) {
-      return NextResponse.json({ message: 'Webhook recebido, mas sem invoice_id associado.' }, { status: 200 })
+    // 1. Identificação da Fatura por múltiplos identificadores
+    let invoiceId: string | null = 
+      body.metadata?.invoice_id || 
+      body.data?.metadata?.invoice_id || 
+      body.invoice_id || 
+      body.order_id || 
+      body.data?.order_id || 
+      body.reference_id || 
+      body.data?.reference_id || 
+      null
+
+    const txid = body.txid || body.transaction?.txid || body.data?.txid || body.end_to_end_id || ''
+
+    let fatura: any = null
+
+    // Busca direta por ID se vier formatado como UUID
+    if (invoiceId && invoiceId.includes('-')) {
+      const { data } = await supabase
+        .from('faturas')
+        .select('*, clientes ( id, razao_social, nome_fantasia, whatsapp )')
+        .eq('id', invoiceId)
+        .maybeSingle()
+      fatura = data
     }
 
-    // Busca os dados da fatura e do cliente
-    const { data: fatura } = await supabase
-      .from('faturas')
-      .select('*, clientes ( id, razao_social, nome_fantasia, whatsapp )')
-      .eq('id', invoiceId)
-      .single()
+    // Busca por TXID Bacen (Tag 62.05: ex FAT890CE1B8FA2B44F)
+    if (!fatura && txid && txid.startsWith('FAT')) {
+      const cleanPrefix = txid.replace(/^FAT/, '').toLowerCase()
+      // O ID original do Supabase é xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+      // O prefixo retirou os hífens
+      const { data: faturasPendentes } = await supabase
+        .from('faturas')
+        .select('*, clientes ( id, razao_social, nome_fantasia, whatsapp )')
+        .eq('status', 'pendente')
+      
+      fatura = faturasPendentes?.find(f => {
+        const idSemTraco = f.id.replace(/-/g, '').toLowerCase()
+        return idSemTraco.startsWith(cleanPrefix) || cleanPrefix.startsWith(idSemTraco.substring(0, 10))
+      })
+    }
+
+    // Busca por fatura pendente com o mesmo valor se ainda não encontrada
+    if (!fatura && amount > 0) {
+      const { data: faturasPorValor } = await supabase
+        .from('faturas')
+        .select('*, clientes ( id, razao_social, nome_fantasia, whatsapp )')
+        .eq('status', 'pendente')
+        .order('data_vencimento', { ascending: true })
+
+      fatura = faturasPorValor?.find(f => Math.abs(Number(f.valor) - amount) < 0.05)
+    }
 
     if (!fatura) {
-      return NextResponse.json({ error: 'Fatura não encontrada.' }, { status: 404 })
+      console.warn('Webhook InfinitePay: Fatura não localizada para o payload recebido.', { invoiceId, txid, amount })
+      return NextResponse.json({ message: 'Webhook recebido, mas nenhuma fatura compatível foi encontrada.' }, { status: 200 })
     }
 
-    const cliente: any = Array.isArray(fatura.clientes) ? fatura.clientes[0] : fatura.clientes
-    const valorFormatado = Number(fatura.valor || amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-    const refMes = fatura.competencia || new Date(fatura.data_vencimento).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' })
+    // 2. EVENTO: PAGAMENTO CONFIRMADO
+    const isPaidEvent = 
+      event === 'transaction.paid' || 
+      event === 'payment.succeeded' || 
+      event === 'paid' || 
+      event === 'CONFIRMED' || 
+      event === 'RECEIVED' || 
+      event === 'approved' ||
+      event === 'success'
 
-    // 1. EVENTO: PAGAMENTO CONFIRMADO
-    if (event === 'transaction.paid' || event === 'payment.succeeded' || event === 'paid') {
-      if (fatura.status === 'pago' || fatura.status === 'paga') {
-        return NextResponse.json({ success: true, message: 'Fatura já estava quitada' })
-      }
+    if (isPaidEvent) {
+      const resultado = await confirmarPagamentoFatura(fatura.id, {
+        provedor: 'infinitepay',
+        amountPago: amount > 0 ? amount : Number(fatura.valor),
+        txid: txid || undefined,
+        notificarCliente: true,
+        notificarAdmin: true
+      })
 
-      // Atualiza o status da fatura para "pago"
-      await supabase
-        .from('faturas')
-        .update({ 
-          status: 'pago',
-          data_pagamento: new Date().toISOString(),
-          provedor_pagamento: 'infinitepay'
-        })
-        .eq('id', fatura.id)
-
-      // Mensagem para o CLIENTE
-      if (cliente?.whatsapp) {
-        try {
-          await sendWhatsAppMessage({
-            to: cliente.whatsapp,
-            message: `✅ *Pagamento Confirmado!*\n\nOlá, ${cliente.nome_fantasia || cliente.razao_social}! Confirmamos o recebimento da sua fatura no valor de ${valorFormatado} referente a ${refMes}.\n\nSeu sistema está liberado para uso. Muito obrigado pela parceria!`,
-            remetente: 'Sistema (Webhook InfinitePay)',
-            destinatarioTipo: 'cliente',
-            destinatarioNome: cliente.nome_fantasia || cliente.razao_social,
-            motivo: 'Confirmação de Pagamento Pix',
-            modelo: '4. Ao Pagar (Cliente)',
-            clienteId: cliente?.id,
-            faturaId: fatura?.id,
-          })
-        } catch (e: any) {
-          console.error('Erro ao notificar cliente via WhatsApp:', e.message)
-        }
-      }
-
-      // Mensagem para o ADMIN
-      const adminPhone = process.env.ADMIN_WHATSAPP_NUMBER
-      if (adminPhone) {
-        try {
-          await sendWhatsAppMessage({
-            to: adminPhone,
-            message: `💰 *Novo Pagamento Recebido (InfinitePay)!*\n\n• *Cliente:* ${cliente?.nome_fantasia || cliente?.razao_social}\n• *Valor:* ${valorFormatado}\n• *Referência:* ${refMes}\n• *Fatura ID:* ${fatura.id.split('-')[0]}\n\nStatus do Hub: Liberado no sistema.`,
-            remetente: 'Sistema (Webhook InfinitePay)',
-            destinatarioTipo: 'admin',
-            destinatarioNome: 'Administrador Paratech',
-            motivo: `Novo Pagamento (${cliente?.nome_fantasia || cliente?.razao_social})`,
-            modelo: '5. Ao Pagar (Admin)',
-            clienteId: cliente?.id,
-            faturaId: fatura?.id,
-          })
-        } catch (e: any) {
-          console.error('Erro ao notificar admin via WhatsApp:', e.message)
-        }
-      }
-
-      // REGRA DE ANTECIPAÇÃO: Gera automaticamente a próxima fatura para pagamento antecipado
-      try {
-        await gerarProximaFaturaAposPagamento(fatura.id)
-      } catch (errAnt: any) {
-        console.error('Erro ao gerar próxima fatura após pagamento InfinitePay:', errAnt.message)
-      }
-
-      return NextResponse.json({ success: true, status: 'pago_processado' })
+      return NextResponse.json({
+        success: true,
+        status: 'pago_processado',
+        resultado
+      })
     }
 
-    // 2. EVENTO: CHECKOUT ABANDONADO / PAGAMENTO NÃO FINALIZADO
+    // 3. EVENTO: CHECKOUT ABANDONADO / PAGAMENTO NÃO FINALIZADO
     if (event === 'transaction.failed' || event === 'checkout.abandoned' || event === 'payment.canceled') {
+      const cliente: any = Array.isArray(fatura.clientes) ? fatura.clientes[0] : fatura.clientes
+      const valorFormatado = Number(fatura.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
       if (cliente?.whatsapp) {
         try {
           await sendWhatsAppMessage({
@@ -120,7 +126,7 @@ export async function POST(request: Request) {
             motivo: 'Abandono de Checkout Pix',
             modelo: '6. Abandono de Pix',
             clienteId: cliente?.id,
-            faturaId: fatura?.id,
+            faturaId: fatura.id,
           })
         } catch (e: any) {
           console.error('Erro ao enviar aviso de abandono via WhatsApp:', e.message)
@@ -130,7 +136,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, status: 'abandono_processado' })
     }
 
-    return NextResponse.json({ success: true, message: 'Evento ignorado' })
+    return NextResponse.json({ success: true, message: `Evento ${event} registrado.` })
   } catch (error: any) {
     console.error('Erro no processamento do webhook InfinitePay:', error.message)
     return NextResponse.json({ error: error.message }, { status: 500 })

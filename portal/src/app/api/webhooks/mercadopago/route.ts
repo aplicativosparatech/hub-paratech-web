@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
-import { sendWhatsAppMessage } from '@/utils/whatsapp'
-import { gerarProximaFaturaAposPagamento } from '@/utils/billingCharges'
+import { confirmarPagamentoFatura } from '@/utils/paymentConfirmation'
 
 export async function GET(request: Request) {
   // O Mercado Pago às vezes valida a URL com uma chamada GET
@@ -101,69 +100,23 @@ export async function POST(request: Request) {
         return NextResponse.json({ received: true, message: 'Fatura já estava quitada' }, { status: 200 })
       }
 
-      // 5. Atualiza a fatura para "pago"
+      // 5. Confirma pagamento de forma centralizada (Gera próxima fatura em dia útil e notifica cliente e admin)
+      const valorPago = Number(payment.transaction_amount || fatura.valor)
+      
+      // Atualiza também o ID do pagamento MP
       await supabase
         .from('faturas')
-        .update({
-          status: 'pago',
-          data_pagamento: new Date().toISOString(),
-          provedor_pagamento: 'mercadopago',
-          mercadopago_payment_id: String(paymentId)
-        })
+        .update({ mercadopago_payment_id: String(paymentId) })
         .eq('id', fatura.id)
 
-      const cliente: any = Array.isArray(fatura.clientes) ? fatura.clientes[0] : fatura.clientes
-      const valorPago = Number(payment.transaction_amount || fatura.valor)
-      const valorFormatado = valorPago.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-      const refMes = fatura.competencia || new Date(fatura.data_vencimento).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' })
+      const resultado = await confirmarPagamentoFatura(fatura.id, {
+        provedor: 'mercadopago',
+        amountPago: valorPago,
+        notificarCliente: true,
+        notificarAdmin: true
+      })
 
-      // 6. Notificação via WhatsApp para o CLIENTE
-      if (cliente?.whatsapp) {
-        try {
-          await sendWhatsAppMessage({
-            to: cliente.whatsapp,
-            message: `✅ *Pagamento Confirmado!*\n\nOlá, ${cliente.nome_fantasia || cliente.razao_social}!\nConfirmamos o recebimento da sua fatura no valor de ${valorFormatado} referente a ${refMes} via Mercado Pago (Pix).\n\nSeu sistema está liberado para uso. Muito obrigado pela parceria!`,
-            remetente: 'Sistema (Webhook Mercado Pago)',
-            destinatarioTipo: 'cliente',
-            destinatarioNome: cliente.nome_fantasia || cliente.razao_social,
-            motivo: 'Confirmação de Pagamento Pix',
-            modelo: '4. Ao Pagar (Cliente)',
-            clienteId: cliente?.id,
-            faturaId: fatura?.id,
-          })
-        } catch (e: any) {
-          console.error('Erro ao enviar WhatsApp de confirmação ao cliente:', e.message)
-        }
-      }
-
-      // 7. Notificação via WhatsApp para o ADMINISTRADOR
-      const adminPhone = process.env.ADMIN_WHATSAPP_NUMBER
-      if (adminPhone) {
-        try {
-          await sendWhatsAppMessage({
-            to: adminPhone,
-            message: `💰 *Novo Pagamento Recebido (Mercado Pago)!*\n\n• *Cliente:* ${cliente?.nome_fantasia || cliente?.razao_social}\n• *Valor:* ${valorFormatado}\n• *Competência:* ${refMes}\n• *Fatura:* ${fatura.id.split('-')[0]}\n• *Status Hub:* Liberado no sistema.`,
-            remetente: 'Sistema (Webhook Mercado Pago)',
-            destinatarioTipo: 'admin',
-            destinatarioNome: 'Administrador Paratech',
-            motivo: `Novo Pagamento (${cliente?.nome_fantasia || cliente?.razao_social})`,
-            modelo: '5. Ao Pagar (Admin)',
-            clienteId: cliente?.id,
-            faturaId: fatura?.id,
-          })
-        } catch (e: any) {
-          console.error('Erro ao avisar admin via WhatsApp:', e.message)
-        }
-      }
-
-      // 8. REGRA DE ANTECIPAÇÃO: Gera automaticamente a próxima fatura para pagamento antecipado
-      try {
-        await gerarProximaFaturaAposPagamento(fatura.id)
-      } catch (errAnt: any) {
-        console.error('Erro ao gerar próxima fatura após pagamento MP:', errAnt.message)
-      }
-
-      return NextResponse.json({ success: true, status: 'pago_processado', paymentId })
+      return NextResponse.json({ success: true, status: 'pago_processado', paymentId, resultado })
     }
 
     return NextResponse.json({ received: true, status: payment.status })

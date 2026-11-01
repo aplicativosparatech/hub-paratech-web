@@ -52,6 +52,7 @@ namespace HubParatechDesktop
         private static readonly object LogLock = new object();
         private static LiveMonitorForm? activeInstance = null;
         public static string PontoPartidaInfo { get; set; } = "Configuração do Portal";
+        public static string? ConfidenceTimerText { get; set; } = null;
 
         private static int currentProgress = 100;
         private static int maxProgress = 100;
@@ -690,11 +691,29 @@ namespace HubParatechDesktop
             Controls.Add(bottomPanel);
             gridContainer.BringToFront();
 
-            // Timer suave de atualização
-            refreshTimer = new System.Windows.Forms.Timer { Interval = 2500 };
+            // Timer suave de atualização (a cada 1 segundo para atualizar o timer de confiança e logs)
+            refreshTimer = new System.Windows.Forms.Timer { Interval = 1000 };
             refreshTimer.Tick += (s, e) => {
                 try
                 {
+                    if (lblStatusPill != null && !lblStatusPill.IsDisposed)
+                    {
+                        if (!string.IsNullOrEmpty(ConfidenceTimerText))
+                        {
+                            lblStatusPill.Text = ConfidenceTimerText;
+                            lblStatusPill.ForeColor = Color.FromArgb(180, 83, 9); // amber-700
+                            lblStatusPill.BackColor = Color.FromArgb(254, 243, 199); // amber-100
+                            lblStatusPill.Width = 270;
+                        }
+                        else
+                        {
+                            lblStatusPill.Text = "● MONITORAMENTO ATIVO";
+                            lblStatusPill.ForeColor = Color.FromArgb(16, 185, 129); // emerald-600
+                            lblStatusPill.BackColor = Color.FromArgb(236, 253, 245); // emerald-50
+                            lblStatusPill.Width = 200;
+                        }
+                    }
+
                     if (Visible && !IsDisposed && dgvLogs != null && !dgvLogs.IsDisposed)
                     {
                         RefreshDataGrid();

@@ -51,6 +51,8 @@ export default function FaturasPage() {
   const [competencia, setCompetencia] = useState('')
   const [dataVencimento, setDataVencimento] = useState('')
   const [valor, setValor] = useState('')
+  const [statusFatura, setStatusFatura] = useState<'pendente' | 'pago' | 'cancelado'>('pendente')
+  const [dataPagamento, setDataPagamento] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
 
   // Modal Geração em Lote
@@ -199,6 +201,8 @@ export default function FaturasPage() {
     setSelectedCliente(f.cliente_id)
     setCompetencia(f.competencia)
     setDataVencimento(f.data_vencimento)
+    setStatusFatura(f.status || 'pendente')
+    setDataPagamento(f.data_pagamento ? f.data_pagamento.split('T')[0] : '')
 
     // Busca o cliente correspondente para trazer o valor do cadastro
     const cli = clientes.find(c => c.id === f.cliente_id)
@@ -245,10 +249,27 @@ export default function FaturasPage() {
           valor_original: valorNumerico,
           valor_multa: 0,
           valor_juros: 0,
+          status: statusFatura,
+          data_pagamento: statusFatura === 'pago' 
+            ? (dataPagamento ? `${dataPagamento}T12:00:00.000Z` : new Date().toISOString()) 
+            : null,
           qr_code_payload: null // reseta Pix para regenerar com valor atualizado
         })
         .eq('id', editingId)
       error = updateError
+
+      // Se foi alterado para 'pago', chama rotina para gerar próxima fatura em dia útil se necessário
+      if (!error && statusFatura === 'pago') {
+        try {
+          await fetch('/api/pagamentos/confirmar-status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fatura_id: editingId, status: 'pago' })
+          })
+        } catch (err) {
+          console.warn('Erro ao disparar rotina de pagamento:', err)
+        }
+      }
     } else {
       const { error: insertError } = await supabase.from('faturas').insert([
         {
@@ -282,6 +303,8 @@ export default function FaturasPage() {
     setCompetencia('')
     setDataVencimento('')
     setValor('')
+    setStatusFatura('pendente')
+    setDataPagamento('')
   }
 
   const getStatusStyle = (status: string) => {
@@ -926,6 +949,56 @@ export default function FaturasPage() {
                     </strong>
                   </p>
                 ) : null}
+              </div>
+
+              {/* Status da Fatura e Data do Pagamento */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Status da Fatura
+                  </label>
+                  <select
+                    value={statusFatura}
+                    onChange={e => {
+                      const newStatus = e.target.value as 'pendente' | 'pago' | 'cancelado'
+                      setStatusFatura(newStatus)
+                      if (newStatus === 'pago' && !dataPagamento) {
+                        setDataPagamento(new Date().toISOString().split('T')[0])
+                      }
+                    }}
+                    className={`w-full px-3.5 py-2.5 rounded-xl border font-bold text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ${
+                      statusFatura === 'pago' ? 'text-emerald-700 border-emerald-300' :
+                      statusFatura === 'cancelado' ? 'text-rose-700 border-rose-300' :
+                      'text-amber-700 border-amber-300'
+                    }`}
+                  >
+                    <option value="pendente">⏳ Pendente</option>
+                    <option value="pago">✅ Pago / Quitado</option>
+                    <option value="cancelado">❌ Cancelado</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Data do Pagamento {statusFatura === 'pago' && <span className="text-emerald-600 font-bold">*</span>}
+                  </label>
+                  <input
+                    type="date"
+                    disabled={statusFatura !== 'pago'}
+                    value={dataPagamento}
+                    onChange={e => setDataPagamento(e.target.value)}
+                    className={`w-full px-3.5 py-2.5 rounded-xl border text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      statusFatura === 'pago' 
+                        ? 'bg-white border-emerald-300 text-slate-900 cursor-text' 
+                        : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                    }`}
+                  />
+                  {statusFatura !== 'pago' && (
+                    <span className="text-[10px] text-slate-400 block mt-0.5">
+                      Habilitado quando status for &quot;Pago&quot;
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="flex gap-3 justify-end pt-4 border-t border-slate-100">
