@@ -66,18 +66,41 @@ export async function sendWhatsAppMessage({
   faturaId,
 }: SendWhatsAppMessageOptions) {
   const supabase = createAdminClient()
-  const cleanNumber = to.replace(/\D/g, '')
+  let cleanNumber = to.replace(/\D/g, "")
+  // Se informado número com 10 ou 11 dígitos (DDD + número no Brasil), prefixa com 55 automaticamente
+  if (cleanNumber.length === 10 || cleanNumber.length === 11) {
+    cleanNumber = "55" + cleanNumber
+  }
 
-  // 1. Busca a integração ativa do WhatsApp
-  const { data: integracao, error } = await supabase
-    .from('integracoes')
-    .select('*')
-    .eq('tipo', 'whatsapp')
-    .eq('is_ativo', true)
-    .single()
+  // 1. Busca todas as integrações de WhatsApp cadastradas
+  const { data: integracoes } = await supabase
+    .from("integracoes")
+    .select("*")
+    .eq("tipo", "whatsapp")
 
-  if (error || !integracao) {
-    const errMsg = 'Nenhuma API de WhatsApp está ativa no sistema.'
+  const isEndpointValido = (it: any) => {
+    const ep = it?.credenciais?.endpoint
+    return ep && typeof ep === 'string' && (ep.startsWith('http://') || ep.startsWith('https://'))
+  }
+
+  // Tenta encontrar a marcada como ativa que tenha endpoint HTTP válido
+  let integracao = integracoes?.find((i: any) => i.is_ativo && isEndpointValido(i))
+
+  // Se não encontrar uma ativa válida, tenta qualquer ativa
+  if (!integracao) {
+    integracao = integracoes?.find((i: any) => i.is_ativo)
+  }
+
+  // Fallback inteligente: se a ativa estiver com endpoint inválido (ex: email), usa a outra válida
+  if (!integracao || !isEndpointValido(integracao)) {
+    const valida = integracoes?.find((i: any) => isEndpointValido(i))
+    if (valida) {
+      integracao = valida
+    }
+  }
+
+  if (!integracao) {
+    const errMsg = "Nenhuma API de WhatsApp válida ou ativa no sistema."
     await saveWhatsAppLog(supabase, {
       remetente,
       destinatarioTipo,
@@ -86,7 +109,7 @@ export async function sendWhatsAppMessage({
       motivo,
       modelo,
       mensagem: message,
-      status: 'falha',
+      status: "falha",
       erro: errMsg,
       clienteId,
       contabilidadeId,
