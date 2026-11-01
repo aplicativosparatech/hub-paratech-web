@@ -11,7 +11,11 @@ import {
   DadosParaMensagem
 } from '@/utils/cobrancaTemplates'
 
-async function prepararContextoCliente(clienteId: string, situacaoForcada?: SituacaoCobranca | 'auto') {
+async function prepararContextoCliente(
+  clienteId: string,
+  situacaoForcada?: SituacaoCobranca | 'auto',
+  faturaIdForcada?: string
+) {
   const supabase = createAdminClient()
   const hoje = new Date()
   hoje.setHours(0, 0, 0, 0)
@@ -40,30 +44,48 @@ async function prepararContextoCliente(clienteId: string, situacaoForcada?: Situ
     .eq('id', 1)
     .maybeSingle()
 
-  // 3. Busca a fatura mais relevante (prioriza pendentes mais antigas; se não tiver, busca última paga)
-  const { data: faturasPendentes } = await supabase
-    .from('faturas')
-    .select('*')
-    .eq('cliente_id', cliente.id)
-    .eq('status', 'pendente')
-    .order('data_vencimento', { ascending: true })
-
-  let fatura = faturasPendentes?.[0]
+  // 3. Busca a fatura: se foi especificada faturaIdForcada, busca exatamente ela
+  let fatura: any = null
   let isPago = false
 
+  if (faturaIdForcada) {
+    const { data: faturaEspecifica } = await supabase
+      .from('faturas')
+      .select('*')
+      .eq('id', faturaIdForcada)
+      .maybeSingle()
+
+    if (faturaEspecifica) {
+      fatura = faturaEspecifica
+      isPago = faturaEspecifica.status === 'pago' || faturaEspecifica.status === 'paga'
+    }
+  }
+
+  // Se não foi encontrada fatura específica, prioriza pendente mais antiga ou última paga
   if (!fatura) {
-    const { data: faturaPaga } = await supabase
+    const { data: faturasPendentes } = await supabase
       .from('faturas')
       .select('*')
       .eq('cliente_id', cliente.id)
-      .eq('status', 'pago')
-      .order('data_vencimento', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+      .eq('status', 'pendente')
+      .order('data_vencimento', { ascending: true })
 
-    if (faturaPaga) {
-      fatura = faturaPaga
-      isPago = true
+    fatura = faturasPendentes?.[0]
+
+    if (!fatura) {
+      const { data: faturaPaga } = await supabase
+        .from('faturas')
+        .select('*')
+        .eq('cliente_id', cliente.id)
+        .eq('status', 'pago')
+        .order('data_vencimento', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (faturaPaga) {
+        fatura = faturaPaga
+        isPago = true
+      }
     }
   }
 
@@ -187,7 +209,7 @@ async function prepararContextoCliente(clienteId: string, situacaoForcada?: Situ
   }
 }
 
-// GET: Retorna os dados da condição atual e a prévia da mensagem (aceita ?situacao=...)
+// GET: Retorna os dados da condição atual e a prévia da mensagem (aceita ?situacao=...&faturaId=...)
 export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> }
@@ -196,15 +218,16 @@ export async function GET(
     const { id } = await context.params
     const { searchParams } = new URL(request.url)
     const situacao = (searchParams.get('situacao') || 'auto') as SituacaoCobranca | 'auto'
+    const faturaId = searchParams.get('faturaId') || searchParams.get('fatura_id') || undefined
 
-    const dados = await prepararContextoCliente(id, situacao)
+    const dados = await prepararContextoCliente(id, situacao, faturaId)
     return NextResponse.json({ success: true, ...dados })
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 400 })
   }
 }
 
-// POST: Realiza o envio imediato da mensagem pelo WhatsApp (aceita texto customizado e situação)
+// POST: Realiza o envio imediato da mensagem pelo WhatsApp (aceita texto customizado, situação e faturaId)
 export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> }
@@ -213,8 +236,9 @@ export async function POST(
     const { id } = await context.params
     const body = await request.json().catch(() => ({}))
     const situacaoParam = (body.situacao || 'auto') as SituacaoCobranca | 'auto'
+    const faturaIdParam = body.faturaId || body.fatura_id || undefined
 
-    const dados = await prepararContextoCliente(id, situacaoParam)
+    const dados = await prepararContextoCliente(id, situacaoParam, faturaIdParam)
 
     const telefoneFinal = (body.telefone || dados.telefone || '').replace(/\D/g, '')
 

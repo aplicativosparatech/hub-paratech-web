@@ -22,7 +22,15 @@ import {
   Laptop,
   CheckCircle2,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  AlertTriangle,
+  Send,
+  Unlock,
+  CheckSquare,
+  Square,
+  Loader2,
+  Layers,
+  StopCircle
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import ResizableSortableTh from '@/components/ui/ResizableSortableTh'
@@ -38,6 +46,35 @@ export default function FaturasPage() {
   const [gerando, setGerando] = useState(false)
   const [gerandoLote, setGerandoLote] = useState(false)
   const supabase = createClient()
+
+  // Seleção de Faturas (Aleatórias ou Todas de uma vez)
+  const [selectedFaturaIds, setSelectedFaturaIds] = useState<string[]>([])
+  const masterCheckboxRef = useRef<HTMLInputElement>(null)
+
+  // Modal WhatsApp em Lote
+  const [modalWhatsappLoteOpen, setModalWhatsappLoteOpen] = useState(false)
+  const [situacaoWppLote, setSituacaoWppLote] = useState<string>('auto')
+  const [intervaloWppLote, setIntervaloWppLote] = useState<number>(5)
+  const [isEnviandoWppLote, setIsEnviandoWppLote] = useState(false)
+  const cancelarWppLoteRef = useRef(false)
+  const [progressoWppLote, setProgressoWppLote] = useState({
+    total: 0,
+    atual: 0,
+    sucessos: 0,
+    falhas: 0,
+    clienteAtualNome: '',
+    concluido: false
+  })
+
+  // Modal Baixa / Quitar em Lote
+  const [modalBaixaLoteOpen, setModalBaixaLoteOpen] = useState(false)
+  const [dataBaixaLote, setDataBaixaLote] = useState(new Date().toISOString().split('T')[0])
+  const [notificarClienteBaixaLote, setNotificarClienteBaixaLote] = useState(true)
+  const [isBaixandoLote, setIsBaixandoLote] = useState(false)
+
+  // Modal Excluir em Lote
+  const [modalExcluirLoteOpen, setModalExcluirLoteOpen] = useState(false)
+  const [isExcluindoLote, setIsExcluindoLote] = useState(false)
 
   // Filtro de busca na tabela
   const [filtroTexto, setFiltroTexto] = useState('')
@@ -381,6 +418,233 @@ export default function FaturasPage() {
     }
   })
 
+  // Faturas selecionadas completas
+  const faturasSelecionadasObjs = useMemo(() => {
+    return faturas.filter(f => selectedFaturaIds.includes(f.id))
+  }, [faturas, selectedFaturaIds])
+
+  // Total R$ das selecionadas
+  const valorTotalSelecionadas = useMemo(() => {
+    return faturasSelecionadasObjs.reduce((acc, f) => acc + (Number(f.valor) || 0), 0)
+  }, [faturasSelecionadasObjs])
+
+  // Checagens de seleção em relação às faturas visíveis na tabela (filtradas)
+  const idsVisiveis = useMemo(() => faturasOrdenadas.map(f => f.id), [faturasOrdenadas])
+
+  const todasVisiveisSelecionadas = useMemo(() => {
+    return idsVisiveis.length > 0 && idsVisiveis.every(id => selectedFaturaIds.includes(id))
+  }, [idsVisiveis, selectedFaturaIds])
+
+  const algumaVisivelSelecionada = useMemo(() => {
+    return idsVisiveis.some(id => selectedFaturaIds.includes(id))
+  }, [idsVisiveis, selectedFaturaIds])
+
+  const isParcialmenteSelecionadas = algumaVisivelSelecionada && !todasVisiveisSelecionadas
+
+  // Atualiza indeterminate no checkbox mestre
+  useEffect(() => {
+    if (masterCheckboxRef.current) {
+      masterCheckboxRef.current.indeterminate = isParcialmenteSelecionadas
+    }
+  }, [isParcialmenteSelecionadas])
+
+  // Alternar fatura aleatória individual
+  const handleToggleSelectFatura = (id: string) => {
+    setSelectedFaturaIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    )
+  }
+
+  // Alternar todas as faturas visíveis de uma vez
+  const handleToggleSelectAll = () => {
+    if (todasVisiveisSelecionadas) {
+      // Se todas visíveis estão selecionadas, desmarca apenas as visíveis
+      setSelectedFaturaIds(prev => prev.filter(id => !idsVisiveis.includes(id)))
+    } else {
+      // Seleciona todas as visíveis
+      setSelectedFaturaIds(prev => Array.from(new Set([...prev, ...idsVisiveis])))
+    }
+  }
+
+  // Limpar seleção
+  const handleLimparSelecao = () => {
+    setSelectedFaturaIds([])
+  }
+
+  // Ação 1: Excluir Faturas Selecionadas em Lote
+  const executarExcluirLote = async () => {
+    if (selectedFaturaIds.length === 0) return
+    setIsExcluindoLote(true)
+    const toastId = toast.loading(`Excluindo ${selectedFaturaIds.length} fatura(s)...`)
+    try {
+      const { error } = await supabase
+        .from('faturas')
+        .delete()
+        .in('id', selectedFaturaIds)
+
+      if (error) throw new Error(error.message)
+
+      toast.success(`${selectedFaturaIds.length} fatura(s) excluída(s) com sucesso!`, { id: toastId })
+      setSelectedFaturaIds([])
+      setModalExcluirLoteOpen(false)
+      fetchFaturas()
+    } catch (err: any) {
+      toast.error('Erro ao excluir em lote: ' + err.message, { id: toastId })
+    } finally {
+      setIsExcluindoLote(false)
+    }
+  }
+
+  // Ação 2: Dar Baixa / Quitar Faturas Selecionadas em Lote
+  const executarBaixaLote = async () => {
+    if (selectedFaturaIds.length === 0) return
+    setIsBaixandoLote(true)
+    const toastId = toast.loading(`Processando baixa de ${selectedFaturaIds.length} fatura(s)...`)
+
+    let sucessos = 0
+    let falhas = 0
+
+    try {
+      for (const fatId of selectedFaturaIds) {
+        try {
+          const res = await fetch('/api/faturas/baixar-manual', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fatura_id: fatId,
+              data_pagamento: dataBaixaLote,
+              notificarCliente: notificarClienteBaixaLote
+            })
+          })
+          if (res.ok) {
+            sucessos++
+          } else {
+            falhas++
+          }
+        } catch {
+          falhas++
+        }
+      }
+
+      toast.success(
+        `Baixa concluída! ${sucessos} fatura(s) quitada(s)${falhas > 0 ? `, ${falhas} falha(s)` : ''}. Ciclos atualizados.`,
+        { id: toastId, duration: 5000 }
+      )
+      setSelectedFaturaIds([])
+      setModalBaixaLoteOpen(false)
+      fetchFaturas()
+    } catch (err: any) {
+      toast.error('Erro durante a baixa em lote: ' + err.message, { id: toastId })
+    } finally {
+      setIsBaixandoLote(false)
+    }
+  }
+
+  // Ação 3: Desbloqueio Confiança 24h em Lote
+  const executarDesbloqueioConfiancaLote = async () => {
+    const pendentes = faturasSelecionadasObjs.filter(f => f.status === 'pendente')
+    if (pendentes.length === 0) {
+      toast.error('Nenhuma fatura pendente selecionada para desbloqueio em confiança.')
+      return
+    }
+
+    const toastId = toast.loading(`Liberando em confiança ${pendentes.length} cliente(s)...`)
+    let sucessos = 0
+    let falhas = 0
+
+    for (const fat of pendentes) {
+      try {
+        const res = await fetch('/api/faturas/desbloqueio-confianca', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fatura_id: fat.id })
+        })
+        if (res.ok) sucessos++
+        else falhas++
+      } catch {
+        falhas++
+      }
+    }
+
+    toast.success(
+      `Desbloqueio processado: ${sucessos} liberado(s)${falhas > 0 ? `, ${falhas} indisponível(is)` : ''}.`,
+      { id: toastId }
+    )
+    fetchFaturas()
+  }
+
+  // Ação 4: Iniciar Disparo de WhatsApp em Lote
+  const iniciarDisparoWhatsAppLote = async () => {
+    if (selectedFaturaIds.length === 0) return
+
+    setIsEnviandoWppLote(true)
+    cancelarWppLoteRef.current = false
+    setProgressoWppLote({
+      total: faturasSelecionadasObjs.length,
+      atual: 0,
+      sucessos: 0,
+      falhas: 0,
+      clienteAtualNome: '',
+      concluido: false
+    })
+
+    let sucessos = 0
+    let falhas = 0
+
+    for (let i = 0; i < faturasSelecionadasObjs.length; i++) {
+      if (cancelarWppLoteRef.current) {
+        toast('Envio em lote interrompido pelo usuário.', { icon: '⚠️' })
+        break
+      }
+
+      const fat = faturasSelecionadasObjs[i]
+      const cli = fat.clientes
+      const nomeCliente = cli?.nome_fantasia || cli?.razao_social || 'Cliente'
+
+      setProgressoWppLote(prev => ({
+        ...prev,
+        atual: i + 1,
+        clienteAtualNome: nomeCliente
+      }))
+
+      try {
+        const res = await fetch(`/api/clientes/${fat.cliente_id}/enviar-whatsapp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            faturaId: fat.id,
+            situacao: situacaoWppLote,
+            enviarImagemQrCode: true
+          })
+        })
+        const data = await res.json()
+        if (res.ok && data.success) {
+          sucessos++
+        } else {
+          falhas++
+        }
+      } catch (e) {
+        falhas++
+      }
+
+      setProgressoWppLote(prev => ({
+        ...prev,
+        sucessos,
+        falhas
+      }))
+
+      // Aguarda intervalo de segurança se não for o último
+      if (i < faturasSelecionadasObjs.length - 1 && !cancelarWppLoteRef.current) {
+        await new Promise(r => setTimeout(r, intervaloWppLote * 1000))
+      }
+    }
+
+    setIsEnviandoWppLote(false)
+    setProgressoWppLote(prev => ({ ...prev, concluido: true }))
+    toast.success(`Disparo concluído: ${sucessos} enviado(s), ${falhas} falha(s).`)
+    fetchFaturas()
+  }
+
   return (
     <div className="p-8">
       {/* Header Superior */}
@@ -463,11 +727,115 @@ export default function FaturasPage() {
         </div>
       </div>
 
+      {/* BARRA DE AÇÕES EM LOTE (Aparece quando 1 ou mais faturas forem selecionadas) */}
+      {selectedFaturaIds.length > 0 && (
+        <div className="sticky top-4 z-20 mb-6 p-4 bg-slate-900 text-white rounded-2xl shadow-xl border border-slate-700/80 flex flex-col lg:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-3 duration-200">
+          <div className="flex items-center gap-3 w-full lg:w-auto">
+            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-white shrink-0 shadow-inner">
+              <CheckSquare size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-base text-white">
+                  {selectedFaturaIds.length} {selectedFaturaIds.length === 1 ? 'fatura selecionada' : 'faturas selecionadas'}
+                </span>
+                <span className="text-slate-400 text-sm">•</span>
+                <span className="text-emerald-400 font-bold text-base">
+                  Total: R$ {formatarDuasCasasDecimais(valorTotalSelecionadas)}
+                </span>
+              </div>
+              <p className="text-xs text-slate-300">
+                Selecione faturas aleatórias na tabela ou marque o checkbox do topo para selecionar todas.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center flex-wrap gap-2 w-full lg:w-auto justify-end">
+            {/* Botão Disparar WhatsApp em Lote */}
+            <button
+              onClick={() => {
+                setProgressoWppLote({
+                  total: faturasSelecionadasObjs.length,
+                  atual: 0,
+                  sucessos: 0,
+                  falhas: 0,
+                  clienteAtualNome: '',
+                  concluido: false
+                })
+                setModalWhatsappLoteOpen(true)
+              }}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+              title="Disparar régua de cobrança das faturas selecionadas pelo WhatsApp com QR Code Pix"
+            >
+              <Send size={15} />
+              Enviar WhatsApp ({selectedFaturaIds.length})
+            </button>
+
+            {/* Botão Baixar / Quitar em Lote */}
+            <button
+              onClick={() => {
+                setDataBaixaLote(new Date().toISOString().split('T')[0])
+                setModalBaixaLoteOpen(true)
+              }}
+              className="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+              title="Dar baixa / confirmar pagamento de todas as faturas selecionadas"
+            >
+              <DollarSign size={15} />
+              Quitar / Baixa ({selectedFaturaIds.length})
+            </button>
+
+            {/* Botão Desbloqueio Confiança 24h em Lote */}
+            <button
+              onClick={executarDesbloqueioConfiancaLote}
+              className="bg-amber-600 hover:bg-amber-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+              title="Liberar em confiança por 24 horas as faturas pendentes selecionadas"
+            >
+              <Unlock size={15} />
+              Desbloquear 24h
+            </button>
+
+            {/* Botão Excluir em Lote */}
+            <button
+              onClick={() => setModalExcluirLoteOpen(true)}
+              className="bg-rose-600 hover:bg-rose-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+              title="Excluir faturas selecionadas permanentemente"
+            >
+              <Trash2 size={15} />
+              Excluir ({selectedFaturaIds.length})
+            </button>
+
+            {/* Botão Desmarcar Todas */}
+            <button
+              onClick={handleLimparSelecao}
+              className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-2 rounded-xl text-xs font-semibold transition cursor-pointer border border-slate-700"
+              title="Limpar seleção atual"
+            >
+              Desmarcar
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Tabela de Faturas */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto custom-scrollbar w-full">
         <table className="w-full text-left border-collapse min-w-[950px]">
           <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 shadow-2xs">
             <tr className="bg-slate-50 border-b border-slate-200">
+              {/* Checkbox Mestre (Selecionar Todas / Nenhuma) */}
+              <th className="p-4 w-12 text-center select-none">
+                <input
+                  ref={masterCheckboxRef}
+                  type="checkbox"
+                  checked={todasVisiveisSelecionadas}
+                  onChange={handleToggleSelectAll}
+                  className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                  title={
+                    todasVisiveisSelecionadas
+                      ? 'Desmarcar todas as faturas visíveis'
+                      : 'Selecionar todas as faturas visíveis de uma vez'
+                  }
+                />
+              </th>
               <ResizableSortableTh
                 columnId="cliente"
                 label="Cliente / Razão / Fantasia"
@@ -537,7 +905,7 @@ export default function FaturasPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="p-8 text-center text-slate-500">
+                <td colSpan={7} className="p-8 text-center text-slate-500">
                   <div className="flex items-center justify-center gap-2">
                     <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
                     <span>Carregando faturas...</span>
@@ -546,7 +914,7 @@ export default function FaturasPage() {
               </tr>
             ) : faturasOrdenadas.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-12 text-center">
+                <td colSpan={7} className="p-12 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <FileText size={40} className="text-slate-300" />
                     <p className="text-slate-600 font-semibold">
@@ -565,14 +933,30 @@ export default function FaturasPage() {
                 const cli = f.clientes
                 const nomeDestaque = cli?.nome_fantasia || cli?.razao_social || 'Cliente não identificado'
                 const temFantasia = Boolean(cli?.nome_fantasia && cli?.razao_social && cli.nome_fantasia !== cli.razao_social)
+                const isSelecionada = selectedFaturaIds.includes(f.id)
 
                 return (
                   <tr
                     key={f.id}
-                    className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${
-                      isVencida(f.data_vencimento, f.status) ? 'bg-red-50/40' : ''
+                    className={`border-b border-slate-100 transition-colors ${
+                      isSelecionada
+                        ? 'bg-blue-50/80 border-l-4 border-l-blue-600'
+                        : isVencida(f.data_vencimento, f.status)
+                          ? 'bg-red-50/40 hover:bg-red-50/60'
+                          : 'hover:bg-slate-50'
                     }`}
                   >
+                    {/* Checkbox de Seleção Individual */}
+                    <td className="p-4 text-center select-none" onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={isSelecionada}
+                        onChange={() => handleToggleSelectFatura(f.id)}
+                        className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                        title={isSelecionada ? 'Desmarcar esta fatura' : 'Selecionar esta fatura'}
+                      />
+                    </td>
+
                     {/* Coluna Cliente */}
                     <td className="p-4">
                       <div className="flex flex-col">
@@ -1168,7 +1552,7 @@ export default function FaturasPage() {
         </div>
       )}
 
-      {/* MODAL 4: Excluir Fatura */}
+      {/* MODAL 4: Excluir Fatura Avulsa */}
       {deleteModal.open && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border border-slate-100 text-center animate-in fade-in zoom-in-95 duration-150">
@@ -1195,6 +1579,360 @@ export default function FaturasPage() {
                 className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 transition shadow-sm cursor-pointer"
               >
                 Sim, Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 5: Disparo de WhatsApp em Lote para Faturas Selecionadas */}
+      {modalWhatsappLoteOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex justify-between items-start mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center">
+                  <Send size={22} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">
+                    Disparo de Faturas via WhatsApp em Lote
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {faturasSelecionadasObjs.length} fatura(s) selecionada(s) • Total: R${' '}
+                    {formatarDuasCasasDecimais(valorTotalSelecionadas)}
+                  </p>
+                </div>
+              </div>
+              {!isEnviandoWppLote && (
+                <button
+                  onClick={() => setModalWhatsappLoteOpen(false)}
+                  className="text-slate-400 hover:text-slate-600 p-1"
+                >
+                  <X size={20} />
+                </button>
+              )}
+            </div>
+
+            {/* Informações de Envio e Configurações */}
+            {!isEnviandoWppLote && !progressoWppLote.concluido && (
+              <div className="space-y-4">
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-2 text-xs">
+                  <div className="flex justify-between text-slate-700">
+                    <span>Faturas Marcadas:</span>
+                    <strong className="text-slate-900 font-bold">{faturasSelecionadasObjs.length}</strong>
+                  </div>
+                  <div className="flex justify-between text-slate-700">
+                    <span>Valor Total Selecionado:</span>
+                    <strong className="text-emerald-700 font-bold">
+                      R$ {formatarDuasCasasDecimais(valorTotalSelecionadas)}
+                    </strong>
+                  </div>
+                  <div className="flex justify-between text-slate-700">
+                    <span>Clientes com WhatsApp Válido:</span>
+                    <strong className="text-blue-700 font-bold">
+                      {
+                        faturasSelecionadasObjs.filter(
+                          f => (f.clientes?.whatsapp_cobranca || f.clientes?.whatsapp || '').replace(/\D/g, '').length >= 10
+                        ).length
+                      }{' '}
+                      de {faturasSelecionadasObjs.length}
+                    </strong>
+                  </div>
+                </div>
+
+                {/* Seletor da Situação / Modelo */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Modelo da Mensagem
+                  </label>
+                  <select
+                    value={situacaoWppLote}
+                    onChange={e => setSituacaoWppLote(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                  >
+                    <option value="auto">🤖 Automático (conforme vencimento de cada fatura)</option>
+                    <option value="fatura_disponivel">1. Fatura Disponível (Pré-Vencimento)</option>
+                    <option value="vence_hoje">2. Vencendo Hoje</option>
+                    <option value="atraso_1_5">3. Em Atraso (1 a 5 dias)</option>
+                    <option value="bloqueio_iminente_6_10">4. Bloqueio Iminente (6 a 10 dias)</option>
+                    <option value="bloqueado_10_plus">5. Sistema Bloqueado (Mais de 10 dias)</option>
+                  </select>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Todas as mensagens enviadas incluem a logo oficial da Paratech e a imagem do QR Code Pix.
+                  </p>
+                </div>
+
+                {/* Seletor de Intervalo Anti-Bloqueio */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Intervalo de Segurança entre Envios
+                  </label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[
+                      { seg: 3, label: '3 seg' },
+                      { seg: 5, label: '5 seg (Recomendado)' },
+                      { seg: 10, label: '10 seg' },
+                      { seg: 15, label: '15 seg' }
+                    ].map(opt => (
+                      <button
+                        key={opt.seg}
+                        type="button"
+                        onClick={() => setIntervaloWppLote(opt.seg)}
+                        className={`py-2 px-2 text-xs rounded-xl border font-bold transition cursor-pointer text-center ${
+                          intervaloWppLote === opt.seg
+                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    O espaçamento entre envios protege seu número contra bloqueios no WhatsApp.
+                  </p>
+                </div>
+
+                <div className="flex gap-3 justify-end pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setModalWhatsappLoteOpen(false)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 transition cursor-pointer text-sm"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={iniciarDisparoWhatsAppLote}
+                    className="px-6 py-2.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition shadow-sm cursor-pointer text-sm flex items-center gap-2"
+                  >
+                    <Send size={16} />
+                    Iniciar Disparos ({faturasSelecionadasObjs.length})
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Progresso ao Vivo do Disparo */}
+            {(isEnviandoWppLote || progressoWppLote.concluido) && (
+              <div className="space-y-5 py-2">
+                <div>
+                  <div className="flex justify-between items-center text-xs font-bold text-slate-700 mb-1.5">
+                    <span>
+                      {progressoWppLote.concluido
+                        ? 'Envio Concluído'
+                        : `Enviando fatura ${progressoWppLote.atual} de ${progressoWppLote.total}...`}
+                    </span>
+                    <span>
+                      {Math.round(
+                        (progressoWppLote.atual / (progressoWppLote.total || 1)) * 100
+                      )}
+                      %
+                    </span>
+                  </div>
+
+                  {/* Barra de Progresso Animada */}
+                  <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                    <div
+                      className={`h-full transition-all duration-300 ${
+                        progressoWppLote.concluido ? 'bg-emerald-600' : 'bg-blue-600'
+                      }`}
+                      style={{
+                        width: `${Math.round(
+                          (progressoWppLote.atual / (progressoWppLote.total || 1)) * 100
+                        )}%`
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Cliente atual */}
+                {!progressoWppLote.concluido && progressoWppLote.clienteAtualNome && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-2xl flex items-center gap-3">
+                    <Loader2 size={18} className="text-blue-600 animate-spin shrink-0" />
+                    <div className="text-xs truncate">
+                      <span className="text-slate-500">Destinatário atual:</span>
+                      <strong className="text-slate-900 block truncate font-bold">
+                        {progressoWppLote.clienteAtualNome}
+                      </strong>
+                    </div>
+                  </div>
+                )}
+
+                {/* Contadores */}
+                <div className="grid grid-cols-2 gap-3 text-center">
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl">
+                    <span className="text-xs text-emerald-700 block font-semibold">Sucessos</span>
+                    <strong className="text-2xl font-extrabold text-emerald-800">
+                      {progressoWppLote.sucessos}
+                    </strong>
+                  </div>
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl">
+                    <span className="text-xs text-rose-700 block font-semibold">Falhas</span>
+                    <strong className="text-2xl font-extrabold text-rose-800">
+                      {progressoWppLote.falhas}
+                    </strong>
+                  </div>
+                </div>
+
+                {/* Ações Durante ou Pós Envio */}
+                <div className="flex justify-end gap-3 pt-2">
+                  {isEnviandoWppLote ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        cancelarWppLoteRef.current = true
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-amber-600 text-white font-bold hover:bg-amber-700 transition flex items-center justify-center gap-2 cursor-pointer text-sm"
+                    >
+                      <StopCircle size={18} />
+                      Interromper Envio
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalWhatsappLoteOpen(false)
+                        setSelectedFaturaIds([])
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition cursor-pointer text-sm"
+                    >
+                      Concluir e Desmarcar Faturas
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 6: Baixa / Quitar Faturas em Lote */}
+      {modalBaixaLoteOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-inner">
+              <CheckCircle2 size={30} />
+            </div>
+
+            <h3 className="text-xl font-bold text-slate-900 text-center mb-1">
+              Quitar Faturas em Lote
+            </h3>
+            <p className="text-xs text-slate-500 text-center mb-5 leading-relaxed">
+              Você está prestes a registrar o pagamento de{' '}
+              <strong className="text-slate-800 font-bold">{selectedFaturaIds.length} fatura(s)</strong> no
+              valor total de{' '}
+              <strong className="text-emerald-700 font-bold">
+                R$ {formatarDuasCasasDecimais(valorTotalSelecionadas)}
+              </strong>
+              .
+            </p>
+
+            <div className="space-y-4 text-left">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Data do Pagamento
+                </label>
+                <input
+                  type="date"
+                  value={dataBaixaLote}
+                  onChange={e => setDataBaixaLote(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <label className="flex items-start gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-200 cursor-pointer hover:bg-emerald-50/50 transition">
+                <input
+                  type="checkbox"
+                  checked={notificarClienteBaixaLote}
+                  onChange={e => setNotificarClienteBaixaLote(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer"
+                />
+                <div className="text-xs text-slate-700">
+                  <span className="font-bold text-slate-900 block">
+                    Notificar clientes pelo WhatsApp
+                  </span>
+                  <span className="text-slate-500 text-[11px]">
+                    Envia mensagem de agradecimento pelo pagamento e confirmação de regularidade.
+                  </span>
+                </div>
+              </label>
+
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-2xl text-[11px] text-blue-800 leading-relaxed">
+                ℹ️ <strong>Ciclo Automático:</strong> O status das faturas será alterado para &quot;pago&quot;,
+                o Hub registrará o pagamento e já gerará a próxima fatura do mês seguinte ajustada para o
+                próximo dia útil.
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-center mt-6">
+              <button
+                type="button"
+                disabled={isBaixandoLote}
+                onClick={() => setModalBaixaLoteOpen(false)}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 transition cursor-pointer text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isBaixandoLote}
+                onClick={executarBaixaLote}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition shadow-sm cursor-pointer text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isBaixandoLote ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Processando...
+                  </>
+                ) : (
+                  'Confirmar Quitação'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 7: Excluir Faturas em Lote */}
+      {modalExcluirLoteOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border border-slate-100 text-center animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-14 h-14 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Trash2 size={28} />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 mb-2">Excluir Faturas em Lote</h3>
+            <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+              Deseja realmente excluir permanentemente as{' '}
+              <strong className="text-red-600 font-bold">{selectedFaturaIds.length} faturas</strong>{' '}
+              selecionadas?
+              <br />
+              <span className="text-xs text-red-500 font-medium mt-1 block">Esta ação é irreversível.</span>
+            </p>
+            <div className="flex gap-3 justify-center">
+              <button
+                type="button"
+                disabled={isExcluindoLote}
+                onClick={() => setModalExcluirLoteOpen(false)}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 transition cursor-pointer text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isExcluindoLote}
+                onClick={executarExcluirLote}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 transition shadow-sm cursor-pointer text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isExcluindoLote ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Excluindo...
+                  </>
+                ) : (
+                  'Sim, Excluir Todas'
+                )}
               </button>
             </div>
           </div>
