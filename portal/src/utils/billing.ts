@@ -11,6 +11,7 @@ export interface GerarFaturasOptions {
   dataReferencia?: Date
   competencia?: string
   dispararWhatsapp?: boolean
+  forcarWhatsapp?: boolean
   baseUrl?: string
 }
 
@@ -248,7 +249,29 @@ export async function gerarFaturasMensalistas(options: GerarFaturasOptions = {})
 
   // 5. Se solicitado envio de WhatsApp (ex: primeiro dia do mês ou botão Gerar Todas com checkbox)
   if (options.dispararWhatsapp) {
-    for (const item of detalhes) {
+    // Verifica se os disparos de WhatsApp do Cron estão ativos pelo Administrador
+    let isWhatsappHabilitado = true
+    if (!options.forcarWhatsapp) {
+      const { data: configGeral } = await supabase
+        .from('configuracoes_portal_geral')
+        .select('cron_whatsapp_ativo')
+        .eq('id', 1)
+        .maybeSingle()
+
+      if (configGeral?.cron_whatsapp_ativo === false) {
+        isWhatsappHabilitado = false
+      }
+    }
+
+    if (!isWhatsappHabilitado) {
+      for (const item of detalhes) {
+        if (item.status !== 'sem_mensalidade' && item.status !== 'paga_antecipada') {
+          item.whatsappEnviado = false
+          item.whatsappErro = 'Disparos automáticos do Cron estão pausados pelo Administrador.'
+        }
+      }
+    } else {
+      for (const item of detalhes) {
       if (item.status === 'sem_mensalidade' || item.status === 'paga_antecipada' || !item.faturaId) {
         continue
       }
@@ -321,6 +344,7 @@ export async function gerarFaturasMensalistas(options: GerarFaturasOptions = {})
         item.whatsappErro = errWpp.message || 'Erro no envio WhatsApp'
       }
     }
+    }
   }
 
   return {
@@ -352,9 +376,28 @@ export async function executarRotinaPrimeiroDiaDoMes(options: { dataReferencia?:
     }
   }
 
+  // Trava do Cron: Se não for forçado manualmente e o cron estiver desativado pelo Administrador, aborta
+  if (!options.forcar) {
+    const supabase = createAdminClient()
+    const { data: configGeral } = await supabase
+      .from('configuracoes_portal_geral')
+      .select('cron_whatsapp_ativo')
+      .eq('id', 1)
+      .maybeSingle()
+
+    if (configGeral?.cron_whatsapp_ativo === false) {
+      return {
+        executado: false,
+        motivo: 'Rotina do 1º dia do mês pausada: Disparos e rotinas do Cron estão desativados pelo Administrador.',
+        resultado: null
+      }
+    }
+  }
+
   const resultado = await gerarFaturasMensalistas({
     dataReferencia: hoje,
     dispararWhatsapp: true,
+    forcarWhatsapp: options.forcar,
     baseUrl: options.baseUrl
   })
 

@@ -13,16 +13,7 @@ export async function GET(request: Request) {
   hoje.setHours(0, 0, 0, 0)
 
   try {
-    // 0. Se for dia 01, executa a rotina automática de gerar todas as faturas e disparar WhatsApp
-    if (hoje.getDate() === 1) {
-      try {
-        await executarRotinaPrimeiroDiaDoMes({ dataReferencia: hoje })
-      } catch (err) {
-        console.error('Erro ao executar rotina do 1º dia do mês no Cron:', err)
-      }
-    }
-
-    // 1. Busca configurações globais de juros, multa, carência e estado do Cron
+    // 1. Busca configurações globais e estado do Cron PRIMEIRO (Trava Absoluta)
     const { data: configGeral } = await supabase
       .from('configuracoes_portal_geral')
       .select('global_multa_atraso_percentual, global_juros_mora_mensal_percentual, global_dias_carencia, cron_whatsapp_ativo')
@@ -36,20 +27,29 @@ export async function GET(request: Request) {
       .eq('tipo', 'whatsapp')
       .eq('is_ativo', true)
       .maybeSingle()
-    
-    if (!wppApis) {
-      return NextResponse.json({ message: 'Nenhuma API de WhatsApp ativa encontrada. Abortando alertas.' })
-    }
 
-    // Verifica se os Crons de WhatsApp estão ativados pelo Administrador
+    // TRAVA ABSOLUTA: Verifica se os Crons estão ativados pelo Administrador
     const isCronAtivo = configGeral?.cron_whatsapp_ativo ?? (wppApis?.credenciais?.cron_ativo !== false)
     if (!isCronAtivo) {
       return NextResponse.json({
         success: true,
         cron_ativo: false,
-        message: 'Crons de WhatsApp estão temporariamente desativados pelo Administrador nas configurações de integrações.',
+        message: 'Crons de faturas e WhatsApp estão temporariamente desativados pelo Administrador nas configurações de integrações.',
         disparos: []
       })
+    }
+
+    if (!wppApis) {
+      return NextResponse.json({ message: 'Nenhuma API de WhatsApp ativa encontrada. Abortando alertas.' })
+    }
+
+    // 3. Se for dia 01 e o Cron estiver ATIVO, executa a rotina automática de gerar faturas e disparar WhatsApp
+    if (hoje.getDate() === 1) {
+      try {
+        await executarRotinaPrimeiroDiaDoMes({ dataReferencia: hoje })
+      } catch (err) {
+        console.error('Erro ao executar rotina do 1º dia do mês no Cron:', err)
+      }
     }
 
     // 3. Busca todas as Faturas Pendentes (que não estão Pagas nem Canceladas)

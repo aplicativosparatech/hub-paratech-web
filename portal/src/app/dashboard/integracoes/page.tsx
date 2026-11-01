@@ -1,14 +1,16 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { PlugZap, CreditCard, MessageCircle, Mail, Eye, EyeOff, Save, Send, Calendar, Sliders, Bell, FileText, CheckCircle2, AlertTriangle, Cpu, Sparkles, Bot, ExternalLink, RefreshCw, Check, ShieldCheck, ShieldAlert, Zap, Server, Database, Building2, Layers, FileSpreadsheet, Code2, ChevronRight } from 'lucide-react'
+import { PlugZap, CreditCard, MessageCircle, Mail, Eye, EyeOff, Save, Send, Calendar, Sliders, Bell, FileText, CheckCircle2, AlertTriangle, Cpu, Sparkles, Bot, ExternalLink, RefreshCw, Check, ShieldCheck, ShieldAlert, Zap, Server, Database, Building2, Layers, FileSpreadsheet, Code2, ChevronRight, Clock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { createClient } from '@/utils/supabase/client'
 import { useTableFeatures } from '@/hooks/useTableFeatures'
 import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
 import CardApisHubParatech from '@/components/CardApisHubParatech'
 import CardLogsWhatsApp from '@/components/CardLogsWhatsApp'
+import CardBroadcastWhatsApp from '@/components/CardBroadcastWhatsApp'
 import ModalDisparoManualCobranca from '@/components/ModalDisparoManualCobranca'
+import AbaCronsDashboard from '@/components/AbaCronsDashboard'
 
 type Integracao = {
   id: string;
@@ -20,7 +22,7 @@ type Integracao = {
 
 export default function IntegracoesPage() {
   const supabase = createClient()
-  const [activeTab, setActiveTab] = useState<'gateways' | 'whatsapp' | 'email' | 'ia_mcp' | 'alterdata' | 'apis_hub'>('gateways')
+  const [activeTab, setActiveTab] = useState<'gateways' | 'whatsapp' | 'email' | 'ia_mcp' | 'alterdata' | 'apis_hub' | 'crons'>('gateways')
   const [isLoading, setIsLoading] = useState(true)
   const [integracoes, setIntegracoes] = useState<Integracao[]>([])
   const [adminPhone, setAdminPhone] = useState('')
@@ -608,6 +610,21 @@ export default function IntegracoesPage() {
             Copiar APIs
           </span>
         </button>
+
+        {/* Aba Crons & Agendamentos */}
+        <button
+          onClick={() => setActiveTab('crons')}
+          className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold text-sm transition-all duration-200 cursor-pointer ${
+            activeTab === 'crons' 
+              ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-md' 
+              : 'text-amber-800 bg-amber-50/80 hover:bg-amber-100 border border-amber-200/60'
+          }`}
+        >
+          <Clock size={18} /> Crons & Agendamentos
+          <span className={`ml-1 px-2 py-0.5 text-xs font-extrabold rounded-full ${activeTab === 'crons' ? 'bg-white/20 text-white' : 'bg-amber-500 text-white'}`}>
+            Rotinas
+          </span>
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -685,47 +702,79 @@ export default function IntegracoesPage() {
         {/* ===================== ABA WHATSAPP ===================== */}
         {activeTab === 'whatsapp' && (
           <>
-            {/* Card de Destaque no Topo: WhatsApp do Administrador */}
-            <div className="col-span-full bg-gradient-to-r from-indigo-50/90 via-white to-blue-50/90 border-2 border-indigo-300 rounded-2xl p-6 sm:p-7 shadow-md">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+            {/* Topo da Aba WhatsApp: WhatsApp do Administrador e Envio em Massa Lado a Lado */}
+            <div className="col-span-full grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+              {/* Card 1: WhatsApp do Administrador */}
+              <div className="bg-gradient-to-r from-indigo-50/90 via-white to-blue-50/90 border-2 border-indigo-300 rounded-2xl p-6 sm:p-7 shadow-md flex flex-col justify-between">
                 <div>
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 font-bold text-xs uppercase tracking-wide mb-2">
-                    <ShieldCheck size={14} /> Canal Interno de Notificações Paratech
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 font-bold text-xs uppercase tracking-wide">
+                      <ShieldCheck size={14} /> Canal Interno de Notificações Paratech
+                    </div>
+                    {adminPhone ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-xs">
+                        <CheckCircle2 size={13} /> Ativo
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold text-xs">
+                        <AlertTriangle size={13} /> Não Configurado
+                      </span>
+                    )}
                   </div>
+
                   <h3 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
                     📱 WhatsApp do Administrador (Alertas de Pagamentos Pix)
                   </h3>
-                  <p className="text-sm text-slate-600 mt-1 max-w-3xl leading-relaxed">
-                    Cadastre o seu número de WhatsApp pessoal/administrativo. Quando um cliente pagar a mensalidade via Pix ou a fatura for quitada, o Hub Paratech enviará um comprovante instantâneo para você com o nome do cliente, valor recebido e dados da fatura.
+                  <p className="text-sm text-slate-600 mt-1 leading-relaxed">
+                    Cadastre o seu número de WhatsApp pessoal ou administrativo. Quando um cliente pagar a mensalidade via Pix ou a fatura for quitada, o Hub Paratech enviará um comprovante instantâneo para você com o nome do cliente, valor recebido e dados da fatura.
                   </p>
+
+                  <div className="mt-4 p-3 bg-white/80 border border-indigo-200/60 rounded-xl space-y-1.5 text-xs text-slate-700">
+                    <div className="flex items-center gap-2 font-semibold text-indigo-900">
+                      <Bell size={13} className="text-indigo-600" /> Eventos Notificados Automaticamente:
+                    </div>
+                    <ul className="list-disc list-inside space-y-0.5 text-slate-600 pl-1">
+                      <li>Confirmação instantânea de Pix pago via InfinitePay / Mercado Pago</li>
+                      <li>Baixa automática de faturas e recibo digital</li>
+                      <li>Avisos de novas adesões ou alterações cadastrais críticas</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-indigo-100">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
+                    Número de Destino do Administrador
+                  </label>
+                  <div className="flex flex-col sm:flex-row gap-2.5">
+                    <input 
+                      type="text" 
+                      placeholder="DDD + Seu Número (Ex: 5537999786187)" 
+                      value={adminPhone} 
+                      onChange={e => setAdminPhone(e.target.value)}
+                      className="flex-1 bg-white border-2 border-indigo-300 px-4 py-2.5 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-semibold shadow-xs"
+                    />
+                    <button 
+                      type="button"
+                      onClick={handleSalvarAdminPhone}
+                      disabled={isSavingAdminPhone}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-2.5 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 text-xs sm:text-sm disabled:opacity-50 cursor-pointer shrink-0"
+                    >
+                      <Save size={16} /> {isSavingAdminPhone ? 'Salvando...' : 'Salvar Admin'}
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={handleTestarAdminPhone}
+                      disabled={isTestingAdminWpp || !adminPhone}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 text-xs sm:text-sm disabled:opacity-50 cursor-pointer shrink-0"
+                    >
+                      <Send size={16} /> {isTestingAdminWpp ? 'Testando...' : 'Testar'}
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-3 max-w-2xl">
-                <input 
-                  type="text" 
-                  placeholder="DDD + Seu Número de Admin (Ex: 5537999786187)" 
-                  value={adminPhone} 
-                  onChange={e => setAdminPhone(e.target.value)}
-                  className="flex-1 bg-white border-2 border-indigo-300 px-4 py-2.5 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-base font-semibold shadow-xs"
-                />
-                <button 
-                  type="button"
-                  onClick={handleSalvarAdminPhone}
-                  disabled={isSavingAdminPhone}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-2.5 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 text-sm disabled:opacity-50 cursor-pointer"
-                >
-                  <Save size={16} /> {isSavingAdminPhone ? 'Salvando...' : 'Salvar WhatsApp do Admin'}
-                </button>
-                <button 
-                  type="button"
-                  onClick={handleTestarAdminPhone}
-                  disabled={isTestingAdminWpp || !adminPhone}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 text-sm disabled:opacity-50 cursor-pointer"
-                >
-                  <Send size={16} /> {isTestingAdminWpp ? 'Testando...' : 'Testar Envio'}
-                </button>
-              </div>
+              {/* Card 2: Envio em Massa de Mensagens (WhatsApp Broadcast) */}
+              <CardBroadcastWhatsApp onDisparoConcluido={() => setKeyLogsWpp(k => k + 1)} />
             </div>
 
             <div className={`bg-white rounded-2xl p-6 border-2 transition-all duration-300 ${evolution.is_ativo ? 'border-emerald-500 shadow-lg shadow-emerald-500/10' : 'border-slate-200'}`}>
@@ -2444,7 +2493,20 @@ export default function IntegracoesPage() {
         <CardApisHubParatech />
       )}
 
-      {activeTab !== 'apis_hub' && (
+      {/* ===================== ABA CRONS & AGENDAMENTOS ===================== */}
+      {activeTab === 'crons' && (
+        <div className="col-span-full">
+          <AbaCronsDashboard
+            onCronToggled={(provedor, estado) => {
+              if (provedor === 'billing_alerts') {
+                setCronAtivo(estado)
+              }
+            }}
+          />
+        </div>
+      )}
+
+      {activeTab !== 'apis_hub' && activeTab !== 'crons' && (
         <div className="mt-8 flex justify-end">
           <button onClick={handleSave} className="flex items-center gap-2 bg-slate-900 text-white px-8 py-3 rounded-xl font-semibold shadow-lg hover:bg-slate-800 hover:shadow-xl transition-all hover:-translate-y-0.5 cursor-pointer">
             <Save size={20} /> Salvar Configurações
