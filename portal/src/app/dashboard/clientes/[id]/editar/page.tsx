@@ -949,17 +949,34 @@ export default function EditarClientePage() {
               </div>
 
               {/* Status no Sistema */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Status no Sistema</label>
+              <div className="md:col-span-1">
+                <label className="block text-sm font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Status do Cliente</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    formData.is_ativo 
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                      : 'bg-rose-100 text-rose-800 border border-rose-200'
+                  }`}>
+                    {formData.is_ativo ? '● ATIVO' : '● DESATIVADO'}
+                  </span>
+                </label>
                 <select 
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-medium"
+                  className={`w-full px-4 py-2.5 rounded-xl border font-bold text-sm focus:outline-none focus:ring-2 transition ${
+                    formData.is_ativo 
+                      ? 'border-emerald-300 bg-emerald-50/40 text-emerald-900 focus:ring-emerald-500' 
+                      : 'border-rose-300 bg-rose-50/40 text-rose-900 focus:ring-rose-500'
+                  }`}
                   value={formData.is_ativo ? 'true' : 'false'} 
                   onChange={e => setFormData({...formData, is_ativo: e.target.value === 'true'})}
                 >
-                  <option value="true">Ativo (Acesso Liberado)</option>
-                  <option value="false">Inativo / Bloqueado</option>
+                  <option value="true">✅ Ativo (Acesso Liberado & Rotinas Normais)</option>
+                  <option value="false">⛔ Desativado (Crons Pausados / Cobrança 4x ao dia se houver pendência)</option>
                 </select>
-                <p className="text-[11px] text-slate-500 mt-1">Ativa/desativa cliente e faturamento</p>
+                <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                  {formData.is_ativo 
+                    ? 'Acesso liberado no Hub e rotinas normais do dia 01 ativas.'
+                    : 'Crons rotineiros não rodam para este cliente. Caso haja faturas em aberto, ele será cobrado 4x ao dia (09h, 14h, 17h e 21h) até a quitação.'}
+                </p>
               </div>
 
               {/* Toggle MEI Simples */}

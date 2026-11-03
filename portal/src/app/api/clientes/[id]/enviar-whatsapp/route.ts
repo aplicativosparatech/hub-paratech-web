@@ -26,7 +26,7 @@ async function prepararContextoCliente(
     .select(`
       id, razao_social, nome_fantasia, nome_contato, whatsapp, whatsapp_cobranca,
       dias_carencia, multa_atraso_percentual, juros_mora_mensal_percentual,
-      valor_mensalidade, dia_vencimento
+      valor_mensalidade, dia_vencimento, is_ativo
     `)
     .eq('id', clienteId)
     .single()
@@ -165,6 +165,8 @@ async function prepararContextoCliente(
   let condicaoReal: SituacaoCobranca = 'pre_vencimento'
   if (isPago) {
     condicaoReal = 'pago'
+  } else if (cliente.is_ativo === false) {
+    condicaoReal = 'desativado_pendente'
   } else if (diasParaBloqueio < 0) {
     condicaoReal = 'bloqueado'
   } else if (diferencaDias < 0 && diasParaBloqueio >= 0) {

@@ -243,6 +243,7 @@ export default function BotaoEnviarCobrancaWhatsApp({
           <option value="bloqueado">4. Bloqueio por Inadimplência — Sistema Bloqueado</option>
           <option value="pago">5. Ao Pagar (Cliente) — Confirmação de Quitação</option>
           <option value="abandono_pix">6. Abandono de Pix — Recuperação de Pagamento</option>
+          <option value="desativado_pendente">7. Cliente Desativado — Cobrança Intensiva Automática (4x/dia)</option>
         </select>
       </div>
 

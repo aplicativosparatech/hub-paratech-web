@@ -85,11 +85,11 @@ export async function GET(request: Request) {
       // Busca dados cadastrais do cliente
       const { data: cliente } = await supabase
         .from('clientes')
-        .select('id, razao_social, nome_fantasia, cnpj, whatsapp, email_fiscal')
+        .select('id, razao_social, nome_fantasia, cnpj, whatsapp, email_fiscal, is_ativo')
         .eq('id', clienteId)
         .single()
 
-      if (!cliente) continue
+      if (!cliente || cliente.is_ativo === false) continue
 
       const nomeEmpresa = cliente.nome_fantasia || cliente.razao_social
       const whatsappDestino = (cred.whatsapp || cliente.whatsapp || '').replace(/\D/g, '')

@@ -13,6 +13,33 @@ export async function GET(request: Request) {
   hoje.setHours(0, 0, 0, 0)
 
   try {
+    const url = new URL(request.url)
+    const tipoFiltro = url.searchParams.get('tipo') // 'inadimplentes' | 'ativos' | null (ambos)
+    const slotParam = url.searchParams.get('slot') // '09h' | '14h' | '17h' | '21h' | null
+    const forcar = url.searchParams.get('forcar') === 'true'
+
+    // Horário oficial de Brasília (America/Sao_Paulo)
+    const agoraSpStr = new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })
+    const agoraSp = new Date(agoraSpStr)
+    const horaSp = agoraSp.getHours()
+    const dataHojeSp = agoraSp.toISOString().split('T')[0]
+
+    // Determina o slot de horário atual para clientes desativados (09:00, 14:00, 17:00, 21:00)
+    let slotAtual: '09h' | '14h' | '17h' | '21h' | null = null
+    if (slotParam && ['09h', '14h', '17h', '21h'].includes(slotParam)) {
+      slotAtual = slotParam as any
+    } else {
+      if (horaSp >= 21) {
+        slotAtual = '21h'
+      } else if (horaSp >= 17) {
+        slotAtual = '17h'
+      } else if (horaSp >= 14) {
+        slotAtual = '14h'
+      } else if (horaSp >= 9) {
+        slotAtual = '09h'
+      }
+    }
+
     // 1. Busca configurações globais e estado do Cron PRIMEIRO (Trava Absoluta)
     const { data: configGeral } = await supabase
       .from('configuracoes_portal_geral')
@@ -43,8 +70,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ message: 'Nenhuma API de WhatsApp ativa encontrada. Abortando alertas.' })
     }
 
-    // 3. Se for dia 01 e o Cron estiver ATIVO, executa a rotina automática de gerar faturas e disparar WhatsApp
-    if (hoje.getDate() === 1) {
+    // 3. Se for dia 01 e o Cron estiver ATIVO (e não for filtro exclusivo de inadimplentes), executa rotina do 1º dia
+    if (hoje.getDate() === 1 && tipoFiltro !== 'inadimplentes') {
       try {
         await executarRotinaPrimeiroDiaDoMes({ dataReferencia: hoje })
       } catch (err) {
@@ -57,6 +84,7 @@ export async function GET(request: Request) {
       .from('faturas')
       .select(`
         id, valor, valor_original, data_vencimento, status, qr_code_payload, competencia,
+        ultimo_disparo_inativo_slot, ultimo_disparo_inativo_em,
         clientes ( 
           id, razao_social, nome_fantasia, nome_contato, whatsapp, whatsapp_cobranca,
           multa_atraso_percentual, juros_mora_mensal_percentual, dias_carencia, is_ativo
@@ -72,10 +100,122 @@ export async function GET(request: Request) {
     // 4. Processa cada fatura de acordo com a Régua de Cobrança e Carência
     for (const fatura of faturas || []) {
       const cliente: any = Array.isArray(fatura.clientes) ? fatura.clientes[0] : fatura.clientes
-      if (!cliente || cliente.is_ativo === false) continue
+      if (!cliente) continue
 
       const telefonesCliente = extrairTelefonesWhatsapp(cliente.whatsapp_cobranca || cliente.whatsapp)
       if (telefonesCliente.length === 0) continue
+
+      const isClienteDesativado = cliente.is_ativo === false
+
+      // =========================================================================
+      // REGRA ESPECIAL: CLIENTE DESATIVADO COM FATURA EM ABERTO
+      // Crons regulares NÃO rodam para clientes desativados.
+      // SALVO SE ele tiver faturas em aberto: cobrança automática 4x ao dia (09h, 14h, 17h, 21h)
+      // até a quitação, sempre avisando que é uma mensagem automática.
+      // =========================================================================
+      if (isClienteDesativado) {
+        if (tipoFiltro === 'ativos') continue
+
+        // Para clientes desativados, os disparos ocorrem nos slots 09h, 14h, 17h ou 21h
+        if (!slotAtual && !forcar) {
+          // Fora das 4 janelas do dia e não forçado
+          continue
+        }
+
+        const slotEfetivo = slotAtual || '09h'
+        const chaveSlotHoje = `${dataHojeSp}_${slotEfetivo}`
+
+        // Evita duplicidade no mesmo slot de horário do mesmo dia
+        if (fatura.ultimo_disparo_inativo_slot === chaveSlotHoje && !forcar) {
+          continue
+        }
+
+        // Garante Pix Bacen
+        let pixPayload = fatura.qr_code_payload
+        if (!pixPayload || pixPayload.includes('mock-hubparatech')) {
+          try {
+            const pixRes = await obterOuGerarPixFatura(fatura.id)
+            if (pixRes.qr_code_payload) {
+              pixPayload = pixRes.qr_code_payload
+              fatura.qr_code_payload = pixPayload
+            }
+          } catch (errPix) {
+            console.warn('Erro ao atualizar pix no cron para cliente inativo:', errPix)
+          }
+        }
+
+        // Calcula encargos
+        const valorBase = Number(fatura.valor_original ?? fatura.valor)
+        const encargos = calcularEncargosFatura({
+          valorBase,
+          dataVencimento: fatura.data_vencimento,
+          clienteMulta: cliente?.multa_atraso_percentual,
+          clienteJuros: cliente?.juros_mora_mensal_percentual,
+          clienteCarencia: cliente?.dias_carencia,
+          globalMulta: configGeral?.global_multa_atraso_percentual,
+          globalJuros: configGeral?.global_juros_mora_mensal_percentual,
+          globalCarencia: configGeral?.global_dias_carencia
+        })
+
+        const msgObj = gerarMensagemCobranca('desativado_pendente', {
+          cliente,
+          fatura: { ...fatura, qr_code_payload: pixPayload },
+          encargos
+        })
+
+        let algumEnviado = false
+        for (const telDestino of telefonesCliente) {
+          try {
+            await sendWhatsAppMessage({
+              to: telDestino,
+              message: msgObj.mensagem,
+              remetente: `Robô Automático (${slotEfetivo})`,
+              destinatarioTipo: 'cliente',
+              destinatarioNome: msgObj.clienteNome || msgObj.empresaNome,
+              motivo: `Cobrança Intensiva - Cliente Inativo (${slotEfetivo})`,
+              modelo: msgObj.modelo,
+              clienteId: cliente.id,
+              faturaId: fatura.id,
+            })
+            algumEnviado = true
+            disparosRealizados.push({
+              cliente: cliente.nome_fantasia || cliente.razao_social,
+              whatsapp: telDestino,
+              motivo: `Cliente Desativado (${slotEfetivo})`,
+              tipo: 'desativado_inadimplente',
+              slot: slotEfetivo,
+              status: 'enviado'
+            })
+          } catch (err: any) {
+            disparosRealizados.push({
+              cliente: cliente.nome_fantasia || cliente.razao_social,
+              whatsapp: telDestino,
+              motivo: `Cliente Desativado (${slotEfetivo})`,
+              tipo: 'desativado_inadimplente',
+              slot: slotEfetivo,
+              status: 'falha',
+              erro: err.message
+            })
+          }
+        }
+
+        if (algumEnviado) {
+          await supabase
+            .from('faturas')
+            .update({
+              ultimo_disparo_inativo_slot: chaveSlotHoje,
+              ultimo_disparo_inativo_em: new Date().toISOString()
+            })
+            .eq('id', fatura.id)
+        }
+
+        continue // Finaliza esta fatura de cliente inativo e não prossegue para a régua regular
+      }
+
+      // =========================================================================
+      // REGRA REGULAR: CLIENTE ATIVO (Régua Padrão de Cobrança)
+      // =========================================================================
+      if (tipoFiltro === 'inadimplentes') continue
 
       // Prioridade da Carência / Tolerância: Cliente individual > Global
       const diasCarenciaEfetivos = (cliente.dias_carencia !== null && cliente.dias_carencia !== undefined)
@@ -188,10 +328,11 @@ export async function GET(request: Request) {
       }
     }
 
-    // 5. ALERTA DE VENCIMENTO DO CERTIFICADO DIGITAL A1 (A partir de 45 dias antes)
+    // 5. ALERTA DE VENCIMENTO DO CERTIFICADO DIGITAL A1 (Apenas clientes ATIVOS, 45 dias antes)
     const { data: clientesComCert } = await supabase
       .from('clientes')
       .select('id, razao_social, nome_fantasia, whatsapp, certificado_validade, contabilidade_id')
+      .eq('is_ativo', true)
       .not('certificado_validade', 'is', null)
 
     const { data: todasConfigs } = await supabase

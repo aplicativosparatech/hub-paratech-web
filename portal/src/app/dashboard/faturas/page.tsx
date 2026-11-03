@@ -1657,6 +1657,7 @@ export default function FaturasPage() {
                     <option value="atraso_1_5">3. Em Atraso (1 a 5 dias)</option>
                     <option value="bloqueio_iminente_6_10">4. Bloqueio Iminente (6 a 10 dias)</option>
                     <option value="bloqueado_10_plus">5. Sistema Bloqueado (Mais de 10 dias)</option>
+                    <option value="desativado_pendente">6. Cliente Desativado (Cobrança 4x ao dia)</option>
                   </select>
                   <p className="text-[11px] text-slate-400 mt-1">
                     Todas as mensagens enviadas incluem a logo oficial da Paratech e a imagem do QR Code Pix.

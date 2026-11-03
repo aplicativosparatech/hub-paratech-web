@@ -12,6 +12,7 @@ export type SituacaoCobranca =
   | 'bloqueado'
   | 'pago'
   | 'abandono_pix'
+  | 'desativado_pendente'
 
 export interface DadosParaMensagem {
   cliente: {
@@ -195,6 +196,14 @@ export function gerarMensagemCobranca(
       mensagem = `${bannerHeader}Olá, *${clienteNome}*! Notamos que você iniciou o pagamento da fatura *[${faturaCodigo}]* da empresa *${empresaNome}* no valor de *${valorFormatado}*, mas a operação não foi concluída.\n\nPrecisa de ajuda com o Pix? Você pode concluir de forma rápida tocando no link abaixo:${pixBloco}\n\nQualquer dúvida estamos à inteira disposição!`
       break
     }
+
+    case 'desativado_pendente': {
+      tituloCondicao = 'Cliente Desativado (Pendência Financeira)'
+      modelo = '7. Cobrança de Cliente Desativado (4x ao dia)'
+      motivo = 'Cobrança Intensiva - Cliente Desativado'
+      mensagem = `${bannerHeader}⚠️ *AVISO DE COBRANÇA AUTOMÁTICA - CONTRATO SUSPENSO* ⚠️\n\nOlá, *${clienteNome}*!\n\nIdentificamos que o cadastro da sua empresa *${empresaNome}* encontra-se *DESATIVADO / SUSPENSO* e possui fatura em aberto aguardando regularização:\n\n• *Fatura:* ${faturaCodigo}\n• *Competência:* ${competencia}\n• *Vencimento:* ${dataVencimento}\n• *Valor Total:* ${valorFormatado}${textoEncargos}${pixBloco}\n\n🤖 *AVISO AUTOMÁTICO:* Esta é uma notificação automática gerada pelo sistema e enviada 4 vezes ao dia (às 09:00, 14:00, 17:00 e 21:00) até a quitação. Após a liquidação via Pix, a baixa e a finalização dos avisos ocorrem de forma 100% automática em segundos.\n\n_Caso já tenha efetuado o pagamento, por favor desconsidere este aviso._\n*Paratech Soluções em Software*`
+      break
+    }
   }
 
   return {
@@ -225,5 +234,6 @@ export const OPCOES_SITUACAO = [
   { valor: 'atrasado_tolerancia', rotulo: '3. Atraso & Regressiva (Cobrança Progressiva)', badge: 'bg-orange-100 text-orange-800' },
   { valor: 'bloqueado', rotulo: '4. Bloqueio por Inadimplência (Sistema Bloqueado)', badge: 'bg-red-100 text-red-800' },
   { valor: 'pago', rotulo: '5. Ao Pagar (Confirmação de Quitação)', badge: 'bg-emerald-100 text-emerald-800' },
-  { valor: 'abandono_pix', rotulo: '6. Abandono de Pix (Recuperação)', badge: 'bg-purple-100 text-purple-800' }
+  { valor: 'abandono_pix', rotulo: '6. Abandono de Pix (Recuperação)', badge: 'bg-purple-100 text-purple-800' },
+  { valor: 'desativado_pendente', rotulo: '7. Cliente Desativado (Cobrança Automática 4x/dia)', badge: 'bg-rose-100 text-rose-800' }
 ]

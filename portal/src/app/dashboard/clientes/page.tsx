@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Trash2, X, Copy, RefreshCw, Search, Upload, DollarSign, TrendingDown, TrendingUp, Eye, EyeOff, KeyRound, Laptop } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Copy, RefreshCw, Search, Upload, DollarSign, TrendingDown, TrendingUp, Eye, EyeOff, KeyRound, Laptop, Power, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { limparDocumento, formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
@@ -22,6 +22,13 @@ export default function ClientesPage() {
   const [userRole, setUserRole] = useState<'admin' | 'contabilidade' | 'cliente'>('admin')
   const [userRoleData, setUserRoleData] = useState<any>(null)
   const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({})
+  const [toggleAtivoModal, setToggleAtivoModal] = useState<{
+    open: boolean
+    id: string
+    nome: string
+    novoEstado: boolean
+  }>({ open: false, id: '', nome: '', novoEstado: false })
+  const [salvandoStatus, setSalvandoStatus] = useState(false)
   const supabase = createClient()
 
   const togglePasswordVisibility = (id: string) => {
@@ -105,6 +112,38 @@ export default function ClientesPage() {
     }
     setDeleting(false)
     setDeleteModal({ open: false, id: '', nome: '' })
+  }
+
+  const handleConfirmToggleAtivo = async () => {
+    if (!toggleAtivoModal.id) return
+    setSalvandoStatus(true)
+    const toastId = toast.loading(
+      toggleAtivoModal.novoEstado ? 'Ativando cliente...' : 'Desativando cliente...'
+    )
+    try {
+      const { error } = await supabase
+        .from('clientes')
+        .update({
+          is_ativo: toggleAtivoModal.novoEstado,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', toggleAtivoModal.id)
+
+      if (error) throw error
+
+      toast.success(
+        toggleAtivoModal.novoEstado
+          ? `Cliente ${toggleAtivoModal.nome} ativado com sucesso!`
+          : `Cliente ${toggleAtivoModal.nome} desativado! Crons rotineiros pausados (cobrança 4x/dia ativa se houver faturas pendentes).`,
+        { id: toastId, duration: 6000 }
+      )
+      setToggleAtivoModal({ open: false, id: '', nome: '', novoEstado: false })
+      fetchClientes()
+    } catch (err: any) {
+      toast.error('Erro ao alterar status: ' + err.message, { id: toastId })
+    } finally {
+      setSalvandoStatus(false)
+    }
   }
 
   const copyToken = (token: string) => {
@@ -648,9 +687,29 @@ export default function ClientesPage() {
                     </td>
                     <td className="p-4 text-slate-600 text-xs">{c.contabilidades?.razao_social || <span className="text-slate-400">—</span>}</td>
                     <td className="p-4">
-                      <span className={`px-2 py-1 rounded text-xs font-semibold ${c.is_ativo ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'}`}>
-                        {c.is_ativo ? 'Ativo' : 'Inativo'}
-                      </span>
+                      {userRole === 'admin' ? (
+                        <button
+                          onClick={() => setToggleAtivoModal({ open: true, id: c.id, nome: c.razao_social, novoEstado: !c.is_ativo })}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition cursor-pointer border ${
+                            c.is_ativo 
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 shadow-2xs' 
+                              : 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100 shadow-2xs'
+                          }`}
+                          title={c.is_ativo ? 'Clique para desativar este cliente' : 'Clique para reativar este cliente'}
+                        >
+                          <span className={`w-2 h-2 rounded-full ${c.is_ativo ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
+                          {c.is_ativo ? 'Ativo' : 'Desativado'}
+                        </button>
+                      ) : (
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
+                          c.is_ativo 
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+                            : 'bg-rose-50 text-rose-800 border-rose-200'
+                        }`}>
+                          <span className={`w-2 h-2 rounded-full ${c.is_ativo ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+                          {c.is_ativo ? 'Ativo' : 'Desativado'}
+                        </span>
+                      )}
                     </td>
                     <td className="p-4 align-top">
                       <div className="flex flex-col gap-1.5 min-w-[130px]">
@@ -726,6 +785,19 @@ export default function ClientesPage() {
                     </td>
                   <td className="p-4 text-right">
                     <div className="flex gap-2 justify-end">
+                      {userRole === 'admin' && (
+                        <button 
+                          onClick={() => setToggleAtivoModal({ open: true, id: c.id, nome: c.razao_social, novoEstado: !c.is_ativo })} 
+                          className={`p-2 rounded-lg transition cursor-pointer ${
+                            c.is_ativo 
+                              ? 'bg-rose-50 text-rose-600 hover:bg-rose-100' 
+                              : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
+                          }`} 
+                          title={c.is_ativo ? 'Desativar Cliente (Pausar crons e cobrar pendências 4x ao dia)' : 'Reativar Cliente'}
+                        >
+                          <Power size={16} />
+                        </button>
+                      )}
                       <Link href={`/dashboard/clientes/${c.id}/editar`} className="p-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition" title="Editar / Visualizar Dados Fiscais">
                         <Pencil size={16} />
                       </Link>
@@ -768,6 +840,95 @@ export default function ClientesPage() {
           </div>
         </div>
       )}
+      {/* Modal de Confirmação de Ativação / Desativação de Cliente */}
+      {toggleAtivoModal.open && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 border border-slate-200">
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <div className={`p-3 rounded-2xl ${
+                  toggleAtivoModal.novoEstado 
+                    ? 'bg-emerald-100 text-emerald-700' 
+                    : 'bg-rose-100 text-rose-700'
+                }`}>
+                  {toggleAtivoModal.novoEstado ? <CheckCircle2 size={24} /> : <AlertTriangle size={24} />}
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">
+                    {toggleAtivoModal.novoEstado ? 'Reativar Cliente' : 'Desativar Cliente'}
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    {toggleAtivoModal.nome}
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setToggleAtivoModal({ open: false, id: '', nome: '', novoEstado: false })} 
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {toggleAtivoModal.novoEstado ? (
+              <div className="space-y-3 mb-6 text-sm text-slate-600">
+                <p>
+                  Deseja realmente <strong>reativar</strong> este cliente?
+                </p>
+                <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-2 text-xs text-emerald-900">
+                  <p className="font-semibold flex items-center gap-1.5">
+                    <CheckCircle2 size={15} className="text-emerald-600" />
+                    O que acontece ao reativar:
+                  </p>
+                  <ul className="list-disc list-inside space-y-1 text-emerald-800">
+                    <li>O acesso ao sistema cliente é liberado imediatamente pelo Hub.</li>
+                    <li>As rotinas normais do dia 01 (geração de faturas) e crons rotineiros voltam a funcionar.</li>
+                  </ul>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3 mb-6 text-sm text-slate-600">
+                <p>
+                  Tem certeza que deseja <strong>desativar</strong> o cliente <strong className="text-slate-900">{toggleAtivoModal.nome}</strong>?
+                </p>
+                <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl space-y-2 text-xs text-amber-950">
+                  <p className="font-bold flex items-center gap-1.5 text-amber-800">
+                    <AlertTriangle size={15} />
+                    Regras de Suspensão e Cobrança Automática:
+                  </p>
+                  <ul className="list-disc list-inside space-y-1 text-amber-900">
+                    <li><strong>Bloqueio Imediato:</strong> O acesso ao sistema será bloqueado pelo Hub.</li>
+                    <li><strong>Pausa nos Crons:</strong> Os crons agendados (novas faturas, Alterdata, etc.) <strong>NÃO</strong> rodarão para este cliente.</li>
+                    <li><strong>Cobrança Intensiva de Faturas em Aberto:</strong> Se o cliente possuir faturas pendentes, ele será <strong>cobrado automaticamente 4x ao dia (09:00, 14:00, 17:00 e 21:00)</strong> via WhatsApp com alerta de notificação automática até a quitação.</li>
+                  </ul>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 justify-end">
+              <button 
+                onClick={() => setToggleAtivoModal({ open: false, id: '', nome: '', novoEstado: false })} 
+                disabled={salvandoStatus}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 transition font-bold text-sm cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleConfirmToggleAtivo} 
+                disabled={salvandoStatus}
+                className={`px-5 py-2.5 rounded-xl text-white font-bold text-sm transition cursor-pointer shadow-sm disabled:opacity-50 ${
+                  toggleAtivoModal.novoEstado 
+                    ? 'bg-emerald-600 hover:bg-emerald-700' 
+                    : 'bg-rose-600 hover:bg-rose-700'
+                }`}
+              >
+                {salvandoStatus ? 'Salvando...' : toggleAtivoModal.novoEstado ? 'Confirmar Reativação' : 'Confirmar Desativação'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal de Importação em Lote de Clientes */}
       <ImportadorLoteModal
         isOpen={importModalOpen}
