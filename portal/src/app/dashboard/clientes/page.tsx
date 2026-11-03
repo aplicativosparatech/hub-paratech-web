@@ -167,25 +167,38 @@ export default function ClientesPage() {
     })
   }, [clientes, searchTerm])
 
-  // Cálculo da Soma Total das Mensalidades das Empresas
-  const totalMensalidades = useMemo(() => {
-    return clientes.reduce((acc, c) => acc + (Number(c.valor_mensalidade) || 0), 0)
+  // Clientes Ativos vs Desativados
+  const clientesAtivos = useMemo(() => {
+    return clientes.filter(c => c.is_ativo !== false)
   }, [clientes])
+
+  const clientesInativos = useMemo(() => {
+    return clientes.filter(c => c.is_ativo === false)
+  }, [clientes])
+
+  const clientesFiltradosAtivos = useMemo(() => {
+    return clientesFiltrados.filter(c => c.is_ativo !== false)
+  }, [clientesFiltrados])
+
+  // Cálculo da Soma Total das Mensalidades das Empresas ATIVAS (MRR Recorrente Real)
+  const totalMensalidades = useMemo(() => {
+    return clientesAtivos.reduce((acc, c) => acc + (Number(c.valor_mensalidade) || 0), 0)
+  }, [clientesAtivos])
 
   const totalMensalidadesFiltradas = useMemo(() => {
-    return clientesFiltrados.reduce((acc, c) => acc + (Number(c.valor_mensalidade) || 0), 0)
-  }, [clientesFiltrados])
+    return clientesFiltradosAtivos.reduce((acc, c) => acc + (Number(c.valor_mensalidade) || 0), 0)
+  }, [clientesFiltradosAtivos])
 
-  // Cálculo da Soma dos Custos das Empresas
+  // Cálculo da Soma dos Custos das Empresas ATIVAS
   const totalCustos = useMemo(() => {
-    return clientes.reduce((acc, c) => acc + (Number(c.custo) || 0), 0)
-  }, [clientes])
+    return clientesAtivos.reduce((acc, c) => acc + (Number(c.custo) || 0), 0)
+  }, [clientesAtivos])
 
   const totalCustosFiltrados = useMemo(() => {
-    return clientesFiltrados.reduce((acc, c) => acc + (Number(c.custo) || 0), 0)
-  }, [clientesFiltrados])
+    return clientesFiltradosAtivos.reduce((acc, c) => acc + (Number(c.custo) || 0), 0)
+  }, [clientesFiltradosAtivos])
 
-  // Cálculo do Lucro (Total das Mensalidades - Total dos Custos)
+  // Cálculo do Lucro (Total das Mensalidades - Total dos Custos) das empresas ATIVAS
   const totalLucro = useMemo(() => {
     return totalMensalidades - totalCustos
   }, [totalMensalidades, totalCustos])
@@ -194,7 +207,7 @@ export default function ClientesPage() {
     return totalMensalidadesFiltradas - totalCustosFiltrados
   }, [totalMensalidadesFiltradas, totalCustosFiltrados])
 
-  // Margem de lucro percentual
+  // Margem de lucro percentual das empresas ATIVAS
   const margemLucro = useMemo(() => {
     if (totalMensalidades <= 0) return 0
     return Math.round((totalLucro / totalMensalidades) * 100)
@@ -310,7 +323,9 @@ export default function ClientesPage() {
                 </span>
               </div>
               <div className="text-[11px] text-emerald-700/80 mt-0.5 truncate font-medium">
-                {searchTerm ? `Filtradas: ${totalMensalidadesFiltradas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : `${clientes.length} empresas cadastradas`}
+                {searchTerm 
+                  ? `Filtradas: ${totalMensalidadesFiltradas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} (${clientesFiltradosAtivos.length} ativas)` 
+                  : `${clientesAtivos.length} empresas ativas${clientesInativos.length > 0 ? ` (${clientesInativos.length} desativada${clientesInativos.length === 1 ? '' : 's'})` : ''}`}
               </div>
             </div>
           </div>
@@ -338,7 +353,9 @@ export default function ClientesPage() {
                 </span>
               </div>
               <div className="text-[11px] text-rose-700/80 mt-0.5 truncate font-medium">
-                {searchTerm ? `Filtrado: ${totalCustosFiltrados.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : 'Custos operacionais / licenças'}
+                {searchTerm 
+                  ? `Filtrado: ${totalCustosFiltrados.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` 
+                  : `Custos operacionais de ${clientesAtivos.length} empresas ativas`}
               </div>
             </div>
           </div>
@@ -366,7 +383,9 @@ export default function ClientesPage() {
                 </span>
               </div>
               <div className="text-[11px] text-blue-700/80 mt-0.5 truncate font-medium">
-                {searchTerm ? `Líquido: ${totalLucroFiltrado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : 'Mensalidades − Custos'}
+                {searchTerm 
+                  ? `Líquido: ${totalLucroFiltrado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` 
+                  : `Mensalidades − Custos (${clientesAtivos.length} ativas)`}
               </div>
             </div>
           </div>
@@ -636,16 +655,31 @@ export default function ClientesPage() {
                     <td className="p-4">{getRegimeBadge(c.regime_tributario)}</td>
                     {userRole === 'admin' && (
                       <td className="p-4 align-top">
-                        <div className="font-bold text-slate-900 text-sm whitespace-nowrap">
-                          {c.valor_mensalidade !== undefined && c.valor_mensalidade !== null
-                            ? Number(c.valor_mensalidade).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-                            : 'R$ 0,00'}
+                        <div className={`font-bold text-sm whitespace-nowrap flex items-center gap-1.5 ${
+                          c.is_ativo ? 'text-slate-900' : 'text-slate-400'
+                        }`}>
+                          <span className={c.is_ativo ? '' : 'line-through'}>
+                            {c.valor_mensalidade !== undefined && c.valor_mensalidade !== null
+                              ? Number(c.valor_mensalidade).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                              : 'R$ 0,00'}
+                          </span>
+                          {!c.is_ativo && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 border border-slate-200 uppercase">
+                              Pausado
+                            </span>
+                          )}
                         </div>
                         <div className="mt-1 flex flex-col gap-0.5 text-[11px] leading-tight">
-                          <span className="text-rose-600 font-medium whitespace-nowrap" title="Custo individual deste cliente">
+                          <span className={`font-medium whitespace-nowrap ${c.is_ativo ? 'text-rose-600' : 'text-slate-400'}`} title="Custo individual deste cliente">
                             Custo: {Number(c.custo || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                           </span>
-                          <span className={`font-semibold whitespace-nowrap ${(Number(c.valor_mensalidade || 0) - Number(c.custo || 0)) >= 0 ? 'text-emerald-700' : 'text-red-600'}`} title="Lucro líquido (Mensalidade - Custo)">
+                          <span className={`font-semibold whitespace-nowrap ${
+                            !c.is_ativo
+                              ? 'text-slate-400'
+                              : (Number(c.valor_mensalidade || 0) - Number(c.custo || 0)) >= 0 
+                                ? 'text-emerald-700' 
+                                : 'text-red-600'
+                          }`} title="Lucro líquido (Mensalidade - Custo)">
                             Lucro: {(Number(c.valor_mensalidade || 0) - Number(c.custo || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                           </span>
                         </div>
