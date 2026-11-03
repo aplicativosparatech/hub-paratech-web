@@ -1,5 +1,31 @@
 import { createAdminClient } from '@/utils/supabase/admin'
 
+/**
+ * Extrai e normaliza todos os números de WhatsApp de um campo texto.
+ * Suporta múltiplos números separados por vírgula, ponto-e-vírgula, quebra de linha ou barra.
+ * Formata com DDI 55 caso tenha 10 ou 11 dígitos.
+ */
+export function extrairTelefonesWhatsapp(campo?: string | null): string[] {
+  if (!campo) return []
+  const partes = campo.split(/[,;\n/]+/)
+  const numerosUnicos = new Set<string>()
+
+  for (const parte of partes) {
+    let limpo = parte.replace(/\D/g, '').trim()
+    if (!limpo || limpo.length < 10) continue
+
+    if ((limpo.length === 10 || limpo.length === 11) && !limpo.startsWith('55')) {
+      limpo = `55${limpo}`
+    }
+
+    if (limpo.length >= 10) {
+      numerosUnicos.add(limpo)
+    }
+  }
+
+  return Array.from(numerosUnicos)
+}
+
 export interface SendWhatsAppMessageOptions {
   to: string; // Número com DDD, ex: 5511999999999
   message: string;
@@ -12,6 +38,34 @@ export interface SendWhatsAppMessageOptions {
   clienteId?: string;
   contabilidadeId?: string;
   faturaId?: string;
+}
+
+/**
+ * Envia uma mensagem para múltiplos destinatários (um ou mais telefones).
+ */
+export async function sendWhatsAppMessageToMultiple(
+  destinatarios: string | string[],
+  options: Omit<SendWhatsAppMessageOptions, 'to'>
+) {
+  const listaNumeros = Array.isArray(destinatarios)
+    ? destinatarios.flatMap(d => extrairTelefonesWhatsapp(d))
+    : extrairTelefonesWhatsapp(destinatarios)
+
+  if (listaNumeros.length === 0) {
+    throw new Error('Nenhum número de WhatsApp válido encontrado para envio.')
+  }
+
+  const resultados = []
+  for (const tel of listaNumeros) {
+    try {
+      const res = await sendWhatsAppMessage({ ...options, to: tel })
+      resultados.push({ telefone: tel, sucesso: true, res })
+    } catch (err: any) {
+      resultados.push({ telefone: tel, sucesso: false, erro: err.message })
+    }
+  }
+
+  return resultados
 }
 
 async function saveWhatsAppLog(supabase: any, logData: {

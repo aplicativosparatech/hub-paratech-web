@@ -76,9 +76,9 @@ export default function BotaoEnviarCobrancaWhatsApp({
   }
 
   const handleEnviarAgora = async () => {
-    const telefoneDestino = (telefonePrincipal || dadosCondicao?.telefone || '').replace(/\D/g, '')
+    const telefoneDestino = (telefonePrincipal || dadosCondicao?.telefone || '').trim()
 
-    if (!telefoneDestino || telefoneDestino.length < 10) {
+    if (!telefoneDestino || telefoneDestino.replace(/\D/g, '').length < 10) {
       toast.error('Informe um WhatsApp válido no campo de contato antes de enviar.', { duration: 4000 })
       return
     }
@@ -112,7 +112,10 @@ export default function BotaoEnviarCobrancaWhatsApp({
 
       const agoraFormatado = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
       setUltimoDisparo(agoraFormatado)
-      toast.success(`Mensagem enviada com sucesso para ${telefoneDestino}! (${data.tituloCondicao})`, { id: tId, duration: 5000 })
+      const msgSucesso = data.totalEnviados && data.totalEnviados > 1
+        ? `Mensagem enviada com sucesso para ${data.totalEnviados} números de WhatsApp!`
+        : `Mensagem enviada com sucesso para ${data.telefone || telefoneDestino}! (${data.tituloCondicao})`
+      toast.success(msgSucesso, { id: tId, duration: 5000 })
     } catch (err: any) {
       toast.error(`Erro no disparo: ${err.message}`, { id: tId, duration: 5000 })
     } finally {
@@ -246,10 +249,22 @@ export default function BotaoEnviarCobrancaWhatsApp({
       {/* Resumo da Fatura & Variáveis Extraídas */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs bg-white p-3.5 rounded-xl border border-emerald-100">
         <div>
-          <span className="text-slate-400 block font-medium">WhatsApp de Destino:</span>
-          <span className="font-bold text-slate-800 font-mono text-sm">
-            {telAtual ? telAtual : <span className="text-amber-600 font-normal">Preencha o WhatsApp acima</span>}
-          </span>
+          <span className="text-slate-400 block font-medium">WhatsApp(s) de Destino:</span>
+          {telAtual ? (
+            <div className="flex flex-wrap gap-1 mt-0.5">
+              {telAtual.split(/[,;\n/]+/).map((t: string, idx: number) => {
+                const limpo = t.trim()
+                if (!limpo) return null
+                return (
+                  <span key={idx} className="font-bold text-slate-800 font-mono text-xs px-2 py-0.5 rounded bg-slate-100 border border-slate-200">
+                    {limpo}
+                  </span>
+                )
+              })}
+            </div>
+          ) : (
+            <span className="text-amber-600 font-normal">Preencha o WhatsApp acima</span>
+          )}
         </div>
         <div>
           <span className="text-slate-400 block font-medium">[Cliente] / [Empresa]:</span>

@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/utils/supabase/admin'
-import { sendWhatsAppMessage } from '@/utils/whatsapp'
+import { sendWhatsAppMessage, extrairTelefonesWhatsapp } from '@/utils/whatsapp'
 import { gerarProximaFaturaAposPagamento } from '@/utils/billingCharges'
 
 /**
@@ -81,7 +81,7 @@ export async function confirmarPagamentoFatura(
     .select(`
       *,
       clientes (
-        id, razao_social, nome_fantasia, cnpj, whatsapp, valor_mensalidade, dia_vencimento
+        id, razao_social, nome_fantasia, cnpj, whatsapp, whatsapp_cobranca, valor_mensalidade, dia_vencimento
       )
     `)
     .eq('id', faturaId)
@@ -134,8 +134,9 @@ export async function confirmarPagamentoFatura(
 
   const bannerHeader = `🏢 *PARATECH TECNOLOGIA & SISTEMAS*\n\n`
 
-  // 4. Notifica o CLIENTE via WhatsApp (agradecimento & liberação)
-  if (options?.notificarCliente !== false && cliente?.whatsapp) {
+  // 4. Notifica o CLIENTE via WhatsApp (agradecimento & liberação) - suporta múltiplos números
+  const telefonesCliente = extrairTelefonesWhatsapp(cliente?.whatsapp_cobranca || cliente?.whatsapp)
+  if (options?.notificarCliente !== false && telefonesCliente.length > 0) {
     try {
       const msgCliente = `${bannerHeader}✅ *PAGAMENTO CONFIRMADO!*
 
@@ -145,17 +146,23 @@ Confirmamos com sucesso o recebimento da sua fatura *[${faturaCodigo}]* no valor
 ✨ *Seu sistema está 100% liberado e em dia.*
 Muito obrigado pela pontualidade, confiança e por essa valiosa parceria com a Paratech Sistemas! 🤝🚀`
 
-      await sendWhatsAppMessage({
-        to: cliente.whatsapp,
-        message: msgCliente,
-        remetente: 'Sistema (Confirmação Pix)',
-        destinatarioTipo: 'cliente',
-        destinatarioNome: clienteNome,
-        motivo: 'Confirmação de Pagamento & Agradecimento',
-        modelo: '4. Ao Pagar (Cliente)',
-        clienteId: cliente?.id,
-        faturaId: fatura.id,
-      })
+      for (const tel of telefonesCliente) {
+        try {
+          await sendWhatsAppMessage({
+            to: tel,
+            message: msgCliente,
+            remetente: 'Sistema (Confirmação Pix)',
+            destinatarioTipo: 'cliente',
+            destinatarioNome: clienteNome,
+            motivo: 'Confirmação de Pagamento & Agradecimento',
+            modelo: '4. Ao Pagar (Cliente)',
+            clienteId: cliente?.id,
+            faturaId: fatura.id,
+          })
+        } catch (errDisparo: any) {
+          console.error(`Erro ao enviar confirmação para ${tel}:`, errDisparo.message)
+        }
+      }
     } catch (e: any) {
       console.error('Erro ao notificar cliente via WhatsApp:', e.message)
     }

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
-import { sendWhatsAppMessage } from '@/utils/whatsapp'
+import { sendWhatsAppMessage, extrairTelefonesWhatsapp } from '@/utils/whatsapp'
 import { calculateEffectiveDates } from '@/utils/businessDays'
 import { gerarFaturasMensalistas, executarRotinaPrimeiroDiaDoMes } from '@/utils/billing'
 import { calcularEncargosFatura } from '@/utils/billingCharges'
@@ -74,8 +74,8 @@ export async function GET(request: Request) {
       const cliente: any = Array.isArray(fatura.clientes) ? fatura.clientes[0] : fatura.clientes
       if (!cliente || cliente.is_ativo === false) continue
 
-      const telefone = (cliente.whatsapp_cobranca || cliente.whatsapp || '').replace(/\D/g, '')
-      if (telefone.length < 10) continue
+      const telefonesCliente = extrairTelefonesWhatsapp(cliente.whatsapp_cobranca || cliente.whatsapp)
+      if (telefonesCliente.length === 0) continue
 
       // Prioridade da Carência / Tolerância: Cliente individual > Global
       const diasCarenciaEfetivos = (cliente.dias_carencia !== null && cliente.dias_carencia !== undefined)
@@ -152,35 +152,38 @@ export async function GET(request: Request) {
           dataBloqueioFormatada
         })
 
-        try {
-          await sendWhatsAppMessage({
-            to: telefone,
-            message: msgObj.mensagem,
-            remetente: 'Robô Automático (Cron)',
-            destinatarioTipo: 'cliente',
-            destinatarioNome: msgObj.clienteNome || msgObj.empresaNome,
-            motivo: msgObj.motivo,
-            modelo: msgObj.modelo,
-            clienteId: cliente.id,
-            faturaId: fatura.id,
-          })
+        // Dispara para cada um dos WhatsApps cadastrados no cliente
+        for (const telDestino of telefonesCliente) {
+          try {
+            await sendWhatsAppMessage({
+              to: telDestino,
+              message: msgObj.mensagem,
+              remetente: 'Robô Automático (Cron)',
+              destinatarioTipo: 'cliente',
+              destinatarioNome: msgObj.clienteNome || msgObj.empresaNome,
+              motivo: msgObj.motivo,
+              modelo: msgObj.modelo,
+              clienteId: cliente.id,
+              faturaId: fatura.id,
+            })
 
-          disparosRealizados.push({
-            cliente: cliente.nome_fantasia || cliente.razao_social,
-            whatsapp: cliente.whatsapp,
-            motivo: msgObj.motivo,
-            regra: diferencaDias,
-            status: 'enviado'
-          })
-        } catch (err: any) {
-          disparosRealizados.push({
-            cliente: cliente.nome_fantasia || cliente.razao_social,
-            whatsapp: cliente.whatsapp,
-            motivo: msgObj.motivo,
-            regra: diferencaDias,
-            status: 'falha',
-            erro: err.message
-          })
+            disparosRealizados.push({
+              cliente: cliente.nome_fantasia || cliente.razao_social,
+              whatsapp: telDestino,
+              motivo: msgObj.motivo,
+              regra: diferencaDias,
+              status: 'enviado'
+            })
+          } catch (err: any) {
+            disparosRealizados.push({
+              cliente: cliente.nome_fantasia || cliente.razao_social,
+              whatsapp: telDestino,
+              motivo: msgObj.motivo,
+              regra: diferencaDias,
+              status: 'falha',
+              erro: err.message
+            })
+          }
         }
       }
     }

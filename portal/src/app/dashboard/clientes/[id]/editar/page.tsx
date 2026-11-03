@@ -34,6 +34,7 @@ import { formatarDuasCasasDecimais, parseValorDecimal } from '@/utils/money'
 import { sanitizarNomeArquivoStorage } from '@/utils/storageUtils'
 import { SistemaAutocompleteInput, ERP_PADRAO } from '@/components/SistemaAutocompleteInput'
 import { FormAccordionCard } from '@/components/ui/FormAccordionCard'
+import MultiWhatsAppInput from '@/components/MultiWhatsAppInput'
 
 export default function EditarClientePage() {
   const router = useRouter()
@@ -136,6 +137,7 @@ export default function EditarClientePage() {
     valor_mensalidade: '',
     custo: '',
     dia_vencimento: '10',
+    periodo_cobranca: 'mensal',
     multa_atraso_percentual: '',
     juros_mora_mensal_percentual: '',
     dias_carencia: '',
@@ -222,6 +224,7 @@ export default function EditarClientePage() {
           valor_mensalidade: formatarDuasCasasDecimais(d.valor_mensalidade),
           custo: formatarDuasCasasDecimais(d.custo),
           dia_vencimento: d.dia_vencimento ? String(d.dia_vencimento) : '10',
+          periodo_cobranca: d.periodo_cobranca || 'mensal',
           multa_atraso_percentual: formatarDuasCasasDecimais(d.multa_atraso_percentual),
           juros_mora_mensal_percentual: formatarDuasCasasDecimais(d.juros_mora_mensal_percentual),
           dias_carencia: d.dias_carencia !== undefined && d.dias_carencia !== null ? String(d.dias_carencia) : '',
@@ -609,6 +612,7 @@ export default function EditarClientePage() {
     const payload = {
       ...clienteData,
       whatsapp_cobranca: formData.whatsapp_cobranca?.trim() || null,
+      periodo_cobranca: formData.periodo_cobranca || 'mensal',
       is_ativo: formData.is_ativo,
       is_associacao: Boolean(formData.is_associacao),
       dia_vencimento: parseInt(String(formData.dia_vencimento)) || 10,
@@ -1156,14 +1160,18 @@ export default function EditarClientePage() {
           <FormAccordionCard
             id="cobranca"
             title="Faturamento & Parâmetros de Cobrança"
-            subtitle="Mensalidade, custo operacional, dia de vencimento, WhatsApp de cobrança e regras individuais de juros"
+            subtitle="Mensalidade, período (mensal/quinzenal/semanal), dia de vencimento, múltiplos WhatsApps de cobrança e regras individuais"
             icon={<DollarSign size={22} />}
             iconBgColor="bg-teal-50 text-teal-600 border border-teal-100"
             isOpen={openCards.cobranca}
             onToggle={() => toggleCard('cobranca')}
             badge={
               <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200">
-                {formData.valor_mensalidade ? `R$ ${formData.valor_mensalidade}/mês` : 'R$ 0,00'} • Dia {formData.dia_vencimento || 10}
+                {formData.valor_mensalidade ? `R$ ${formData.valor_mensalidade}` : 'R$ 0,00'} • {
+                  formData.periodo_cobranca === 'quinzenal' ? 'Quinzenal (2x)' :
+                  formData.periodo_cobranca === 'semanal' ? 'Semanal (4x)' :
+                  'Mensal (1x)'
+                } • Dia {formData.dia_vencimento || 10}
               </span>
             }
           >
@@ -1184,7 +1192,7 @@ export default function EditarClientePage() {
                       }
                     }}
                   />
-                  <p className="text-[11px] text-slate-500 mt-1">Valor cobrado mensalmente do cliente</p>
+                  <p className="text-[11px] text-slate-500 mt-1">Valor base cobrado no mês do cliente</p>
                 </div>
 
                 <div>
@@ -1213,7 +1221,7 @@ export default function EditarClientePage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Dia de Vencimento da Fatura</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Dia Base de Vencimento</label>
                   <input 
                     type="number" 
                     min="1" 
@@ -1223,22 +1231,52 @@ export default function EditarClientePage() {
                     value={formData.dia_vencimento} 
                     onChange={e => setFormData({...formData, dia_vencimento: e.target.value})} 
                   />
-                  <p className="text-[11px] text-slate-500 mt-1">Gera fatura automática todo dia 01</p>
+                  <p className="text-[11px] text-slate-500 mt-1">Dia do mês ou data base do ciclo</p>
                 </div>
 
+                {/* Período de Pagamento da Mensalidade (Mensal / Quinzenal / Semanal) */}
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
-                    <span>WhatsApp de Cobrança / Faturas</span>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">
+                    Período de Pagamento
                   </label>
-                  <input 
-                    type="text" 
-                    placeholder="5511999999999" 
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white font-medium text-slate-800"
-                    value={formData.whatsapp_cobranca} 
-                    onChange={e => setFormData({...formData, whatsapp_cobranca: e.target.value})} 
-                  />
-                  <p className="text-[11px] text-slate-500 mt-1">Recebe links de faturas Pix (se vazio, usa o WhatsApp geral)</p>
+                  <select
+                    value={formData.periodo_cobranca || 'mensal'}
+                    onChange={e => setFormData({ ...formData, periodo_cobranca: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-slate-50/50 font-bold text-slate-800 text-sm"
+                  >
+                    <option value="mensal">🗓️ Mensal (1 fatura integral)</option>
+                    <option value="quinzenal">🌓 Quinzenal (2 faturas de 50%)</option>
+                    <option value="semanal">📅 Semanal (4 faturas de 25%)</option>
+                  </select>
+                  <p className="text-[11px] text-teal-700 font-medium mt-1">
+                    {formData.periodo_cobranca === 'quinzenal'
+                      ? `2 faturas de R$ ${formatarDuasCasasDecimais(parseValorDecimal(formData.valor_mensalidade) / 2)}`
+                      : formData.periodo_cobranca === 'semanal'
+                      ? `4 faturas de R$ ${formatarDuasCasasDecimais(parseValorDecimal(formData.valor_mensalidade) / 4)}`
+                      : `1 fatura de R$ ${formData.valor_mensalidade || '0,00'}`}
+                  </p>
                 </div>
+              </div>
+
+              {/* Múltiplos Números de WhatsApp de Cobrança / Faturas */}
+              <div className="p-4 bg-teal-50/40 border border-teal-200/80 rounded-2xl space-y-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <label className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                    <span>WhatsApp(s) de Cobrança & Faturas</span>
+                    <span className="text-[10px] uppercase font-bold bg-teal-100 text-teal-800 px-2 py-0.5 rounded-md border border-teal-200">
+                      Múltiplos Destinatários
+                    </span>
+                  </label>
+                  <span className="text-[11px] text-slate-500">
+                    Todas as cobranças e Pix serão enviados para todos os números listados abaixo
+                  </span>
+                </div>
+
+                <MultiWhatsAppInput
+                  value={formData.whatsapp_cobranca}
+                  onChange={val => setFormData({ ...formData, whatsapp_cobranca: val })}
+                  placeholder="Digite o número (DDD) e clique em Adicionar ou pressione Enter"
+                />
               </div>
 
               {/* Seção Destacada: Parâmetros Individuais de Cobrança e Juros */}

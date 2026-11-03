@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
-import { sendWhatsAppMessage } from '@/utils/whatsapp'
+import { sendWhatsAppMessage, extrairTelefonesWhatsapp } from '@/utils/whatsapp'
 import { calculateEffectiveDates } from '@/utils/businessDays'
 import { calcularEncargosFatura } from '@/utils/billingCharges'
 import { obterOuGerarPixFatura } from '@/utils/pix'
@@ -240,12 +240,13 @@ export async function POST(
 
     const dados = await prepararContextoCliente(id, situacaoParam, faturaIdParam)
 
-    const telefoneFinal = (body.telefone || dados.telefone || '').replace(/\D/g, '')
+    // Suporta múltiplos telefones cadastrados no cliente ou passados no body
+    const telefonesAlvo = extrairTelefonesWhatsapp(body.telefone || dados.telefone)
 
-    if (!telefoneFinal || telefoneFinal.length < 10) {
+    if (telefonesAlvo.length === 0) {
       return NextResponse.json({
         success: false,
-        error: 'Cliente não possui um número de WhatsApp cadastrado. Preencha o campo WhatsApp no card de Contatos & Responsável antes de enviar.'
+        error: 'Cliente não possui um número de WhatsApp cadastrado. Preencha o campo WhatsApp no cadastro antes de enviar.'
       }, { status: 400 })
     }
 
@@ -258,24 +259,43 @@ export async function POST(
       ? dados.linkQrCode
       : undefined
 
-    // Envia a mensagem via integração ativa de WhatsApp (com imagem do QR Code se disponível)
-    await sendWhatsAppMessage({
-      to: telefoneFinal,
-      message: mensagemFinal,
-      mediaUrl,
-      remetente: 'Administrador (Manual - Enviar Agora)',
-      destinatarioTipo: 'cliente',
-      destinatarioNome: body.destinatarioNome || dados.clienteNome || dados.empresaNome,
-      motivo: dados.motivo,
-      modelo: dados.modelo,
-      clienteId: id,
-      faturaId: dados.faturaId
-    })
+    // Envia a mensagem para todos os números de WhatsApp cadastrados para este cliente
+    const resultadosEnvios = []
+    for (const telefoneFinal of telefonesAlvo) {
+      try {
+        await sendWhatsAppMessage({
+          to: telefoneFinal,
+          message: mensagemFinal,
+          mediaUrl,
+          remetente: 'Administrador (Manual - Enviar Agora)',
+          destinatarioTipo: 'cliente',
+          destinatarioNome: body.destinatarioNome || dados.clienteNome || dados.empresaNome,
+          motivo: dados.motivo,
+          modelo: dados.modelo,
+          clienteId: id,
+          faturaId: dados.faturaId
+        })
+        resultadosEnvios.push({ telefone: telefoneFinal, sucesso: true })
+      } catch (errDisparo: any) {
+        console.error(`Falha ao disparar para ${telefoneFinal}:`, errDisparo.message)
+        resultadosEnvios.push({ telefone: telefoneFinal, sucesso: false, erro: errDisparo.message })
+      }
+    }
+
+    const algumSucesso = resultadosEnvios.some(r => r.sucesso)
+    if (!algumSucesso && resultadosEnvios.length > 0) {
+      return NextResponse.json({
+        success: false,
+        error: `Falha no envio para ${telefonesAlvo.join(', ')}: ${resultadosEnvios[0].erro}`
+      }, { status: 500 })
+    }
 
     return NextResponse.json({
       success: true,
       mensagemEnviada: mensagemFinal,
-      telefone: telefoneFinal,
+      telefones: telefonesAlvo,
+      totalEnviados: resultadosEnvios.filter(r => r.sucesso).length,
+      telefone: telefonesAlvo.join(', '),
       condicaoReal: dados.condicaoReal,
       situacaoAtiva: dados.situacaoAtiva,
       tituloCondicao: dados.tituloCondicao,
