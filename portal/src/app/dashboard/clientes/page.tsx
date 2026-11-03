@@ -124,8 +124,7 @@ export default function ClientesPage() {
       const { error } = await supabase
         .from('clientes')
         .update({
-          is_ativo: toggleAtivoModal.novoEstado,
-          updated_at: new Date().toISOString()
+          is_ativo: toggleAtivoModal.novoEstado
         })
         .eq('id', toggleAtivoModal.id)
 
