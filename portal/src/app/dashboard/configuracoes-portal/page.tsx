@@ -23,6 +23,7 @@ export default function ConfiguracoesPortalPage() {
     auto_excluir_divergentes: false,
     apenas_xmls_autorizados: false,
     auto_corrigir_assinar_xmls: false,
+    bloquear_recepcao_xml_se_inadimplente: false,
     analise_ia_xmls_ativa: true,
     exibir_certificados_contabilidade: false,
     exibir_certificados_cliente: false,
@@ -55,7 +56,8 @@ export default function ConfiguracoesPortalPage() {
     global_dias_carencia: 3,
     limite_desbloqueios_confianca: 1,
     horas_desbloqueio_confianca: 24,
-    intervalo_horas_entre_desbloqueios: 24
+    intervalo_horas_entre_desbloqueios: 24,
+    global_bloquear_recepcao_xml_se_inadimplente: false
   })
 
   // Controle de Alternância de Interface (Clean vs Clássico)
@@ -88,6 +90,7 @@ export default function ConfiguracoesPortalPage() {
         limite_desbloqueios_confianca: Number(regrasFinanceiras.limite_desbloqueios_confianca),
         horas_desbloqueio_confianca: Number(regrasFinanceiras.horas_desbloqueio_confianca),
         intervalo_horas_entre_desbloqueios: Number(regrasFinanceiras.intervalo_horas_entre_desbloqueios),
+        global_bloquear_recepcao_xml_se_inadimplente: Boolean(regrasFinanceiras.global_bloquear_recepcao_xml_se_inadimplente),
         updated_at: new Date().toISOString()
       })
 
@@ -192,7 +195,7 @@ export default function ConfiguracoesPortalPage() {
         setSelectedCliente(roleData.cliente_id)
         const { data: cli } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, analise_ia_xmls_ativa, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado, modo_processamento_xml)')
+          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, bloquear_recepcao_xml_se_inadimplente, analise_ia_xmls_ativa, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado, modo_processamento_xml)')
           .eq('id', roleData.cliente_id)
           .single()
         if (cli) {
@@ -203,6 +206,7 @@ export default function ConfiguracoesPortalPage() {
             auto_excluir_divergentes: Boolean(config?.auto_excluir_divergentes),
             apenas_xmls_autorizados: Boolean(config?.apenas_xmls_autorizados),
             auto_corrigir_assinar_xmls: Boolean(config?.auto_corrigir_assinar_xmls),
+            bloquear_recepcao_xml_se_inadimplente: Boolean(config?.bloquear_recepcao_xml_se_inadimplente),
             analise_ia_xmls_ativa: config?.analise_ia_xmls_ativa !== false,
             exibir_certificados_contabilidade: Boolean(config?.exibir_certificados_contabilidade),
             exibir_certificados_cliente: Boolean(config?.exibir_certificados_cliente),
@@ -213,7 +217,7 @@ export default function ConfiguracoesPortalPage() {
       } else if (role === 'contabilidade' && roleData?.contabilidade_id) {
         const { data: clis } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado, modo_processamento_xml)')
+          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, bloquear_recepcao_xml_se_inadimplente, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado, modo_processamento_xml)')
           .eq('contabilidade_id', roleData.contabilidade_id)
           .order('razao_social')
         if (clis && clis.length > 0) {
@@ -224,7 +228,7 @@ export default function ConfiguracoesPortalPage() {
         // Admin
         const { data: clis } = await supabase
           .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado, modo_processamento_xml)')
+          .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, bloquear_recepcao_xml_se_inadimplente, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado, modo_processamento_xml)')
           .order('razao_social')
         if (clis && clis.length > 0) {
           setClientes(clis)
@@ -274,7 +278,8 @@ export default function ConfiguracoesPortalPage() {
             global_dias_carencia: Number(geralData.global_dias_carencia ?? 3),
             limite_desbloqueios_confianca: Number(geralData.limite_desbloqueios_confianca ?? 1),
             horas_desbloqueio_confianca: Number(geralData.horas_desbloqueio_confianca ?? 24),
-            intervalo_horas_entre_desbloqueios: Number(geralData.intervalo_horas_entre_desbloqueios ?? 24)
+            intervalo_horas_entre_desbloqueios: Number(geralData.intervalo_horas_entre_desbloqueios ?? 24),
+            global_bloquear_recepcao_xml_se_inadimplente: Boolean(geralData.global_bloquear_recepcao_xml_se_inadimplente)
           })
         }
       }
@@ -310,7 +315,7 @@ export default function ConfiguracoesPortalPage() {
     async function loadConfig() {
       const { data } = await supabase
         .from('configuracoes_hub')
-        .select('auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, analise_ia_xmls_ativa, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado, modo_processamento_xml')
+        .select('auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, bloquear_recepcao_xml_se_inadimplente, analise_ia_xmls_ativa, exibir_certificados_contabilidade, exibir_certificados_cliente, avisar_whatsapp_certificado, exibir_faixa_topo_certificado, modo_processamento_xml')
         .eq('cliente_id', selectedCliente)
         .single()
 
@@ -320,6 +325,7 @@ export default function ConfiguracoesPortalPage() {
           auto_excluir_divergentes: Boolean(data.auto_excluir_divergentes),
           apenas_xmls_autorizados: Boolean(data.apenas_xmls_autorizados),
           auto_corrigir_assinar_xmls: Boolean(data.auto_corrigir_assinar_xmls),
+          bloquear_recepcao_xml_se_inadimplente: Boolean(data.bloquear_recepcao_xml_se_inadimplente),
           analise_ia_xmls_ativa: data.analise_ia_xmls_ativa !== false,
           exibir_certificados_contabilidade: Boolean(data.exibir_certificados_contabilidade),
           exibir_certificados_cliente: Boolean(data.exibir_certificados_cliente),
@@ -332,6 +338,7 @@ export default function ConfiguracoesPortalPage() {
           auto_excluir_divergentes: false,
           apenas_xmls_autorizados: false,
           auto_corrigir_assinar_xmls: false,
+          bloquear_recepcao_xml_se_inadimplente: false,
           analise_ia_xmls_ativa: true,
           exibir_certificados_contabilidade: false,
           exibir_certificados_cliente: false,
@@ -357,6 +364,7 @@ export default function ConfiguracoesPortalPage() {
       auto_excluir_divergentes: formData.auto_excluir_divergentes,
       apenas_xmls_autorizados: formData.apenas_xmls_autorizados,
       auto_corrigir_assinar_xmls: formData.auto_corrigir_assinar_xmls,
+      bloquear_recepcao_xml_se_inadimplente: Boolean(formData.bloquear_recepcao_xml_se_inadimplente),
       analise_ia_xmls_ativa: formData.analise_ia_xmls_ativa,
       dia_vencimento: 10,
       valor_mensalidade: 0.00,
@@ -702,6 +710,35 @@ export default function ConfiguracoesPortalPage() {
                 </div>
               </div>
             </div>
+
+            {/* Bloco 3: Diretriz Global de Recepção Fiscal & Bloqueio */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4 md:col-span-2">
+              <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+                <span className="p-2 bg-rose-50 text-rose-600 rounded-xl font-bold text-xs">03</span>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Diretriz Global de Recepção Fiscal & Bloqueio</h3>
+                  <p className="text-xs text-slate-500">Comportamento padrão para empresas inadimplentes sem configuração individual específica</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3.5 p-4 bg-slate-50 rounded-xl border border-slate-200 hover:border-slate-300 transition">
+                <input 
+                  type="checkbox" 
+                  id="global_bloquear_recepcao_xml_se_inadimplente"
+                  checked={regrasFinanceiras.global_bloquear_recepcao_xml_se_inadimplente}
+                  onChange={e => setRegrasFinanceiras({ ...regrasFinanceiras, global_bloquear_recepcao_xml_se_inadimplente: e.target.checked })}
+                  className="mt-1 h-5 w-5 rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                />
+                <label htmlFor="global_bloquear_recepcao_xml_se_inadimplente" className="cursor-pointer select-none flex-1">
+                  <span className="font-bold text-slate-900 block text-sm mb-1">
+                    Bloquear globalmente a recepção de XMLs para clientes bloqueados por inadimplência
+                  </span>
+                  <span className="text-xs text-slate-600 leading-relaxed block">
+                    Quando ativo, se qualquer cliente estiver com mensalidade vencida além dos dias de tolerância, o Hub Desktop e sistemas da Paratech receberão recusa HTTP 403 no envio de notas fiscais até que a fatura seja quitada via Pix. As empresas configuradas individualmente na aba Geral mantêm sua preferência própria.
+                  </span>
+                </label>
+              </div>
+            </div>
           </div>
 
           <div className="pt-4 flex justify-end">
@@ -976,6 +1013,37 @@ export default function ConfiguracoesPortalPage() {
                 </span>
                 <span className="inline-flex items-center gap-1.5 mt-3 text-xs font-semibold px-2.5 py-1 rounded-full bg-purple-100 text-purple-800">
                   <CheckCircle2 size={14} /> Ativo para: Super Admin, Contabilidade e Empresa Cliente
+                </span>
+              </label>
+            </div>
+
+            {/* Suspender Recepção de XMLs em caso de Inadimplência / Bloqueio */}
+            <div className="flex items-start gap-3.5 p-5 bg-rose-50/60 rounded-2xl border border-rose-200 hover:border-rose-300 transition">
+              <input 
+                type="checkbox" 
+                id="bloquear_recepcao_xml_se_inadimplente"
+                checked={formData.bloquear_recepcao_xml_se_inadimplente}
+                onChange={e => setFormData({ ...formData, bloquear_recepcao_xml_se_inadimplente: e.target.checked })}
+                className="mt-1 h-5 w-5 rounded border-rose-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+              />
+              <label htmlFor="bloquear_recepcao_xml_se_inadimplente" className="cursor-pointer select-none">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-bold text-slate-900 block text-base">
+                    Suspender Recepção de XMLs quando o Cliente estiver Bloqueado por Inadimplência
+                  </span>
+                  <span className="text-[10px] uppercase font-bold tracking-wider bg-rose-100 text-rose-800 px-2 py-0.5 rounded-md border border-rose-200 flex items-center gap-1">
+                    <ShieldAlert size={12} /> Trava Financeira
+                  </span>
+                </div>
+                <span className="text-slate-600 text-sm leading-relaxed block">
+                  Determina se o Hub Paratech Desktop e os sistemas integrados (MEI Simples, TechSlim, Gastro, Tech Pro) devem ter a transmissão de XMLs fiscais interrompida caso a empresa possua faturas em aberto vencidas além dos dias de carência.
+                </span>
+                <span className="text-slate-600 text-sm leading-relaxed block mt-2">
+                  • <strong>Se marcado:</strong> Novos XMLs emitidos são <strong>recusados com erro 403 (Inadimplência)</strong> e não entram no portal até que o cliente pague a mensalidade via Pix ou obtenha liberação em confiança.<br />
+                  • <strong>Se desmarcado (Padrão):</strong> O portal <strong>continua acolhendo os XMLs fiscais</strong> normalmente para a contabilidade, preservando os registros contábeis mesmo com o sistema do cliente travado na ponta.
+                </span>
+                <span className="inline-flex items-center gap-1.5 mt-3 text-xs font-semibold px-2.5 py-1 rounded-full bg-rose-100/80 text-rose-800">
+                  <CheckCircle2 size={14} /> Preferência individual desta empresa (Sobrepõe diretriz padrão global)
                 </span>
               </label>
             </div>

@@ -90,6 +90,7 @@ export default function SistemaGestaoTemplate({ config }: { config: SistemaConfi
   const [editMensagemBloqueio, setEditMensagemBloqueio] = useState('')
   const [editBannerUrl, setEditBannerUrl] = useState('')
   const [editSupportWhatsapp, setEditSupportWhatsapp] = useState('')
+  const [editBloquearXmlInadimplente, setEditBloquearXmlInadimplente] = useState(false)
   const [editFeatures, setEditFeatures] = useState<Record<string, boolean>>({})
   const [salvando, setSalvando] = useState(false)
   const [now, setNow] = useState<number>(() => Date.now())
@@ -113,7 +114,7 @@ export default function SistemaGestaoTemplate({ config }: { config: SistemaConfi
           dia_vencimento, valor_mensalidade, dias_carencia, hub_token, 
           nome_sistema_utilizado,
           configuracoes_hub (
-            offline_secret, ultima_sincronizacao, dias_tolerancia_bloqueio, mensagem_bloqueio, banner_url, support_whatsapp,
+            offline_secret, ultima_sincronizacao, dias_tolerancia_bloqueio, mensagem_bloqueio, banner_url, support_whatsapp, bloquear_recepcao_xml_se_inadimplente,
             feature_sugestao_tributaria, feature_nuvem_produtos, feature_loja_virtual, feature_nfce, feature_nfe, feature_contas_pagar, feature_estoque_avancado
           )
         `)
@@ -277,6 +278,7 @@ export default function SistemaGestaoTemplate({ config }: { config: SistemaConfi
     setEditMensagemBloqueio(cliente.configuracoes_hub?.mensagem_bloqueio || `SISTEMA ${config.nome.toUpperCase()} BLOQUEADO. Por favor, regularize sua mensalidade.`)
     setEditBannerUrl(cliente.configuracoes_hub?.banner_url || '')
     setEditSupportWhatsapp(cliente.configuracoes_hub?.support_whatsapp || '')
+    setEditBloquearXmlInadimplente(Boolean(cliente.configuracoes_hub?.bloquear_recepcao_xml_se_inadimplente))
     
     // Inicializa features
     const feats: Record<string, boolean> = {}
@@ -317,7 +319,8 @@ export default function SistemaGestaoTemplate({ config }: { config: SistemaConfi
         support_whatsapp: editSupportWhatsapp.trim(),
         dias_tolerancia_bloqueio: editDiasCarencia,
         dia_vencimento: editDiaVencimento,
-        valor_mensalidade: parseFloat(editValorMensalidade.replace(',', '.'))
+        valor_mensalidade: parseFloat(editValorMensalidade.replace(',', '.')),
+        bloquear_recepcao_xml_se_inadimplente: editBloquearXmlInadimplente
       }
 
       // Adiciona toggles de features
@@ -945,6 +948,25 @@ export default function SistemaGestaoTemplate({ config }: { config: SistemaConfi
                       className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl font-bold"
                     />
                   </div>
+                </div>
+
+                <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <label className="flex items-start gap-2.5 p-2.5 bg-rose-50/60 dark:bg-rose-950/20 rounded-xl border border-rose-200/80 dark:border-rose-900/40 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editBloquearXmlInadimplente}
+                      onChange={e => setEditBloquearXmlInadimplente(e.target.checked)}
+                      className="mt-0.5 rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
+                    />
+                    <div>
+                      <span className="font-bold text-slate-800 dark:text-slate-200 block text-xs">
+                        Suspender Recepção de XMLs em caso de Inadimplência
+                      </span>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block leading-tight mt-0.5">
+                        Recusa o envio de novos XMLs pelo Hub e pelo sistema caso haja mensalidade vencida além da tolerância.
+                      </span>
+                    </div>
+                  </label>
                 </div>
               </div>
 

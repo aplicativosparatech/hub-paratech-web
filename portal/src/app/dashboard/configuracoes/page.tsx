@@ -71,7 +71,8 @@ export default function ConfiguracoesPage() {
     mensagem_bloqueio: 'SISTEMA BLOQUEADO. Por favor, regularize seu pagamento.',
     pastas_vendas: '',
     pastas_compras: '',
-    exes_monitorados: ''
+    exes_monitorados: '',
+    bloquear_recepcao_xml_se_inadimplente: false
   })
 
   async function loadClientes() {
@@ -107,14 +108,16 @@ export default function ConfiguracoesPage() {
           mensagem_bloqueio: data.mensagem_bloqueio || '',
           pastas_vendas: Array.isArray(data.pastas_vendas) ? data.pastas_vendas.map((p: string) => p.replace(/\\\\+/g, '\\')).join('\n') : '',
           pastas_compras: Array.isArray(data.pastas_compras) ? data.pastas_compras.map((p: string) => p.replace(/\\\\+/g, '\\')).join('\n') : '',
-          exes_monitorados: Array.isArray(data.exes_monitorados) ? data.exes_monitorados.join('\n') : ''
+          exes_monitorados: Array.isArray(data.exes_monitorados) ? data.exes_monitorados.join('\n') : '',
+          bloquear_recepcao_xml_se_inadimplente: Boolean(data.bloquear_recepcao_xml_se_inadimplente)
         })
       } else {
         // Reseta se nao tiver
         setFormData({
           dia_vencimento: 10, valor_mensalidade: 150.00, dias_aviso_previo: 7, dias_tolerancia_bloqueio: 3,
           mensagem_bloqueio: 'SISTEMA BLOQUEADO. Por favor, regularize seu pagamento.',
-          pastas_vendas: 'C:\\Sistemas\\Vendas\\XML', pastas_compras: '', exes_monitorados: 'vendas.exe'
+          pastas_vendas: 'C:\\Sistemas\\Vendas\\XML', pastas_compras: '', exes_monitorados: 'vendas.exe',
+          bloquear_recepcao_xml_se_inadimplente: false
         })
       }
       setLoading(false)
@@ -138,6 +141,7 @@ export default function ConfiguracoesPage() {
       pastas_vendas: formData.pastas_vendas.split('\n').filter(Boolean).map(s => s.trim().replace(/\\\\+/g, '\\')),
       pastas_compras: formData.pastas_compras.split('\n').filter(Boolean).map(s => s.trim().replace(/\\\\+/g, '\\')),
       exes_monitorados: formData.exes_monitorados.split('\n').filter(Boolean).map(s => s.trim()),
+      bloquear_recepcao_xml_se_inadimplente: Boolean(formData.bloquear_recepcao_xml_se_inadimplente),
       updated_at: new Date().toISOString()
     }
 
@@ -223,6 +227,25 @@ export default function ConfiguracoesPage() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">Mensagem de Bloqueio na Tela</label>
                   <textarea rows={3} className="w-full px-4 py-2 rounded-lg border border-slate-200"
                     value={formData.mensagem_bloqueio} onChange={e => setFormData({...formData, mensagem_bloqueio: e.target.value})} />
+                </div>
+                <div className="md:col-span-2 pt-2 border-t border-slate-100">
+                  <div className="flex items-start gap-3 p-3.5 bg-rose-50 rounded-xl border border-rose-200">
+                    <input 
+                      type="checkbox" 
+                      id="bloquear_recepcao_xml_se_inadimplente"
+                      checked={Boolean(formData.bloquear_recepcao_xml_se_inadimplente)}
+                      onChange={e => setFormData({ ...formData, bloquear_recepcao_xml_se_inadimplente: e.target.checked })}
+                      className="mt-1 h-4 w-4 rounded border-rose-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                    />
+                    <label htmlFor="bloquear_recepcao_xml_se_inadimplente" className="cursor-pointer select-none">
+                      <span className="font-bold text-slate-900 block text-sm">
+                        Suspender Recepção de XMLs em caso de Inadimplência
+                      </span>
+                      <span className="text-xs text-slate-600 leading-relaxed block mt-0.5">
+                        Se marcado, o Hub Desktop e sistemas da Paratech receberão recusa 403 no envio de novos XMLs caso o cliente esteja com fatura vencida além da carência.
+                      </span>
+                    </label>
+                  </div>
                 </div>
               </div>
 

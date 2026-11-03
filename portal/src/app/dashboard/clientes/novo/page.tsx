@@ -137,6 +137,7 @@ export default function NovoClientePage() {
     login_email: '',
     login_senha: '',
     logo_url: '',
+    bloquear_recepcao_xml_se_inadimplente: false,
     plano_auditoria_tributaria: false,
     gemini_api_key: '',
     gemini_modelo: 'gemini-1.5-flash'
@@ -610,13 +611,14 @@ export default function NovoClientePage() {
       return
     }
 
-    // 1.1 Sincronizar configuracoes_hub com vencimento, valor e status da IA
+    // 1.1 Sincronizar configuracoes_hub com vencimento, valor, status da IA e trava de inadimplência
     if (clienteResult?.id) {
       await supabase.from('configuracoes_hub').upsert({
         cliente_id: clienteResult.id,
         dia_vencimento: payload.dia_vencimento,
         valor_mensalidade: payload.valor_mensalidade,
-        analise_ia_xmls_ativa: Boolean(formData.plano_auditoria_tributaria)
+        analise_ia_xmls_ativa: Boolean(formData.plano_auditoria_tributaria),
+        bloquear_recepcao_xml_se_inadimplente: Boolean(formData.bloquear_recepcao_xml_se_inadimplente)
       })
 
       // Sincronizar token do Gemini nas integrações se informado
@@ -1332,6 +1334,26 @@ export default function NovoClientePage() {
                       <span className="absolute right-3.5 top-2.5 text-xs text-slate-400 font-bold">dias</span>
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1">Deixe em branco para usar carência global (3 dias)</p>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-200/80">
+                  <div className="flex items-start gap-3 p-3.5 bg-rose-50/50 rounded-xl border border-rose-200">
+                    <input 
+                      type="checkbox" 
+                      id="bloquear_recepcao_xml_se_inadimplente"
+                      checked={Boolean(formData.bloquear_recepcao_xml_se_inadimplente)}
+                      onChange={e => setFormData({ ...formData, bloquear_recepcao_xml_se_inadimplente: e.target.checked })}
+                      className="mt-1 h-4 w-4 rounded border-rose-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                    />
+                    <label htmlFor="bloquear_recepcao_xml_se_inadimplente" className="cursor-pointer select-none">
+                      <span className="font-bold text-slate-900 block text-xs">
+                        Suspender Recepção de XMLs em caso de Inadimplência
+                      </span>
+                      <span className="text-[11px] text-slate-600 leading-relaxed block mt-0.5">
+                        Se marcado, recusa o recebimento de novos XMLs do Hub Desktop e sistemas integrados caso este cliente possua faturas pendentes vencidas além da tolerância.
+                      </span>
+                    </label>
                   </div>
                 </div>
               </div>

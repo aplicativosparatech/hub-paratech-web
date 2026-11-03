@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { consultarSefazProtocolo, gerarProcNFeFinal } from '@/utils/sefazXmlService'
 import { limparDocumento, limparChaveAcesso, validarChaveAcessoNfe } from '@/utils/cnpjAlfanumerico'
+import { calculateEffectiveDates } from '@/utils/businessDays'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -134,14 +135,73 @@ export async function POST(request: Request) {
     // 1. Validar Cliente e configurações
     const { data: cliente } = await supabaseAdmin
       .from('clientes')
-      .select('id, cnpj, razao_social, inscricao_estadual, is_ativo, is_associacao, certificado_url, certificado_senha, data_inicio_monitoramento, numero_inicial_nfe, numero_inicial_nfce, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, modo_processamento_xml)')
+      .select('id, cnpj, razao_social, inscricao_estadual, is_ativo, is_associacao, certificado_url, certificado_senha, data_inicio_monitoramento, numero_inicial_nfe, numero_inicial_nfce, dias_carencia, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, modo_processamento_xml, dias_tolerancia_bloqueio, bloquear_recepcao_xml_se_inadimplente)')
       .eq('hub_token', token)
       .single()
 
     if (!cliente) return NextResponse.json({ error: 'Cliente não encontrado' }, { status: 404 })
-    if (!cliente.is_ativo) return NextResponse.json({ error: 'Cliente bloqueado/inativo' }, { status: 403 })
+    if (!cliente.is_ativo) return NextResponse.json({ error: 'Cliente desativado ou suspenso administrativamente. Recepção de XMLs pausada.' }, { status: 403 })
 
     const hubConfig = Array.isArray(cliente.configuracoes_hub) ? cliente.configuracoes_hub[0] : cliente.configuracoes_hub
+
+    // Verificar se a trava de bloqueio de recepção de XML por inadimplência está ativa (Individual do cliente ou Global do Portal)
+    const { data: configGeral } = await supabaseAdmin
+      .from('configuracoes_portal_geral')
+      .select('global_bloquear_recepcao_xml_se_inadimplente, global_dias_carencia, horas_desbloqueio_confianca')
+      .eq('id', 1)
+      .maybeSingle()
+
+    const bloquearPorInadimplencia = Boolean(
+      hubConfig?.bloquear_recepcao_xml_se_inadimplente || 
+      configGeral?.global_bloquear_recepcao_xml_se_inadimplente
+    )
+
+    if (bloquearPorInadimplencia) {
+      const hoje = new Date().toISOString().split('T')[0]
+      const { data: faturasPendentes } = await supabaseAdmin
+        .from('faturas')
+        .select('id, data_vencimento, status, desbloqueio_confianca_em')
+        .eq('cliente_id', cliente.id)
+        .eq('status', 'pendente')
+        .order('data_vencimento', { ascending: true })
+
+      const faturaVencida = faturasPendentes?.find(f => f.data_vencimento < hoje)
+      if (faturaVencida) {
+        const diasCarenciaEfetivos = (cliente.dias_carencia !== null && cliente.dias_carencia !== undefined)
+          ? Number(cliente.dias_carencia)
+          : (hubConfig?.dias_tolerancia_bloqueio !== null && hubConfig?.dias_tolerancia_bloqueio !== undefined)
+            ? Number(hubConfig.dias_tolerancia_bloqueio)
+            : Number(configGeral?.global_dias_carencia ?? 3)
+
+        const { effectiveBlockDate } = calculateEffectiveDates(faturaVencida.data_vencimento, 'bloqueio_real', diasCarenciaEfetivos)
+        const dataHoje = new Date()
+        dataHoje.setHours(0, 0, 0, 0)
+
+        if (dataHoje.getTime() >= effectiveBlockDate.getTime()) {
+          // Checa se há desbloqueio em confiança ativo e válido
+          let emConfianca = false
+          const faturaConf = faturasPendentes?.find(f => f.desbloqueio_confianca_em)
+          if (faturaConf?.desbloqueio_confianca_em) {
+            const horasPermitidas = Number(configGeral?.horas_desbloqueio_confianca ?? 24)
+            const dataDesbloqueio = new Date(faturaConf.desbloqueio_confianca_em).getTime()
+            const agora = Date.now()
+            const horasPassadas = (agora - dataDesbloqueio) / (1000 * 60 * 60)
+            if (horasPassadas <= horasPermitidas) {
+              emConfianca = true
+            }
+          }
+
+          if (!emConfianca) {
+            return NextResponse.json({
+              error: 'Recepção de XMLs suspensa por inadimplência. Regularize sua mensalidade via Pix no Hub para restabelecer o envio.',
+              bloqueado: true,
+              motivo: 'inadimplencia'
+            }, { status: 403 })
+          }
+        }
+      }
+    }
+
     const processarPeloPortal = hubConfig?.modo_processamento_xml === 'portal'
 
     // 2. Extrair dados do XML
