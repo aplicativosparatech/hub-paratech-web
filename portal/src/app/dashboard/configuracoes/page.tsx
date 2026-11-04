@@ -67,7 +67,9 @@ export default function ConfiguracoesPage() {
     dia_vencimento: 10,
     valor_mensalidade: 150.00,
     dias_aviso_previo: 7,
+    intervalo_aviso_horas: 4,
     dias_tolerancia_bloqueio: 3,
+    mensagem_aviso_previo: 'AVISO DE VENCIMENTO: Sua mensalidade vence em breve. Regularize via Pix no Hub para evitar bloqueio.',
     mensagem_bloqueio: 'SISTEMA BLOQUEADO. Por favor, regularize seu pagamento.',
     pastas_vendas: '',
     pastas_compras: '',
@@ -104,7 +106,9 @@ export default function ConfiguracoesPage() {
           dia_vencimento: data.dia_vencimento || 10,
           valor_mensalidade: data.valor_mensalidade || 150.00,
           dias_aviso_previo: data.dias_aviso_previo || 7,
+          intervalo_aviso_horas: data.intervalo_aviso_horas || 4,
           dias_tolerancia_bloqueio: data.dias_tolerancia_bloqueio || 3,
+          mensagem_aviso_previo: data.mensagem_aviso_previo || 'AVISO DE VENCIMENTO: Sua mensalidade vence em breve. Regularize via Pix no Hub para evitar bloqueio.',
           mensagem_bloqueio: data.mensagem_bloqueio || '',
           pastas_vendas: Array.isArray(data.pastas_vendas) ? data.pastas_vendas.map((p: string) => p.replace(/\\\\+/g, '\\')).join('\n') : '',
           pastas_compras: Array.isArray(data.pastas_compras) ? data.pastas_compras.map((p: string) => p.replace(/\\\\+/g, '\\')).join('\n') : '',
@@ -114,7 +118,8 @@ export default function ConfiguracoesPage() {
       } else {
         // Reseta se nao tiver
         setFormData({
-          dia_vencimento: 10, valor_mensalidade: 150.00, dias_aviso_previo: 7, dias_tolerancia_bloqueio: 3,
+          dia_vencimento: 10, valor_mensalidade: 150.00, dias_aviso_previo: 7, intervalo_aviso_horas: 4, dias_tolerancia_bloqueio: 3,
+          mensagem_aviso_previo: 'AVISO DE VENCIMENTO: Sua mensalidade vence em breve. Regularize via Pix no Hub para evitar bloqueio.',
           mensagem_bloqueio: 'SISTEMA BLOQUEADO. Por favor, regularize seu pagamento.',
           pastas_vendas: 'C:\\Sistemas\\Vendas\\XML', pastas_compras: '', exes_monitorados: 'vendas.exe',
           bloquear_recepcao_xml_se_inadimplente: false
@@ -136,7 +141,9 @@ export default function ConfiguracoesPage() {
       dia_vencimento: formData.dia_vencimento,
       valor_mensalidade: formData.valor_mensalidade,
       dias_aviso_previo: formData.dias_aviso_previo,
+      intervalo_aviso_horas: formData.intervalo_aviso_horas,
       dias_tolerancia_bloqueio: formData.dias_tolerancia_bloqueio,
+      mensagem_aviso_previo: formData.mensagem_aviso_previo,
       mensagem_bloqueio: formData.mensagem_bloqueio,
       pastas_vendas: formData.pastas_vendas.split('\n').filter(Boolean).map(s => s.trim().replace(/\\\\+/g, '\\')),
       pastas_compras: formData.pastas_compras.split('\n').filter(Boolean).map(s => s.trim().replace(/\\\\+/g, '\\')),
@@ -215,17 +222,31 @@ export default function ConfiguracoesPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Dias p/ Aviso Prévio</label>
-                  <input type="number" required className="w-full px-4 py-2 rounded-lg border border-slate-200"
+                  <input type="number" required min="1" max="30" className="w-full px-4 py-2 rounded-lg border border-slate-200"
                     value={formData.dias_aviso_previo} onChange={e => setFormData({...formData, dias_aviso_previo: parseInt(e.target.value)})} />
+                  <span className="text-xs text-slate-500 mt-0.5 block">Exibe aviso ao abrir o app quando faltar X dias p/ vencer</span>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Intervalo p/ Reaviso na Tela (Horas)</label>
+                  <input type="number" required min="1" max="24" className="w-full px-4 py-2 rounded-lg border border-slate-200"
+                    value={formData.intervalo_aviso_horas} onChange={e => setFormData({...formData, intervalo_aviso_horas: parseInt(e.target.value)})} />
+                  <span className="text-xs text-slate-500 mt-0.5 block">Reapresenta na tela a cada X horas se o app continuar aberto</span>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Dias p/ Bloqueio (Tolerância)</label>
-                  <input type="number" required className="w-full px-4 py-2 rounded-lg border border-slate-200"
+                  <input type="number" required min="0" max="60" className="w-full px-4 py-2 rounded-lg border border-slate-200"
                     value={formData.dias_tolerancia_bloqueio} onChange={e => setFormData({...formData, dias_tolerancia_bloqueio: parseInt(e.target.value)})} />
+                  <span className="text-xs text-slate-500 mt-0.5 block">Dias de carência após o vencimento antes de fechar o ERP</span>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Mensagem de Aviso Prévio na Tela</label>
+                  <textarea rows={2} className="w-full px-4 py-2 rounded-lg border border-slate-200"
+                    placeholder="AVISO DE VENCIMENTO: Sua mensalidade vence em breve. Regularize via Pix no Hub para evitar bloqueio."
+                    value={formData.mensagem_aviso_previo} onChange={e => setFormData({...formData, mensagem_aviso_previo: e.target.value})} />
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-slate-700 mb-1">Mensagem de Bloqueio na Tela</label>
-                  <textarea rows={3} className="w-full px-4 py-2 rounded-lg border border-slate-200"
+                  <textarea rows={2} className="w-full px-4 py-2 rounded-lg border border-slate-200"
                     value={formData.mensagem_bloqueio} onChange={e => setFormData({...formData, mensagem_bloqueio: e.target.value})} />
                 </div>
                 <div className="md:col-span-2 pt-2 border-t border-slate-100">

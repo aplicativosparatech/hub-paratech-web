@@ -20,10 +20,10 @@ export async function POST(request: Request) {
       .single()
     if (!cliente) return NextResponse.json({ error: 'Cliente não encontrado' }, { status: 404 })
 
-    // 2. Busca configuração do Hub (pastas, exes, tolerância, banner, whatsapp, features)
+    // 2. Busca configuração do Hub (pastas, exes, tolerância, banner, whatsapp, features, aviso prévio)
     const { data: config } = await supabase
       .from('configuracoes_hub')
-      .select('offline_secret, exes_monitorados, pastas_vendas, pastas_compras, modo_processamento_xml, dias_tolerancia_bloqueio, mensagem_bloqueio, dias_aviso_previo, banner_url, support_whatsapp, feature_sugestao_tributaria, feature_nuvem_produtos, feature_loja_virtual, feature_nfce, feature_nfe, feature_contas_pagar, feature_estoque_avancado')
+      .select('offline_secret, exes_monitorados, pastas_vendas, pastas_compras, modo_processamento_xml, dias_tolerancia_bloqueio, mensagem_bloqueio, dias_aviso_previo, intervalo_aviso_horas, mensagem_aviso_previo, banner_url, support_whatsapp, feature_sugestao_tributaria, feature_nuvem_produtos, feature_loja_virtual, feature_nfce, feature_nfe, feature_contas_pagar, feature_estoque_avancado')
       .eq('cliente_id', cliente.id)
       .maybeSingle()
 
@@ -67,31 +67,6 @@ export async function POST(request: Request) {
       }
     }
 
-    // Configura fatura de aviso prévio para faturas a vencer
-    let faturaAviso = null
-    const faturaProx = faturasPendentes?.find(f => f.data_vencimento >= hoje) || null
-    if (faturaProx) {
-      const dtVenc = new Date(faturaProx.data_vencimento + 'T12:00:00Z')
-      const dtHoje = new Date()
-      const diasRestantes = Math.max(0, Math.ceil((dtVenc.getTime() - dtHoje.getTime()) / (1000 * 60 * 60 * 24)))
-
-      let pixProx = faturaProx.qr_code_payload
-      if (!pixProx || pixProx.includes('mock-hubparatech')) {
-        try {
-          const pixData = await obterOuGerarPixFatura(faturaProx.id)
-          if (pixData.qr_code_payload) pixProx = pixData.qr_code_payload
-        } catch (_) {}
-      }
-
-      faturaAviso = {
-        id: faturaProx.id,
-        valor: faturaProx.valor,
-        pix_payload: pixProx || finalPix || '',
-        data_vencimento: faturaProx.data_vencimento,
-        dias_restantes: diasRestantes
-      }
-    }
-
     let isBloqueado = !cliente.is_ativo;
 
     // Regra de Bloqueio: respeita os dias de carência (Cliente > Global) e fins de semana/feriados
@@ -102,6 +77,61 @@ export async function POST(request: Request) {
 
       if (dataHoje.getTime() >= effectiveBlockDate.getTime()) {
         isBloqueado = true
+      }
+    }
+
+    // Configuração de Aviso Prévio na Tela e a Cada X Horas
+    const diasAvisoConfig = Math.max(1, Number(config?.dias_aviso_previo ?? 2))
+    const intervaloAvisoHoras = Math.max(1, Number(config?.intervalo_aviso_horas ?? 4))
+    let avisoPrevioAtivo = false
+    let faturaAviso = null
+
+    // O aviso na tela só atua quando NÃO está em bloqueio total
+    if (!isBloqueado) {
+      if (faturaVencida) {
+        // Cenário 1: Vencida, mas ainda em carência/tolerância
+        avisoPrevioAtivo = true
+        faturaAviso = {
+          id: faturaVencida.id,
+          valor: Number(faturaVencida.valor),
+          pix_payload: finalPix || '',
+          data_vencimento: faturaVencida.data_vencimento,
+          dias_restantes: 0,
+          is_tolerancia: true,
+          dias_tolerancia_restantes: diasCarenciaEfetivos,
+          mensagem: config?.mensagem_aviso_previo || `FATURA VENCIDA: Sua mensalidade venceu em ${faturaVencida.data_vencimento}. Você está no período de tolerância. Pague via Pix para evitar o bloqueio.`
+        }
+      } else {
+        // Cenário 2: Próxima de vencer (dentro de dias_aviso_previo)
+        const faturaProx = faturasPendentes?.find(f => f.data_vencimento >= hoje) || null
+        if (faturaProx) {
+          const dtVenc = new Date(faturaProx.data_vencimento + 'T12:00:00Z')
+          const dtHoje = new Date()
+          const diasRestantes = Math.max(0, Math.ceil((dtVenc.getTime() - dtHoje.getTime()) / (1000 * 60 * 60 * 24)))
+
+          if (diasRestantes <= diasAvisoConfig) {
+            avisoPrevioAtivo = true
+            let pixProx = faturaProx.qr_code_payload
+            if (!pixProx || pixProx.includes('mock-hubparatech')) {
+              try {
+                const pixData = await obterOuGerarPixFatura(faturaProx.id)
+                if (pixData.qr_code_payload) pixProx = pixData.qr_code_payload
+              } catch (_) {}
+            }
+
+            const diasTxt = diasRestantes === 0 ? 'HOJE' : (diasRestantes === 1 ? 'amanhã' : `em ${diasRestantes} dias`)
+            faturaAviso = {
+              id: faturaProx.id,
+              valor: Number(faturaProx.valor),
+              pix_payload: pixProx || finalPix || '',
+              data_vencimento: faturaProx.data_vencimento,
+              dias_restantes: diasRestantes,
+              is_tolerancia: false,
+              dias_tolerancia_restantes: 0,
+              mensagem: config?.mensagem_aviso_previo || `AVISO DE VENCIMENTO: Sua mensalidade vence ${diasTxt} (${faturaProx.data_vencimento}). Pague via Pix no Hub para evitar bloqueio.`
+            }
+          }
+        }
       }
     }
     
@@ -165,6 +195,9 @@ export async function POST(request: Request) {
 
     const responseData = {
       bloqueado: isBloqueado,
+      aviso_previo_ativo: avisoPrevioAtivo,
+      intervalo_aviso_horas: intervaloAvisoHoras,
+      mensagem_aviso_previo: config?.mensagem_aviso_previo || 'AVISO: Sua mensalidade vence em breve. Regularize via Pix no Hub para evitar bloqueio.',
       desbloqueio_confianca: confiancaInfo,
       motivo: !cliente.is_ativo ? 'administrativo' : (faturaVencida ? 'inadimplencia' : null),
       mensagem_bloqueio: config?.mensagem_bloqueio || 'SISTEMA BLOQUEADO. Por favor, regularize sua mensalidade.',

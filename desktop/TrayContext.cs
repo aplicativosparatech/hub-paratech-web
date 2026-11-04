@@ -28,6 +28,22 @@ namespace HubParatechDesktop
         public long? numero_inicial_mdfe { get; set; }
         public FaturaSync? fatura { get; set; }
         public DesbloqueioConfiancaSync? desbloqueio_confianca { get; set; }
+        public bool aviso_previo_ativo { get; set; }
+        public int intervalo_aviso_horas { get; set; } = 4;
+        public string? mensagem_aviso_previo { get; set; }
+        public FaturaAvisoSync? fatura_aviso { get; set; }
+    }
+
+    public class FaturaAvisoSync
+    {
+        public string? id { get; set; }
+        public decimal valor { get; set; }
+        public string? pix_payload { get; set; }
+        public string? data_vencimento { get; set; }
+        public int dias_restantes { get; set; }
+        public bool is_tolerancia { get; set; }
+        public int dias_tolerancia_restantes { get; set; }
+        public string? mensagem { get; set; }
     }
 
     public class DesbloqueioConfiancaSync
@@ -79,6 +95,14 @@ namespace HubParatechDesktop
         private decimal faturaValor = 0;
         private string faturaVencimento = "";
         private string clienteNome = "";
+
+        // Estado do Aviso Prévio na Tela e a Cada X Horas
+        private bool isAvisoPrevioAtivo = false;
+        private int intervaloAvisoHoras = 4;
+        private string? mensagemAvisoPrevio = null;
+        private FaturaAvisoSync? currentFaturaAviso = null;
+        private DateTime lastAvisoExibido = DateTime.MinValue;
+        private HashSet<int> notifiedProcessIds = new HashSet<int>();
         
         // Estado dos Monitores de XML
         private List<XmlMonitor> activeMonitors = new List<XmlMonitor>();
@@ -514,6 +538,12 @@ namespace HubParatechDesktop
                             LiveMonitorForm.ConfidenceTimerText = null;
                         }
                         lastSync = DateTime.Now;
+
+                        // Atualiza dados de Aviso Prévio Preventivo
+                        isAvisoPrevioAtivo = data.aviso_previo_ativo;
+                        intervaloAvisoHoras = data.intervalo_aviso_horas > 0 ? data.intervalo_aviso_horas : 4;
+                        mensagemAvisoPrevio = data.mensagem_aviso_previo;
+                        currentFaturaAviso = data.fatura_aviso;
                         
                         string novoModo = !string.IsNullOrWhiteSpace(data.modo_processamento) ? data.modo_processamento : "hub";
                         currentModoProcessamento = novoModo;
@@ -602,37 +632,98 @@ namespace HubParatechDesktop
 
         private void ProcessTimer_Tick(object? sender, EventArgs e)
         {
-            if (!isBlocked || targetProcesses.Count == 0) return;
+            if (targetProcesses.Count == 0) return;
 
-            bool killedAny = false;
-
-            foreach (var target in targetProcesses)
+            // 1. CENÁRIO DE BLOQUEIO TOTAL (Inadimplência após vencimento + tolerância)
+            if (isBlocked)
             {
-                var processes = Process.GetProcessesByName(target);
-                if (processes.Length > 0)
+                bool killedAny = false;
+
+                foreach (var target in targetProcesses)
                 {
-                    foreach (var p in processes)
+                    var processes = Process.GetProcessesByName(target);
+                    if (processes.Length > 0)
                     {
-                        try { p.Kill(); killedAny = true; } catch { }
+                        foreach (var p in processes)
+                        {
+                            try { p.Kill(); killedAny = true; } catch { }
+                        }
                     }
                 }
+
+                if (killedAny)
+                {
+                    if (activeBlocker == null || activeBlocker.IsDisposed)
+                    {
+                        activeBlocker = new BlockerForm(pixPayload, faturaValor, offlineSecret, faturaVencimento, clienteNome);
+                        
+                        activeBlocker.FormClosed += (s, ev) => {
+                            if (activeBlocker.IsOfflineUnlocked)
+                            {
+                                isBlocked = false;
+                                activeBlocker = null;
+                            }
+                        };
+                        
+                        activeBlocker.Show();
+                    }
+                }
+                return;
             }
 
-            if (killedAny)
+            // 2. CENÁRIO DE AVISO PRÉVIO (Sistema liberado: exibe pop-up ao abrir o app e a cada X horas)
+            if (isAvisoPrevioAtivo && currentFaturaAviso != null)
             {
-                if (activeBlocker == null || activeBlocker.IsDisposed)
+                bool recemAberto = false;
+                bool algumRodando = false;
+                var currentRunningPids = new HashSet<int>();
+
+                foreach (var target in targetProcesses)
                 {
-                    activeBlocker = new BlockerForm(pixPayload, faturaValor, offlineSecret, faturaVencimento, clienteNome);
-                    
-                    activeBlocker.FormClosed += (s, ev) => {
-                        if (activeBlocker.IsOfflineUnlocked)
+                    var processes = Process.GetProcessesByName(target);
+                    if (processes.Length > 0)
+                    {
+                        algumRodando = true;
+                        foreach (var p in processes)
                         {
-                            isBlocked = false;
-                            activeBlocker = null;
+                            currentRunningPids.Add(p.Id);
+                            // Se o PID ainda não foi notificado, significa que o usuário acabou de abrir o executável!
+                            if (!notifiedProcessIds.Contains(p.Id))
+                            {
+                                recemAberto = true;
+                                notifiedProcessIds.Add(p.Id);
+                            }
                         }
-                    };
-                    
-                    activeBlocker.Show();
+                    }
+                }
+
+                // Limpa PIDs antigos de processos que já foram encerrados
+                notifiedProcessIds.RemoveWhere(id => !currentRunningPids.Contains(id));
+
+                // Verifica se o intervalo configurado em horas expirou
+                bool intervaloExpirou = (DateTime.Now - lastAvisoExibido).TotalHours >= intervaloAvisoHoras;
+
+                // Dispara o aviso preventivo na tela se:
+                // a) O usuário acabou de abrir qualquer um dos executáveis monitorados
+                // b) OU o sistema continuar aberto e atingir o intervalo de X horas
+                if ((recemAberto || (algumRodando && intervaloExpirou)) && (DateTime.Now - lastAvisoExibido).TotalSeconds >= 30)
+                {
+                    lastAvisoExibido = DateTime.Now;
+                    string pix = currentFaturaAviso.pix_payload ?? pixPayload ?? "";
+                    decimal val = currentFaturaAviso.valor > 0 ? currentFaturaAviso.valor : faturaValor;
+                    string venc = !string.IsNullOrEmpty(currentFaturaAviso.data_vencimento) ? currentFaturaAviso.data_vencimento : faturaVencimento;
+                    string msg = currentFaturaAviso.mensagem ?? mensagemAvisoPrevio ?? "";
+
+                    NoticeWarningForm.ShowNotice(
+                        pix,
+                        val,
+                        venc,
+                        clienteNome,
+                        currentFaturaAviso.dias_restantes,
+                        currentFaturaAviso.is_tolerancia,
+                        intervaloAvisoHoras,
+                        msg
+                    );
                 }
             }
         }
