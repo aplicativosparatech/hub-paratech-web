@@ -462,7 +462,8 @@ namespace HubParatechDesktop
                         
                         if (!string.IsNullOrWhiteSpace(data.executavel)) 
                         {
-                            targetProcesses.Add(data.executavel.Replace(".exe", "", StringComparison.OrdinalIgnoreCase));
+                            string cleanBase = Path.GetFileNameWithoutExtension(data.executavel.Trim());
+                            if (!string.IsNullOrWhiteSpace(cleanBase)) targetProcesses.Add(cleanBase);
                         }
 
                         if (data.executaveis != null)
@@ -472,7 +473,7 @@ namespace HubParatechDesktop
                                 var lines = exeInfo.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
                                 foreach (var line in lines)
                                 {
-                                    var clean = line.Trim().Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
+                                    string clean = Path.GetFileNameWithoutExtension(line.Trim());
                                     if (!string.IsNullOrWhiteSpace(clean) && !targetProcesses.Contains(clean))
                                     {
                                         targetProcesses.Add(clean);
