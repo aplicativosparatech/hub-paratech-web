@@ -498,7 +498,6 @@ export async function POST(request: Request) {
     const { error: dbError } = await supabaseAdmin.from(tabela).upsert(dbPayload, { onConflict: 'chave' })
 
     if (dbError) {
-      // Se falhar por causa de colunas novas ainda não criadas, faz fallback para o payload compatível
       console.warn('Erro ao inserir colunas extras, tentando payload compatível:', dbError.message)
       const fallbackPayload: any = {
         cliente_id: cliente.id,
@@ -515,9 +514,14 @@ export async function POST(request: Request) {
         motivo_sefaz: motivoFinal,
         protocolo: nProt || null,
         cnpj_emitente: cnpjEmitente || null,
+        destinatario_documento: cnpjDestinatario || null,
         cnpj_destinatario: cnpjDestinatario || null
       }
-      await supabaseAdmin.from(tabela).upsert(fallbackPayload, { onConflict: 'chave' })
+      const { error: fallbackError } = await supabaseAdmin.from(tabela).upsert(fallbackPayload, { onConflict: 'chave' })
+      if (fallbackError) {
+        console.error('Falha crítica ao persistir nota no banco:', fallbackError.message)
+        return NextResponse.json({ error: 'Erro ao gravar nota no banco: ' + fallbackError.message }, { status: 500 })
+      }
     }
 
     // Atualiza o registro da última sincronização do Hub para esta empresa
