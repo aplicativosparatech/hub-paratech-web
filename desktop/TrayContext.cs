@@ -124,6 +124,10 @@ namespace HubParatechDesktop
             };
             trayIcon.ContextMenuStrip.Items.Add(itemMonitor);
 
+            LiveMonitorForm.OnForceRescanRequested = () => {
+                foreach (var m in activeMonitors) m.TriggerScan();
+            };
+
             trayIcon.ContextMenuStrip.Items.Add("Ver Status Interno", null, (s, e) => {
                 string procs = targetProcesses.Count > 0 ? string.Join(", ", targetProcesses) : "Nenhum processo restrito";
                 string syncTxt = lastSync > DateTime.MinValue ? lastSync.ToString("dd/MM/yyyy HH:mm:ss") : "Pendente";
@@ -555,6 +559,24 @@ namespace HubParatechDesktop
                             currentVendasStr = novasVendasStr;
                             currentComprasStr = novasComprasStr;
                         }
+
+                        var todasPastas = new List<string>();
+                        if (data.pastas_vendas != null)
+                        {
+                            foreach (var p in data.pastas_vendas)
+                                if (!string.IsNullOrWhiteSpace(p)) todasPastas.Add(p.Trim().Replace(@"\\", @"\"));
+                        }
+                        if (data.pastas_compras != null)
+                        {
+                            foreach (var p in data.pastas_compras)
+                                if (!string.IsNullOrWhiteSpace(p)) todasPastas.Add(p.Trim().Replace(@"\\", @"\"));
+                        }
+
+                        LiveMonitorForm.PastasCount = todasPastas.Count;
+                        LiveMonitorForm.PastasCaminhos = todasPastas;
+                        LiveMonitorForm.PastasDescricao = todasPastas.Count > 0
+                            ? $"{todasPastas.Count} pasta(s) ativa(s)"
+                            : "Nenhuma pasta configurada";
 
                         if (!isBlocked && activeBlocker != null && !activeBlocker.IsDisposed)
                         {

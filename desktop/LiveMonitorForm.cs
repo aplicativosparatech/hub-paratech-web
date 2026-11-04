@@ -33,13 +33,23 @@ namespace HubParatechDesktop
             {
                 if (!string.IsNullOrWhiteSpace(DataEmissao))
                 {
-                    if (DateTime.TryParse(DataEmissao, out DateTime dt))
-                        return dt.Date;
-                    var m = System.Text.RegularExpressions.Regex.Match(DataEmissao, @"^(\d{4})-(\d{2})-(\d{2})");
+                    // 1. Tenta capturar YYYY-MM-DD em qualquer posição (ex: 2026-11-03T18:45:00-03:00)
+                    var m = System.Text.RegularExpressions.Regex.Match(DataEmissao, @"(\d{4})-(\d{2})-(\d{2})");
                     if (m.Success && int.TryParse(m.Groups[1].Value, out int y) && int.TryParse(m.Groups[2].Value, out int mo) && int.TryParse(m.Groups[3].Value, out int d))
                     {
-                        return new DateTime(y, mo, d);
+                        try { return new DateTime(y, mo, d); } catch { }
                     }
+
+                    // 2. Tenta capturar formato brasileiro DD/MM/YYYY
+                    var mBr = System.Text.RegularExpressions.Regex.Match(DataEmissao, @"(\d{2})/(\d{2})/(\d{4})");
+                    if (mBr.Success && int.TryParse(mBr.Groups[3].Value, out int yBr) && int.TryParse(mBr.Groups[2].Value, out int moBr) && int.TryParse(mBr.Groups[1].Value, out int dBr))
+                    {
+                        try { return new DateTime(yBr, moBr, dBr); } catch { }
+                    }
+
+                    // 3. TryParse geral
+                    if (DateTime.TryParse(DataEmissao, out DateTime dt))
+                        return dt.Date;
                 }
                 return Timestamp.Date;
             }
@@ -53,6 +63,10 @@ namespace HubParatechDesktop
         private static LiveMonitorForm? activeInstance = null;
         public static string PontoPartidaInfo { get; set; } = "Configuração do Portal";
         public static string? ConfidenceTimerText { get; set; } = null;
+        public static int PastasCount { get; set; } = 0;
+        public static string? PastasDescricao { get; set; } = null;
+        public static List<string> PastasCaminhos { get; set; } = new List<string>();
+        public static Action? OnForceRescanRequested { get; set; } = null;
 
         private static int currentProgress = 100;
         private static int maxProgress = 100;
@@ -61,9 +75,13 @@ namespace HubParatechDesktop
 
         private DataGridView dgvLogs;
         private Label lblTotalEnviados;
+        private Label lblSubTotalEnviados;
         private Label lblTotalNoCache;
+        private Label lblSubTotalNoCache;
         private Label lblPastasMonitoradas;
+        private Label lblSubPastasMonitoradas;
         private Label lblModoOperacao;
+        private Label lblSubModoOperacao;
         private Label lblStatusPill;
         private ProgressBar pbSync;
         private Label lblProgressMessage;
@@ -72,6 +90,7 @@ namespace HubParatechDesktop
         private DateTimePicker dtpFiltro;
         private Label lblContadorFiltro;
         private System.Windows.Forms.Timer refreshTimer;
+        private ToolTip toolTipGlobal = new ToolTip();
 
         private static readonly string HistoryPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -105,7 +124,7 @@ namespace HubParatechDesktop
                         lock (LogLock)
                         {
                             GlobalLogItems.Clear();
-                            foreach (var it in items.Take(300))
+                            foreach (var it in items.Take(1500))
                             {
                                 if (it.ValorTotal == 0 && !string.IsNullOrEmpty(it.Arquivo) && File.Exists(it.Arquivo))
                                 {
@@ -129,7 +148,7 @@ namespace HubParatechDesktop
                 List<XmlLogItem> copy;
                 lock (LogLock)
                 {
-                    copy = GlobalLogItems.Take(200).ToList();
+                    copy = GlobalLogItems.Take(1500).ToList();
                 }
                 string dir = Path.GetDirectoryName(HistoryPath)!;
                 if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
@@ -158,7 +177,7 @@ namespace HubParatechDesktop
                 else
                 {
                     GlobalLogItems.Insert(0, item);
-                    if (GlobalLogItems.Count > 400)
+                    if (GlobalLogItems.Count > 2500)
                     {
                         GlobalLogItems.RemoveAt(GlobalLogItems.Count - 1);
                     }
@@ -369,41 +388,63 @@ namespace HubParatechDesktop
             var statsPanel = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 82,
+                Height = 88,
                 BackColor = Color.FromArgb(248, 250, 252),
-                Padding = new Padding(20, 10, 20, 10)
+                Padding = new Padding(20, 8, 20, 8)
             };
 
-            int cardWidth = 235;
+            int cardWidth = 240;
             int cardGap = 16;
             int curX = 20;
 
-            // Card 1: Enviados Nesta Sessão
-            var card1 = CreateCard("ENVIADOS NA SESSÃO", "0", out lblTotalEnviados);
-            card1.Location = new Point(curX, 10);
-            card1.Size = new Size(cardWidth, 62);
+            // Card 1: Notas Sincronizadas
+            var card1 = CreateCard("NOTAS SINCRONIZADAS", "0", out lblTotalEnviados, out lblSubTotalEnviados);
+            card1.Location = new Point(curX, 8);
+            card1.Size = new Size(cardWidth, 70);
             statsPanel.Controls.Add(card1);
             curX += cardWidth + cardGap;
 
             // Card 2: Monitores Ativos
-            var card2 = CreateCard("PASTAS MONITORADAS", $"{pastasCount} pasta(s) + subpastas", out lblPastasMonitoradas);
-            card2.Location = new Point(curX, 10);
-            card2.Size = new Size(cardWidth, 62);
+            int qPastasIni = PastasCount > 0 ? PastasCount : pastasCount;
+            var card2 = CreateCard("PASTAS MONITORADAS", $"{Math.Max(1, qPastasIni)} pasta(s) ativa(s)", out lblPastasMonitoradas, out lblSubPastasMonitoradas);
+            card2.Location = new Point(curX, 8);
+            card2.Size = new Size(cardWidth, 70);
             statsPanel.Controls.Add(card2);
             curX += cardWidth + cardGap;
 
-            // Card 3: Ponto de Partida Fiscal
-            var card3 = CreateCard("PONTO DE PARTIDA FISCAL", PontoPartidaInfo, out lblTotalNoCache);
-            card3.Location = new Point(curX, 10);
-            card3.Size = new Size(cardWidth, 62);
+            // Card 3: Intervalo de Notas
+            var card3 = CreateCard("INTERVALO DE NOTAS", "Carregando...", out lblTotalNoCache, out lblSubTotalNoCache);
+            card3.Location = new Point(curX, 8);
+            card3.Size = new Size(cardWidth, 70);
             statsPanel.Controls.Add(card3);
             curX += cardWidth + cardGap;
 
             // Card 4: Modo
-            var card4 = CreateCard("MODO DE OPERAÇÃO", modo.ToUpper(), out lblModoOperacao);
-            card4.Location = new Point(curX, 10);
-            card4.Size = new Size(cardWidth, 62);
+            var card4 = CreateCard("MODO DE OPERAÇÃO", "TEMPO REAL", out lblModoOperacao, out lblSubModoOperacao);
+            card4.Location = new Point(curX, 8);
+            card4.Size = new Size(cardWidth, 70);
             statsPanel.Controls.Add(card4);
+
+            statsPanel.Resize += (s, e) => {
+                try
+                {
+                    int wDisponivel = statsPanel.Width - 40 - (cardGap * 3);
+                    if (wDisponivel > 600)
+                    {
+                        int dynamicWidth = wDisponivel / 4;
+                        card1.Width = dynamicWidth;
+                        card2.Width = dynamicWidth;
+                        card3.Width = dynamicWidth;
+                        card4.Width = dynamicWidth;
+
+                        card1.Location = new Point(20, 8);
+                        card2.Location = new Point(20 + dynamicWidth + cardGap, 8);
+                        card3.Location = new Point(20 + (dynamicWidth + cardGap) * 2, 8);
+                        card4.Location = new Point(20 + (dynamicWidth + cardGap) * 3, 8);
+                    }
+                }
+                catch { }
+            };
 
             Controls.Add(statsPanel);
 
@@ -466,12 +507,12 @@ namespace HubParatechDesktop
 
             toolBarPanel.Controls.Add(pnlProgress);
 
-            // Lado Direito: Filtro por Data de Emissão (Padrão: Data do Dia)
+            // Lado Direito: Filtro por Data de Emissão (com suporte a Todas as Datas, Hoje, Ontem, etc.)
             var pnlFilter = new Panel
             {
-                Size = new Size(540, 40),
+                Size = new Size(580, 40),
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
-                Location = new Point(toolBarPanel.Width - 560, 6),
+                Location = new Point(toolBarPanel.Width - 600, 6),
                 BackColor = Color.Transparent
             };
 
@@ -489,15 +530,22 @@ namespace HubParatechDesktop
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 Font = new Font("Segoe UI", 8.5f),
-                Size = new Size(160, 26),
+                Size = new Size(180, 26),
                 Location = new Point(78, 6)
             };
+            cmbFiltroData.Items.Add("Todas as Datas (Geral)");
             cmbFiltroData.Items.Add($"Hoje ({DateTime.Today:dd/MM})");
             cmbFiltroData.Items.Add($"Ontem ({DateTime.Today.AddDays(-1):dd/MM})");
             cmbFiltroData.Items.Add("Últimos 7 dias");
-            cmbFiltroData.Items.Add("Todas as Datas");
             cmbFiltroData.Items.Add("Data no Calendário ▾");
-            cmbFiltroData.SelectedIndex = 0; // Padrão solicitado: Data do Dia!
+
+            // Seleção inicial inteligente: se houver notas hoje, abre em Hoje (1); caso contrário Todas as Datas (0)
+            bool temNotasHoje = false;
+            lock (LogLock)
+            {
+                temNotasHoje = GlobalLogItems.Any(x => x.DataEmissaoData == DateTime.Today);
+            }
+            cmbFiltroData.SelectedIndex = temNotasHoje ? 1 : 0;
             pnlFilter.Controls.Add(cmbFiltroData);
 
             dtpFiltro = new DateTimePicker
@@ -505,7 +553,7 @@ namespace HubParatechDesktop
                 Format = DateTimePickerFormat.Short,
                 Font = new Font("Segoe UI", 8.5f),
                 Size = new Size(95, 24),
-                Location = new Point(244, 6),
+                Location = new Point(264, 6),
                 Value = DateTime.Today,
                 Enabled = false
             };
@@ -516,7 +564,7 @@ namespace HubParatechDesktop
                 Text = "Carregando...",
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(14, 116, 144),
-                Location = new Point(345, 9),
+                Location = new Point(365, 9),
                 AutoSize = true
             };
             pnlFilter.Controls.Add(lblContadorFiltro);
@@ -528,12 +576,12 @@ namespace HubParatechDesktop
             };
 
             cmbFiltroData.SelectedIndexChanged += (s, e) => {
-                if (cmbFiltroData.SelectedIndex == 0) // Hoje
+                if (cmbFiltroData.SelectedIndex == 1) // Hoje
                 {
                     dtpFiltro.Value = DateTime.Today;
                     dtpFiltro.Enabled = false;
                 }
-                else if (cmbFiltroData.SelectedIndex == 1) // Ontem
+                else if (cmbFiltroData.SelectedIndex == 2) // Ontem
                 {
                     dtpFiltro.Value = DateTime.Today.AddDays(-1);
                     dtpFiltro.Enabled = false;
@@ -672,6 +720,40 @@ namespace HubParatechDesktop
             };
             bottomPanel.Controls.Add(btnLimpar);
 
+            var btnRescan = new Button
+            {
+                Text = "🔄 Forçar Varredura Agora",
+                Size = new Size(190, 36),
+                Location = new Point(350, 12),
+                BackColor = Color.FromArgb(241, 245, 249),
+                ForeColor = Color.FromArgb(14, 116, 144),
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btnRescan.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
+            btnRescan.Click += (s, e) => {
+                btnRescan.Enabled = false;
+                btnRescan.Text = "Varrendo notas...";
+                try
+                {
+                    OnForceRescanRequested?.Invoke();
+                }
+                catch { }
+                var t = new System.Windows.Forms.Timer { Interval = 3000 };
+                t.Tick += (st, et) => {
+                    t.Stop();
+                    t.Dispose();
+                    if (!btnRescan.IsDisposed)
+                    {
+                        btnRescan.Enabled = true;
+                        btnRescan.Text = "🔄 Forçar Varredura Agora";
+                    }
+                };
+                t.Start();
+            };
+            bottomPanel.Controls.Add(btnRescan);
+
             var btnClose = new Button
             {
                 Text = "Fechar Monitor",
@@ -768,13 +850,13 @@ namespace HubParatechDesktop
             }
         }
 
-        private Panel CreateCard(string title, string value, out Label lblValue)
+        private Panel CreateCard(string title, string value, out Label lblValue, out Label lblSub)
         {
             var pnl = new Panel
             {
                 BackColor = Color.White,
                 BorderStyle = BorderStyle.FixedSingle,
-                Padding = new Padding(12, 8, 12, 8)
+                Padding = new Padding(12, 6, 12, 6)
             };
 
             var lblT = new Label
@@ -782,7 +864,7 @@ namespace HubParatechDesktop
                 Text = title,
                 Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(100, 116, 139),
-                Location = new Point(10, 8),
+                Location = new Point(10, 6),
                 AutoSize = true
             };
             pnl.Controls.Add(lblT);
@@ -792,10 +874,20 @@ namespace HubParatechDesktop
                 Text = value,
                 Font = new Font("Segoe UI", 11.5f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(15, 23, 42),
-                Location = new Point(10, 26),
+                Location = new Point(10, 24),
                 AutoSize = true
             };
             pnl.Controls.Add(lblValue);
+
+            lblSub = new Label
+            {
+                Text = "",
+                Font = new Font("Segoe UI", 7.5f, FontStyle.Regular),
+                ForeColor = Color.FromArgb(100, 116, 139),
+                Location = new Point(10, 48),
+                AutoSize = true
+            };
+            pnl.Controls.Add(lblSub);
 
             return pnl;
         }
@@ -827,31 +919,96 @@ namespace HubParatechDesktop
                     allCopy = GlobalLogItems.ToList();
                 }
 
+                // 1. Atualizar Card 1: Notas Sincronizadas
                 if (lblTotalEnviados != null && !lblTotalEnviados.IsDisposed)
                 {
-                    int countSucesso = allCopy.Count(x => x.Status == "Sucesso" || x.Status == "Enviado");
-                    lblTotalEnviados.Text = countSucesso.ToString();
+                    int countSincronizadas = allCopy.Count(x =>
+                        x.Status == "Sucesso" ||
+                        x.Status == "Enviado" ||
+                        x.Status.Contains("Sincronizado") ||
+                        x.Status.Contains("Portal") ||
+                        x.Status.Contains("Cache")
+                    );
+                    int countEnviadosAgora = allCopy.Count(x => x.IsRealTime || x.Status == "Sucesso" || x.Status == "Enviado");
+
+                    lblTotalEnviados.Text = $"{countSincronizadas} notas";
+                    if (lblSubTotalEnviados != null && !lblSubTotalEnviados.IsDisposed)
+                    {
+                        if (countEnviadosAgora > 0)
+                            lblSubTotalEnviados.Text = $"{countEnviadosAgora} transmitidas nesta sessão";
+                        else
+                            lblSubTotalEnviados.Text = "100% sincronizadas no Portal";
+                    }
                 }
 
+                // 2. Atualizar Card 2: Pastas Monitoradas
+                if (lblPastasMonitoradas != null && !lblPastasMonitoradas.IsDisposed)
+                {
+                    int qPastas = PastasCount > 0 ? PastasCount : (PastasCaminhos.Count > 0 ? PastasCaminhos.Count : 1);
+                    lblPastasMonitoradas.Text = $"{qPastas} pasta(s) ativa(s)";
+                    if (lblSubPastasMonitoradas != null && !lblSubPastasMonitoradas.IsDisposed)
+                    {
+                        lblSubPastasMonitoradas.Text = "Varredura contínua + subpastas";
+                    }
+
+                    if (PastasCaminhos != null && PastasCaminhos.Count > 0)
+                    {
+                        string toolTipText = "Pastas monitoradas em tempo real:\n" + string.Join("\n", PastasCaminhos);
+                        toolTipGlobal.SetToolTip(lblPastasMonitoradas, toolTipText);
+                    }
+                }
+
+                // 3. Atualizar Card 3: Intervalo de Notas / Numeração
                 if (lblTotalNoCache != null && !lblTotalNoCache.IsDisposed)
                 {
-                    lblTotalNoCache.Text = PontoPartidaInfo;
+                    var notasComNumero = allCopy.Where(x => x.NumeroLong > 0).ToList();
+                    if (notasComNumero.Count > 0)
+                    {
+                        long minNum = notasComNumero.Min(x => x.NumeroLong);
+                        long maxNum = notasComNumero.Max(x => x.NumeroLong);
+
+                        string modStr = allCopy.Any(x => x.Modelo == "65") ? "NFC-e" : (allCopy.Any(x => x.Modelo == "55") ? "NF-e" : "Notas");
+                        lblTotalNoCache.Text = $"#{minNum} a #{maxNum}";
+                        if (lblSubTotalNoCache != null && !lblSubTotalNoCache.IsDisposed)
+                        {
+                            lblSubTotalNoCache.Text = $"{modStr} ({notasComNumero.Count} notas na faixa)";
+                        }
+                        toolTipGlobal.SetToolTip(lblTotalNoCache, $"Intervalo Local: #{minNum} até #{maxNum}\nPonto de Partida Fiscal: {PontoPartidaInfo}");
+                    }
+                    else
+                    {
+                        lblTotalNoCache.Text = PontoPartidaInfo;
+                        if (lblSubTotalNoCache != null && !lblSubTotalNoCache.IsDisposed)
+                        {
+                            lblSubTotalNoCache.Text = "Aguardando leitura de notas";
+                        }
+                    }
                 }
 
-                // 1. Filtragem por data (Padrão: Data do Dia / Hoje)
+                // 4. Atualizar Card 4: Modo de Operação
+                if (lblModoOperacao != null && !lblModoOperacao.IsDisposed)
+                {
+                    lblModoOperacao.Text = "TEMPO REAL";
+                    if (lblSubModoOperacao != null && !lblSubModoOperacao.IsDisposed)
+                    {
+                        lblSubModoOperacao.Text = "Varredura contínua ativa";
+                    }
+                }
+
+                // 5. Filtragem por data
                 int modoFiltro = cmbFiltroData != null ? cmbFiltroData.SelectedIndex : 0;
                 DateTime dataEscolhida = dtpFiltro != null ? dtpFiltro.Value.Date : DateTime.Today;
 
                 List<XmlLogItem> filtered;
-                if (modoFiltro == 0) // Hoje (Padrão)
+                if (modoFiltro == 1) // Hoje
                 {
                     filtered = allCopy.Where(x => x.DataEmissaoData == DateTime.Today).ToList();
                 }
-                else if (modoFiltro == 1) // Ontem
+                else if (modoFiltro == 2) // Ontem
                 {
                     filtered = allCopy.Where(x => x.DataEmissaoData == DateTime.Today.AddDays(-1)).ToList();
                 }
-                else if (modoFiltro == 2) // Últimos 7 dias
+                else if (modoFiltro == 3) // Últimos 7 dias
                 {
                     DateTime d7 = DateTime.Today.AddDays(-7);
                     filtered = allCopy.Where(x => (x.DataEmissaoData ?? DateTime.MinValue) >= d7).ToList();
@@ -860,29 +1017,29 @@ namespace HubParatechDesktop
                 {
                     filtered = allCopy.Where(x => x.DataEmissaoData == dataEscolhida).ToList();
                 }
-                else // 3 = Todas as Datas
+                else // 0 = Todas as Datas (Geral)
                 {
                     filtered = allCopy;
                 }
 
-                // 2. Inverter a ordem: Notas finais no início (mais recentes e com maior número no topo)
+                // Inverter a ordem: Notas finais no início (mais recentes e com maior número no topo)
                 filtered = filtered
                     .OrderByDescending(x => x.DataEmissaoData ?? DateTime.MinValue)
                     .ThenByDescending(x => x.NumeroLong)
                     .ThenByDescending(x => x.Timestamp)
                     .ToList();
 
-                // 3. Atualizar contador do filtro
+                // Atualizar contador do filtro
                 if (lblContadorFiltro != null && !lblContadorFiltro.IsDisposed)
                 {
-                    if (modoFiltro == 0 && filtered.Count == 0 && allCopy.Count > 0)
+                    if (modoFiltro == 1 && filtered.Count == 0 && allCopy.Count > 0)
                     {
                         lblContadorFiltro.Text = $"0 notas hoje ({DateTime.Today:dd/MM}) • {allCopy.Count} no histórico geral (Escolha 'Todas as Datas')";
                         lblContadorFiltro.ForeColor = Color.FromArgb(217, 119, 6); // amber
                     }
                     else
                     {
-                        lblContadorFiltro.Text = $"Exibindo {filtered.Count} nota(s)";
+                        lblContadorFiltro.Text = $"Exibindo {filtered.Count} nota(s) de {allCopy.Count} total";
                         lblContadorFiltro.ForeColor = Color.FromArgb(14, 116, 144); // cyan-700
                     }
                 }
@@ -901,12 +1058,13 @@ namespace HubParatechDesktop
                         {
                             emissaoFormatada = dtEmi.ToString("dd/MM/yyyy HH:mm");
                         }
-                        else if (!string.IsNullOrEmpty(item.DataEmissao) && item.DataEmissao.Length >= 10)
+                        else if (!string.IsNullOrEmpty(item.DataEmissao))
                         {
-                            var m = System.Text.RegularExpressions.Regex.Match(item.DataEmissao, @"^(\d{4})-(\d{2})-(\d{2})");
+                            var m = System.Text.RegularExpressions.Regex.Match(item.DataEmissao, @"(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?");
                             if (m.Success)
                             {
-                                emissaoFormatada = $"{m.Groups[3].Value}/{m.Groups[2].Value}/{m.Groups[1].Value}";
+                                string hora = m.Groups[4].Success ? $" {m.Groups[4].Value}:{m.Groups[5].Value}" : "";
+                                emissaoFormatada = $"{m.Groups[3].Value}/{m.Groups[2].Value}/{m.Groups[1].Value}{hora}";
                             }
                         }
 

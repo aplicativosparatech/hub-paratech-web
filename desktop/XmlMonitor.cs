@@ -320,7 +320,7 @@ namespace HubParatechDesktop
 
                     string fileIdentifier = $"{fileName}_{fileInfo.Length}";
 
-                    // Extração rápida de chave e metadados
+                    // Extração de chave e metadados
                     string? chRapida = null;
                     string? dataEmiChave = null;
                     string modChave = "65";
@@ -328,45 +328,45 @@ namespace HubParatechDesktop
                     string serieChave = "1";
                     decimal valorRapido = 0;
 
+                    // 1. Extração preliminar se chave de 44 dígitos constar no nome do arquivo
                     var matchChaveNome = Regex.Match(fileName, @"\d{44}");
                     if (matchChaveNome.Success)
                     {
                         chRapida = matchChaveNome.Value;
-                        string aa = chRapida.Substring(2, 2);
-                        string mm = chRapida.Substring(4, 2);
-                        dataEmiChave = $"20{aa}-{mm}-01";
                         modChave = chRapida.Substring(20, 2);
                         numChave = long.TryParse(chRapida.Substring(25, 9), out long n) ? n : 0;
                         serieChave = long.TryParse(chRapida.Substring(22, 3), out long s) ? s.ToString() : "1";
                     }
 
-                    // Se a chave não estava no nome do arquivo (ex: SiedFood "44162.xml"), extrai do próprio XML
-                    if (chRapida == null)
+                    // 2. Extrai metadados reais de dentro do XML (dhEmi real com dia e horário exatos, valor total e número)
+                    var meta = ExtrairMetadadosRapidos(file);
+                    if (!string.IsNullOrEmpty(meta.chave)) chRapida = meta.chave;
+                    if (!string.IsNullOrEmpty(meta.modelo)) modChave = meta.modelo;
+                    if (long.TryParse(meta.numero, out long nParsed) && nParsed > 0) numChave = nParsed;
+                    if (!string.IsNullOrEmpty(meta.serie)) serieChave = meta.serie;
+                    if (!string.IsNullOrEmpty(meta.dhEmi)) dataEmiChave = meta.dhEmi;
+                    if (meta.valor > 0) valorRapido = meta.valor;
+
+                    // Fallback para data da chave ou do arquivo caso não haja dhEmi no XML
+                    if (string.IsNullOrEmpty(dataEmiChave))
                     {
-                        var meta = ExtrairMetadadosRapidos(file);
-                        if (!string.IsNullOrEmpty(meta.chave))
+                        if (matchChaveNome.Success && chRapida != null && chRapida.Length == 44)
                         {
-                            chRapida = meta.chave;
-                            modChave = meta.modelo ?? "65";
-                            if (long.TryParse(meta.numero, out long n)) numChave = n;
-                            if (!string.IsNullOrEmpty(meta.serie)) serieChave = meta.serie;
-                            dataEmiChave = meta.dhEmi;
-                            valorRapido = meta.valor;
+                            string aa = chRapida.Substring(2, 2);
+                            string mm = chRapida.Substring(4, 2);
+                            dataEmiChave = $"20{aa}-{mm}-01";
+                        }
+                        else
+                        {
+                            dataEmiChave = fileInfo.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss");
                         }
                     }
 
                     if (XmlUploadCache.IsUploaded(fileIdentifier, chRapida))
                     {
                         jaProcessados++;
-                        if (LiveMonitorForm.CountLogs < 150)
+                        if (LiveMonitorForm.CountLogs < 2000)
                         {
-                            if (valorRapido == 0)
-                            {
-                                var meta = ExtrairMetadadosRapidos(file);
-                                valorRapido = meta.valor;
-                                if (dataEmiChave == null) dataEmiChave = meta.dhEmi;
-                            }
-
                             LiveMonitorForm.AddLog(new XmlLogItem
                             {
                                 Timestamp = fileInfo.LastWriteTime,
@@ -374,7 +374,7 @@ namespace HubParatechDesktop
                                 Modelo = modChave,
                                 Numero = numChave > 0 ? numChave.ToString() : Path.GetFileNameWithoutExtension(fileName),
                                 Serie = serieChave,
-                                DataEmissao = dataEmiChave ?? fileInfo.LastWriteTime.ToString("yyyy-MM-dd"),
+                                DataEmissao = dataEmiChave ?? "",
                                 ValorTotal = valorRapido,
                                 Chave = chRapida ?? "-",
                                 Status = "Já no Portal (Sincronizado)",
@@ -423,15 +423,8 @@ namespace HubParatechDesktop
                         {
                             XmlUploadCache.MarkAsUploaded(fileIdentifier, chRapida);
                             jaProcessados++;
-                            if (LiveMonitorForm.CountLogs < 150)
+                            if (LiveMonitorForm.CountLogs < 2000)
                             {
-                                if (valorRapido == 0)
-                                {
-                                    var meta = ExtrairMetadadosRapidos(file);
-                                    valorRapido = meta.valor;
-                                    if (dataEmiChave == null) dataEmiChave = meta.dhEmi;
-                                }
-
                                 LiveMonitorForm.AddLog(new XmlLogItem
                                 {
                                     Timestamp = fileInfo.LastWriteTime,
@@ -439,9 +432,9 @@ namespace HubParatechDesktop
                                     Modelo = modChave,
                                     Numero = numChave > 0 ? numChave.ToString() : Path.GetFileNameWithoutExtension(fileName),
                                     Serie = serieChave,
-                                    DataEmissao = dataEmiChave ?? fileInfo.LastWriteTime.ToString("yyyy-MM-dd"),
+                                    DataEmissao = dataEmiChave ?? "",
                                     ValorTotal = valorRapido,
-                                    Chave = chRapida,
+                                    Chave = chRapida ?? "-",
                                     Status = motivoIgnorar,
                                     Arquivo = file,
                                     IsRealTime = false
