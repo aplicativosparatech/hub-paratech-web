@@ -129,10 +129,10 @@ namespace HubParatechDesktop
                 Icon = baseIcon,
                 ContextMenuStrip = new ContextMenuStrip(),
                 Visible = !isStealthMode,
-                Text = "Hub Paratech v2.6.0 - Inicializando..."
+                Text = $"Hub Paratech v{UpdateManager.VersaoAtual} - Inicializando..."
             };
 
-            var itemVersao = new ToolStripMenuItem("Hub Paratech v2.6.0") { Enabled = false, Font = new Font(Control.DefaultFont, FontStyle.Bold) };
+            var itemVersao = new ToolStripMenuItem($"Hub Paratech v{UpdateManager.VersaoAtual}") { Enabled = false, Font = new Font(Control.DefaultFont, FontStyle.Bold) };
             trayIcon.ContextMenuStrip.Items.Add(itemVersao);
 
             itemHeartbeat = new ToolStripMenuItem("🟡 Conectando ao Portal...") { Enabled = false };
@@ -168,7 +168,7 @@ namespace HubParatechDesktop
                     ? $"ATIVO (Faltam {(int)(confiancaExpiraEm.Value - DateTime.Now).TotalHours:D2}:{(confiancaExpiraEm.Value - DateTime.Now).Minutes:D2}:{(confiancaExpiraEm.Value - DateTime.Now).Seconds:D2} • Expira às {confiancaExpiraEm.Value:dd/MM/yyyy HH:mm:ss})"
                     : "Inativo";
 
-                string msg = $"Status Operacional do Hub Paratech v2.6.0:\n\n" +
+                string msg = $"Status Operacional do Hub Paratech v{UpdateManager.VersaoAtual}:\n\n" +
                              $"• Situação do Sistema: {(isBlocked ? "BLOQUEADO" : "LIBERADO / REGULAR")}\n" +
                              $"• Desbloqueio em Confiança (24h): {confiancaTxt}\n" +
                              $"• Cadência do Batimento: 15 minutos (com tolerância de 2 min no Portal)\n" +
@@ -212,7 +212,7 @@ namespace HubParatechDesktop
 
             if (!isStealthMode)
             {
-                trayIcon.ShowBalloonTip(3000, "Hub Paratech v2.6.0", "Monitoramento em tempo real ativo em todas as pastas e subpastas.", ToolTipIcon.Info);
+                trayIcon.ShowBalloonTip(3000, $"Hub Paratech v{UpdateManager.VersaoAtual}", "Monitoramento em tempo real ativo em todas as pastas e subpastas.", ToolTipIcon.Info);
             }
             EnableAutoStart();
 
@@ -362,7 +362,7 @@ namespace HubParatechDesktop
 
                 if (lastSync == DateTime.MinValue)
                 {
-                    SetTrayText("Hub Paratech v2.6.0 - Conectando...");
+                    SetTrayText($"Hub Paratech v{UpdateManager.VersaoAtual} - Conectando...");
                     if (itemHeartbeat != null) itemHeartbeat.Text = "🟡 Conectando ao Portal...";
                     return;
                 }
@@ -374,13 +374,13 @@ namespace HubParatechDesktop
                 if (remaining.TotalSeconds > 0)
                 {
                     string mmss = $"{(int)remaining.TotalMinutes:D2}:{remaining.Seconds:D2}";
-                    SetTrayText($"Hub Paratech v2.6.0 | Próx: {mmss}");
+                    SetTrayText($"Hub Paratech v{UpdateManager.VersaoAtual} | Próx: {mmss}");
                     if (itemHeartbeat != null) itemHeartbeat.Text = $"🟢 Online • Próximo pulso em: {mmss}";
                 }
                 else
                 {
                     int atrasoSec = (int)Math.Abs(remaining.TotalSeconds);
-                    SetTrayText("Hub Paratech v2.6.0 | Enviando pulso...");
+                    SetTrayText($"Hub Paratech v{UpdateManager.VersaoAtual} | Enviando pulso...");
                     if (itemHeartbeat != null) itemHeartbeat.Text = $"🟡 Sincronizando pulso (+{atrasoSec}s)...";
                 }
             }

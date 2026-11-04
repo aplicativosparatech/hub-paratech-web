@@ -218,7 +218,7 @@ namespace HubParatechDesktop
 
             var lblVersao = new Label
             {
-                Text = "Hub Paratech v2.3.0 • Monitoramento & Segurança de Dados",
+                Text = $"Hub Paratech v{UpdateManager.VersaoAtual} • Monitoramento & Segurança de Dados",
                 Location = new Point(0, 725),
                 Size = new Size(panelWidth, 20),
                 Font = new Font("Segoe UI", 8f, FontStyle.Regular),
