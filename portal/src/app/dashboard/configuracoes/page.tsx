@@ -7,6 +7,7 @@ import { RefreshCw, Download, Clock } from 'lucide-react'
 import { APP_VERSION } from '@/utils/version'
 import { useTableFeatures } from '@/hooks/useTableFeatures'
 import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
+import { ClienteAutocompleteInput } from '@/components/ClienteAutocompleteInput'
 
 export default function ConfiguracoesPage() {
   const supabase = createClient()
@@ -80,7 +81,7 @@ export default function ConfiguracoesPage() {
   async function loadClientes() {
     const { data } = await supabase
       .from('clientes')
-      .select('id, razao_social, configuracoes_hub(ultima_sincronizacao, offline_secret)')
+      .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(ultima_sincronizacao, offline_secret)')
       .order('razao_social')
     
     if (data) {
@@ -187,16 +188,13 @@ export default function ConfiguracoesPage() {
       </header>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-        <label className="block text-sm font-medium text-slate-700 mb-2">Selecione o Cliente para Configurar</label>
-        <select
-          className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          value={selectedCliente} onChange={e => setSelectedCliente(e.target.value)}
-        >
-          <option value="">-- Selecione --</option>
-          {clientes.map(c => (
-            <option key={c.id} value={c.id}>{c.razao_social}</option>
-          ))}
-        </select>
+        <ClienteAutocompleteInput
+          clientes={clientes}
+          selectedId={selectedCliente}
+          onSelect={id => setSelectedCliente(id)}
+          label="Selecione o Cliente para Configurar"
+          placeholder="Digite a Razão Social, Nome Fantasia ou CNPJ..."
+        />
       </div>
 
       {selectedCliente && (
