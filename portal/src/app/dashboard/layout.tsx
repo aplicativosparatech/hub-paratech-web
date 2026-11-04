@@ -8,7 +8,7 @@ import {
   Menu, X, Sliders, ShieldCheck, Sparkles, Database,
   Maximize2, Minimize2, Sun, Moon, Palette, ScanText, GraduationCap, Inbox,
   PanelLeftClose, PanelLeftOpen, Bell, ChevronDown, ChevronRight, Store,
-  MonitorCheck, Zap, UtensilsCrossed, Scale, Lock, Unlock, Rocket
+  MonitorCheck, Zap, UtensilsCrossed, Scale, Lock, Unlock, Rocket, FileSpreadsheet
 } from 'lucide-react'
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/utils/supabase/client'
@@ -135,7 +135,8 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
       pathname.startsWith('/dashboard/tech-slim') ||
       pathname.startsWith('/dashboard/tech-pro') ||
       pathname.startsWith('/dashboard/gastro') ||
-      pathname.startsWith('/dashboard/pes-ai')
+      pathname.startsWith('/dashboard/pes-ai') ||
+      pathname.startsWith('/dashboard/saneador-tributario')
     )) return true
 
     if (sectionId === 'tecnica' && (
@@ -565,7 +566,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             )}
 
             {/* TÓPICO 5: PARATECH SISTEMAS */}
-            <MenuSectionHeader id="paratech_sistemas" label="Paratech Sistemas" itemCount={6} />
+            <MenuSectionHeader id="paratech_sistemas" label="Paratech Sistemas" itemCount={7} />
             {(isCollapsed || isSectionOpen('paratech_sistemas')) && (
               <div className="space-y-1 animate-in fade-in duration-150">
                 <NavItem href="/dashboard/versoes" icon={Rocket} label="Atualizações & Versões" />
@@ -574,6 +575,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                 <NavItem href="/dashboard/tech-pro" icon={Zap} label="Tech Pro" />
                 <NavItem href="/dashboard/gastro" icon={UtensilsCrossed} label="Gastro" />
                 <NavItem href="/dashboard/pes-ai" icon={Scale} label="Pes.Ai" />
+                <NavItem href="/dashboard/saneador-tributario" icon={FileSpreadsheet} label="Saneador Tributário" />
               </div>
             )}
 
@@ -968,6 +970,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                   pathname.startsWith('/dashboard/tech-pro') ||
                   pathname.startsWith('/dashboard/gastro') ||
                   pathname.startsWith('/dashboard/pes-ai') ||
+                  pathname.startsWith('/dashboard/saneador-tributario') ||
                   pathname.startsWith('/dashboard/versoes'),
         items: [
           ...(role === 'admin' ? [
@@ -1018,6 +1021,14 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
               icon: Scale,
               iconColor: 'text-purple-600 dark:text-purple-400',
               iconBg: 'bg-purple-50 dark:bg-purple-950/60'
+            },
+            {
+              href: '/dashboard/saneador-tributario',
+              label: 'Saneador Tributário',
+              desc: 'Auditoria local Firebird, Postgres, Excel e SQL',
+              icon: FileSpreadsheet,
+              iconColor: 'text-emerald-600 dark:text-emerald-400',
+              iconBg: 'bg-emerald-50 dark:bg-emerald-950/60'
             }
           ] : [])
         ]
