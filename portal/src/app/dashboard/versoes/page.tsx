@@ -49,6 +49,7 @@ interface ClientePolitica {
 
 const SISTEMAS_PREDEFINIDOS = [
   { id: 'mei_simples', nome: 'MEI Simples', icon: Store, cor: 'text-indigo-600 bg-indigo-50 border-indigo-200' },
+  { id: 'saneador_tributario', nome: 'Saneador Tributário', icon: FileCode2, cor: 'text-teal-600 bg-teal-50 border-teal-200' },
   { id: 'hub_desktop', nome: 'Hub Desktop (.NET)', icon: HardDrive, cor: 'text-blue-600 bg-blue-50 border-blue-200' },
   { id: 'tech_slim', nome: 'TechSlim', icon: MonitorCheck, cor: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
   { id: 'tech_pro', nome: 'TechPro', icon: Zap, cor: 'text-amber-600 bg-amber-50 border-amber-200' },

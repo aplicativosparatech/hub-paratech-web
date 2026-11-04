@@ -573,7 +573,15 @@ export default function NovoClientePage() {
       finalCertUrl = certUploadData.storagePath
     }
 
-    const { login_email, login_senha, plano_auditoria_tributaria, gemini_api_key, gemini_modelo, ...clienteData } = formData
+    const { 
+      login_email, 
+      login_senha, 
+      plano_auditoria_tributaria, 
+      gemini_api_key, 
+      gemini_modelo, 
+      bloquear_recepcao_xml_se_inadimplente, 
+      ...clienteData 
+    } = formData
     
     const payload = {
       ...clienteData,

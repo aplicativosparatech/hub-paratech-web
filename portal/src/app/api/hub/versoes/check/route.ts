@@ -31,7 +31,7 @@ export async function GET(request: Request) {
 
     if (!sistemaId) {
       return NextResponse.json(
-        { error: 'Parâmetro sistema_id é obrigatório (ex: mei_simples, hub_desktop, tech_slim, tech_pro, gastro, pes_ai)' },
+        { error: 'Parâmetro sistema_id é obrigatório (ex: mei_simples, hub_desktop, tech_slim, tech_pro, gastro, pes_ai, saneador_tributario)' },
         { status: 400 }
       )
     }

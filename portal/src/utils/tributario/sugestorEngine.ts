@@ -109,7 +109,10 @@ export async function tributarProdutoIndividual(
   configsIa: IaProviderConfig[] = [],
   usarIa: boolean = true
 ): Promise<ProdutoTributadoOutput> {
-  const isSimples = crt === 1;
+  const isMei = crt === 4;
+  const isSimplesMe = crt === 1;
+  const isExcessoSublimite = crt === 2;
+  const isSimplesGeral = crt === 1 || crt === 4;
   const id = prod.id || `prod_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const codigo = prod.codigo || '';
   const descricao = prod.descricao.trim();
@@ -156,26 +159,40 @@ export async function tributarProdutoIndividual(
     ? '6404 - Venda de mercadoria sujeita ao regime de substituição tributária, cujo imposto já tenha sido retido anteriormente'
     : '6102 - Venda de mercadoria adquirida ou recebida de terceiros para fora do estado';
 
-  // 5. Determinação de CSOSN (CRT 1) ou CST ICMS (CRT 3)
+  // 5. Determinação de CSOSN (CRT 1 e 4) ou CST ICMS (CRT 2 e 3)
   let csosn = '';
   let descricaoCsosn = '';
   let cstIcms = '';
   let descricaoCstIcms = '';
 
-  if (isSimples) {
+  if (isMei) {
+    csosn = temSt ? '500' : '400';
+    descricaoCsosn = temSt
+      ? '500 - ICMS cobrado anteriormente por substituição tributária (substituído) no MEI'
+      : '400 - Não tributada pelo Simples Nacional no MEI';
+    cstIcms = '';
+    descricaoCstIcms = 'Não aplicável ao MEI (utiliza CSOSN 400 ou 500)';
+  } else if (isSimplesMe) {
     csosn = temSt ? '500' : '102';
     descricaoCsosn = temSt
       ? '500 - ICMS cobrado anteriormente por substituição tributária (substituído) ou por antecipação'
-      : '102 - Tributada pelo Simples Nacional sem permissão de crédito';
+      : '102 - Tributada pelo Simples Nacional sem permissão de crédito (Microempresa ME e EPP)';
     cstIcms = '';
-    descricaoCstIcms = 'Não aplicável ao Simples Nacional (usa CSOSN)';
+    descricaoCstIcms = 'Não aplicável ao Simples Nacional ME/EPP (utiliza CSOSN 102 ou 500)';
+  } else if (isExcessoSublimite) {
+    cstIcms = temSt ? '60' : '00';
+    descricaoCstIcms = temSt
+      ? '60 - ICMS cobrado anteriormente por substituição tributária (Sublimite Estadual Excedido)'
+      : '00 - Tributada integralmente (Sublimite Estadual Excedido)';
+    csosn = '';
+    descricaoCsosn = 'Excesso de sublimite estadual: ICMS apurado por CST normal do Estado';
   } else {
     cstIcms = temSt ? '60' : '00';
     descricaoCstIcms = temSt
       ? '60 - ICMS cobrado anteriormente por substituição tributária'
       : '00 - Tributada integralmente';
     csosn = '';
-    descricaoCsosn = 'Não aplicável ao Regime Normal (usa CST ICMS)';
+    descricaoCsosn = 'Não aplicável ao Regime Normal (utiliza CST ICMS 00, 10, 20, 60)';
   }
 
   // 6. Determinação de PIS e COFINS
@@ -192,7 +209,7 @@ export async function tributarProdutoIndividual(
     aliqPis = 0.0;
     cstCofins = '04';
     aliqCofins = 0.0;
-  } else if (isSimples) {
+  } else if (isSimplesGeral || isExcessoSublimite) {
     tipoPisCofins = 'simples_nacional';
     cstPis = '49'; // Outras Operações de Saída do Simples
     aliqPis = 0.0;

@@ -11,10 +11,12 @@ npm-debug.log*
 [Bb]in/
 [Oo]bj/
 [Pp]ublish/
+[Pp]ublish-x86/
 *.pdb
 .vs/
 *.user
 *.suo
+*.zip
 
 # macOS
 .DS_Store
