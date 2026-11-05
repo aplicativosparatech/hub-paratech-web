@@ -24,6 +24,8 @@ interface CleanDashboardViewProps {
     totalFaturas: number
     faturasEmDia: number
     faturasAtrasadas: number
+    faturasEmDiaValor?: number
+    faturasAtrasadasValor?: number
     pctAtraso: number
     nfQuantidade: number
     nfValor: number

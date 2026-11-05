@@ -65,6 +65,8 @@ export default function DashboardPage() {
     totalFaturas: 0,
     faturasEmDia: 0,
     faturasAtrasadas: 0,
+    faturasEmDiaValor: 0,
+    faturasAtrasadasValor: 0,
     pctAtraso: 0,
     nfQuantidade: 0,
     nfValor: 0,
@@ -243,8 +245,8 @@ export default function DashboardPage() {
           ? Number(geralConfig.ficticio_cidades)
           : cidadesRealCount
 
-        // Faturas: respeita cliente específico ou clientes da contabilidade logada
-        let qFaturas = supabase.from('faturas').select('id, status, data_vencimento')
+        // Faturas: busca faturas e valores reais da carteira da contabilidade logada
+        let qFaturas = supabase.from('faturas').select('id, status, data_vencimento, valor, cliente_id')
         if (currentRole === 'cliente' && userRoleData?.cliente_id) {
           qFaturas = qFaturas.eq('cliente_id', userRoleData.cliente_id)
         } else if (currentRole === 'contabilidade' && userRoleData?.contabilidade_id) {
@@ -257,26 +259,47 @@ export default function DashboardPage() {
 
         const { data: faturasData } = await qFaturas
         const listaFaturas = faturasData || []
-        let totalFaturas = listaFaturas.length
-        let faturasAtrasadas = 0
-        let faturasEmDia = 0
+
+        let faturasAtrasadasRealCount = 0
+        let faturasEmDiaRealCount = 0
+        let faturasAtrasadasValorReal = 0
+        let faturasEmDiaValorReal = 0
 
         listaFaturas.forEach(f => {
+          const valNum = Number(f.valor) || 0
           const isAtrasada = f.status === 'pendente' && f.data_vencimento && f.data_vencimento < hojeStr
           if (isAtrasada) {
-            faturasAtrasadas++
+            faturasAtrasadasRealCount++
+            faturasAtrasadasValorReal += valNum
           } else {
-            faturasEmDia++
+            faturasEmDiaRealCount++
+            faturasEmDiaValorReal += valNum
           }
         })
 
-        // Se fictício ativo e configurado para faturas atrasadas (para gerar autoridade visual)
-        if (ficticioLigado && Number(geralConfig?.ficticio_faturas_atrasadas) > 0 && currentRole !== 'admin') {
-          faturasAtrasadas = Number(geralConfig.ficticio_faturas_atrasadas)
-          totalFaturas = Math.max(totalFaturas, faturasAtrasadas)
+        // Se a contabilidade tem clientes vinculados mas ainda não há faturas faturadas no banco, usamos o valor_mensalidade cadastrado dos clientes
+        const mensalidadesCarteira = clisData.reduce((acc, c) => acc + (Number(c.valor_mensalidade) || 0), 0)
+        if (faturasEmDiaValorReal === 0 && mensalidadesCarteira > 0) {
+          faturasEmDiaValorReal = mensalidadesCarteira
         }
 
-        const pctAtraso = totalFaturas > 0 ? (faturasAtrasadas / totalFaturas) * 100 : 0
+        // Base de Clientes de Referência (Fictício se habilitado e > 0, senão total de clientes)
+        const baseClientesTotal = totalClientesParatech
+
+        // Quantidade de Faturas em Atraso (Fictício se habilitado e > 0 para contabilidade/cliente, senão quantidade real)
+        let faturasAtrasadasQtd = faturasAtrasadasRealCount
+        if (ficticioLigado && Number(geralConfig?.ficticio_faturas_atrasadas) > 0 && currentRole !== 'admin') {
+          faturasAtrasadasQtd = Number(geralConfig.ficticio_faturas_atrasadas)
+        }
+
+        // Faturas Em Dia: REGRA: total de clientes menos faturas em atraso
+        const faturasEmDiaQtd = Math.max(0, baseClientesTotal - faturasAtrasadasQtd)
+
+        // Total de Faturas exibido no topo do card
+        const totalFaturas = Math.max(baseClientesTotal, faturasEmDiaQtd + faturasAtrasadasQtd)
+
+        // Percentual de atraso calculado sobre a base total
+        const pctAtraso = totalFaturas > 0 ? (faturasAtrasadasQtd / totalFaturas) * 100 : 0
 
         // Carrega volume de notas fiscais respeitando o período selecionado e o escopo da contabilidade
         let qNfeSaidas = supabase.from('nfe_saidas').select('id, valor, valor_monofasico, data_emissao')
@@ -397,8 +420,10 @@ export default function DashboardPage() {
           contabilidades: totalContabilidades,
           contabilidadesReal: contabilidadesRealCount,
           totalFaturas,
-          faturasEmDia,
-          faturasAtrasadas,
+          faturasEmDia: faturasEmDiaQtd,
+          faturasAtrasadas: faturasAtrasadasQtd,
+          faturasEmDiaValor: faturasEmDiaValorReal,
+          faturasAtrasadasValor: faturasAtrasadasValorReal,
           pctAtraso,
           nfQuantidade: totalNFQuantidade,
           nfValor: totalNFValor,
@@ -798,50 +823,34 @@ export default function DashboardPage() {
               <Users size={16} />
             </div>
           </div>
-          {userRole === 'contabilidade' ? (
-            <div className="space-y-1">
-              <div className="flex items-baseline justify-between gap-2">
-                <div>
-                  <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block">
-                    Sua Carteira
-                  </span>
-                  <p className="text-2xl sm:text-3xl font-black text-slate-800">
-                    {loading ? '...' : metrics.clientesContabilidade.toLocaleString('pt-BR')}
-                  </p>
-                  <span className="text-[10px] text-slate-400 font-medium">Clientes vinculados</span>
-                </div>
+          <div>
+            <div className="flex items-baseline gap-2">
+              <p className="text-2xl sm:text-3xl font-black text-slate-800">
+                {loading ? '...' : metrics.clientesParatech.toLocaleString('pt-BR')}
+              </p>
+              {isFicticioAtivo && metrics.clientesReal !== metrics.clientesParatech && (
+                <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
+                  Fictício
+                </span>
+              )}
+            </div>
+            <div className="flex items-center justify-between mt-1 text-[11px] text-slate-400 font-medium">
+              <span>Empresas ativas</span>
+              {userRole === 'admin' && isFicticioAtivo && metrics.clientesReal !== metrics.clientesParatech && (
+                <span className="text-slate-500 font-normal">Real: {metrics.clientesReal}</span>
+              )}
+            </div>
 
-                <div className="text-right border-l border-slate-100 pl-3">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                    Total Paratech
-                  </span>
-                  <p className="text-xl sm:text-2xl font-black text-slate-700">
-                    {loading ? '...' : metrics.clientesParatech.toLocaleString('pt-BR')}
-                  </p>
-                  <span className="text-[10px] text-slate-400 font-medium">Rede Hub</span>
-                </div>
+            {/* Destaque da Quantidade Real da Contabilidade Logada no mesmo Card */}
+            {userRole === 'contabilidade' && (
+              <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                <span className="text-slate-500 font-medium">Sua Carteira:</span>
+                <span className="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                  {metrics.clientesContabilidade} {metrics.clientesContabilidade === 1 ? 'cliente real' : 'clientes reais'}
+                </span>
               </div>
-            </div>
-          ) : (
-            <div>
-              <div className="flex items-baseline gap-2">
-                <p className="text-2xl sm:text-3xl font-black text-slate-800">
-                  {loading ? '...' : metrics.clientesParatech.toLocaleString('pt-BR')}
-                </p>
-                {userRole === 'admin' && isFicticioAtivo && metrics.clientesReal !== metrics.clientesParatech && (
-                  <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
-                    Fictício
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center justify-between mt-1 text-[11px] text-slate-400 font-medium">
-                <span>Empresas ativas</span>
-                {userRole === 'admin' && isFicticioAtivo && metrics.clientesReal !== metrics.clientesParatech && (
-                  <span className="text-slate-500 font-normal">Real: {metrics.clientesReal}</span>
-                )}
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* CARD 2: CONTABILIDADES */}
@@ -874,7 +883,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* CARD 3: STATUS DAS FATURAS (TODAS, EM DIA E ATRASADAS - REGRAS 20% AMARELO, 50% LARANJA, >50% VERMELHO) */}
+        {/* CARD 3: STATUS DAS FATURAS & COBRANÇAS */}
         <div className={`bg-white p-4 sm:p-5 rounded-2xl border transition flex flex-col justify-between shadow-xs ${
           faturasStatus.cor === 'vermelho' ? 'border-red-300 hover:border-red-400' :
           faturasStatus.cor === 'laranja' ? 'border-orange-300 hover:border-orange-400' :
@@ -916,6 +925,22 @@ export default function DashboardPage() {
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border inline-block ${faturasStatus.badgeBg}`}>
                 {faturasStatus.label}
               </span>
+            </div>
+
+            {/* Valores REAIS em R$ da carteira da contabilidade logada */}
+            <div className="mt-2.5 pt-2 border-t border-slate-100 space-y-0.5 text-[10px]">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Em dia (Real):</span>
+                <span className="font-bold text-emerald-600">
+                  {metrics.faturasEmDiaValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Atrasado (Real):</span>
+                <span className={`font-bold ${metrics.faturasAtrasadasValor > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                  {metrics.faturasAtrasadasValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </span>
+              </div>
             </div>
           </div>
         </div>
