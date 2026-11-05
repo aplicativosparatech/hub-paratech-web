@@ -79,9 +79,24 @@ export async function GET(request: Request) {
       politicaEfetiva = clienteEncontrado.politica_atualizacao === 'automatica' ? 'automatica' : 'informativa'
     }
 
+    const targetClienteId = clienteEncontrado?.id || (clienteId || null)
+    let hasRemoteUpdateCommand = false
+
+    // Se houver comando remoto 'atualizar_hub' gravado para este cliente, força obrigatoriedade e política automática
+    if (targetClienteId && sistemaId.toLowerCase() === 'hub_desktop') {
+      const { data: cfgHub } = await supabase
+        .from('configuracoes_hub')
+        .select('comando_remoto')
+        .eq('cliente_id', targetClienteId)
+        .maybeSingle()
+      if (cfgHub?.comando_remoto === 'atualizar_hub') {
+        hasRemoteUpdateCommand = true
+        politicaEfetiva = 'automatica'
+      }
+    }
+
     // 3. Registra telemetria de forma assíncrona/não-bloqueante
     const ipOrigem = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
-    const targetClienteId = clienteEncontrado?.id || (clienteId || null)
 
     const payloadTelemetria = {
       cliente_id: targetClienteId,
@@ -159,8 +174,8 @@ export async function GET(request: Request) {
       build_number_atual: buildNumberAtual,
       versao_mais_recente: versaoMaisRecente.versao,
       build_number_mais_recente: versaoMaisRecente.build_number,
-      obrigatoria: !!versaoMaisRecente.obrigatoria,
-      politica_efetiva: versaoMaisRecente.obrigatoria ? 'automatica' : politicaEfetiva,
+      obrigatoria: !!versaoMaisRecente.obrigatoria || hasRemoteUpdateCommand,
+      politica_efetiva: (versaoMaisRecente.obrigatoria || hasRemoteUpdateCommand) ? 'automatica' : politicaEfetiva,
       changelog: versaoMaisRecente.changelog || 'Melhorias de desempenho e correções gerais.',
       url_download: versaoMaisRecente.url_download,
       sha256: versaoMaisRecente.sha256 || null,

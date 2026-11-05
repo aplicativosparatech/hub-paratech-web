@@ -341,8 +341,37 @@ export default function ConfiguracoesPage() {
       {/* Tabela de Hubs */}
       {!selectedCliente && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 mt-8 overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-200">
-            <h3 className="font-semibold text-lg text-slate-800">Hubs Ativos (Monitoramento)</h3>
+          <div className="px-6 py-4 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+            <div>
+              <h3 className="font-semibold text-lg text-slate-800">Hubs Ativos (Monitoramento)</h3>
+              <p className="text-xs text-slate-500">Acompanhamento em tempo real de conexão, versões instaladas e comandos remotos</p>
+            </div>
+            {/* Legenda visual com bolinhas estilizadas */}
+            <div className="flex flex-wrap items-center gap-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
+              <span className="font-semibold text-slate-600 mr-1">Legenda:</span>
+              <span className="inline-flex items-center gap-1.5 font-medium text-emerald-700">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-200"></span>
+                v2.8.2 (Atual)
+              </span>
+              <span className="text-slate-300">•</span>
+              <span className="inline-flex items-center gap-1.5 font-medium text-amber-700">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 ring-2 ring-amber-200"></span>
+                v2.8.0 (Desatualizado)
+              </span>
+              <span className="text-slate-300">•</span>
+              <span className="inline-flex items-center gap-1.5 font-medium text-blue-700">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-600"></span>
+                </span>
+                Atualização enviada ⏳
+              </span>
+              <span className="text-slate-300">•</span>
+              <span className="inline-flex items-center gap-1.5 font-medium text-slate-500">
+                <span className="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+                Não instalado
+              </span>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse" style={{ tableLayout: 'fixed' }}>
@@ -497,10 +526,15 @@ export default function ConfiguracoesPage() {
                       </td>
                       <td className="p-4 text-sm truncate">
                         {isPendenteAtualizacao ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 animate-pulse border border-blue-200" title="Comando de atualização enviado. Será executado no próximo pulso de sincronização.">
-                            <ArrowUpCircle className="w-3.5 h-3.5 mr-1 text-blue-600" />
-                            Atualização enviada ⏳
-                          </span>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 animate-pulse border border-blue-200 w-fit" title="Comando gravado na nuvem. O executável no cliente aplicará a atualização silenciosa no próximo pulso ou quando for iniciado.">
+                              <ArrowUpCircle className="w-3.5 h-3.5 mr-1 text-blue-600" />
+                              Atualização enviada ⏳
+                            </span>
+                            <span className="text-[10px] text-blue-600 font-medium">
+                              Aguardando pulso do cliente
+                            </span>
+                          </div>
                         ) : versaoHub ? (
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
                             isAtualizado 
