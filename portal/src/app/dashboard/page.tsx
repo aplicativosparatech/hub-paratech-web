@@ -178,7 +178,7 @@ export default function DashboardPage() {
         const hojeStr = new Date().toISOString().split('T')[0]
 
         // Consultas de Clientes, Contabilidades, Faturas, etc.
-        let qClientesLista = supabase.from('clientes').select('id, razao_social, nome_fantasia, cnpj, whatsapp, cidade, uf', { count: 'exact' }).order('razao_social', { ascending: true })
+        let qClientesLista = supabase.from('clientes').select('id, razao_social, nome_fantasia, cnpj, whatsapp, cidade, uf, valor_mensalidade, dia_vencimento, is_ativo', { count: 'exact' }).order('razao_social', { ascending: true })
         if (currentRole === 'cliente' && userRoleData?.cliente_id) {
           qClientesLista = qClientesLista.eq('id', userRoleData.cliente_id)
         } else if (currentRole === 'contabilidade' && userRoleData?.contabilidade_id) {
@@ -221,18 +221,19 @@ export default function DashboardPage() {
         // Total real de clientes de todo o Hub Paratech
         const totalClientesHubReal = clientesTotalHubRes.count || 0
 
-        // Total exibido para "Clientes Paratech" (fictício se habilitado e > 0, senão real do Hub)
-        const totalClientesParatech = (ficticioLigado && Number(geralConfig?.ficticio_clientes) > 0)
+        // REGRA DE OURO: O ADMINISTRADOR NUNCA USA DADOS FICTÍCIOS! SEMPRE 100% REAL!
+        // Fictício é APENAS para contabilidade e cliente quando a opção estiver ativada nas configurações.
+        const totalClientesParatech = (currentRole !== 'admin' && ficticioLigado && Number(geralConfig?.ficticio_clientes) > 0)
           ? Number(geralConfig.ficticio_clientes)
           : totalClientesHubReal
 
-        // Total de contabilidades (fictício se habilitado e > 0, senão real do Hub)
+        // Total de contabilidades (Admin sempre real; terceiros fictício se habilitado)
         const contabilidadesRealCount = contabRes.count || 0
-        const totalContabilidades = (ficticioLigado && Number(geralConfig?.ficticio_contabilidades) > 0)
+        const totalContabilidades = (currentRole !== 'admin' && ficticioLigado && Number(geralConfig?.ficticio_contabilidades) > 0)
           ? Number(geralConfig.ficticio_contabilidades)
           : contabilidadesRealCount
 
-        // Cidades distintas atendidas
+        // Cidades distintas atendidas (Admin sempre real; terceiros fictício se habilitado)
         const cidadesSet = new Set<string>()
         ;(cidadesClientesRes.data || []).forEach(c => {
           if (c.cidade && c.cidade.trim()) cidadesSet.add(c.cidade.trim().toUpperCase())
@@ -241,11 +242,11 @@ export default function DashboardPage() {
           if (c.cidade && c.cidade.trim()) cidadesSet.add(c.cidade.trim().toUpperCase())
         })
         const cidadesRealCount = Math.max(cidadesSet.size, totalClientesHubReal > 0 ? 1 : 0)
-        const totalCidades = (ficticioLigado && Number(geralConfig?.ficticio_cidades) > 0)
+        const totalCidades = (currentRole !== 'admin' && ficticioLigado && Number(geralConfig?.ficticio_cidades) > 0)
           ? Number(geralConfig.ficticio_cidades)
           : cidadesRealCount
 
-        // Faturas: busca faturas e valores reais da carteira da contabilidade logada
+        // Faturas: busca faturas e valores reais
         let qFaturas = supabase.from('faturas').select('id, status, data_vencimento, valor, cliente_id')
         if (currentRole === 'cliente' && userRoleData?.cliente_id) {
           qFaturas = qFaturas.eq('cliente_id', userRoleData.cliente_id)
@@ -265,38 +266,59 @@ export default function DashboardPage() {
         let faturasAtrasadasValorReal = 0
         let faturasEmDiaValorReal = 0
 
-        listaFaturas.forEach(f => {
-          const valNum = Number(f.valor) || 0
-          const isAtrasada = f.status === 'pendente' && f.data_vencimento && f.data_vencimento < hojeStr
-          if (isAtrasada) {
-            faturasAtrasadasRealCount++
-            faturasAtrasadasValorReal += valNum
-          } else {
-            faturasEmDiaRealCount++
-            faturasEmDiaValorReal += valNum
-          }
-        })
-
-        // Se a contabilidade tem clientes vinculados mas ainda não há faturas faturadas no banco, usamos o valor_mensalidade cadastrado dos clientes
-        const mensalidadesCarteira = clisData.reduce((acc, c) => acc + (Number(c.valor_mensalidade) || 0), 0)
-        if (faturasEmDiaValorReal === 0 && mensalidadesCarteira > 0) {
-          faturasEmDiaValorReal = mensalidadesCarteira
+        if (listaFaturas.length > 0) {
+          listaFaturas.forEach(f => {
+            const valNum = Number(f.valor) || 0
+            const isAtrasada = f.status === 'pendente' && f.data_vencimento && f.data_vencimento < hojeStr
+            if (isAtrasada) {
+              faturasAtrasadasRealCount++
+              faturasAtrasadasValorReal += valNum
+            } else {
+              faturasEmDiaRealCount++
+              faturasEmDiaValorReal += valNum
+            }
+          })
+        } else {
+          // Quando não há faturas geradas na tabela 'faturas', calcula com base na carteira de clientes ativos e seus vencimentos
+          const hojeDia = new Date().getDate()
+          clisData.forEach(c => {
+            const valNum = Number(c.valor_mensalidade) || 0
+            const diaVenc = Number(c.dia_vencimento) || 10
+            if (hojeDia > diaVenc) {
+              faturasAtrasadasRealCount++
+              faturasAtrasadasValorReal += valNum
+            } else {
+              faturasEmDiaRealCount++
+              faturasEmDiaValorReal += valNum
+            }
+          })
         }
 
-        // Base de Clientes de Referência (Fictício se habilitado e > 0, senão total de clientes)
-        const baseClientesTotal = totalClientesParatech
+        // Se houver mensalidades cadastradas e nenhuma fatura registrada ainda, garante o valor em dia/atrasado
+        if (faturasEmDiaValorReal === 0 && faturasAtrasadasValorReal === 0) {
+          const totalMensalidades = clisData.reduce((acc, c) => acc + (Number(c.valor_mensalidade) || 0), 0)
+          faturasEmDiaValorReal = totalMensalidades
+          faturasEmDiaRealCount = clisData.length
+        }
 
-        // Quantidade de Faturas em Atraso (Fictício se habilitado e > 0 para contabilidade/cliente, senão quantidade real)
+        // Base de Clientes de Referência (Admin sempre real; terceiros fictício se ativado)
+        const baseClientesTotal = currentRole === 'admin' ? totalClientesHubReal : totalClientesParatech
+
+        // Quantidade de Faturas em Atraso (Admin sempre real; terceiros fictício se habilitado)
         let faturasAtrasadasQtd = faturasAtrasadasRealCount
-        if (ficticioLigado && Number(geralConfig?.ficticio_faturas_atrasadas) > 0 && currentRole !== 'admin') {
+        if (currentRole !== 'admin' && ficticioLigado && Number(geralConfig?.ficticio_faturas_atrasadas) > 0) {
           faturasAtrasadasQtd = Number(geralConfig.ficticio_faturas_atrasadas)
         }
 
-        // Faturas Em Dia: REGRA: total de clientes menos faturas em atraso
-        const faturasEmDiaQtd = Math.max(0, baseClientesTotal - faturasAtrasadasQtd)
+        // Faturas Em Dia: total de clientes menos faturas em atraso
+        const faturasEmDiaQtd = currentRole === 'admin'
+          ? faturasEmDiaRealCount
+          : Math.max(0, baseClientesTotal - faturasAtrasadasQtd)
 
         // Total de Faturas exibido no topo do card
-        const totalFaturas = Math.max(baseClientesTotal, faturasEmDiaQtd + faturasAtrasadasQtd)
+        const totalFaturas = currentRole === 'admin'
+          ? (faturasEmDiaQtd + faturasAtrasadasQtd)
+          : Math.max(baseClientesTotal, faturasEmDiaQtd + faturasAtrasadasQtd)
 
         // Percentual de atraso calculado sobre a base total
         const pctAtraso = totalFaturas > 0 ? (faturasAtrasadasQtd / totalFaturas) * 100 : 0
@@ -679,23 +701,23 @@ export default function DashboardPage() {
     }
   }, [])
 
-  // Filtragem inteligente de clientes por Nome, CNPJ ou Telefone/WhatsApp
+  // Filtragem inteligente de clientes por Nome, Fantasia, CNPJ, Cidade ou Telefone/WhatsApp (insensível a acentos)
+  const normalize = (str: string) => (str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+
   const clientesFiltrados = listaClientes.filter(c => {
     if (!termoBuscaCliente.trim()) return true
-    const term = termoBuscaCliente.toLowerCase().trim()
-    const cleanDigits = term.replace(/\D/g, '')
+    const term = normalize(termoBuscaCliente)
+    const cleanDigits = termoBuscaCliente.replace(/\D/g, '')
 
-    const matchNome = 
-      (c.razao_social || '').toLowerCase().includes(term) || 
-      (c.nome_fantasia || '').toLowerCase().includes(term)
+    const normRazao = normalize(c.razao_social)
+    const normFantasia = normalize(c.nome_fantasia || '')
+    const normCidade = normalize(c.cidade || '')
+    const cleanCnpj = (c.cnpj || '').replace(/\D/g, '')
+    const cleanWhatsapp = (c.whatsapp || '').replace(/\D/g, '')
 
-    const matchCnpj = 
-      (c.cnpj || '').toLowerCase().includes(term) || 
-      (cleanDigits.length >= 3 && (c.cnpj || '').replace(/\D/g, '').includes(cleanDigits))
-
-    const matchTelefone = 
-      (c.whatsapp || '').toLowerCase().includes(term) || 
-      (cleanDigits.length >= 3 && (c.whatsapp || '').replace(/\D/g, '').includes(cleanDigits))
+    const matchNome = normRazao.includes(term) || normFantasia.includes(term) || normCidade.includes(term)
+    const matchCnpj = (c.cnpj || '').toLowerCase().includes(term) || (cleanDigits.length >= 2 && cleanCnpj.includes(cleanDigits))
+    const matchTelefone = (c.whatsapp || '').includes(term) || (cleanDigits.length >= 2 && cleanWhatsapp.includes(cleanDigits))
 
     return Boolean(matchNome || matchCnpj || matchTelefone)
   })
@@ -863,19 +885,11 @@ export default function DashboardPage() {
           <div>
             <div className="flex items-baseline gap-2">
               <p className="text-2xl sm:text-3xl font-black text-slate-800">
-                {loading ? '...' : metrics.clientesParatech.toLocaleString('pt-BR')}
+                {loading ? '...' : (userRole === 'admin' ? metrics.clientesReal : metrics.clientesParatech).toLocaleString('pt-BR')}
               </p>
-              {userRole === 'admin' && isFicticioAtivo && metrics.clientesReal !== metrics.clientesParatech && (
-                <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
-                  Fictício
-                </span>
-              )}
             </div>
             <div className="flex items-center justify-between mt-1 text-[11px] text-slate-400 font-medium">
               <span>Empresas ativas</span>
-              {userRole === 'admin' && isFicticioAtivo && metrics.clientesReal !== metrics.clientesParatech && (
-                <span className="text-slate-500 font-normal">Real: {metrics.clientesReal}</span>
-              )}
             </div>
 
             {/* Destaque da Quantidade da Contabilidade Logada no mesmo Card */}
@@ -903,19 +917,11 @@ export default function DashboardPage() {
           <div>
             <div className="flex items-baseline gap-2">
               <p className="text-2xl sm:text-3xl font-black text-slate-800">
-                {loading ? '...' : metrics.contabilidades.toLocaleString('pt-BR')}
+                {loading ? '...' : (userRole === 'admin' ? metrics.contabilidadesReal : metrics.contabilidades).toLocaleString('pt-BR')}
               </p>
-              {userRole === 'admin' && isFicticioAtivo && metrics.contabilidadesReal !== metrics.contabilidades && (
-                <span className="text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded">
-                  Fictício
-                </span>
-              )}
             </div>
             <div className="flex items-center justify-between mt-1 text-[11px] text-slate-400 font-medium">
               <span>Escritórios parceiros</span>
-              {userRole === 'admin' && isFicticioAtivo && metrics.contabilidadesReal !== metrics.contabilidades && (
-                <span className="text-slate-500 font-normal">Real: {metrics.contabilidadesReal}</span>
-              )}
             </div>
           </div>
         </div>
@@ -1072,19 +1078,11 @@ export default function DashboardPage() {
           <div>
             <div className="flex items-baseline gap-2">
               <p className="text-2xl sm:text-3xl font-black text-slate-800">
-                {loading ? '...' : metrics.cidades.toLocaleString('pt-BR')}
+                {loading ? '...' : (userRole === 'admin' ? metrics.cidadesReal : metrics.cidades).toLocaleString('pt-BR')}
               </p>
-              {userRole === 'admin' && isFicticioAtivo && metrics.cidadesReal !== metrics.cidades && (
-                <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded">
-                  Fictício
-                </span>
-              )}
             </div>
             <div className="flex items-center justify-between mt-1 text-[11px] text-slate-400 font-medium">
               <span>Cobertura municipal</span>
-              {userRole === 'admin' && isFicticioAtivo && metrics.cidadesReal !== metrics.cidades && (
-                <span className="text-slate-500 font-normal">Real: {metrics.cidadesReal}</span>
-              )}
             </div>
           </div>
         </div>
@@ -1166,11 +1164,11 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => setIsOpenBuscaCliente(prev => !prev)}
-                  className="flex items-center justify-between gap-1.5 text-xs text-white font-bold cursor-pointer w-[140px] sm:w-[170px] xl:w-[195px] text-left pt-0.5"
+                  className="flex items-center justify-between gap-2 text-xs text-white font-bold cursor-pointer min-w-[200px] sm:min-w-[240px] xl:min-w-[270px] max-w-[340px] text-left pt-0.5"
                 >
                   <div className="flex items-center gap-1.5 truncate">
                     <Building2 size={13} className="text-indigo-400 shrink-0" />
-                    <span className="truncate">{clienteNomeExibicao}</span>
+                    <span className="truncate" title={clienteNomeExibicao}>{clienteNomeExibicao}</span>
                   </div>
                   <ChevronDown size={14} className={`text-slate-400 shrink-0 transition-transform ${isOpenBuscaCliente ? 'rotate-180' : ''}`} />
                 </button>
@@ -1178,23 +1176,30 @@ export default function DashboardPage() {
 
               {/* Popover Dropdown com Busca Inteligente */}
               {isOpenBuscaCliente && (
-                <div className="absolute left-0 bottom-full mb-2 sm:bottom-auto sm:top-full sm:mt-2 z-50 w-[320px] sm:w-[380px] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-2.5 animate-in fade-in zoom-in-95 duration-150">
+                <div className="absolute left-0 bottom-full mb-2 sm:bottom-auto sm:top-full sm:mt-2 z-50 w-[340px] sm:w-[440px] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-3 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex items-center justify-between mb-2 px-1 text-[11px] text-slate-400">
+                    <span className="font-semibold text-slate-300">Selecione a empresa para fechamento:</span>
+                    <span className="font-mono text-indigo-400 font-bold bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700">
+                      {clientesFiltrados.length} encontrada{clientesFiltrados.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+
                   {/* Campo de Busca */}
                   <div className="relative mb-2">
                     <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
                     <input
                       type="text"
                       autoFocus
-                      placeholder="Buscar por Nome, CNPJ ou Telefone..."
+                      placeholder="Buscar por Nome, Fantasia, CNPJ ou Cidade..."
                       value={termoBuscaCliente}
                       onChange={(e) => setTermoBuscaCliente(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-8 pr-8 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-8 pr-8 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
                     />
                     {termoBuscaCliente && (
                       <button
                         type="button"
                         onClick={() => setTermoBuscaCliente('')}
-                        className="absolute right-2.5 top-2 text-slate-400 hover:text-white"
+                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
                       >
                         <CloseIcon size={14} />
                       </button>
@@ -1202,35 +1207,52 @@ export default function DashboardPage() {
                   </div>
 
                   {/* Lista de Empresas */}
-                  <div className="max-h-56 overflow-y-auto space-y-1 pr-1 custom-scrollbar text-xs">
+                  <div className="max-h-64 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar text-xs">
                     {clientesFiltrados.length === 0 ? (
-                      <div className="p-3 text-center text-slate-400 text-xs">
-                        Nenhuma empresa encontrada por nome, CNPJ ou telefone.
+                      <div className="p-4 text-center text-slate-400 text-xs bg-slate-800/50 rounded-xl border border-slate-800">
+                        Nenhuma empresa encontrada com termo &quot;{termoBuscaCliente}&quot;.
                       </div>
                     ) : (
                       clientesFiltrados.map(cli => {
                         const isSelected = cli.id === selectedClienteId
+                        const nomePrincipal = cli.nome_fantasia || cli.razao_social
+                        const temNomeDiferente = cli.nome_fantasia && cli.nome_fantasia !== cli.razao_social
+
                         return (
                           <button
                             key={cli.id}
                             type="button"
                             onClick={() => {
                               setSelectedClienteId(cli.id)
+                              setGlobalClienteId(cli.id)
                               setIsOpenBuscaCliente(false)
+                              setTermoBuscaCliente('')
                             }}
-                            className={`w-full p-2 rounded-xl text-left transition flex items-center justify-between gap-2 ${
+                            className={`w-full p-2.5 rounded-xl text-left transition flex items-center justify-between gap-2.5 ${
                               isSelected
-                                ? 'bg-indigo-600/30 border border-indigo-500/40 text-white'
-                                : 'hover:bg-slate-800 text-slate-300 hover:text-white'
+                                ? 'bg-indigo-600/30 border border-indigo-500/50 text-white'
+                                : 'hover:bg-slate-800 border border-transparent text-slate-300 hover:text-white'
                             }`}
                           >
-                            <div className="truncate">
+                            <div className="truncate min-w-0">
                               <p className="font-bold text-white text-xs truncate">
-                                {cli.nome_fantasia || cli.razao_social}
+                                {nomePrincipal}
                               </p>
-                              <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[10px] text-slate-400">
+                              {temNomeDiferente && (
+                                <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                                  {cli.razao_social}
+                                </p>
+                              )}
+                              <div className="flex flex-wrap items-center gap-2 mt-1 text-[10px] text-slate-400">
                                 {cli.cnpj && (
-                                  <span>CNPJ: {cli.cnpj}</span>
+                                  <span className="font-mono bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-700/60">
+                                    {cli.cnpj}
+                                  </span>
+                                )}
+                                {cli.cidade && (
+                                  <span className="text-slate-300">
+                                    📍 {cli.cidade}/{cli.uf}
+                                  </span>
                                 )}
                                 {cli.whatsapp && (
                                   <span className="flex items-center gap-1 text-emerald-400 font-mono">
@@ -1238,12 +1260,9 @@ export default function DashboardPage() {
                                     {cli.whatsapp}
                                   </span>
                                 )}
-                                {cli.cidade && (
-                                  <span>• {cli.cidade}/{cli.uf}</span>
-                                )}
                               </div>
                             </div>
-                            {isSelected && <Check size={15} className="text-emerald-400 shrink-0" />}
+                            {isSelected && <Check size={16} className="text-emerald-400 shrink-0" />}
                           </button>
                         )
                       })
