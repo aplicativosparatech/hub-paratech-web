@@ -111,7 +111,7 @@ export default function RelatoriosPage() {
         }
 
         const { data: roleData } = await supabase.from('user_roles').select('*').eq('user_id', user.id).maybeSingle()
-        const role = (roleData?.role as any) || 'admin'
+        const role = (roleData?.role as any) || 'cliente'
         setUserRole(role)
 
         let clisData: any[] = []
@@ -130,7 +130,7 @@ export default function RelatoriosPage() {
             .eq('contabilidade_id', roleData.contabilidade_id)
             .order('razao_social')
           if (clis) clisData = clis
-        } else {
+        } else if (role === 'admin') {
           // Admin: busca todas as empresas cadastradas
           const { data: clis, error: errClis } = await supabase
             .from('clientes')
@@ -141,6 +141,8 @@ export default function RelatoriosPage() {
             console.error('Erro ao buscar clientes para relatorios:', errClis)
           }
           if (clis) clisData = clis
+        } else {
+          clisData = []
         }
 
         // Se temos clientes, buscar os nomes das contabilidades vinculadas para exibição no card

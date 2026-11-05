@@ -79,7 +79,12 @@ interface ConsultaSalvaItem {
 
 export default function DistribuicaoDfePage() {
   const supabase = createClient()
-  const { selectedClienteId: globalClienteId } = useGlobalClient()
+  const { 
+    userRole, 
+    clientes: clientesGlobais, 
+    selectedClienteId: globalClienteId, 
+    loadingClientes: loadingClientesGlobais 
+  } = useGlobalClient()
   const [abaAtiva, setAbaAtiva] = useState<'analise' | 'salvas'>('analise')
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loadingClientes, setLoadingClientes] = useState(true)
@@ -225,34 +230,24 @@ export default function DistribuicaoDfePage() {
     }
   }
 
-  // Carrega clientes
+  // Sincronização estrita com a lista de clientes permitidos do GlobalClientContext
   useEffect(() => {
-    async function loadClientes() {
-      setLoadingClientes(true)
-      try {
-        const { data, error } = await supabase
-          .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, uf, certificado_url')
-          .order('razao_social', { ascending: true })
-
-        if (error) throw error
-        setClientes(data || [])
-        if (data && data.length > 0) {
-          const globalSaved = typeof window !== 'undefined' ? localStorage.getItem('hub_paratech_global_cliente') : null
-          if (globalSaved && data.some(c => c.id === globalSaved)) {
-            setSelectedClienteId(globalSaved)
-          } else {
-            setSelectedClienteId(data[0].id)
-          }
-        }
-      } catch (err: any) {
-        toast.error('Erro ao listar empresas: ' + (err.message || ''))
-      } finally {
-        setLoadingClientes(false)
+    if (clientesGlobais && clientesGlobais.length > 0) {
+      setClientes(clientesGlobais as any[])
+      setLoadingClientes(false)
+      if (globalClienteId && clientesGlobais.some(c => c.id === globalClienteId)) {
+        setSelectedClienteId(globalClienteId)
+      } else if (userRole === 'cliente') {
+        setSelectedClienteId(clientesGlobais[0].id)
+      } else if (!selectedClienteId || !clientesGlobais.some(c => c.id === selectedClienteId)) {
+        setSelectedClienteId(clientesGlobais[0].id)
       }
+    } else if (!loadingClientesGlobais) {
+      setClientes([])
+      setSelectedClienteId('')
+      setLoadingClientes(false)
     }
-    loadClientes()
-  }, [])
+  }, [clientesGlobais, globalClienteId, userRole, loadingClientesGlobais])
 
   // Carrega histórico de consultas salvas
   const carregarConsultasSalvas = async () => {

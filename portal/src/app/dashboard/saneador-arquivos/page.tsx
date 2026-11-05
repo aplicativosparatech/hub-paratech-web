@@ -109,9 +109,9 @@ export default function SaneadorArquivosPage() {
           .from('user_roles')
           .select('*')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
 
-        const role = (roleData?.role as string) || 'admin';
+        const role = (roleData?.role as string) || 'cliente';
 
         let clisData: ClienteOption[] = [];
         if (role === 'cliente' && roleData?.cliente_id) {
@@ -119,7 +119,7 @@ export default function SaneadorArquivosPage() {
             .from('clientes')
             .select('id, razao_social, nome_fantasia, cnpj, regime_tributario, uf, cidade')
             .eq('id', roleData.cliente_id)
-            .single();
+            .maybeSingle();
           if (cli) clisData = [cli];
         } else if (role === 'contabilidade' && roleData?.contabilidade_id) {
           const { data: clis } = await supabase
@@ -128,12 +128,14 @@ export default function SaneadorArquivosPage() {
             .eq('contabilidade_id', roleData.contabilidade_id)
             .order('razao_social');
           if (clis) clisData = clis;
-        } else {
+        } else if (role === 'admin') {
           const { data: clis } = await supabase
             .from('clientes')
             .select('id, razao_social, nome_fantasia, cnpj, regime_tributario, uf, cidade')
             .order('razao_social');
           if (clis) clisData = clis;
+        } else {
+          clisData = [];
         }
 
         setClientes(clisData);

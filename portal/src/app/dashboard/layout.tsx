@@ -299,7 +299,9 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
 
     const rotasProtegidas = [
       { prefixo: '/dashboard/minhas-faturas', modulo: 'faturas', nome: 'Minhas Faturas' },
-      { prefixo: '/dashboard/faturas', modulo: 'faturas', nome: 'Faturas' },
+      { prefixo: '/dashboard/faturas', modulo: '_admin_only', nome: 'Faturas (Gestão Financeira)' },
+      { prefixo: '/dashboard/clientes', modulo: '_admin_only', nome: 'Gestão de Clientes' },
+      { prefixo: '/dashboard/contabilidades', modulo: '_admin_only', nome: 'Gestão de Contabilidades' },
       { prefixo: '/dashboard/versoes', modulo: '_admin_only', nome: 'Atualizações & Versões' },
       { prefixo: '/dashboard/mei-simples', modulo: '_admin_only', nome: 'MEI Simples' },
       { prefixo: '/dashboard/tech-slim', modulo: '_admin_only', nome: 'Tech Slim' },

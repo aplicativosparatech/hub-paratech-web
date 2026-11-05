@@ -175,8 +175,8 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
         return
       }
 
-      // Consulta de papel com fallback resiliente
-      let role: 'admin' | 'contabilidade' | 'cliente' = 'admin'
+      // Consulta de papel com validação estrita (Princípio do menor privilégio)
+      let role: 'admin' | 'contabilidade' | 'cliente' | null = null
       let roleData: any = null
 
       try {
@@ -185,12 +185,12 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
           .select('role, cliente_id, contabilidade_id')
           .eq('user_id', user.id)
           .maybeSingle()
-        if (data) {
+        if (data && data.role) {
           roleData = data
-          role = (data.role as any) || 'admin'
+          role = data.role as 'admin' | 'contabilidade' | 'cliente'
         }
       } catch (errRole) {
-        console.warn('user_roles indisponível, assumindo admin:', errRole)
+        console.warn('Erro ao carregar user_roles:', errRole)
       }
 
       setUserRole(role)
@@ -260,7 +260,7 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
         } else if (clis) {
           clisData = clis.map(formatarClienteItem)
         }
-      } else {
+      } else if (role === 'admin') {
         // Admin: busca todas as empresas
         const { data: clis, error: errClis } = await supabase
           .from('clientes')
@@ -275,6 +275,16 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
           if (fbClis) clisData = fbClis as any[]
         } else if (clis) {
           clisData = clis.map(formatarClienteItem)
+        }
+      } else {
+        clisData = []
+      }
+
+      // Limpa qualquer ID salvo de sessões antigas que não pertença a este usuário/carteira
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem(GLOBAL_CLIENT_STORAGE_KEY)
+        if (saved && !clisData.some(c => c.id === saved)) {
+          localStorage.removeItem(GLOBAL_CLIENT_STORAGE_KEY)
         }
       }
 

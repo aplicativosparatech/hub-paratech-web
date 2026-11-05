@@ -92,12 +92,14 @@ export default function DashboardPage() {
       try {
         // 1. Identifica usuário e role
         const { data: { user } } = await supabase.auth.getUser()
-        let currentRole: 'admin' | 'contabilidade' | 'cliente' = 'admin'
+        let currentRole: 'admin' | 'contabilidade' | 'cliente' = 'cliente'
         let userRoleData: any = null
         if (user) {
-          const { data: roleData } = await supabase.from('user_roles').select('*').eq('user_id', user.id).single()
+          const { data: roleData } = await supabase.from('user_roles').select('*').eq('user_id', user.id).maybeSingle()
           userRoleData = roleData
-          if (roleData?.role) currentRole = roleData.role as any
+          if (roleData?.role) {
+            currentRole = roleData.role as any
+          }
         }
         setUserRole(currentRole)
 
@@ -200,9 +202,13 @@ export default function DashboardPage() {
         setListaClientes(clisData)
         if (clisData.length > 0) {
           setSelectedClienteId(prev => {
+            if (currentRole === 'cliente' && userRoleData?.cliente_id) {
+              return userRoleData.cliente_id
+            }
             if (prev && clisData.some(c => c.id === prev)) return prev
-            const cliComNotas = clisData.find(c => c.id === '0ae0938c-0124-453e-81d6-0e9d82f87f86')
-            return cliComNotas ? cliComNotas.id : clisData[0].id
+            const saved = typeof window !== 'undefined' ? localStorage.getItem('hub_paratech_global_cliente') : null
+            if (saved && clisData.some(c => c.id === saved)) return saved
+            return clisData[0].id
           })
         }
 

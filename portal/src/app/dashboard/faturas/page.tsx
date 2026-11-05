@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import {
   FileText,
@@ -109,6 +110,8 @@ export default function FaturasPage() {
   const [limiteConfianca, setLimiteConfianca] = useState(1)
   const [horasConfianca, setHorasConfianca] = useState(24)
 
+  const router = useRouter()
+
   async function fetchFaturas() {
     const { data } = await supabase
       .from('faturas')
@@ -127,8 +130,37 @@ export default function FaturasPage() {
   }
 
   useEffect(() => {
-    fetchFaturas()
-    fetchClientes()
+    async function checkRoleAndInit() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        router.push('/login')
+        return
+      }
+
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (roleData?.role === 'cliente') {
+        router.push('/dashboard/minhas-faturas')
+        return
+      }
+      if (roleData?.role === 'contabilidade') {
+        router.push('/dashboard')
+        return
+      }
+      if (roleData?.role !== 'admin') {
+        router.push('/dashboard')
+        return
+      }
+
+      fetchFaturas()
+      fetchClientes()
+    }
+
+    checkRoleAndInit()
 
     // Inicializa competência do mês corrente (MM/AAAA)
     const hoje = new Date()

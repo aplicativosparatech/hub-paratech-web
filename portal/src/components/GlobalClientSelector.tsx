@@ -185,7 +185,7 @@ export default function GlobalClientSelector() {
             >
               <div className="flex items-center gap-2">
                 <span className="text-sm">≡</span>
-                <span>Todos os Clientes / Limpar Filtro</span>
+                <span>{userRole === 'contabilidade' ? 'Minha Carteira (Todos os Clientes do Escritório)' : 'Todos os Clientes / Limpar Filtro'}</span>
               </div>
               {!selectedClienteId && <Check size={16} className="text-white" />}
             </button>

@@ -14,9 +14,18 @@ import { createClient } from '@/utils/supabase/client'
 import { ProdutoTributadoOutput, ItemExtraidoOcr } from '@/utils/tributario/sugestorEngine'
 import { useTableFeatures } from '@/hooks/useTableFeatures'
 import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
+import { useGlobalClient } from '@/components/GlobalClientContext'
 
 export default function SugestorTributarioPage() {
   const supabase = createClient()
+  const { 
+    userRole, 
+    clientes: clientesGlobais, 
+    selectedClienteId: globalClienteId, 
+    selectedCliente: globalCliente,
+    setSelectedClienteId: setGlobalClienteId,
+    loadingClientes
+  } = useGlobalClient()
 
   // Estados de Contexto do Cliente e CRT
   const [clientes, setClientes] = useState<any[]>([])
@@ -60,55 +69,61 @@ export default function SugestorTributarioPage() {
   const [buscaTabela, setBuscaTabela] = useState<string>('')
   const [modalItemDetalhe, setModalItemDetalhe] = useState<ProdutoTributadoOutput | null>(null)
 
-  // 1. Carregar Clientes para Contexto de CRT
+  // 1. Sincronização Estrita com o Contexto Global e Papel do Usuário
   useEffect(() => {
-    async function carregarClientes() {
-      try {
-        const { data, error } = await supabase
-          .from('clientes')
-          .select('id, razao_social, nome_fantasia, cnpj, regime_tributario, uf, cidade')
-          .order('razao_social', { ascending: true })
+    if (clientesGlobais && clientesGlobais.length > 0) {
+      setClientes(clientesGlobais)
 
-        if (!error && data && data.length > 0) {
-          setClientes(data)
-          // Seleciona o primeiro por padrão ou recupera da sessão
-          const salvo = localStorage.getItem('hub_cliente_ativo_id')
-          const clientePadrao = data.find(c => c.id === salvo) || data[0]
-          setClienteSelecionadoId(clientePadrao.id)
-          setClienteAtivo(clientePadrao)
-
-          // Aplica CRT e UF do cliente
-          const regime = clientePadrao.regime_tributario || ''
-          const isSimples = regime.includes('simples') || !regime.includes('lucro')
-          setCrt(isSimples ? 1 : 3)
-          if (clientePadrao.uf) {
-            setUfOrigem(clientePadrao.uf.toUpperCase())
-            setUfDestino(clientePadrao.uf.toUpperCase())
-          }
-        }
-      } catch (err) {
-        console.warn('Erro ao carregar lista de clientes:', err)
+      // Identifica o cliente alvo respeitando o escopo estrito
+      let target: any = null
+      if (userRole === 'cliente') {
+        target = clientesGlobais[0]
+      } else if (globalCliente && clientesGlobais.some(c => c.id === globalCliente.id)) {
+        target = globalCliente
+      } else if (globalClienteId && clientesGlobais.some(c => c.id === globalClienteId)) {
+        target = clientesGlobais.find(c => c.id === globalClienteId)
+      } else {
+        target = clientesGlobais[0]
       }
+
+      if (target) {
+        setClienteSelecionadoId(target.id)
+        setClienteAtivo(target)
+
+        // Aplica CRT e UF do cliente selecionado
+        const regime = target.regime_tributario || ''
+        const isSimples = regime.includes('simples') || !regime.includes('lucro')
+        setCrt(isSimples ? 1 : 3)
+        if (target.uf) {
+          setUfOrigem(target.uf.toUpperCase())
+          setUfDestino(target.uf.toUpperCase())
+        }
+      }
+    } else if (!loadingClientes) {
+      setClientes([])
+      setClienteSelecionadoId('')
+      setClienteAtivo(null)
     }
-    carregarClientes()
-  }, [])
+  }, [clientesGlobais, globalCliente, globalClienteId, userRole, loadingClientes])
 
   // Quando o cliente selecionado muda
   const handleSelecionarCliente = (id: string) => {
+    // Garante que o cliente escolhido pertença à lista de clientes autorizados
+    const c = clientesGlobais.find(item => item.id === id)
+    if (!c) return
+
     setClienteSelecionadoId(id)
-    localStorage.setItem('hub_cliente_ativo_id', id)
-    const c = clientes.find(item => item.id === id)
-    if (c) {
-      setClienteAtivo(c)
-      const regime = c.regime_tributario || ''
-      const isSimples = regime.includes('simples') || !regime.includes('lucro')
-      setCrt(isSimples ? 1 : 3)
-      if (c.uf) {
-        setUfOrigem(c.uf.toUpperCase())
-        setUfDestino(c.uf.toUpperCase())
-      }
-      toast.success(`Contexto alterado para ${c.nome_fantasia || c.razao_social} (${isSimples ? 'Simples Nacional' : 'Regime Normal'})`)
+    setGlobalClienteId(id)
+    setClienteAtivo(c)
+
+    const regime = c.regime_tributario || ''
+    const isSimples = regime.includes('simples') || !regime.includes('lucro')
+    setCrt(isSimples ? 1 : 3)
+    if (c.uf) {
+      setUfOrigem(c.uf.toUpperCase())
+      setUfDestino(c.uf.toUpperCase())
     }
+    toast.success(`Contexto alterado para ${c.nome_fantasia || c.razao_social} (${isSimples ? 'Simples Nacional' : 'Regime Normal'})`)
   }
 
   // Alternar CRT manualmente
@@ -694,7 +709,16 @@ export default function SugestorTributarioPage() {
                 )}
               </div>
               <div className="mt-1 flex items-center gap-3 flex-wrap">
-                {clientes.length > 0 ? (
+                {userRole === 'cliente' ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                      {clienteAtivo?.nome_fantasia || clienteAtivo?.razao_social || 'Sua Empresa'}
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                      Sua Empresa
+                    </span>
+                  </div>
+                ) : clientes.length > 0 ? (
                   <select
                     value={clienteSelecionadoId}
                     onChange={(e) => handleSelecionarCliente(e.target.value)}
@@ -707,8 +731,8 @@ export default function SugestorTributarioPage() {
                     ))}
                   </select>
                 ) : (
-                  <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
-                    {clienteAtivo?.razao_social || 'Nenhum cliente cadastrado'}
+                  <span className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                    {userRole === 'contabilidade' ? 'Nenhum cliente vinculado à sua contabilidade' : 'Nenhum cliente cadastrado'}
                   </span>
                 )}
               </div>

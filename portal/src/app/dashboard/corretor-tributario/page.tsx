@@ -102,20 +102,22 @@ export default function CorretorTributarioPage() {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) { router.push('/login'); return }
 
-        const { data: roleData } = await supabase.from('user_roles').select('*').eq('user_id', user.id).single()
-        const role = (roleData?.role as any) || 'admin'
+        const { data: roleData } = await supabase.from('user_roles').select('*').eq('user_id', user.id).maybeSingle()
+        const role = (roleData?.role as any) || 'cliente'
         setUserRole(role)
 
         let clisData: any[] = []
         if (role === 'cliente' && roleData?.cliente_id) {
-          const { data: cli } = await supabase.from('clientes').select('id, razao_social, nome_fantasia, cnpj').eq('id', roleData.cliente_id).single()
+          const { data: cli } = await supabase.from('clientes').select('id, razao_social, nome_fantasia, cnpj').eq('id', roleData.cliente_id).maybeSingle()
           if (cli) clisData = [cli]
         } else if (role === 'contabilidade' && roleData?.contabilidade_id) {
           const { data: clis } = await supabase.from('clientes').select('id, razao_social, nome_fantasia, cnpj').eq('contabilidade_id', roleData.contabilidade_id).order('razao_social')
           if (clis) clisData = clis
-        } else {
+        } else if (role === 'admin') {
           const { data: clis } = await supabase.from('clientes').select('id, razao_social, nome_fantasia, cnpj').order('razao_social')
           if (clis) clisData = clis
+        } else {
+          clisData = []
         }
 
         setClientes(clisData)

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Plus, Pencil, Trash2, X, Copy, RefreshCw, Search, Upload, DollarSign, TrendingDown, TrendingUp, Eye, EyeOff, KeyRound, Laptop, Power, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
@@ -11,6 +12,7 @@ import ResizableSortableTh from '@/components/ui/ResizableSortableTh'
 import { useTableFeatures } from '@/hooks/useTableFeatures'
 
 export default function ClientesPage() {
+  const router = useRouter()
   const [clientes, setClientes] = useState<any[]>([])
   const [contabilidades, setContabilidades] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -63,31 +65,32 @@ export default function ClientesPage() {
       .eq('user_id', user.id)
       .maybeSingle()
 
-    const role = (roleData?.role as 'admin' | 'contabilidade' | 'cliente') || 'admin'
+    const role = (roleData?.role as 'admin' | 'contabilidade' | 'cliente') || 'cliente'
     setUserRole(role)
     setUserRoleData(roleData)
 
-    let query = supabase
+    if (role === 'contabilidade') {
+      router.push('/dashboard/meus-clientes')
+      return
+    }
+    if (role === 'cliente') {
+      router.push('/dashboard/meu-perfil')
+      return
+    }
+
+    const query = supabase
       .from('clientes')
       .select('*, contabilidades ( razao_social ), configuracoes_hub ( ultima_sincronizacao )')
       .order('created_at', { ascending: false })
 
-    if (role === 'contabilidade' && roleData?.contabilidade_id) {
-      query = query.eq('contabilidade_id', roleData.contabilidade_id)
-    } else if (role === 'cliente' && roleData?.cliente_id) {
-      query = query.eq('id', roleData.cliente_id)
-    }
-
     const { data } = await query
     if (data) setClientes(data)
 
-    if (role === 'admin') {
-      const { data: contabs } = await supabase
-        .from('contabilidades')
-        .select('id, razao_social')
-        .order('razao_social')
-      if (contabs) setContabilidades(contabs)
-    }
+    const { data: contabs } = await supabase
+      .from('contabilidades')
+      .select('id, razao_social')
+      .order('razao_social')
+    if (contabs) setContabilidades(contabs)
 
     setLoading(false)
   }

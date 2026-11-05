@@ -167,7 +167,7 @@ export function NotasFiscaisFilterProvider({ children }: { children: React.React
       }
 
       // Consulta de papel com fallback resiliente
-      let role: 'admin' | 'contabilidade' | 'cliente' = 'admin'
+      let role: 'admin' | 'contabilidade' | 'cliente' | null = null
       let roleData: any = null
 
       try {
@@ -176,15 +176,15 @@ export function NotasFiscaisFilterProvider({ children }: { children: React.React
           .select('role, cliente_id, contabilidade_id')
           .eq('user_id', user.id)
           .maybeSingle()
-        if (data) {
+        if (data && data.role) {
           roleData = data
-          role = (data.role as any) || 'admin'
+          role = data.role as any
         }
       } catch (errRole) {
-        console.warn('user_roles indisponível, assumindo admin:', errRole)
+        console.warn('user_roles indisponível no filtro de notas:', errRole)
       }
 
-      setUserRole(role)
+      setUserRole(role || 'cliente')
 
       let clisData: any[] = []
       const camposSelect = 'id, razao_social, nome_fantasia, cnpj, is_associacao, certificado_url, logo_url, uf, cidade, regime_tributario, data_inicio_monitoramento, numero_inicial_nfe, numero_inicial_nfce, numero_inicial_nfse, numero_inicial_cte, numero_inicial_mdfe'
@@ -203,13 +203,15 @@ export function NotasFiscaisFilterProvider({ children }: { children: React.React
           .eq('contabilidade_id', roleData.contabilidade_id)
           .order('razao_social')
         if (clis) clisData = clis
-      } else {
+      } else if (role === 'admin') {
         // Admin: busca todas as empresas
         const { data: clis } = await supabase
           .from('clientes')
           .select(camposSelect)
           .order('razao_social')
         if (clis) clisData = clis
+      } else {
+        clisData = []
       }
 
       setClientes(clisData)
