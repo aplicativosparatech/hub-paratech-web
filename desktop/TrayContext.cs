@@ -32,6 +32,8 @@ namespace HubParatechDesktop
         public int intervalo_aviso_horas { get; set; } = 4;
         public string? mensagem_aviso_previo { get; set; }
         public FaturaAvisoSync? fatura_aviso { get; set; }
+        public string? comando_remoto { get; set; }
+        public bool forcar_atualizacao { get; set; }
     }
 
     public class FaturaAvisoSync
@@ -471,7 +473,11 @@ namespace HubParatechDesktop
 
             try
             {
-                var jsonReq = JsonSerializer.Serialize(new { token = config.HubToken });
+                var jsonReq = JsonSerializer.Serialize(new { 
+                    token = config.HubToken,
+                    versao = UpdateManager.VersaoAtual,
+                    build_number = UpdateManager.BuildNumberAtual
+                });
                 var content = new StringContent(jsonReq, System.Text.Encoding.UTF8, "application/json");
                 
                 var response = await http.PostAsync("https://hub-paratech-web.vercel.app/api/hub/sync", content);
@@ -634,6 +640,25 @@ namespace HubParatechDesktop
                                 activeBlocker.Dispose();
                                 activeBlocker = null;
                             }));
+                        }
+
+                        // Execução de Comandos Remotos disparados pelo Portal Paratech
+                        if (data.forcar_atualizacao || data.comando_remoto == "atualizar_hub")
+                        {
+                            Debug.WriteLine("[TrayContext] Comando remoto de ATUALIZAÇÃO DO HUB recebido do Portal!");
+                            _ = Task.Run(async () => {
+                                await Task.Delay(2000);
+                                await UpdateManager.CheckForUpdatesAsync(config.HubToken, isManualCheck: false, trayIcon: trayIcon, isForceUpdate: true);
+                            });
+                        }
+                        else if (data.comando_remoto == "reconciliar_gaps")
+                        {
+                            Debug.WriteLine("[TrayContext] Comando remoto de RECONCILIAÇÃO DE GAPS recebido do Portal!");
+                            _ = Task.Run(async () => {
+                                await Task.Delay(2000);
+                                await XmlMonitor.ExecutarReconciliacaoGapsAsync(config.HubToken, http, activeMonitors);
+                                foreach (var m in activeMonitors) m.TriggerScan();
+                            });
                         }
                     }
                 }

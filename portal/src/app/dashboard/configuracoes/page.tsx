@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
-import { RefreshCw, Download, Clock } from 'lucide-react'
+import { RefreshCw, Download, Clock, ArrowUpCircle, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { APP_VERSION } from '@/utils/version'
 import { useTableFeatures } from '@/hooks/useTableFeatures'
 import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
@@ -24,6 +24,7 @@ export default function ConfiguracoesPage() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+  const [loadingComandoId, setLoadingComandoId] = useState<string | null>(null)
 
   const {
     sortedData: hubsOrdenados,
@@ -38,11 +39,12 @@ export default function ConfiguracoesPage() {
     defaultSortKey: 'cliente',
     defaultSortDirection: 'asc',
     initialWidths: {
-      cliente: 260,
-      contraSenha: 200,
-      ultimaSync: 180,
+      cliente: 240,
+      contraSenha: 170,
+      ultimaSync: 160,
       status: 120,
-      acao: 110
+      versao: 150,
+      acao: 150
     },
     customExtractors: {
       cliente: (h: any) => h.razao_social || '',
@@ -60,6 +62,10 @@ export default function ConfiguracoesPage() {
         if (!lastSync) return 0
         const diff = Date.now() - new Date(lastSync).getTime()
         return diff < (15 * 60 * 1000 + 2 * 60 * 1000) ? 1 : 0
+      },
+      versao: (h: any) => {
+        const config = Array.isArray(h.configuracoes_hub) ? h.configuracoes_hub[0] : h.configuracoes_hub
+        return config?.versao_hub_instalada || ''
       }
     }
   })
@@ -81,12 +87,32 @@ export default function ConfiguracoesPage() {
   async function loadClientes() {
     const { data } = await supabase
       .from('clientes')
-      .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(ultima_sincronizacao, offline_secret)')
+      .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(ultima_sincronizacao, offline_secret, versao_hub_instalada, comando_remoto, comando_remoto_em)')
       .order('razao_social')
     
     if (data) {
       setClientes(data)
       setHubs(data)
+    }
+  }
+
+  async function handleDispararComando(clienteId: string, comando: string) {
+    setLoadingComandoId(clienteId)
+    try {
+      const res = await fetch('/api/hub/comando-remoto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cliente_id: clienteId, comando })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erro ao enviar comando')
+      
+      toast.success(data.message)
+      await loadClientes()
+    } catch (err: any) {
+      toast.error(`Falha: ${err.message}`)
+    } finally {
+      setLoadingComandoId(null)
     }
   }
 
@@ -367,12 +393,23 @@ export default function ConfiguracoesPage() {
                     minWidth={110}
                   />
                   <ResizableSortableTh
+                    columnId="versao"
+                    label="Versão do Hub"
+                    sortKey="versao"
+                    currentSortKey={sortKey}
+                    currentSortDirection={sortDirection}
+                    onSort={handleSort}
+                    width={columnWidths.versao || 150}
+                    onResize={handleResizeColumn}
+                    minWidth={130}
+                  />
+                  <ResizableSortableTh
                     columnId="acao"
                     label="Ação"
                     disableSort
                     width={columnWidths.acao}
                     onResize={handleResizeColumn}
-                    minWidth={100}
+                    minWidth={140}
                     align="right"
                   />
                 </tr>
@@ -440,6 +477,12 @@ export default function ConfiguracoesPage() {
                     }
                   }
 
+                  const versaoHub = config?.versao_hub_instalada;
+                  const comandoRemoto = config?.comando_remoto;
+                  const VERSAO_MAIS_RECENTE = '2.8.2';
+                  const isAtualizado = versaoHub === VERSAO_MAIS_RECENTE;
+                  const isPendenteAtualizacao = comandoRemoto === 'atualizar_hub';
+
                   return (
                     <tr key={hub.id} className="border-b border-slate-100 hover:bg-slate-50">
                       <td className="p-4 text-sm font-medium text-slate-800 truncate" title={hub.razao_social}>{hub.razao_social}</td>
@@ -452,20 +495,62 @@ export default function ConfiguracoesPage() {
                       <td className="p-4 text-sm truncate">
                         {statusElement}
                       </td>
+                      <td className="p-4 text-sm truncate">
+                        {isPendenteAtualizacao ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 animate-pulse border border-blue-200" title="Comando de atualização enviado. Será executado no próximo pulso de sincronização.">
+                            <ArrowUpCircle className="w-3.5 h-3.5 mr-1 text-blue-600" />
+                            Atualização enviada ⏳
+                          </span>
+                        ) : versaoHub ? (
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                            isAtualizado 
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                          }`}>
+                            {isAtualizado ? (
+                              <CheckCircle2 className="w-3 h-3 mr-1 text-emerald-500" />
+                            ) : (
+                              <AlertTriangle className="w-3 h-3 mr-1 text-amber-500" />
+                            )}
+                            v{versaoHub} {isAtualizado ? '(Atual)' : '(Desatualizado)'}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs text-slate-500 bg-slate-100">
+                            Não informada
+                          </span>
+                        )}
+                      </td>
                       <td className="p-4 text-right whitespace-nowrap">
-                        <button
-                          onClick={() => setSelectedCliente(hub.id)}
-                          className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                        >
-                          Configurar
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          {!isAtualizado && (
+                            <button
+                              onClick={() => handleDispararComando(hub.id, isPendenteAtualizacao ? 'cancelar' : 'atualizar_hub')}
+                              disabled={loadingComandoId === hub.id}
+                              title={isPendenteAtualizacao ? 'Cancelar ordem de atualização pendente' : 'Enviar comando remoto para o Hub atualizar sozinho para a v2.8.2 no próximo pulso'}
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                                isPendenteAtualizacao
+                                  ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'
+                                  : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200'
+                              }`}
+                            >
+                              <ArrowUpCircle className="w-3.5 h-3.5" />
+                              {loadingComandoId === hub.id ? 'Enviando...' : isPendenteAtualizacao ? 'Cancelar' : 'Atualizar Hub'}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setSelectedCliente(hub.id)}
+                            className="text-blue-600 hover:text-blue-800 text-sm font-medium hover:underline"
+                          >
+                            Configurar
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
                 })}
                 {hubs.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="p-8 text-center text-slate-500">
+                    <td colSpan={6} className="p-8 text-center text-slate-500">
                       Nenhum cliente encontrado.
                     </td>
                   </tr>

@@ -9,7 +9,11 @@ const supabase = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY
 
 export async function POST(request: Request) {
   try {
-    const { token } = await request.json()
+    const body = await request.json().catch(() => ({}))
+    const token = body.token
+    const versaoHub = body.versao || body.versao_hub || null
+    const buildNumber = body.build_number ? Number(body.build_number) : null
+
     if (!token) return NextResponse.json({ error: 'Token inválido' }, { status: 400 })
 
     // 1. Busca o cliente com campos de tolerância e encargos
@@ -20,10 +24,10 @@ export async function POST(request: Request) {
       .single()
     if (!cliente) return NextResponse.json({ error: 'Cliente não encontrado' }, { status: 404 })
 
-    // 2. Busca configuração do Hub (pastas, exes, tolerância, banner, whatsapp, features, aviso prévio)
+    // 2. Busca configuração do Hub (pastas, exes, tolerância, banner, whatsapp, features, aviso prévio, comandos e versão)
     const { data: config } = await supabase
       .from('configuracoes_hub')
-      .select('offline_secret, exes_monitorados, pastas_vendas, pastas_compras, modo_processamento_xml, dias_tolerancia_bloqueio, mensagem_bloqueio, dias_aviso_previo, intervalo_aviso_horas, mensagem_aviso_previo, banner_url, support_whatsapp, feature_sugestao_tributaria, feature_nuvem_produtos, feature_loja_virtual, feature_nfce, feature_nfe, feature_contas_pagar, feature_estoque_avancado')
+      .select('offline_secret, exes_monitorados, pastas_vendas, pastas_compras, modo_processamento_xml, dias_tolerancia_bloqueio, mensagem_bloqueio, dias_aviso_previo, intervalo_aviso_horas, mensagem_aviso_previo, banner_url, support_whatsapp, feature_sugestao_tributaria, feature_nuvem_produtos, feature_loja_virtual, feature_nfce, feature_nfe, feature_contas_pagar, feature_estoque_avancado, comando_remoto, comando_remoto_em, versao_hub_instalada')
       .eq('cliente_id', cliente.id)
       .maybeSingle()
 
@@ -243,13 +247,24 @@ export async function POST(request: Request) {
         desbloqueio_confianca_em: faturaPrincipal.desbloqueio_confianca_em,
         confianca_qtd: faturaPrincipal.confianca_qtd
       } : null,
-      fatura_aviso: faturaAviso
+      fatura_aviso: faturaAviso,
+      comando_remoto: config?.comando_remoto || null,
+      forcar_atualizacao: config?.comando_remoto === 'atualizar_hub'
     }
 
-    // Registra heartbeat do Hub (Online)
+    // Registra heartbeat do Hub (Online) e atualiza a versão instalada informada pelo executável
+    const updateHubData: any = { ultima_sincronizacao: new Date().toISOString() }
+    if (versaoHub) {
+      updateHubData.versao_hub_instalada = versaoHub
+    }
+    // Se havia um comando pendente que foi entregue nesta resposta, consome o comando
+    if (config?.comando_remoto) {
+      updateHubData.comando_remoto = null
+    }
+
     const { error: syncError } = await supabase
       .from('configuracoes_hub')
-      .update({ ultima_sincronizacao: new Date().toISOString() })
+      .update(updateHubData)
       .eq('cliente_id', cliente.id)
 
     if (syncError) {

@@ -44,7 +44,7 @@ namespace HubParatechDesktop
             catch { }
         }
 
-        public static async Task<ParatechUpdateInfo?> CheckForUpdatesAsync(string? token = null, bool isManualCheck = false, NotifyIcon? trayIcon = null)
+        public static async Task<ParatechUpdateInfo?> CheckForUpdatesAsync(string? token = null, bool isManualCheck = false, NotifyIcon? trayIcon = null, bool isForceUpdate = false)
         {
             if (isUpdating) return null;
 
@@ -76,11 +76,11 @@ namespace HubParatechDesktop
 
                 if (info != null && info.tem_atualizacao)
                 {
-                    LogUpdate($"Atualização encontrada! Versão mais recente: {info.versao_mais_recente} (Build {info.build_number_mais_recente}). Obrigatória: {info.obrigatoria}, Política: {info.politica_efetiva}");
+                    LogUpdate($"Atualização encontrada! Versão mais recente: {info.versao_mais_recente} (Build {info.build_number_mais_recente}). Forçada: {isForceUpdate}, Obrigatória: {info.obrigatoria}, Política: {info.politica_efetiva}");
 
-                    if (info.obrigatoria || info.politica_efetiva == "automatica")
+                    if (isForceUpdate || info.obrigatoria || info.politica_efetiva == "automatica")
                     {
-                        // Atualização silenciosa em background
+                        // Atualização silenciosa imediata em background (disparada remotamente ou por política automática)
                         _ = PerformSilentUpdateAsync(info);
                     }
                     else
