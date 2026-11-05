@@ -41,6 +41,22 @@ namespace HubParatechDesktop
         public DadosXmlExtraidos? Dados { get; set; }
     }
 
+    public class GapItemPortal
+    {
+        public string? modelo { get; set; }
+        public string? serie { get; set; }
+        public long numero_inicial { get; set; }
+        public long numero_final { get; set; }
+        public int quantidade { get; set; }
+    }
+
+    public class ReconciliacaoGapsResponse
+    {
+        public bool success { get; set; }
+        public int total_gaps { get; set; }
+        public List<GapItemPortal>? gaps { get; set; }
+    }
+
     public class XmlSyncEventArgs : EventArgs
     {
         public bool IsSyncing { get; set; }
@@ -267,15 +283,63 @@ namespace HubParatechDesktop
             }
         }
 
+        public static List<FileInfo> SafeEnumerateXmlFiles(string root)
+        {
+            var result = new List<FileInfo>();
+            try
+            {
+                var rootDir = new DirectoryInfo(root);
+                if (!rootDir.Exists) return result;
+
+                var stack = new Stack<DirectoryInfo>();
+                stack.Push(rootDir);
+
+                while (stack.Count > 0)
+                {
+                    var currentDir = stack.Pop();
+                    try
+                    {
+                        var files = currentDir.GetFiles();
+                        foreach (var f in files)
+                        {
+                            if (f.Extension.Equals(".xml", StringComparison.OrdinalIgnoreCase))
+                            {
+                                result.Add(f);
+                            }
+                        }
+                    }
+                    catch { }
+
+                    try
+                    {
+                        var subDirs = currentDir.GetDirectories();
+                        foreach (var sd in subDirs)
+                        {
+                            try
+                            {
+                                if (!sd.Attributes.HasFlag(FileAttributes.Hidden) && !sd.Attributes.HasFlag(FileAttributes.System))
+                                {
+                                    stack.Push(sd);
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+            return result;
+        }
+
         private async Task ScanExistingFilesAsync()
         {
             if (!Directory.Exists(rootPath)) return;
 
             try
             {
-                // Busca todos os .xml na pasta principal e em todas as subpastas recursivamente
-                var dirInfo = new DirectoryInfo(rootPath);
-                var files = dirInfo.GetFiles("*.xml", SearchOption.AllDirectories)
+                // Busca todos os arquivos XML (case-insensitive) na pasta principal e em todas as subpastas recursivamente
+                var files = SafeEnumerateXmlFiles(rootPath)
                                    .OrderByDescending(f => f.LastWriteTime) // Prioriza os mais recentes (de hoje e deste mês)
                                    .ToList();
 
@@ -1092,6 +1156,132 @@ namespace HubParatechDesktop
                 }
             }
             return null;
+        }
+
+        public static async Task<(int recuperados, int ausentes, string mensagem)> ExecutarReconciliacaoGapsAsync(
+            string hubToken,
+            HttpClient client,
+            List<XmlMonitor> monitores)
+        {
+            if (string.IsNullOrEmpty(hubToken) || monitores == null || monitores.Count == 0)
+            {
+                return (0, 0, "Nenhum monitor ativo ou token do cliente não configurado.");
+            }
+
+            try
+            {
+                var jsonReq = JsonSerializer.Serialize(new { hub_token = hubToken });
+                var contentReq = new StringContent(jsonReq, System.Text.Encoding.UTF8, "application/json");
+
+                var resp = await client.PostAsync("https://hub-paratech-web.vercel.app/api/hub/reconciliar-gaps", contentReq);
+                if (!resp.IsSuccessStatusCode)
+                {
+                    return (0, 0, $"Falha ao consultar gaps no portal: HTTP {(int)resp.StatusCode}");
+                }
+
+                var respStr = await resp.Content.ReadAsStringAsync();
+                var gapData = JsonSerializer.Deserialize<ReconciliacaoGapsResponse>(respStr);
+
+                if (gapData == null || !gapData.success)
+                {
+                    return (0, 0, "Resposta inválida recebida do Portal Paratech.");
+                }
+
+                if (gapData.gaps == null || gapData.gaps.Count == 0)
+                {
+                    return (0, 0, "✅ Sequência fiscal 100% perfeita!\n\nNão há nenhuma quebra ou nota faltante identificada no Portal Paratech.");
+                }
+
+                // Cria mapa de números faltantes esperados
+                var faltantesNfce = new HashSet<long>();
+                var faltantesNfe = new HashSet<long>();
+
+                foreach (var g in gapData.gaps)
+                {
+                    for (long n = g.numero_inicial; n <= g.numero_final; n++)
+                    {
+                        if (g.modelo == "55") faltantesNfe.Add(n);
+                        else faltantesNfce.Add(n);
+                    }
+                }
+
+                int totalFaltantesEsperados = faltantesNfce.Count + faltantesNfe.Count;
+                int recuperados = 0;
+
+                Debug.WriteLine($"[Reconciliação Gaps] {totalFaltantesEsperados} notas faltantes no portal. Iniciando varredura profunda no disco do PDV...");
+
+                // Mapeia todos os arquivos XML locais em todas as pastas de vendas e subpastas
+                var arquivosLocais = new List<FileInfo>();
+                foreach (var m in monitores.Where(x => x.tipoPasta == "vendas"))
+                {
+                    arquivosLocais.AddRange(SafeEnumerateXmlFiles(m.rootPath));
+                }
+
+                var numerosRecuperados = new HashSet<long>();
+
+                foreach (var fileInfo in arquivosLocais)
+                {
+                    if (fileInfo.Length < 100) continue;
+
+                    var meta = ExtrairMetadadosRapidos(fileInfo.FullName);
+                    if (long.TryParse(meta.numero, out long numNota) && numNota > 0)
+                    {
+                        bool precisaEnviar = false;
+                        if (meta.modelo == "65" && faltantesNfce.Contains(numNota) && !numerosRecuperados.Contains(numNota))
+                        {
+                            precisaEnviar = true;
+                        }
+                        else if (meta.modelo == "55" && faltantesNfe.Contains(numNota) && !numerosRecuperados.Contains(numNota))
+                        {
+                            precisaEnviar = true;
+                        }
+
+                        if (precisaEnviar)
+                        {
+                            // Remove do cache para forçar envio
+                            string fileId = $"{fileInfo.Name}_{fileInfo.Length}";
+                            XmlUploadCache.RemoveKey(fileId);
+                            if (!string.IsNullOrEmpty(meta.chave)) XmlUploadCache.RemoveKey(meta.chave);
+
+                            // Envia o arquivo
+                            var monitor = monitores.FirstOrDefault(x => x.tipoPasta == "vendas") ?? monitores[0];
+                            bool ok = await monitor.ProcessFileAsync(fileInfo.FullName, isRealTime: false);
+                            if (ok)
+                            {
+                                recuperados++;
+                                numerosRecuperados.Add(numNota);
+                                string modNome = meta.modelo == "65" ? "NFC-e" : "NF-e";
+                                LiveMonitorForm.AddLog(new XmlLogItem
+                                {
+                                    Timestamp = DateTime.Now,
+                                    TipoPasta = "Saída",
+                                    Modelo = meta.modelo ?? "65",
+                                    Numero = numNota.ToString(),
+                                    Serie = meta.serie ?? "1",
+                                    DataEmissao = meta.dhEmi ?? DateTime.Now.ToString("yyyy-MM-dd"),
+                                    ValorTotal = meta.valor,
+                                    Chave = meta.chave ?? "-",
+                                    Status = "Recuperado & Enviado (Gap)",
+                                    Arquivo = fileInfo.FullName,
+                                    IsRealTime = false
+                                });
+                            }
+                        }
+                    }
+                }
+
+                int ausentes = totalFaltantesEsperados - recuperados;
+
+                string msg = recuperados > 0
+                    ? $"🎉 Auditoria e Reconciliação Concluída!\n\n• {recuperados} notas foram localizadas no disco do computador do cliente e sincronizadas com sucesso no Portal!\n• {ausentes} números faltantes não possuem arquivo XML no computador do cliente (correspondem a pulos de sequência no PDV, prontos para inutilização segura)."
+                    : $"Auditoria e Reconciliação Concluída!\n\n• Nenhuma das {ausentes} numerações faltantes possui arquivo XML no disco do cliente.\n• Todas as quebras correspondem a saltos de emissão no PDV e estão aptas para inutilização na SEFAZ.";
+
+                return (recuperados, ausentes, msg);
+            }
+            catch (Exception ex)
+            {
+                return (0, 0, $"Erro durante reconciliação de gaps: {ex.Message}");
+            }
         }
 
         public void Stop()

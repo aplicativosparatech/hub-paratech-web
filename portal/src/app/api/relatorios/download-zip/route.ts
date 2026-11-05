@@ -34,11 +34,26 @@ export async function GET(request: Request) {
       qEntradas = qEntradas.gte('data_emissao', startDate).lte('data_emissao', endDate)
     }
 
-    const [resNfe, resNfce, resEntradas] = await Promise.all([qNfe, qNfce, qEntradas])
+    async function fetchAllItems(queryBase: any) {
+      const all: any[] = []
+      let from = 0
+      const pageSize = 1000
+      let hasMore = true
+      while (hasMore) {
+        const { data, error } = await queryBase.range(from, from + pageSize - 1)
+        if (error || !data || data.length === 0) break
+        all.push(...data)
+        from += pageSize
+        if (data.length < pageSize) hasMore = false
+      }
+      return all
+    }
 
-    const nfeList = resNfe.data || []
-    const nfceList = resNfce.data || []
-    const entradasList = resEntradas.data || []
+    const [nfeList, nfceList, entradasList] = await Promise.all([
+      fetchAllItems(qNfe),
+      fetchAllItems(qNfce),
+      fetchAllItems(qEntradas)
+    ])
 
     const totalNotas = nfeList.length + nfceList.length + entradasList.length
     if (totalNotas === 0) {

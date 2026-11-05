@@ -379,21 +379,44 @@ export default function DashboardPage() {
           qNfeEntradas = qNfeEntradas.gte('data_emissao', new Date(inicio).toISOString()).lte('data_emissao', new Date(fim).toISOString())
         }
 
-        const [nfeRes, nfceRes, nfeEntradasRes, xmlsRes] = await Promise.all([
-          qNfeSaidas,
-          qNfceSaidas,
-          qNfeEntradas,
+        // Função auxiliar para agregação resiliente de grandes volumes superando o limite de 1000 linhas
+        async function fetchAgregadoNotas(queryBase: any) {
+          let count = 0
+          let totalValor = 0
+          let totalMonofasico = 0
+          const pageSize = 1000
+          let from = 0
+          let hasMore = true
+
+          while (hasMore) {
+            const { data, error } = await queryBase.range(from, from + pageSize - 1)
+            if (error || !data || data.length === 0) break
+            count += data.length
+            for (const item of data) {
+              totalValor += Number(item.valor) || 0
+              if (item.valor_monofasico) totalMonofasico += Number(item.valor_monofasico) || 0
+            }
+            from += pageSize
+            if (data.length < pageSize) hasMore = false
+          }
+          return { count, totalValor, totalMonofasico }
+        }
+
+        const [nfeAgregado, nfceAgregado, nfeEntradasAgregado, xmlsRes] = await Promise.all([
+          fetchAgregadoNotas(qNfeSaidas),
+          fetchAgregadoNotas(qNfceSaidas),
+          fetchAgregadoNotas(qNfeEntradas),
           qArquivosXml
         ])
 
-        const nfeCount = (nfeRes.data || []).length
-        const nfeTotal = (nfeRes.data || []).reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0)
+        const nfeCount = nfeAgregado.count
+        const nfeTotal = nfeAgregado.totalValor
 
-        const nfceCount = (nfceRes.data || []).length
-        const nfceTotal = (nfceRes.data || []).reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0)
+        const nfceCount = nfceAgregado.count
+        const nfceTotal = nfceAgregado.totalValor
 
-        const nfeEntradasCount = (nfeEntradasRes.data || []).length
-        const nfeEntradasTotal = (nfeEntradasRes.data || []).reduce((acc, curr) => acc + (Number(curr.valor) || 0), 0)
+        const nfeEntradasCount = nfeEntradasAgregado.count
+        const nfeEntradasTotal = nfeEntradasAgregado.totalValor
 
         // Documentos de Vendas (Saídas: NF-e 55 + NFC-e 65)
         const vendasQuantidade = nfeCount + nfceCount
@@ -407,8 +430,7 @@ export default function DashboardPage() {
         const totalNFValor = vendasValor + comprasValor
 
         // Monofásicos apurados reais
-        const monofasicoTotal = (nfeRes.data || []).reduce((acc, curr) => acc + (Number(curr.valor_monofasico) || 0), 0) +
-                                (nfceRes.data || []).reduce((acc, curr) => acc + (Number(curr.valor_monofasico) || 0), 0)
+        const monofasicoTotal = nfeAgregado.totalMonofasico + nfceAgregado.totalMonofasico
 
         const totalRelatorios = (xmlsRes.count || 0) > 0 ? (xmlsRes.count || 0) : totalNFQuantidade
 
@@ -485,9 +507,24 @@ export default function DashboardPage() {
             }
           }
 
-          const [resNfe12m, resNfce12m, resNfeRecentes, resNfceRecentes] = await Promise.all([
-            qNfe12m,
-            qNfce12m,
+          async function fetchAll12m(queryBase: any) {
+            const allItems: any[] = []
+            let from = 0
+            const pageSize = 1000
+            let hasMore = true
+            while (hasMore) {
+              const { data, error } = await queryBase.range(from, from + pageSize - 1)
+              if (error || !data || data.length === 0) break
+              allItems.push(...data)
+              from += pageSize
+              if (data.length < pageSize) hasMore = false
+            }
+            return allItems
+          }
+
+          const [listaNfe12m, listaNfce12m, resNfeRecentes, resNfceRecentes] = await Promise.all([
+            fetchAll12m(qNfe12m),
+            fetchAll12m(qNfce12m),
             qNfeRecentes,
             qNfceRecentes
           ])
@@ -501,8 +538,8 @@ export default function DashboardPage() {
               mesTotais[ym] = (mesTotais[ym] || 0) + (Number(item.valor) || 0)
             })
           }
-          somarNoMes(resNfe12m.data || [])
-          somarNoMes(resNfce12m.data || [])
+          somarNoMes(listaNfe12m)
+          somarNoMes(listaNfce12m)
 
           // Gera a lista dos 12 meses cronológicos
           const nomesMesesExtenso = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']

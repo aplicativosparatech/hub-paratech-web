@@ -67,6 +67,7 @@ namespace HubParatechDesktop
         public static string? PastasDescricao { get; set; } = null;
         public static List<string> PastasCaminhos { get; set; } = new List<string>();
         public static Action? OnForceRescanRequested { get; set; } = null;
+        public static Func<Task>? OnReconciliarGapsRequested { get; set; } = null;
 
         private static int currentProgress = 100;
         private static int maxProgress = 100;
@@ -753,6 +754,40 @@ namespace HubParatechDesktop
                 t.Start();
             };
             bottomPanel.Controls.Add(btnRescan);
+
+            var btnReconciliar = new Button
+            {
+                Text = "⚖️ Reconciliar Gaps",
+                Size = new Size(160, 36),
+                Location = new Point(550, 12),
+                BackColor = Color.FromArgb(238, 242, 255),
+                ForeColor = Color.FromArgb(79, 70, 229),
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btnReconciliar.FlatAppearance.BorderColor = Color.FromArgb(199, 210, 254);
+            btnReconciliar.Click += async (s, e) => {
+                btnReconciliar.Enabled = false;
+                btnReconciliar.Text = "Reconciliando...";
+                try
+                {
+                    if (OnReconciliarGapsRequested != null)
+                    {
+                        await OnReconciliarGapsRequested.Invoke();
+                    }
+                }
+                catch { }
+                finally
+                {
+                    if (!btnReconciliar.IsDisposed)
+                    {
+                        btnReconciliar.Enabled = true;
+                        btnReconciliar.Text = "⚖️ Reconciliar Gaps";
+                    }
+                }
+            };
+            bottomPanel.Controls.Add(btnReconciliar);
 
             var btnClose = new Button
             {

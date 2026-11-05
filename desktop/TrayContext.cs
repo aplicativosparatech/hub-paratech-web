@@ -152,6 +152,15 @@ namespace HubParatechDesktop
                 foreach (var m in activeMonitors) m.TriggerScan();
             };
 
+            LiveMonitorForm.OnReconciliarGapsRequested = async () => {
+                var config = ConfigManager.Load();
+                SetTrayText("Hub Paratech - Reconciliando Gaps...");
+                var (recup, ausentes, msg) = await XmlMonitor.ExecutarReconciliacaoGapsAsync(config.HubToken, http, activeMonitors);
+                SetTrayText("Hub Paratech - Monitorando");
+                ParatechDialog.ShowInfo(msg, "Reconciliação Fiscal de Gaps");
+                foreach (var m in activeMonitors) m.TriggerScan();
+            };
+
             trayIcon.ContextMenuStrip.Items.Add("Ver Status Interno", null, (s, e) => {
                 string procs = targetProcesses.Count > 0 ? string.Join(", ", targetProcesses) : "Nenhum processo restrito";
                 string syncTxt = lastSync > DateTime.MinValue ? lastSync.ToString("dd/MM/yyyy HH:mm:ss") : "Pendente";
@@ -189,6 +198,15 @@ namespace HubParatechDesktop
                 await SyncWithServer();
                 foreach (var m in activeMonitors) m.TriggerScan();
                 ParatechDialog.ShowSuccess("Sincronização com o Portal Paratech concluída com sucesso!\nTodos os diretórios de notas e subpastas foram conferidos.", "Sincronização Concluída");
+            });
+
+            trayIcon.ContextMenuStrip.Items.Add("⚖️ Reconciliar Gaps e Notas Faltantes...", null, async (s, e) => {
+                var config = ConfigManager.Load();
+                SetTrayText("Hub Paratech - Reconciliando Gaps...");
+                var (recup, ausentes, msg) = await XmlMonitor.ExecutarReconciliacaoGapsAsync(config.HubToken, http, activeMonitors);
+                SetTrayText("Hub Paratech - Monitorando");
+                ParatechDialog.ShowInfo(msg, "Reconciliação Fiscal de Gaps");
+                foreach (var m in activeMonitors) m.TriggerScan();
             });
 
             trayIcon.ContextMenuStrip.Items.Add("Configurações...", null, SetupToken);

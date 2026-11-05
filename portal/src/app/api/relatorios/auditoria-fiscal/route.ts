@@ -30,16 +30,32 @@ export async function GET(request: Request) {
     if (startDate && endDate) {
       queryNfe = queryNfe.gte('data_emissao', startDate).lte('data_emissao', endDate)
     }
-    const { data: nfeSaidas, error: errNfe } = await queryNfe
-    if (errNfe) throw errNfe
 
     // 3. Busca NFC-e de Saídas (Modelo 65)
     let queryNfce = supabase.from('nfce_saidas').select('*').eq('cliente_id', clienteId)
     if (startDate && endDate) {
       queryNfce = queryNfce.gte('data_emissao', startDate).lte('data_emissao', endDate)
     }
-    const { data: nfceSaidas, error: errNfce } = await queryNfce
-    if (errNfce) throw errNfce
+
+    async function fetchAllItems(queryBase: any) {
+      const all: any[] = []
+      let from = 0
+      const pageSize = 1000
+      let hasMore = true
+      while (hasMore) {
+        const { data, error } = await queryBase.range(from, from + pageSize - 1)
+        if (error || !data || data.length === 0) break
+        all.push(...data)
+        from += pageSize
+        if (data.length < pageSize) hasMore = false
+      }
+      return all
+    }
+
+    const [nfeSaidas, nfceSaidas] = await Promise.all([
+      fetchAllItems(queryNfe),
+      fetchAllItems(queryNfce)
+    ])
 
     // 4. Totais e Consolidação de Faturamento (exclui notas divergentes de outras empresas)
     const nfeValidas = (nfeSaidas || []).filter(n => !n.cnpj_divergente && n.tem_assinatura && (n.cstat === '100' || n.is_autorizada || !n.cstat))

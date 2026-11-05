@@ -74,6 +74,25 @@ namespace HubParatechDesktop
             }
         }
 
+        public static void RemoveKey(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return;
+            lock (LockObj)
+            {
+                if (UploadedKeys.Remove(key))
+                {
+                    try
+                    {
+                        if (File.Exists(CachePath))
+                        {
+                            File.WriteAllLines(CachePath, UploadedKeys);
+                        }
+                    }
+                    catch { }
+                }
+            }
+        }
+
         public static void Clear()
         {
             lock (LockObj)

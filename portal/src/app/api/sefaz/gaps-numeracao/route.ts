@@ -80,35 +80,51 @@ export async function GET(request: Request) {
       return true
     })
 
-    // 3. Busca as notas fiscais emitidas (respeitando data de início do monitoramento se configurada)
-    const resultadosNotas: { modelo: string; data: any[] }[] = []
+    // 3. Busca TODAS as notas fiscais emitidas usando paginação completa (superando o limite default de 1000 linhas do PostgREST)
+    const resultadosNotas: { modelo: string; data: { id: string; numero: string | null; chave: string | null; data_emissao: string | null }[] }[] = []
 
-    if (modeloParam === '55' || modeloParam === 'todos') {
-      let nfeQ = supabaseAdmin
-        .from('nfe_saidas')
-        .select('id, numero, chave, data_emissao')
-        .eq('cliente_id', cliente_id)
+    async function carregarTodasNotas(tabela: 'nfe_saidas' | 'nfce_saidas', cliId: string, dataInicio?: string | null) {
+      const allNotas: { id: string; numero: string | null; chave: string | null; data_emissao: string | null }[] = []
+      const pageSize = 1000
+      let from = 0
+      let hasMore = true
 
-      if (cliente.data_inicio_monitoramento) {
-        nfeQ = nfeQ.gte('data_emissao', cliente.data_inicio_monitoramento)
+      while (hasMore) {
+        let q = supabaseAdmin
+          .from(tabela)
+          .select('id, numero, chave, data_emissao')
+          .eq('cliente_id', cliId)
+          .order('id', { ascending: true })
+          .range(from, from + pageSize - 1)
+
+        if (dataInicio) {
+          q = q.gte('data_emissao', dataInicio)
+        }
+
+        const { data, error } = await q
+        if (error || !data || data.length === 0) {
+          hasMore = false
+          break
+        }
+
+        allNotas.push(...data)
+        from += pageSize
+        if (data.length < pageSize) {
+          hasMore = false
+        }
       }
 
-      const { data: nfeData } = await nfeQ
-      resultadosNotas.push({ modelo: '55', data: nfeData || [] })
+      return allNotas
+    }
+
+    if (modeloParam === '55' || modeloParam === 'todos') {
+      const nfeData = await carregarTodasNotas('nfe_saidas', cliente_id, cliente.data_inicio_monitoramento)
+      resultadosNotas.push({ modelo: '55', data: nfeData })
     }
 
     if (modeloParam === '65' || modeloParam === 'todos') {
-      let nfceQ = supabaseAdmin
-        .from('nfce_saidas')
-        .select('id, numero, chave, data_emissao')
-        .eq('cliente_id', cliente_id)
-
-      if (cliente.data_inicio_monitoramento) {
-        nfceQ = nfceQ.gte('data_emissao', cliente.data_inicio_monitoramento)
-      }
-
-      const { data: nfceData } = await nfceQ
-      resultadosNotas.push({ modelo: '65', data: nfceData || [] })
+      const nfceData = await carregarTodasNotas('nfce_saidas', cliente_id, cliente.data_inicio_monitoramento)
+      resultadosNotas.push({ modelo: '65', data: nfceData })
     }
 
     // Estrutura para agrupar números: Map<"modelo_serie", { numbers: number[], emissaoMap: Map<number, string> }>
