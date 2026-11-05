@@ -103,6 +103,14 @@ export async function GET(request: Request) {
         .then(({ error: errTele }) => {
           if (errTele) console.warn('Aviso telemetria:', errTele.message)
         })
+
+      if (sistemaId.toLowerCase() === 'hub_desktop' && versaoAtual && versaoAtual !== '0.0.0') {
+        supabase
+          .from('configuracoes_hub')
+          .update({ versao_hub_instalada: versaoAtual })
+          .eq('cliente_id', targetClienteId)
+          .then(() => {})
+      }
     } else {
       supabase
         .from('telemetria_versoes_clientes')

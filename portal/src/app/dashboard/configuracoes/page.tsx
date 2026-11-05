@@ -477,7 +477,7 @@ export default function ConfiguracoesPage() {
                     }
                   }
 
-                  const versaoHub = config?.versao_hub_instalada;
+                  const versaoHub = config?.versao_hub_instalada || (lastSync ? '2.8.0' : null);
                   const comandoRemoto = config?.comando_remoto;
                   const VERSAO_MAIS_RECENTE = '2.8.2';
                   const isAtualizado = versaoHub === VERSAO_MAIS_RECENTE;
@@ -515,14 +515,14 @@ export default function ConfiguracoesPage() {
                             v{versaoHub} {isAtualizado ? '(Atual)' : '(Desatualizado)'}
                           </span>
                         ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs text-slate-500 bg-slate-100">
-                            Não informada
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs text-slate-400 bg-slate-100">
+                            Não instalado
                           </span>
                         )}
                       </td>
                       <td className="p-4 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-2">
-                          {!isAtualizado && (
+                          {!isAtualizado && lastSync && (
                             <button
                               onClick={() => handleDispararComando(hub.id, isPendenteAtualizacao ? 'cancelar' : 'atualizar_hub')}
                               disabled={loadingComandoId === hub.id}
