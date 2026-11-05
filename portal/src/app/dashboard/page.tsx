@@ -865,7 +865,7 @@ export default function DashboardPage() {
               <p className="text-2xl sm:text-3xl font-black text-slate-800">
                 {loading ? '...' : metrics.clientesParatech.toLocaleString('pt-BR')}
               </p>
-              {isFicticioAtivo && metrics.clientesReal !== metrics.clientesParatech && (
+              {userRole === 'admin' && isFicticioAtivo && metrics.clientesReal !== metrics.clientesParatech && (
                 <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
                   Fictício
                 </span>
@@ -878,12 +878,12 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* Destaque da Quantidade Real da Contabilidade Logada no mesmo Card */}
+            {/* Destaque da Quantidade da Contabilidade Logada no mesmo Card */}
             {userRole === 'contabilidade' && (
               <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
                 <span className="text-slate-500 font-medium">Sua Carteira:</span>
                 <span className="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
-                  {metrics.clientesContabilidade} {metrics.clientesContabilidade === 1 ? 'cliente real' : 'clientes reais'}
+                  {metrics.clientesContabilidade} {metrics.clientesContabilidade === 1 ? 'cliente vinculado' : 'clientes vinculados'}
                 </span>
               </div>
             )}
@@ -964,21 +964,23 @@ export default function DashboardPage() {
               </span>
             </div>
 
-            {/* Valores REAIS em R$ da carteira da contabilidade logada */}
-            <div className="mt-2.5 pt-2 border-t border-slate-100 space-y-0.5 text-[10px]">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500 font-medium">Em dia (Real):</span>
-                <span className="font-bold text-emerald-600">
-                  {metrics.faturasEmDiaValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </span>
+            {/* Valores financeiros em R$ exibidos exclusivamente para o Administrador Paratech */}
+            {userRole === 'admin' && (
+              <div className="mt-2.5 pt-2 border-t border-slate-100 space-y-0.5 text-[10px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 font-medium">Em dia:</span>
+                  <span className="font-bold text-emerald-600">
+                    {metrics.faturasEmDiaValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 font-medium">Atrasado:</span>
+                  <span className={`font-bold ${metrics.faturasAtrasadasValor > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                    {metrics.faturasAtrasadasValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500 font-medium">Atrasado (Real):</span>
-                <span className={`font-bold ${metrics.faturasAtrasadasValor > 0 ? 'text-red-600' : 'text-slate-400'}`}>
-                  {metrics.faturasAtrasadasValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </span>
-              </div>
-            </div>
+            )}
           </div>
         </div>
 
