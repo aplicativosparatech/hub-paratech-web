@@ -16,7 +16,11 @@ import { FUSO_BRASIL, parseDateUtc } from '@/utils/dateBrasil'
 interface CleanDashboardViewProps {
   metrics: {
     clientes: number
+    clientesParatech?: number
+    clientesContabilidade?: number
+    clientesReal?: number
     contabilidades: number
+    contabilidadesReal?: number
     totalFaturas: number
     faturasEmDia: number
     faturasAtrasadas: number
@@ -34,6 +38,7 @@ interface CleanDashboardViewProps {
     monofasicoValor?: number
     relatorios: number
     cidades: number
+    cidadesReal?: number
   }
   certAlerta: any
   listaClientes: Array<{

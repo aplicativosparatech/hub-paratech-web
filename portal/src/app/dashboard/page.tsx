@@ -57,7 +57,11 @@ export default function DashboardPage() {
 
   const [metrics, setMetrics] = useState({
     clientes: 0,
+    clientesParatech: 0,
+    clientesContabilidade: 0,
+    clientesReal: 0,
     contabilidades: 0,
+    contabilidadesReal: 0,
     totalFaturas: 0,
     faturasEmDia: 0,
     faturasAtrasadas: 0,
@@ -74,7 +78,8 @@ export default function DashboardPage() {
     nfceSaidasValor: 0,
     monofasicoValor: 0,
     relatorios: 0,
-    cidades: 0
+    cidades: 0,
+    cidadesReal: 0
   })
 
   // Dados Reais para a Seção Inferior do Modo Clean
@@ -168,27 +173,7 @@ export default function DashboardPage() {
         // 3. Calcula os valores REAIS das notas fiscais e módulos do portal
         const hojeStr = new Date().toISOString().split('T')[0]
 
-        // Busca datas extremas (1º XML e Último XML emitidos no portal)
-        try {
-          const { data: minNota } = await supabase.from('nfce_saidas').select('data_emissao').order('data_emissao', { ascending: true }).limit(1)
-          const { data: maxNota } = await supabase.from('nfce_saidas').select('data_emissao').order('data_emissao', { ascending: false }).limit(1)
-          if (minNota && minNota.length > 0 && minNota[0].data_emissao) {
-            setPrimeiroXmlData(new Date(minNota[0].data_emissao).toLocaleDateString('pt-BR'))
-          }
-          if (maxNota && maxNota.length > 0 && maxNota[0].data_emissao) {
-            setUltimoXmlData(new Date(maxNota[0].data_emissao).toLocaleDateString('pt-BR'))
-          }
-        } catch (e) {
-          console.warn('Erro ao obter datas extremas de XMLs:', e)
-        }
-
-        // Consultas gerais de Clientes, Contabilidades, Faturas, etc.
-        let qFaturas = supabase.from('faturas').select('id, status, data_vencimento')
-        if (currentRole === 'cliente' && userRoleData?.cliente_id) {
-          qFaturas = qFaturas.eq('cliente_id', userRoleData.cliente_id)
-        }
-
-        // Consulta lista de Clientes para o Seletor de Fechamento Fiscal (com whatsapp, cidade e uf para busca inteligente)
+        // Consultas de Clientes, Contabilidades, Faturas, etc.
         let qClientesLista = supabase.from('clientes').select('id, razao_social, nome_fantasia, cnpj, whatsapp, cidade, uf', { count: 'exact' }).order('razao_social', { ascending: true })
         if (currentRole === 'cliente' && userRoleData?.cliente_id) {
           qClientesLista = qClientesLista.eq('id', userRoleData.cliente_id)
@@ -197,17 +182,15 @@ export default function DashboardPage() {
         }
 
         const [
-          clientesRes, 
-          contabRes, 
-          faturasRes, 
-          xmlsRes,
+          clientesRes,
+          clientesTotalHubRes,
+          contabRes,
           cidadesClientesRes,
           cidadesContabRes
         ] = await Promise.all([
           qClientesLista,
+          supabase.from('clientes').select('id', { count: 'exact', head: true }),
           supabase.from('contabilidades').select('id', { count: 'exact', head: true }),
-          qFaturas,
-          supabase.from('arquivos_xml').select('id', { count: 'exact', head: true }),
           supabase.from('clientes').select('cidade').not('cidade', 'is', null),
           supabase.from('contabilidades').select('cidade').not('cidade', 'is', null)
         ])
@@ -223,9 +206,52 @@ export default function DashboardPage() {
           })
         }
 
-        // Faturas reais: calculando Total, Em Dia e Atrasadas
-        const listaFaturas = faturasRes.data || []
-        const totalFaturas = listaFaturas.length
+        // IDs dos clientes vinculados à contabilidade (para isolar estritamente os dados dela)
+        const clientesContabilidadeIds = currentRole === 'contabilidade' ? clisData.map(c => c.id) : []
+        const totalClientesContabilidadeReal = currentRole === 'contabilidade' ? clisData.length : 0
+
+        // Total real de clientes de todo o Hub Paratech
+        const totalClientesHubReal = clientesTotalHubRes.count || 0
+
+        // Total exibido para "Clientes Paratech" (fictício se habilitado e > 0, senão real do Hub)
+        const totalClientesParatech = (ficticioLigado && Number(geralConfig?.ficticio_clientes) > 0)
+          ? Number(geralConfig.ficticio_clientes)
+          : totalClientesHubReal
+
+        // Total de contabilidades (fictício se habilitado e > 0, senão real do Hub)
+        const contabilidadesRealCount = contabRes.count || 0
+        const totalContabilidades = (ficticioLigado && Number(geralConfig?.ficticio_contabilidades) > 0)
+          ? Number(geralConfig.ficticio_contabilidades)
+          : contabilidadesRealCount
+
+        // Cidades distintas atendidas
+        const cidadesSet = new Set<string>()
+        ;(cidadesClientesRes.data || []).forEach(c => {
+          if (c.cidade && c.cidade.trim()) cidadesSet.add(c.cidade.trim().toUpperCase())
+        })
+        ;(cidadesContabRes.data || []).forEach(c => {
+          if (c.cidade && c.cidade.trim()) cidadesSet.add(c.cidade.trim().toUpperCase())
+        })
+        const cidadesRealCount = Math.max(cidadesSet.size, totalClientesHubReal > 0 ? 1 : 0)
+        const totalCidades = (ficticioLigado && Number(geralConfig?.ficticio_cidades) > 0)
+          ? Number(geralConfig.ficticio_cidades)
+          : cidadesRealCount
+
+        // Faturas: respeita cliente específico ou clientes da contabilidade logada
+        let qFaturas = supabase.from('faturas').select('id, status, data_vencimento')
+        if (currentRole === 'cliente' && userRoleData?.cliente_id) {
+          qFaturas = qFaturas.eq('cliente_id', userRoleData.cliente_id)
+        } else if (currentRole === 'contabilidade' && userRoleData?.contabilidade_id) {
+          if (clientesContabilidadeIds.length > 0) {
+            qFaturas = qFaturas.in('cliente_id', clientesContabilidadeIds)
+          } else {
+            qFaturas = qFaturas.eq('cliente_id', '00000000-0000-0000-0000-000000000000')
+          }
+        }
+
+        const { data: faturasData } = await qFaturas
+        const listaFaturas = faturasData || []
+        let totalFaturas = listaFaturas.length
         let faturasAtrasadas = 0
         let faturasEmDia = 0
 
@@ -238,28 +264,63 @@ export default function DashboardPage() {
           }
         })
 
+        // Se fictício ativo e configurado para faturas atrasadas (para gerar autoridade visual)
+        if (ficticioLigado && Number(geralConfig?.ficticio_faturas_atrasadas) > 0 && currentRole !== 'admin') {
+          faturasAtrasadas = Number(geralConfig.ficticio_faturas_atrasadas)
+          totalFaturas = Math.max(totalFaturas, faturasAtrasadas)
+        }
+
         const pctAtraso = totalFaturas > 0 ? (faturasAtrasadas / totalFaturas) * 100 : 0
 
-        // Cidades distintas atendidas
-        const cidadesSet = new Set<string>()
-        ;(cidadesClientesRes.data || []).forEach(c => {
-          if (c.cidade && c.cidade.trim()) cidadesSet.add(c.cidade.trim().toUpperCase())
-        })
-        ;(cidadesContabRes.data || []).forEach(c => {
-          if (c.cidade && c.cidade.trim()) cidadesSet.add(c.cidade.trim().toUpperCase())
-        })
-        const totalCidades = Math.max(cidadesSet.size, (clientesRes.count || 0) > 0 ? 1 : 0)
-
-        // Carrega volume de notas fiscais respeitando o período selecionado
+        // Carrega volume de notas fiscais respeitando o período selecionado e o escopo da contabilidade
         let qNfeSaidas = supabase.from('nfe_saidas').select('id, valor, valor_monofasico, data_emissao')
         let qNfceSaidas = supabase.from('nfce_saidas').select('id, valor, valor_monofasico, data_emissao')
         let qNfeEntradas = supabase.from('nfe_entradas').select('id, valor, data_emissao')
+        let qArquivosXml = supabase.from('arquivos_xml').select('id', { count: 'exact', head: true })
 
         const clienteFiltroId = (currentRole === 'cliente' && userRoleData?.cliente_id) || globalClienteId || null
         if (clienteFiltroId) {
           qNfeSaidas = qNfeSaidas.eq('cliente_id', clienteFiltroId)
           qNfceSaidas = qNfceSaidas.eq('cliente_id', clienteFiltroId)
           qNfeEntradas = qNfeEntradas.eq('cliente_id', clienteFiltroId)
+          qArquivosXml = qArquivosXml.eq('cliente_id', clienteFiltroId)
+        } else if (currentRole === 'contabilidade' && userRoleData?.contabilidade_id) {
+          // Contabilidade logada: traz SEMPRE os totais dos clientes da contabilidade logada
+          if (clientesContabilidadeIds.length > 0) {
+            qNfeSaidas = qNfeSaidas.in('cliente_id', clientesContabilidadeIds)
+            qNfceSaidas = qNfceSaidas.in('cliente_id', clientesContabilidadeIds)
+            qNfeEntradas = qNfeEntradas.in('cliente_id', clientesContabilidadeIds)
+            qArquivosXml = qArquivosXml.in('cliente_id', clientesContabilidadeIds)
+          } else {
+            qNfeSaidas = qNfeSaidas.eq('cliente_id', '00000000-0000-0000-0000-000000000000')
+            qNfceSaidas = qNfceSaidas.eq('cliente_id', '00000000-0000-0000-0000-000000000000')
+            qNfeEntradas = qNfeEntradas.eq('cliente_id', '00000000-0000-0000-0000-000000000000')
+            qArquivosXml = qArquivosXml.eq('cliente_id', '00000000-0000-0000-0000-000000000000')
+          }
+        }
+
+        // Busca datas extremas (1º XML e Último XML emitidos dentro do escopo selecionado)
+        try {
+          let qMinNota = supabase.from('nfce_saidas').select('data_emissao').order('data_emissao', { ascending: true }).limit(1)
+          let qMaxNota = supabase.from('nfce_saidas').select('data_emissao').order('data_emissao', { ascending: false }).limit(1)
+          if (clienteFiltroId) {
+            qMinNota = qMinNota.eq('cliente_id', clienteFiltroId)
+            qMaxNota = qMaxNota.eq('cliente_id', clienteFiltroId)
+          } else if (currentRole === 'contabilidade' && userRoleData?.contabilidade_id) {
+            if (clientesContabilidadeIds.length > 0) {
+              qMinNota = qMinNota.in('cliente_id', clientesContabilidadeIds)
+              qMaxNota = qMaxNota.in('cliente_id', clientesContabilidadeIds)
+            }
+          }
+          const [resMinNota, resMaxNota] = await Promise.all([qMinNota, qMaxNota])
+          if (resMinNota.data && resMinNota.data.length > 0 && resMinNota.data[0].data_emissao) {
+            setPrimeiroXmlData(new Date(resMinNota.data[0].data_emissao).toLocaleDateString('pt-BR'))
+          }
+          if (resMaxNota.data && resMaxNota.data.length > 0 && resMaxNota.data[0].data_emissao) {
+            setUltimoXmlData(new Date(resMaxNota.data[0].data_emissao).toLocaleDateString('pt-BR'))
+          }
+        } catch (e) {
+          console.warn('Erro ao obter datas extremas de XMLs:', e)
         }
 
         // Aplica filtro de período
@@ -288,12 +349,12 @@ export default function DashboardPage() {
           qNfceSaidas = qNfceSaidas.gte('data_emissao', new Date(inicio).toISOString()).lte('data_emissao', new Date(fim).toISOString())
           qNfeEntradas = qNfeEntradas.gte('data_emissao', new Date(inicio).toISOString()).lte('data_emissao', new Date(fim).toISOString())
         }
-        // Se 'tudo', busca o volume total do primeiro ao último XML sem filtro
 
-        const [nfeRes, nfceRes, nfeEntradasRes] = await Promise.all([
+        const [nfeRes, nfceRes, nfeEntradasRes, xmlsRes] = await Promise.all([
           qNfeSaidas,
           qNfceSaidas,
-          qNfeEntradas
+          qNfeEntradas,
+          qArquivosXml
         ])
 
         const nfeCount = (nfeRes.data || []).length
@@ -323,8 +384,12 @@ export default function DashboardPage() {
         const totalRelatorios = (xmlsRes.count || 0) > 0 ? (xmlsRes.count || 0) : totalNFQuantidade
 
         setMetrics({
-          clientes: clientesRes.count || 0,
-          contabilidades: contabRes.count || 0,
+          clientes: totalClientesParatech,
+          clientesParatech: totalClientesParatech,
+          clientesContabilidade: totalClientesContabilidadeReal,
+          clientesReal: totalClientesHubReal,
+          contabilidades: totalContabilidades,
+          contabilidadesReal: contabilidadesRealCount,
           totalFaturas,
           faturasEmDia,
           faturasAtrasadas,
@@ -341,7 +406,8 @@ export default function DashboardPage() {
           nfceSaidasValor: nfceTotal,
           monofasicoValor: monofasicoTotal,
           relatorios: totalRelatorios,
-          cidades: totalCidades
+          cidades: totalCidades,
+          cidadesReal: cidadesRealCount
         })
 
         // 4. Carrega dados REAIS para a seção inferior do Modo Clean (Gráfico 12M e Top 5 Documentos)
@@ -374,6 +440,18 @@ export default function DashboardPage() {
             qNfce12m = qNfce12m.eq('cliente_id', clienteFiltroId)
             qNfeRecentes = qNfeRecentes.eq('cliente_id', clienteFiltroId)
             qNfceRecentes = qNfceRecentes.eq('cliente_id', clienteFiltroId)
+          } else if (currentRole === 'contabilidade' && userRoleData?.contabilidade_id) {
+            if (clientesContabilidadeIds.length > 0) {
+              qNfe12m = qNfe12m.in('cliente_id', clientesContabilidadeIds)
+              qNfce12m = qNfce12m.in('cliente_id', clientesContabilidadeIds)
+              qNfeRecentes = qNfeRecentes.in('cliente_id', clientesContabilidadeIds)
+              qNfceRecentes = qNfceRecentes.in('cliente_id', clientesContabilidadeIds)
+            } else {
+              qNfe12m = qNfe12m.eq('cliente_id', '00000000-0000-0000-0000-000000000000')
+              qNfce12m = qNfce12m.eq('cliente_id', '00000000-0000-0000-0000-000000000000')
+              qNfeRecentes = qNfeRecentes.eq('cliente_id', '00000000-0000-0000-0000-000000000000')
+              qNfceRecentes = qNfceRecentes.eq('cliente_id', '00000000-0000-0000-0000-000000000000')
+            }
           }
 
           const [resNfe12m, resNfce12m, resNfeRecentes, resNfceRecentes] = await Promise.all([
@@ -707,19 +785,57 @@ export default function DashboardPage() {
         {/* CARD 1: TOTAL DE CLIENTES */}
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-slate-300 transition flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider truncate" title="Total de Clientes">
               Total de Clientes
             </span>
-            <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
+            <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg shrink-0">
               <Users size={16} />
             </div>
           </div>
-          <div>
-            <p className="text-2xl sm:text-3xl font-black text-slate-800">
-              {loading ? '...' : metrics.clientes.toLocaleString('pt-BR')}
-            </p>
-            <span className="text-[11px] text-slate-400 font-medium">Empresas ativas</span>
-          </div>
+          {userRole === 'contabilidade' ? (
+            <div className="space-y-1">
+              <div className="flex items-baseline justify-between gap-2">
+                <div>
+                  <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block">
+                    Sua Carteira
+                  </span>
+                  <p className="text-2xl sm:text-3xl font-black text-slate-800">
+                    {loading ? '...' : metrics.clientesContabilidade.toLocaleString('pt-BR')}
+                  </p>
+                  <span className="text-[10px] text-slate-400 font-medium">Clientes vinculados</span>
+                </div>
+
+                <div className="text-right border-l border-slate-100 pl-3">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                    Total Paratech
+                  </span>
+                  <p className="text-xl sm:text-2xl font-black text-slate-700">
+                    {loading ? '...' : metrics.clientesParatech.toLocaleString('pt-BR')}
+                  </p>
+                  <span className="text-[10px] text-slate-400 font-medium">Rede Hub</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="flex items-baseline gap-2">
+                <p className="text-2xl sm:text-3xl font-black text-slate-800">
+                  {loading ? '...' : metrics.clientesParatech.toLocaleString('pt-BR')}
+                </p>
+                {userRole === 'admin' && isFicticioAtivo && metrics.clientesReal !== metrics.clientesParatech && (
+                  <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
+                    Fictício
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center justify-between mt-1 text-[11px] text-slate-400 font-medium">
+                <span>Empresas ativas</span>
+                {userRole === 'admin' && isFicticioAtivo && metrics.clientesReal !== metrics.clientesParatech && (
+                  <span className="text-slate-500 font-normal">Real: {metrics.clientesReal}</span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* CARD 2: CONTABILIDADES */}
@@ -728,15 +844,27 @@ export default function DashboardPage() {
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
               Contabilidades
             </span>
-            <div className="p-1.5 bg-purple-50 text-purple-600 rounded-lg">
+            <div className="p-1.5 bg-purple-50 text-purple-600 rounded-lg shrink-0">
               <Building2 size={16} />
             </div>
           </div>
           <div>
-            <p className="text-2xl sm:text-3xl font-black text-slate-800">
-              {loading ? '...' : metrics.contabilidades.toLocaleString('pt-BR')}
-            </p>
-            <span className="text-[11px] text-slate-400 font-medium">Escritórios parceiros</span>
+            <div className="flex items-baseline gap-2">
+              <p className="text-2xl sm:text-3xl font-black text-slate-800">
+                {loading ? '...' : metrics.contabilidades.toLocaleString('pt-BR')}
+              </p>
+              {userRole === 'admin' && isFicticioAtivo && metrics.contabilidadesReal !== metrics.contabilidades && (
+                <span className="text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded">
+                  Fictício
+                </span>
+              )}
+            </div>
+            <div className="flex items-center justify-between mt-1 text-[11px] text-slate-400 font-medium">
+              <span>Escritórios parceiros</span>
+              {userRole === 'admin' && isFicticioAtivo && metrics.contabilidadesReal !== metrics.contabilidades && (
+                <span className="text-slate-500 font-normal">Real: {metrics.contabilidadesReal}</span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -867,15 +995,27 @@ export default function DashboardPage() {
             <span className="text-[11px] font-bold text-indigo-700 uppercase tracking-wider">
               Cidades Atendidas
             </span>
-            <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
+            <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg shrink-0">
               <MapPin size={16} />
             </div>
           </div>
           <div>
-            <p className="text-2xl sm:text-3xl font-black text-slate-800">
-              {loading ? '...' : metrics.cidades.toLocaleString('pt-BR')}
-            </p>
-            <span className="text-[11px] text-slate-400 font-medium">Cobertura municipal</span>
+            <div className="flex items-baseline gap-2">
+              <p className="text-2xl sm:text-3xl font-black text-slate-800">
+                {loading ? '...' : metrics.cidades.toLocaleString('pt-BR')}
+              </p>
+              {userRole === 'admin' && isFicticioAtivo && metrics.cidadesReal !== metrics.cidades && (
+                <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded">
+                  Fictício
+                </span>
+              )}
+            </div>
+            <div className="flex items-center justify-between mt-1 text-[11px] text-slate-400 font-medium">
+              <span>Cobertura municipal</span>
+              {userRole === 'admin' && isFicticioAtivo && metrics.cidadesReal !== metrics.cidades && (
+                <span className="text-slate-500 font-normal">Real: {metrics.cidadesReal}</span>
+              )}
+            </div>
           </div>
         </div>
 

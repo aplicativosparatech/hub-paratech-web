@@ -1514,19 +1514,19 @@ export default function ConfiguracoesPortalPage() {
         {ficticioData.valores_ficticios_ativos && (
           <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 mb-2 flex items-center gap-1.5">
-              <Sparkles size={14} className="text-indigo-600" /> Digite os valores para cada card do Dashboard:
+              <Sparkles size={14} className="text-indigo-600" /> Digite os valores para os cards institucionais do Dashboard:
             </h4>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Total de Clientes</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Total de Clientes (Rede Paratech)</label>
                 <input 
                   type="number"
                   min="0"
                   value={ficticioData.ficticio_clientes}
                   onChange={e => setFicticioData({ ...ficticioData, ficticio_clientes: Number(e.target.value) })}
                   className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Ex: 28"
+                  placeholder="Ex: 211"
                 />
               </div>
 
@@ -1538,7 +1538,7 @@ export default function ConfiguracoesPortalPage() {
                   value={ficticioData.ficticio_contabilidades}
                   onChange={e => setFicticioData({ ...ficticioData, ficticio_contabilidades: Number(e.target.value) })}
                   className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Ex: 8"
+                  placeholder="Ex: 32"
                 />
               </div>
 
@@ -1555,43 +1555,6 @@ export default function ConfiguracoesPortalPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">NF Processadas (Quantidade)</label>
-                <input 
-                  type="number"
-                  min="0"
-                  value={ficticioData.ficticio_nf_quantidade}
-                  onChange={e => setFicticioData({ ...ficticioData, ficticio_nf_quantidade: Number(e.target.value) })}
-                  className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Ex: 14500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">NF Processadas (Valor Total R$)</label>
-                <input 
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={ficticioData.ficticio_nf_valor}
-                  onChange={e => setFicticioData({ ...ficticioData, ficticio_nf_valor: Number(e.target.value) })}
-                  className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Ex: 894520.50"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Total de Relatórios Gerados</label>
-                <input 
-                  type="number"
-                  min="0"
-                  value={ficticioData.ficticio_relatorios}
-                  onChange={e => setFicticioData({ ...ficticioData, ficticio_relatorios: Number(e.target.value) })}
-                  className="w-full bg-white border border-slate-200 px-3.5 py-2 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Ex: 120"
-                />
-              </div>
-
-              <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Cidades Atendidas</label>
                 <input 
                   type="number"
@@ -1602,6 +1565,13 @@ export default function ConfiguracoesPortalPage() {
                   placeholder="Ex: 14"
                 />
               </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-start gap-2 mt-3">
+              <span className="font-bold shrink-0">ℹ️ Regra Operacional:</span>
+              <p className="leading-relaxed">
+                Os cards <strong>NF Processadas</strong> (quantidade e valores) e <strong>Total de Relatórios</strong> exibem <strong>sempre os totais 100% reais dos clientes da contabilidade logada</strong>, mesmo com valores fictícios ativados, garantindo fidelidade contábil e auditoria fiscal precisa.
+              </p>
             </div>
           </div>
         )}
