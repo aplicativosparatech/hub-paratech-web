@@ -688,18 +688,19 @@ export default function DashboardPage() {
     : 'Selecione uma Empresa'
   const mesCompetenciaLabel = mesesOpcoes.find(m => m.valor === mesCompetencia)?.label || mesCompetencia
 
-  // Fecha dropdown de busca de cliente ao clicar fora
+  // Fecha modal de busca de cliente ao pressionar ESC
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownClienteRef.current && !dropdownClienteRef.current.contains(event.target as Node)) {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape' && isOpenBuscaCliente) {
         setIsOpenBuscaCliente(false)
+        setTermoBuscaCliente('')
       }
     }
-    document.addEventListener('mousedown', handleClickOutside)
+    window.addEventListener('keydown', handleKeyDown)
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
+      window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [])
+  }, [isOpenBuscaCliente])
 
   // Filtragem inteligente de clientes por Nome, Fantasia, CNPJ, Cidade ou Telefone/WhatsApp (insensível a acentos)
   const normalize = (str: string) => (str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
@@ -1141,10 +1142,10 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 3 BOTÕES / CONTROLES NA MESMA LINHA */}
-        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 overflow-x-auto">
+        {/* 3 BOTÕES / CONTROLES NA MESMA LINHA (FLEX WRAP SEM OVERFLOW-X PARA NUNCA CORTAR ELEMENTOS) */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 shrink-0">
           
-          {/* 1. SELETOR DE CLIENTE COM BUSCA INTELIGENTE (POR NOME, CNPJ OU TELEFONE) */}
+          {/* 1. SELETOR DE CLIENTE COM BOTÃO MODERNO & MODAL SPOTLIGHT */}
           {userRole === 'cliente' ? (
             <div className="flex items-center gap-2 bg-slate-800/80 border border-slate-700/80 px-3 py-1.5 rounded-xl text-xs h-[46px] shrink-0">
               <Building2 size={15} className="text-indigo-400 shrink-0" />
@@ -1156,121 +1157,28 @@ export default function DashboardPage() {
               </div>
             </div>
           ) : (
-            <div className="relative shrink-0" ref={dropdownClienteRef}>
-              <div className="bg-slate-800/90 border border-slate-700 hover:border-slate-600 rounded-xl px-2.5 sm:px-3 py-1.5 shadow-inner transition h-[46px] flex flex-col justify-center">
-                <label className="text-[9px] uppercase font-bold text-slate-400 block leading-tight truncate">
+            <button
+              type="button"
+              onClick={() => setIsOpenBuscaCliente(true)}
+              className="bg-slate-800/90 hover:bg-slate-800 border border-slate-700 hover:border-indigo-500/60 rounded-xl px-3 py-1.5 shadow-inner transition h-[46px] flex flex-col justify-center text-left cursor-pointer group min-w-[200px] sm:min-w-[240px] xl:min-w-[270px] max-w-[340px] shrink-0"
+              title="Clique para pesquisar e selecionar outra empresa"
+            >
+              <div className="flex items-center justify-between w-full">
+                <span className="text-[9px] uppercase font-bold text-slate-400 leading-tight group-hover:text-indigo-300 transition">
                   Cliente / Empresa
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setIsOpenBuscaCliente(prev => !prev)}
-                  className="flex items-center justify-between gap-2 text-xs text-white font-bold cursor-pointer min-w-[200px] sm:min-w-[240px] xl:min-w-[270px] max-w-[340px] text-left pt-0.5"
-                >
-                  <div className="flex items-center gap-1.5 truncate">
-                    <Building2 size={13} className="text-indigo-400 shrink-0" />
-                    <span className="truncate" title={clienteNomeExibicao}>{clienteNomeExibicao}</span>
-                  </div>
-                  <ChevronDown size={14} className={`text-slate-400 shrink-0 transition-transform ${isOpenBuscaCliente ? 'rotate-180' : ''}`} />
-                </button>
+                </span>
+                <span className="text-[9px] text-indigo-400/80 font-mono font-bold group-hover:text-indigo-300">
+                  Alterar 🔍
+                </span>
               </div>
-
-              {/* Popover Dropdown com Busca Inteligente */}
-              {isOpenBuscaCliente && (
-                <div className="absolute left-0 bottom-full mb-2 sm:bottom-auto sm:top-full sm:mt-2 z-50 w-[340px] sm:w-[440px] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-3 animate-in fade-in zoom-in-95 duration-150">
-                  <div className="flex items-center justify-between mb-2 px-1 text-[11px] text-slate-400">
-                    <span className="font-semibold text-slate-300">Selecione a empresa para fechamento:</span>
-                    <span className="font-mono text-indigo-400 font-bold bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700">
-                      {clientesFiltrados.length} encontrada{clientesFiltrados.length === 1 ? '' : 's'}
-                    </span>
-                  </div>
-
-                  {/* Campo de Busca */}
-                  <div className="relative mb-2">
-                    <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
-                    <input
-                      type="text"
-                      autoFocus
-                      placeholder="Buscar por Nome, Fantasia, CNPJ ou Cidade..."
-                      value={termoBuscaCliente}
-                      onChange={(e) => setTermoBuscaCliente(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-8 pr-8 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-                    />
-                    {termoBuscaCliente && (
-                      <button
-                        type="button"
-                        onClick={() => setTermoBuscaCliente('')}
-                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
-                      >
-                        <CloseIcon size={14} />
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Lista de Empresas */}
-                  <div className="max-h-64 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar text-xs">
-                    {clientesFiltrados.length === 0 ? (
-                      <div className="p-4 text-center text-slate-400 text-xs bg-slate-800/50 rounded-xl border border-slate-800">
-                        Nenhuma empresa encontrada com termo &quot;{termoBuscaCliente}&quot;.
-                      </div>
-                    ) : (
-                      clientesFiltrados.map(cli => {
-                        const isSelected = cli.id === selectedClienteId
-                        const nomePrincipal = cli.nome_fantasia || cli.razao_social
-                        const temNomeDiferente = cli.nome_fantasia && cli.nome_fantasia !== cli.razao_social
-
-                        return (
-                          <button
-                            key={cli.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedClienteId(cli.id)
-                              setGlobalClienteId(cli.id)
-                              setIsOpenBuscaCliente(false)
-                              setTermoBuscaCliente('')
-                            }}
-                            className={`w-full p-2.5 rounded-xl text-left transition flex items-center justify-between gap-2.5 ${
-                              isSelected
-                                ? 'bg-indigo-600/30 border border-indigo-500/50 text-white'
-                                : 'hover:bg-slate-800 border border-transparent text-slate-300 hover:text-white'
-                            }`}
-                          >
-                            <div className="truncate min-w-0">
-                              <p className="font-bold text-white text-xs truncate">
-                                {nomePrincipal}
-                              </p>
-                              {temNomeDiferente && (
-                                <p className="text-[10px] text-slate-400 truncate mt-0.5">
-                                  {cli.razao_social}
-                                </p>
-                              )}
-                              <div className="flex flex-wrap items-center gap-2 mt-1 text-[10px] text-slate-400">
-                                {cli.cnpj && (
-                                  <span className="font-mono bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-700/60">
-                                    {cli.cnpj}
-                                  </span>
-                                )}
-                                {cli.cidade && (
-                                  <span className="text-slate-300">
-                                    📍 {cli.cidade}/{cli.uf}
-                                  </span>
-                                )}
-                                {cli.whatsapp && (
-                                  <span className="flex items-center gap-1 text-emerald-400 font-mono">
-                                    <Phone size={10} />
-                                    {cli.whatsapp}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            {isSelected && <Check size={16} className="text-emerald-400 shrink-0" />}
-                          </button>
-                        )
-                      })
-                    )}
-                  </div>
+              <div className="flex items-center justify-between gap-2 text-xs text-white font-bold pt-0.5">
+                <div className="flex items-center gap-1.5 truncate">
+                  <Building2 size={13} className="text-indigo-400 shrink-0" />
+                  <span className="truncate" title={clienteNomeExibicao}>{clienteNomeExibicao}</span>
                 </div>
-              )}
-            </div>
+                <ChevronDown size={14} className="text-slate-400 shrink-0 group-hover:text-white transition" />
+              </div>
+            </button>
           )}
 
           {/* 2. FILTRO MÊS COMPETÊNCIA */}
@@ -1318,6 +1226,183 @@ export default function DashboardPage() {
           )}
 
         </div>
+
+        {/* MODAL SPOTLIGHT CENTRALIZADO: BUSCA E SELEÇÃO DE CLIENTE (100% FLUTUANTE, LIVRE DE OVERFLOWS) */}
+        {isOpenBuscaCliente && (
+          <div 
+            className="fixed inset-0 z-[9999] bg-slate-950/75 backdrop-blur-sm flex items-start sm:items-center justify-center p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-150"
+            onClick={() => {
+              setIsOpenBuscaCliente(false)
+              setTermoBuscaCliente('')
+            }}
+          >
+            <div 
+              className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-auto text-left"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Topo do Modal */}
+              <div className="p-4 sm:p-5 border-b border-slate-800 bg-slate-900/90 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-400 shrink-0">
+                    <Building2 size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm sm:text-base font-bold text-white">
+                      Selecionar Empresa para Fechamento Fiscal
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Escolha a empresa para gerar relatórios, apuração fiscal e pacote ZIP
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOpenBuscaCliente(false)
+                    setTermoBuscaCliente('')
+                  }}
+                  className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition"
+                  title="Fechar (ESC)"
+                >
+                  <CloseIcon size={16} />
+                </button>
+              </div>
+
+              {/* Barra de Pesquisa em Destaque */}
+              <div className="p-4 sm:p-5 border-b border-slate-800 bg-slate-900/50">
+                <div className="relative">
+                  <Search size={18} className="absolute left-3.5 top-3.5 text-indigo-400" />
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder="Digite o Nome, Fantasia, CNPJ ou Cidade da empresa..."
+                    value={termoBuscaCliente}
+                    onChange={(e) => setTermoBuscaCliente(e.target.value)}
+                    className="w-full bg-slate-800/90 border border-slate-700 focus:border-indigo-500 rounded-xl pl-11 pr-10 py-3 text-sm text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition font-medium"
+                  />
+                  {termoBuscaCliente && (
+                    <button
+                      type="button"
+                      onClick={() => setTermoBuscaCliente('')}
+                      className="absolute right-3.5 top-3.5 text-slate-400 hover:text-white"
+                    >
+                      <CloseIcon size={16} />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between mt-2.5 px-1 text-xs text-slate-400">
+                  <span>Dica: busque por qualquer parte da Razão Social, Fantasia, CNPJ ou Cidade</span>
+                  <span className="font-mono text-indigo-400 font-semibold bg-indigo-950/60 border border-indigo-800/60 px-2.5 py-0.5 rounded-full">
+                    {clientesFiltrados.length} encontrada{clientesFiltrados.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Lista de Empresas com Rolagem Própria e Estável */}
+              <div className="max-h-[380px] overflow-y-auto p-3 space-y-2 custom-scrollbar">
+                {clientesFiltrados.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 space-y-2">
+                    <Building2 size={32} className="mx-auto text-slate-600 mb-2" />
+                    <p className="font-bold text-slate-300 text-sm">Nenhuma empresa encontrada</p>
+                    <p className="text-xs text-slate-500">
+                      Não encontramos nenhuma empresa com o termo &quot;{termoBuscaCliente}&quot;.
+                    </p>
+                  </div>
+                ) : (
+                  clientesFiltrados.map(cli => {
+                    const isSelected = cli.id === selectedClienteId
+                    const nomePrincipal = cli.nome_fantasia || cli.razao_social
+                    const temNomeDiferente = cli.nome_fantasia && cli.nome_fantasia !== cli.razao_social
+
+                    return (
+                      <button
+                        key={cli.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedClienteId(cli.id)
+                          setGlobalClienteId(cli.id)
+                          setIsOpenBuscaCliente(false)
+                          setTermoBuscaCliente('')
+                        }}
+                        className={`w-full p-3.5 rounded-xl text-left transition flex items-center justify-between gap-3 border cursor-pointer ${
+                          isSelected
+                            ? 'bg-indigo-950/80 border-indigo-500 shadow-md ring-1 ring-indigo-500/50'
+                            : 'bg-slate-800/50 hover:bg-slate-800 border-slate-800 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-bold text-white text-sm truncate">
+                              {nomePrincipal}
+                            </p>
+                            {isSelected && (
+                              <span className="text-[10px] font-extrabold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                                Ativa
+                              </span>
+                            )}
+                          </div>
+
+                          {temNomeDiferente && (
+                            <p className="text-xs text-slate-400 truncate mt-0.5">
+                              {cli.razao_social}
+                            </p>
+                          )}
+
+                          <div className="flex flex-wrap items-center gap-2.5 mt-2 text-xs text-slate-400">
+                            {cli.cnpj && (
+                              <span className="font-mono bg-slate-900/90 text-slate-300 px-2 py-0.5 rounded-md border border-slate-700/60 font-semibold">
+                                {cli.cnpj}
+                              </span>
+                            )}
+                            {cli.cidade && (
+                              <span className="text-slate-300 flex items-center gap-1 font-medium">
+                                📍 {cli.cidade}{cli.uf ? `/${cli.uf}` : ''}
+                              </span>
+                            )}
+                            {cli.whatsapp && (
+                              <span className="flex items-center gap-1 text-emerald-400 font-mono">
+                                <Phone size={12} />
+                                {cli.whatsapp}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="shrink-0 flex items-center gap-2">
+                          {isSelected ? (
+                            <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                              <Check size={18} />
+                            </div>
+                          ) : (
+                            <span className="text-xs font-semibold text-slate-400 group-hover:text-indigo-400 transition">
+                              Selecionar →
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })
+                )}
+              </div>
+
+              {/* Rodapé do Modal */}
+              <div className="p-3 sm:p-4 border-t border-slate-800 bg-slate-900/90 flex items-center justify-between text-xs text-slate-400">
+                <span>Clique em qualquer empresa da lista para ativá-la</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOpenBuscaCliente(false)
+                    setTermoBuscaCliente('')
+                  }}
+                  className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold transition"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
 
