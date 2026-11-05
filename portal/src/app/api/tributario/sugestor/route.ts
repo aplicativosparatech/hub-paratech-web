@@ -18,10 +18,14 @@ export async function POST(request: Request) {
       crt = 1, 
       uf_origem = 'MG', 
       uf_destino = 'MG',
+      ramo_atividade,
+      ramoAtividade,
       usar_ia = true,
       image_base64,
       mime_type = 'image/jpeg'
     } = body;
+
+    const ramoEfetivo = (ramo_atividade || ramoAtividade || '').trim();
 
     const supabase = createAdminClient();
 
@@ -72,7 +76,8 @@ export async function POST(request: Request) {
         uf_origem,
         uf_destino,
         configsIa,
-        usar_ia !== false
+        usar_ia !== false,
+        ramoEfetivo
       );
 
       return NextResponse.json({
@@ -97,7 +102,8 @@ export async function POST(request: Request) {
         uf_origem,
         uf_destino,
         configsIa,
-        usar_ia !== false
+        usar_ia !== false,
+        ramoEfetivo
       );
 
       return NextResponse.json({

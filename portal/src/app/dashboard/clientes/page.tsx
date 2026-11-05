@@ -763,11 +763,19 @@ export default function ClientesPage() {
                         </div>
 
                         {/* Sistema em Uso (Nome do Sistema Monitorado) */}
-                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700" title={`Sistema Monitorado: ${c.nome_sistema_utilizado || 'Não definido'}`}>
-                          <Laptop size={12} className="text-blue-600 shrink-0" />
-                          <span className="truncate max-w-[140px]">
-                            {c.nome_sistema_utilizado || <span className="text-slate-400 font-normal italic">Não definido</span>}
-                          </span>
+                        <div className="flex items-start gap-1.5 text-[11px] font-semibold text-slate-700" title={`Sistema Monitorado: ${c.nome_sistema_utilizado || 'Não definido'}`}>
+                          <Laptop size={12} className="text-blue-600 shrink-0 mt-0.5" />
+                          <div className="flex flex-wrap gap-1 max-w-[180px]">
+                            {c.nome_sistema_utilizado ? (
+                              c.nome_sistema_utilizado.split(/[+,;]/).map((sis: string) => sis.trim()).filter(Boolean).map((sis: string) => (
+                                <span key={sis} className="inline-block px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 text-[10px] font-semibold border border-blue-200">
+                                  {sis}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-slate-400 font-normal italic">Não definido</span>
+                            )}
+                          </div>
                         </div>
 
                         {/* Status do Hub: ONLINE ou OFFLINE */}

@@ -12,6 +12,7 @@ export interface ProdutoInputSugestor {
   cfopAtual?: string;
   csosnAtual?: string;
   quantidade?: number;
+  ramoAtividade?: string;
 }
 
 export interface ProdutoTributadoOutput {
@@ -100,6 +101,49 @@ export function verificarMonofasico(ncm: string, descricao: string): boolean {
   return false;
 }
 
+// Verifica se o ramo de atividade corresponde a Food Service (Bares, Restaurantes, Lanchonetes, etc.)
+export function isFoodService(ramo?: string): boolean {
+  if (!ramo) return false;
+  const r = ramo.toLowerCase();
+  return (
+    r.includes('bar') ||
+    r.includes('restaurante') ||
+    r.includes('lanchonete') ||
+    r.includes('food') ||
+    r.includes('pizza') ||
+    r.includes('choperia') ||
+    r.includes('churrascaria') ||
+    r.includes('alimenta') ||
+    r.includes('hamburguer') ||
+    r.includes('burger') ||
+    r.includes('petisc') ||
+    r.includes('gastronom') ||
+    r.includes('confeitaria') ||
+    r.includes('pastel')
+  );
+}
+
+// Verifica se um item é alimento preparado / refeição em Food Service (não sujeito a ICMS-ST nem Monofásico)
+export function isAlimentoPreparadoFoodService(descricao: string, ncm?: string): boolean {
+  const desc = (descricao || '').toUpperCase();
+  const cleanNcm = (ncm || '').replace(/\D/g, '');
+
+  // Bebidas frias industrializadas (cervejas, refrigerantes, água mineral, energéticos) NÃO são refeições (mantêm ST)
+  if (cleanNcm.startsWith('2201') || cleanNcm.startsWith('2202') || cleanNcm.startsWith('2203') || cleanNcm.startsWith('2208')) {
+    return false;
+  }
+
+  const palavrasAlimentoPreparado = [
+    'COSTELINHA', 'COSTELA', 'PICANHA', 'ALCATRA', 'FILE', 'FILÉ', 'BIFE', 'CARNE', 'FRANGO', 'PEIXE', 'TILAPIA', 'SALMAO',
+    'PORCAO', 'PORÇÃO', 'PETISCO', 'BATATA', 'MANDIOCA', 'POLENTA', 'TORRESMO', 'TIRA-GOSTO', 'CALABRESA', 'BACON',
+    'PIZZA', 'BURGER', 'HAMBURGUER', 'SANDUICHE', 'LANCHE', 'HOT DOG', 'CALDO', 'SOPA',
+    'PRATO', 'REFEICAO', 'REFEIÇÃO', 'MARMITA', 'BUFFET', 'SELF SERVICE', 'ALMOCO', 'ALMOÇO', 'JANTAR',
+    'SOBREMESA', 'PUDIM', 'TORTA', 'BOLO', 'PASTEL', 'COXINHA', 'SALGADO', 'ESPETO', 'ESPETINHO', 'SALADA'
+  ];
+
+  return palavrasAlimentoPreparado.some(palavra => desc.includes(palavra));
+}
+
 // Classifica e tributa um produto único de acordo com o CRT
 export async function tributarProdutoIndividual(
   prod: ProdutoInputSugestor,
@@ -107,7 +151,8 @@ export async function tributarProdutoIndividual(
   ufOrigem: string = 'MG',
   ufDestino: string = 'MG',
   configsIa: IaProviderConfig[] = [],
-  usarIa: boolean = true
+  usarIa: boolean = true,
+  ramoAtividadeParam?: string
 ): Promise<ProdutoTributadoOutput> {
   const isMei = crt === 4;
   const isSimplesMe = crt === 1;
@@ -118,6 +163,8 @@ export async function tributarProdutoIndividual(
   const descricao = prod.descricao.trim();
   const valor = prod.valor || 0;
   const quantidade = prod.quantidade || 1;
+  const ramoAtividade = (prod.ramoAtividade || ramoAtividadeParam || '').trim();
+  const ramoFoodService = isFoodService(ramoAtividade);
 
   // 1. Invoca auditoria com Multi-IA ou fallback interno inteligente
   let respostaIa;
@@ -131,7 +178,8 @@ export async function tributarProdutoIndividual(
       csosnAtual: prod.csosnAtual,
       valor,
       crt,
-      uf: ufOrigem
+      uf: ufOrigem,
+      ramoAtividade
     };
     const res = await auditarItemComMultiIa(inputAuditoria, configsIa, true);
     respostaIa = res.vencedor;
@@ -142,17 +190,28 @@ export async function tributarProdutoIndividual(
   const cleanNcm = ncm.replace(/\D/g, '');
 
   // 3. Verificação de Substituição Tributária (ST) e CEST pelo Convênio ICMS 142/2018
+  const ehAlimentoPreparadoFoodService = ramoFoodService && isAlimentoPreparadoFoodService(descricao, cleanNcm);
+
   const cestMatch = ITENS_CEST_142.find((c: ItemCest) => 
     c.ncm.replace(/\D/g, '') === cleanNcm || cleanNcm.startsWith(c.ncm.replace(/\D/g, ''))
   );
-  const temSt = Boolean(cestMatch || respostaIa?.cestSugerido);
-  const cest = respostaIa?.cestSugerido || (cestMatch ? cestMatch.cest.replace(/\D/g, '') : '');
+  
+  // REGRA DE OURO: Alimento preparado / refeição em Food Service NÃO tem ST nem CEST!
+  const temSt = ehAlimentoPreparadoFoodService 
+    ? false 
+    : Boolean(cestMatch || respostaIa?.cestSugerido);
+
+  const cest = ehAlimentoPreparadoFoodService 
+    ? '' 
+    : (respostaIa?.cestSugerido || (cestMatch ? cestMatch.cest.replace(/\D/g, '') : ''));
 
   // 4. Determinação dos CFOPs Interno e Interestadual
   let cfopInterno = temSt ? '5405' : '5102';
-  let descricaoCfopInterno = temSt 
-    ? '5405 - Venda de mercadoria adquirida ou recebida de terceiros em operação com mercadoria sujeita ao regime de substituição tributária (substituído)'
-    : '5102 - Venda de mercadoria adquirida ou recebida de terceiros';
+  let descricaoCfopInterno = ehAlimentoPreparadoFoodService
+    ? '5102 - Venda de refeição / alimento preparado para consumo (Food Service - Sem ICMS-ST)'
+    : temSt 
+      ? '5405 - Venda de mercadoria adquirida ou recebida de terceiros em operação com mercadoria sujeita ao regime de substituição tributária (substituído)'
+      : '5102 - Venda de mercadoria adquirida ou recebida de terceiros';
 
   let cfopInterestadual = temSt ? '6404' : '6102';
   let descricaoCfopInterestadual = temSt
@@ -196,7 +255,8 @@ export async function tributarProdutoIndividual(
   }
 
   // 6. Determinação de PIS e COFINS
-  const isMonofasico = verificarMonofasico(cleanNcm, descricao);
+  // REGRA DE OURO: Alimentos preparados em Food Service NÃO são Monofásicos de PIS/COFINS!
+  const isMonofasico = ehAlimentoPreparadoFoodService ? false : verificarMonofasico(cleanNcm, descricao);
   let cstPis = '01';
   let aliqPis = 1.65;
   let cstCofins = '01';
@@ -243,13 +303,15 @@ export async function tributarProdutoIndividual(
   const temImpostoSeletivo = reforma.temImpostoSeletivo;
 
   // 8. Justificativa e pontuação
-  const scoreConfianca = respostaIa?.scoreConfianca || (cestMatch ? 90 : 80);
+  const scoreConfianca = respostaIa?.scoreConfianca || (ehAlimentoPreparadoFoodService ? 95 : cestMatch ? 90 : 80);
   const provedorIa = respostaIa?.nomeProvedor || 'Hub Paratech Fiscal Engine';
-  const justificativa = respostaIa?.justificativa || (
-    isMonofasico 
-      ? `Produto com tributação concentrada/monofásica de PIS/COFINS (CST 04). ${temSt ? 'Enquadrado em Substituição Tributária (CEST ' + cest + ').' : 'Tributação de saída padrão.'} Enquadrado no regime de ${classificacaoReforma} da Reforma Tributária.`
-      : `Classificação efetuada com base na NCM ${ncm}. ${temSt ? 'Sujeito ao regime de ST (Convênio ICMS 142/2018).' : 'Operação comum sem ICMS ST.'} Reforma Tributária: ${reforma.justificativa}`
-  );
+  const justificativa = ehAlimentoPreparadoFoodService
+    ? `Refeição / alimento preparado servido em Food Service (${ramoAtividade || 'Bar/Restaurante'}). Conforme a legislação fiscal (RICMS estadual e Simples Nacional), refeições e alimentos prontos não sofrem ICMS-ST nem PIS Monofásico. CFOP ${cfopInterno} e ${csosn ? 'CSOSN ' + csosn : 'CST ' + cstIcms}.`
+    : respostaIa?.justificativa || (
+        isMonofasico 
+          ? `Produto com tributação concentrada/monofásica de PIS/COFINS (CST 04). ${temSt ? 'Enquadrado em Substituição Tributária (CEST ' + cest + ').' : 'Tributação de saída padrão.'} Enquadrado no regime de ${classificacaoReforma} da Reforma Tributária.`
+          : `Classificação efetuada com base na NCM ${ncm}. ${temSt ? 'Sujeito ao regime de ST (Convênio ICMS 142/2018).' : 'Operação comum sem ICMS ST.'} Reforma Tributária: ${reforma.justificativa}`
+      );
 
   return {
     id,
@@ -293,13 +355,22 @@ export async function tributarLoteProdutos(
   ufOrigem: string = 'MG',
   ufDestino: string = 'MG',
   configsIa: IaProviderConfig[] = [],
-  usarIa: boolean = true
+  usarIa: boolean = true,
+  ramoAtividade?: string
 ): Promise<ProdutoTributadoOutput[]> {
   const resultados: ProdutoTributadoOutput[] = [];
 
   for (const prod of produtos) {
     if (!prod.descricao || !prod.descricao.trim()) continue;
-    const tributado = await tributarProdutoIndividual(prod, crt, ufOrigem, ufDestino, configsIa, usarIa);
+    const tributado = await tributarProdutoIndividual(
+      prod, 
+      crt, 
+      ufOrigem, 
+      ufDestino, 
+      configsIa, 
+      usarIa, 
+      prod.ramoAtividade || ramoAtividade
+    );
     resultados.push(tributado);
   }
 

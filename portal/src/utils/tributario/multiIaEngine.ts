@@ -30,6 +30,7 @@ export interface ItemAuditoriaInput {
   valor?: number;
   crt: number; // 1 = Simples, 3 = Regime Normal
   uf?: string;
+  ramoAtividade?: string;
 }
 
 export interface RespostaIaItem {
@@ -60,16 +61,46 @@ export interface ResultadoConsenso {
 }
 
 // Prompt especializado em tributação brasileira, Convênio ICMS 142/2018 e Reforma Tributária (IBS/CBS - LC 214/2024)
-function buildSystemPrompt(crt: number, uf: string = 'MG'): string {
-  const regimeStr = crt === 1 ? 'Simples Nacional (usa CSOSN 101, 102, 500, etc.)' : 'Regime Normal / Lucro Real / Presumido (usa CST 00, 10, 60, etc.)';
-  return `Você é um Auditor Tributário e Fiscal Sênior especialista na Legislação Brasileira, tributação do estado de ${uf}, tabela NCM/TIPI, Convênio ICMS 142/2018 (CEST e Substituição Tributária), regime ${regimeStr} e no novo Sistema Tributário Nacional da Reforma Tributária (Emenda Constitucional 132/2023 e Lei Complementar 214/2024 - IBS, CBS e IVA Dual).
+function buildSystemPrompt(crt: number, uf: string = 'MG', ramoAtividade?: string): string {
+  const regimeStr = crt === 1 
+    ? 'Simples Nacional (usa CSOSN 101, 102, 500, etc.)' 
+    : crt === 4 
+      ? 'MEI - Microempreendedor Individual (usa CSOSN 400 ou 500)' 
+      : 'Regime Normal / Lucro Real / Presumido (usa CST 00, 10, 60, etc.)';
 
+  const ramoStr = ramoAtividade ? ` do segmento/ramo "${ramoAtividade}"` : '';
+  
+  const isFoodService = ramoAtividade ? (
+    ramoAtividade.toLowerCase().includes('bar') ||
+    ramoAtividade.toLowerCase().includes('restaurante') ||
+    ramoAtividade.toLowerCase().includes('lanchonete') ||
+    ramoAtividade.toLowerCase().includes('food') ||
+    ramoAtividade.toLowerCase().includes('pizza') ||
+    ramoAtividade.toLowerCase().includes('choperia') ||
+    ramoAtividade.toLowerCase().includes('alimenta')
+  ) : false;
+
+  const instrucaoFoodService = isFoodService ? `
+REGRAS CRÍTICAS PARA ESTABELECIMENTO DE FOOD SERVICE (BAR, RESTAURANTE, LANCHONETE, PIZZARIA):
+1. REFEIÇÕES E ALIMENTOS PREPARADOS PARA CONSUMO (Ex: COSTELINHA, PICANHA, BIFES, CARNES, PRATOS, PORÇÕES DE PETISCOS, BATATAS FRITAS, PIZZAS, HAMBÚRGUERES, PASTÉIS E SOBREMESAS):
+   - NÃO SUJEITOS A ICMS-ST (NÃO têm Substituição Tributária)!
+   - NÃO SÃO MONOFÁSICOS de PIS/COFINS!
+   - CFOP: Obrigatoriamente 5102 (ou 5101). NUNCA 5405 para refeições/alimentos preparados!
+   - CSOSN/CST: ${crt === 4 ? '400' : crt === 1 ? '102' : '00'}. NUNCA CSOSN 500 para pratos e carnes preparadas no restaurante!
+   - CEST: Obrigatoriamente VAZIO "" (sem CEST pois não há ST).
+   - PIS/COFINS: CST 49 (Simples Nacional) ou CST 01 (Regime Normal), com is_monofasico: false.
+2. BEBIDAS FRIAS INDUSTRIALIZADAS (Cervejas, chopes industriais, refrigerantes, águas minerais, energéticos):
+   - MANTÉM a Substituição Tributária (CFOP 5405, CSOSN 500 ou CST 60, com CEST obrigatório do segmento 03 e CST PIS/COFINS 04).
+` : '';
+
+  return `Você é um Auditor Tributário e Fiscal Sênior especialista na Legislação Brasileira, tributação do estado de ${uf}${ramoStr}, tabela NCM/TIPI, Convênio ICMS 142/2018 (CEST e Substituição Tributária), regime ${regimeStr} e no novo Sistema Tributário Nacional da Reforma Tributária (Emenda Constitucional 132/2023 e Lei Complementar 214/2024 - IBS, CBS e IVA Dual).
+${instrucaoFoodService}
 Analise o item de mercadoria fornecido e responda ESTRITAMENTE em formato JSON com as seguintes chaves num objeto único:
 {
   "ncm": "8 dígitos numéricos válidos",
   "cest": "7 dígitos numéricos válidos ou vazio se não tiver ST",
   "cfop": "CFOP padrão para saída interna no estado (ex: 5102 para tributado integralmente, 5405 para ICMS ST)",
-  "csosn_cst": "Código de situação tributária adequado ao regime ${crt === 1 ? 'CSOSN do Simples' : 'CST Normal'}",
+  "csosn_cst": "Código de situação tributária adequado ao regime ${crt === 4 ? 'CSOSN 400 ou 500 do MEI' : crt === 1 ? 'CSOSN 102 ou 500 do Simples' : 'CST 00 ou 60 do Regime Normal'}",
   "cst_pis": "CST PIS (ex: 01, 04 para monofásico, 06 para alíquota zero, 49, 99)",
   "cst_cofins": "CST COFINS (ex: 01, 04 para monofásico, 06 para alíquota zero, 49, 99)",
   "is_monofasico": true ou false,
@@ -119,7 +150,7 @@ async function chamarGemini(apiKey: string, model: string, item: ItemAuditoriaIn
       const m = modelosUnicos[i];
       try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${cleanKey}`;
-        const prompt = `${buildSystemPrompt(item.crt, item.uf)}\n\nITEM PARA ANÁLISE:\nDescrição: "${item.descricao}"\nNCM Informado no Arquivo: "${item.ncmAtual || 'Não informado'}"\nCEST Atual: "${item.cestAtual || 'Vazio'}"\nCFOP Atual: "${item.cfopAtual || 'Vazio'}"\nCSOSN/CST Atual: "${item.csosnAtual || 'Vazio'}"\nValor Unitário: R$ ${item.valor || 0}`;
+        const prompt = `${buildSystemPrompt(item.crt, item.uf, item.ramoAtividade)}\n\nITEM PARA ANÁLISE:\nDescrição: "${item.descricao}"\nNCM Informado no Arquivo: "${item.ncmAtual || 'Não informado'}"\nCEST Atual: "${item.cestAtual || 'Vazio'}"\nCFOP Atual: "${item.cfopAtual || 'Vazio'}"\nCSOSN/CST Atual: "${item.csosnAtual || 'Vazio'}"\nValor Unitário: R$ ${item.valor || 0}`;
 
         const res = await fetch(url, {
           method: 'POST',
@@ -190,7 +221,7 @@ async function chamarGroq(apiKey: string, model: string, item: ItemAuditoriaInpu
     const modelosUnicos = Array.from(new Set(modelosGroq));
 
     const url = 'https://api.groq.com/openai/v1/chat/completions';
-    const systemPrompt = buildSystemPrompt(item.crt, item.uf);
+    const systemPrompt = buildSystemPrompt(item.crt, item.uf, item.ramoAtividade);
     const userPrompt = `ITEM PARA ANÁLISE:\nDescrição: "${item.descricao}"\nNCM Informado: "${item.ncmAtual || ''}"\nCEST Atual: "${item.cestAtual || ''}"\nCFOP Atual: "${item.cfopAtual || ''}"\nCSOSN/CST Atual: "${item.csosnAtual || ''}"\nValor: R$ ${item.valor || 0}`;
 
     let erroModeloPrincipal = '';
@@ -267,7 +298,7 @@ async function chamarOpenAi(apiKey: string, model: string, item: ItemAuditoriaIn
     }
 
     const url = 'https://api.openai.com/v1/chat/completions';
-    const systemPrompt = buildSystemPrompt(item.crt, item.uf);
+    const systemPrompt = buildSystemPrompt(item.crt, item.uf, item.ramoAtividade);
     const userPrompt = `ITEM PARA ANÁLISE:\nDescrição: "${item.descricao}"\nNCM: "${item.ncmAtual || ''}"\nCEST: "${item.cestAtual || ''}"\nCFOP: "${item.cfopAtual || ''}"\nCSOSN/CST: "${item.csosnAtual || ''}"\nValor: R$ ${item.valor || 0}`;
 
     const res = await fetch(url, {
@@ -315,7 +346,7 @@ async function chamarClaude(apiKey: string, model: string, item: ItemAuditoriaIn
     }
 
     const url = 'https://api.anthropic.com/v1/messages';
-    const systemPrompt = buildSystemPrompt(item.crt, item.uf);
+    const systemPrompt = buildSystemPrompt(item.crt, item.uf, item.ramoAtividade);
     const userPrompt = `ITEM PARA ANÁLISE:\nDescrição: "${item.descricao}"\nNCM: "${item.ncmAtual || ''}"\nCEST: "${item.cestAtual || ''}"\nCFOP: "${item.cfopAtual || ''}"\nCSOSN/CST: "${item.csosnAtual || ''}"\nValor: R$ ${item.valor || 0}\n\nResponda APENAS o JSON.`;
 
     const res = await fetch(url, {
@@ -356,7 +387,7 @@ async function chamarOllama(endpoint: string, model: string, item: ItemAuditoria
   try {
     const base = endpoint ? endpoint.replace(/\/$/, '') : 'http://localhost:11434';
     const url = `${base}/api/generate`;
-    const prompt = `${buildSystemPrompt(item.crt, item.uf)}\n\nITEM PARA ANÁLISE:\nDescrição: "${item.descricao}"\nNCM: "${item.ncmAtual || ''}"\nCEST: "${item.cestAtual || ''}"\nCFOP: "${item.cfopAtual || ''}"\nCSOSN/CST: "${item.csosnAtual || ''}"\nValor: R$ ${item.valor || 0}\n\nResponda APENAS o JSON válido.`;
+    const prompt = `${buildSystemPrompt(item.crt, item.uf, item.ramoAtividade)}\n\nITEM PARA ANÁLISE:\nDescrição: "${item.descricao}"\nNCM: "${item.ncmAtual || ''}"\nCEST: "${item.cestAtual || ''}"\nCFOP: "${item.cfopAtual || ''}"\nCSOSN/CST: "${item.csosnAtual || ''}"\nValor: R$ ${item.valor || 0}\n\nResponda APENAS o JSON válido.`;
 
     const res = await fetch(url, {
       method: 'POST',
