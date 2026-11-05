@@ -175,7 +175,37 @@ export default function TabelaInutilizacao() {
 
   const [processandoId, setProcessandoId] = useState<string | null>(null)
   const [processandoLote, setProcessandoLote] = useState(false)
+  const [reconciliandoGaps, setReconciliandoGaps] = useState(false)
   const [progressoLote, setProgressoLote] = useState({ atual: 0, total: 0, itemAtual: '' })
+
+  const handleReconciliarGaps = async () => {
+    if (!clienteAtualId) {
+      toast.error('Selecione uma empresa para reconciliar.')
+      return
+    }
+    setReconciliandoGaps(true)
+    const toastId = toast.loading('Despachando ordem de auditoria para o Hub Desktop no computador do cliente...')
+    try {
+      const res = await fetch('/api/hub/comando-remoto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cliente_id: clienteAtualId, comando: 'reconciliar_gaps' })
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        toast.success(
+          '⚖️ Ordem de Reconciliação enviada ao Hub Desktop! O sistema fará a varredura profunda no disco do PDV, removerá o cache local dos XMLs faltantes e sincronizará automaticamente todas as notas emitidas.',
+          { id: toastId, duration: 10000 }
+        )
+      } else {
+        toast.error(data.error || 'Erro ao enviar comando de reconciliação para o cliente.', { id: toastId })
+      }
+    } catch (err: any) {
+      toast.error('Falha de conexão com o servidor: ' + err.message, { id: toastId })
+    } finally {
+      setReconciliandoGaps(false)
+    }
+  }
   const [modalPontoPartida, setModalPontoPartida] = useState<{
     open: boolean
     saving: boolean
@@ -1267,6 +1297,18 @@ export default function TabelaInutilizacao() {
               className="pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg w-36 sm:w-48 focus:w-56 transition-all shadow-xs"
             />
           </div>
+
+          {/* Botão de Reconciliação / Auditoria Ativa com o PDV */}
+          <button
+            type="button"
+            onClick={handleReconciliarGaps}
+            disabled={reconciliandoGaps || !clienteAtualId}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold transition shadow-xs disabled:opacity-50"
+            title="Envia ordem ao Hub Desktop do cliente para fazer varredura profunda no disco do PDV, remover cache local e subir XMLs pendentes"
+          >
+            <RefreshCw size={13} className={reconciliandoGaps ? 'animate-spin text-indigo-600' : 'text-indigo-600'} />
+            <span>{reconciliandoGaps ? 'Reconciliando...' : 'Reconciliar no PDV'}</span>
+          </button>
         </div>
       </div>
 
@@ -2293,9 +2335,21 @@ export default function TabelaInutilizacao() {
               <button
                 type="button"
                 onClick={() => setModalAjudaSefaz({ open: false, gap: null })}
-                className="px-5 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl transition"
               >
-                Entendi
+                Fechar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await handleReconciliarGaps()
+                  setModalAjudaSefaz({ open: false, gap: null })
+                }}
+                disabled={reconciliandoGaps}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition shadow-sm disabled:opacity-50"
+              >
+                <RefreshCw size={13} className={reconciliandoGaps ? 'animate-spin' : ''} />
+                Reconciliar no PDV Agora
               </button>
             </div>
           </div>

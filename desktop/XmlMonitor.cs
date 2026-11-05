@@ -801,7 +801,7 @@ namespace HubParatechDesktop
             return res;
         }
 
-        private async Task<bool> ProcessFileAsync(string filePath, bool isRealTime = false)
+        private async Task<bool> ProcessFileAsync(string filePath, bool isRealTime = false, bool forceUpload = false)
         {
             try
             {
@@ -814,8 +814,8 @@ namespace HubParatechDesktop
                 FileInfo fi = new FileInfo(filePath);
                 string fileIdentifier = $"{fileName}_{fi.Length}";
 
-                // Se já foi enviado anteriormente, não envia de novo
-                if (XmlUploadCache.IsUploaded(fileIdentifier))
+                // Se já foi enviado anteriormente, não envia de novo (a menos que seja forceUpload na reconciliação de gaps)
+                if (!forceUpload && XmlUploadCache.IsUploaded(fileIdentifier))
                 {
                     return true;
                 }
@@ -837,15 +837,15 @@ namespace HubParatechDesktop
 
                 var dadosLocais = validacao.Dados;
 
-                // Se a chave já estiver no cache, marca o identificador e pula
-                if (XmlUploadCache.IsUploaded(fileIdentifier, dadosLocais.Chave))
+                // Se a chave já estiver no cache, marca o identificador e pula (a menos que forceUpload seja true)
+                if (!forceUpload && XmlUploadCache.IsUploaded(fileIdentifier, dadosLocais.Chave))
                 {
                     XmlUploadCache.MarkAsUploaded(fileIdentifier, dadosLocais.Chave);
                     return true;
                 }
 
                 // VALIDAÇÃO FISCAL PRÉVIA: Ponto de Partida Fiscal (ignora arquivos antigos sem fazer requisição de rede)
-                if (IsAnteriorAoPontoPartida(dadosLocais, out string motivoPontoPartida))
+                if (!forceUpload && IsAnteriorAoPontoPartida(dadosLocais, out string motivoPontoPartida))
                 {
                     XmlUploadCache.MarkAsUploaded(fileIdentifier, dadosLocais.Chave);
                     LiveMonitorForm.AddLog(new XmlLogItem
@@ -1243,9 +1243,9 @@ namespace HubParatechDesktop
                             XmlUploadCache.RemoveKey(fileId);
                             if (!string.IsNullOrEmpty(meta.chave)) XmlUploadCache.RemoveKey(meta.chave);
 
-                            // Envia o arquivo
+                            // Envia o arquivo forçando o upload (bypassa cache local já que a nuvem acusou falta)
                             var monitor = monitores.FirstOrDefault(x => x.tipoPasta == "vendas") ?? monitores[0];
-                            bool ok = await monitor.ProcessFileAsync(fileInfo.FullName, isRealTime: false);
+                            bool ok = await monitor.ProcessFileAsync(fileInfo.FullName, isRealTime: false, forceUpload: true);
                             if (ok)
                             {
                                 recuperados++;
@@ -1267,6 +1267,65 @@ namespace HubParatechDesktop
                                 });
                             }
                         }
+                    }
+                }
+
+                // 2. Camada de Varredura Expandida: Se ainda restarem notas faltantes, busca na pasta pai do ERP (ex: NFCe\XML)
+                if (numerosRecuperados.Count < totalFaltantesEsperados)
+                {
+                    var pastasPaisProcessadas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var m in monitores.Where(x => x.tipoPasta == "vendas"))
+                    {
+                        try
+                        {
+                            var pDir = Directory.GetParent(m.rootPath);
+                            if (pDir != null && pDir.Exists && pastasPaisProcessadas.Add(pDir.FullName))
+                            {
+                                var arquivosPai = SafeEnumerateXmlFiles(pDir.FullName);
+                                foreach (var fileInfo in arquivosPai)
+                                {
+                                    if (fileInfo.Length < 100) continue;
+                                    var meta = ExtrairMetadadosRapidos(fileInfo.FullName);
+                                    if (long.TryParse(meta.numero, out long numNota) && numNota > 0)
+                                    {
+                                        bool precisaEnviar = false;
+                                        if (meta.modelo == "65" && faltantesNfce.Contains(numNota) && !numerosRecuperados.Contains(numNota))
+                                            precisaEnviar = true;
+                                        else if (meta.modelo == "55" && faltantesNfe.Contains(numNota) && !numerosRecuperados.Contains(numNota))
+                                            precisaEnviar = true;
+
+                                        if (precisaEnviar)
+                                        {
+                                            string fileId = $"{fileInfo.Name}_{fileInfo.Length}";
+                                            XmlUploadCache.RemoveKey(fileId);
+                                            if (!string.IsNullOrEmpty(meta.chave)) XmlUploadCache.RemoveKey(meta.chave);
+
+                                            bool ok = await m.ProcessFileAsync(fileInfo.FullName, isRealTime: false, forceUpload: true);
+                                            if (ok)
+                                            {
+                                                recuperados++;
+                                                numerosRecuperados.Add(numNota);
+                                                LiveMonitorForm.AddLog(new XmlLogItem
+                                                {
+                                                    Timestamp = DateTime.Now,
+                                                    TipoPasta = "Saída (Pasta Raiz)",
+                                                    Modelo = meta.modelo ?? "65",
+                                                    Numero = numNota.ToString(),
+                                                    Serie = meta.serie ?? "1",
+                                                    DataEmissao = meta.dhEmi ?? DateTime.Now.ToString("yyyy-MM-dd"),
+                                                    ValorTotal = meta.valor,
+                                                    Chave = meta.chave ?? "-",
+                                                    Status = "Recuperado & Enviado (Gap)",
+                                                    Arquivo = fileInfo.FullName,
+                                                    IsRealTime = false
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        catch { }
                     }
                 }
 

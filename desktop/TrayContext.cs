@@ -115,6 +115,7 @@ namespace HubParatechDesktop
         private long currentNumeroNfe = 1;
         private long currentNumeroNfce = 1;
         private DateTime lastSync = DateTime.MinValue;
+        private DateTime lastAutoAuditGaps = DateTime.MinValue;
 
         private bool isStealthMode = false;
 
@@ -658,6 +659,21 @@ namespace HubParatechDesktop
                                 await Task.Delay(2000);
                                 await XmlMonitor.ExecutarReconciliacaoGapsAsync(config.HubToken, http, activeMonitors);
                                 foreach (var m in activeMonitors) m.TriggerScan();
+                            });
+                        }
+
+                        // Auto-Auditoria Silenciosa de Gaps (Executa a cada 4 horas ou na inicialização para garantir 100% de precisão)
+                        if ((DateTime.Now - lastAutoAuditGaps).TotalHours >= 4 && activeMonitors.Count > 0)
+                        {
+                            lastAutoAuditGaps = DateTime.Now;
+                            _ = Task.Run(async () => {
+                                try
+                                {
+                                    await Task.Delay(6000); // Aguarda terminar a rotina principal
+                                    Debug.WriteLine("[TrayContext] Disparando Auto-Auditoria periódica silenciosa de gaps...");
+                                    await XmlMonitor.ExecutarReconciliacaoGapsAsync(config.HubToken, http, activeMonitors);
+                                }
+                                catch { }
                             });
                         }
                     }
