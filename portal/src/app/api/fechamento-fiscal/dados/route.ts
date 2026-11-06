@@ -9,6 +9,63 @@ function isMonofasicoNcmOrCst(xml: string): boolean {
   return ncms.some(ncm => monofasicoPrefixes.some(p => ncm.startsWith(p)))
 }
 
+function detectarQuebrasFechamento(
+  notas: Array<{ numero: string | null; serie?: string | null; chave?: string | null }>,
+  modeloRotulo: string,
+  numInicialMinimo: number = 1
+) {
+  const grupos = new Map<string, number[]>()
+
+  for (const n of notas) {
+    let num: number | null = null
+    let serie = n.serie || '1'
+
+    if (n.chave && n.chave.length === 44) {
+      serie = String(parseInt(n.chave.substring(22, 25), 10) || 1)
+      num = parseInt(n.chave.substring(25, 34), 10)
+    } else if (n.numero) {
+      num = parseInt(String(n.numero).replace(/\D/g, ''), 10)
+    }
+
+    if (num && !isNaN(num) && num >= numInicialMinimo) {
+      const arr = grupos.get(serie) || []
+      arr.push(num)
+      grupos.set(serie, arr)
+    }
+  }
+
+  const quebras: Array<{
+    modelo: string
+    serie: string
+    esperado_de: number
+    esperado_ate: number
+    quantidade_faltante: number
+    anterior_emitido: number
+    posterior_emitido: number
+  }> = []
+
+  grupos.forEach((numeros, serie) => {
+    const ordenados = [...new Set(numeros)].sort((a, b) => a - b)
+    for (let i = 0; i < ordenados.length - 1; i++) {
+      const atual = ordenados[i]
+      const prox = ordenados[i + 1]
+      if (prox > atual + 1) {
+        quebras.push({
+          modelo: modeloRotulo,
+          serie,
+          esperado_de: atual + 1,
+          esperado_ate: prox - 1,
+          quantidade_faltante: prox - atual - 1,
+          anterior_emitido: atual,
+          posterior_emitido: prox
+        })
+      }
+    }
+  })
+
+  return quebras
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
@@ -29,7 +86,7 @@ export async function GET(request: Request) {
     // 1. Busca dados do Cliente
     const { data: cliente, error: errCli } = await supabase
       .from('clientes')
-      .select('id, razao_social, nome_fantasia, cnpj, cidade, uf, whatsapp, regime_tributario, ramo_atividade, contabilidades(razao_social)')
+      .select('id, razao_social, nome_fantasia, cnpj, cidade, uf, whatsapp, regime_tributario, ramo_atividade, numero_inicial_nfe, numero_inicial_nfce, data_inicio_monitoramento, contabilidades(razao_social)')
       .eq('id', clienteId)
       .single()
 
@@ -58,11 +115,14 @@ export async function GET(request: Request) {
 
     // MODO LEVE: Apenas contagens para diagnóstico imediato e sugestão inteligente de relatórios
     if (somenteTotais) {
-      const [countNfce, countNfeSaidas, countNfeEntradas, countDfeNotas] = await Promise.all([
+      const [countNfce, countNfeSaidas, countNfeEntradas, countDfeNotas, notasNfceNums, notasNfeNums, resInuts] = await Promise.all([
         supabase.from('nfce_saidas').select('id', { count: 'exact', head: true }).eq('cliente_id', clienteId).gte('data_emissao', inicioMes).lte('data_emissao', fimMes),
         supabase.from('nfe_saidas').select('id', { count: 'exact', head: true }).eq('cliente_id', clienteId).gte('data_emissao', inicioMes).lte('data_emissao', fimMes),
         supabase.from('nfe_entradas').select('id', { count: 'exact', head: true }).eq('cliente_id', clienteId).gte('data_emissao', inicioMes).lte('data_emissao', fimMes),
-        supabase.from('dfe_notas_destinadas').select('id', { count: 'exact', head: true }).eq('cliente_id', clienteId).or(`competencia.eq.${mesAno},and(data_emissao.gte.${inicioMes},data_emissao.lte.${fimMes})`)
+        supabase.from('dfe_notas_destinadas').select('id', { count: 'exact', head: true }).eq('cliente_id', clienteId).or(`competencia.eq.${mesAno},and(data_emissao.gte.${inicioMes},data_emissao.lte.${fimMes})`),
+        supabase.from('nfce_saidas').select('numero, chave, serie').eq('cliente_id', clienteId).gte('data_emissao', inicioMes).lte('data_emissao', fimMes),
+        supabase.from('nfe_saidas').select('numero, chave, serie').eq('cliente_id', clienteId).gte('data_emissao', inicioMes).lte('data_emissao', fimMes),
+        supabase.from('inutilizacoes_saidas').select('id, modelo, serie, numero_inicial, numero_final, status_sefaz, data_hora, created_at').eq('cliente_id', clienteId).in('status_sefaz', ['102', '204', '563'])
       ])
 
       const totalNfce = countNfce.count || 0
@@ -70,6 +130,22 @@ export async function GET(request: Request) {
       const totalNfeEntradas = (countNfeEntradas.count || 0) + (countDfeNotas.count || 0)
       const totalNfseEntradas = 0
       const totalNfseSaidas = 0
+
+      // Detecção de Quebras na competência
+      const numIniNfce = cliente.numero_inicial_nfce || 1
+      const numIniNfe = cliente.numero_inicial_nfe || 1
+      const quebrasNfce = detectarQuebrasFechamento(notasNfceNums.data || [], 'NFC-e (Mod 65)', numIniNfce)
+      const quebrasNfe = detectarQuebrasFechamento(notasNfeNums.data || [], 'NF-e (Mod 55)', numIniNfe)
+      const totalQuebras = quebrasNfce.length + quebrasNfe.length
+
+      // Detecção de Inutilizações na competência
+      const inutsNoMes = (resInuts.data || []).filter((inut: any) => {
+        const d = inut.data_hora || inut.created_at
+        return d && d >= inicioMes && d <= fimMes
+      })
+      const inutsNfce = inutsNoMes.filter((i: any) => i.modelo === '65' || i.modelo === 'NFC-e')
+      const inutsNfe = inutsNoMes.filter((i: any) => i.modelo === '55' || i.modelo === 'NF-e')
+      const totalInuts = inutsNoMes.length
 
       // Detecção de produtos monofásicos por amostragem rápida
       let temMonofasicos = false
@@ -112,13 +188,21 @@ export async function GET(request: Request) {
           nfse_entradas: totalNfseEntradas,
           nfse_saidas: totalNfseSaidas,
           tem_monofasicos: temMonofasicos,
+          quebras_total: totalQuebras,
+          quebras_nfce: quebrasNfce.length,
+          quebras_nfe: quebrasNfe.length,
+          inutilizadas_total: totalInuts,
+          inutilizadas_nfce: inutsNfce.length,
+          inutilizadas_nfe: inutsNfe.length,
           sugestoes: {
             relNfeEntrada: totalNfeEntradas > 0,
             relNfseEntrada: totalNfseEntradas > 0,
             relNfeSaida: totalNfeSaidas > 0,
             relNfseSaida: totalNfseSaidas > 0,
             relNfceSaida: totalNfce > 0,
-            relMonofasicos: temMonofasicos
+            relMonofasicos: temMonofasicos,
+            relQuebraSequencia: totalQuebras > 0,
+            relNotasInutilizadas: totalInuts > 0
           }
         }
       })
@@ -316,6 +400,26 @@ export async function GET(request: Request) {
       }
     }
 
+    // Inutilizações na SEFAZ e Quebras de Sequência da competência
+    const { data: rawInutsCompleto } = await supabase
+      .from('inutilizacoes_saidas')
+      .select('id, modelo, serie, numero_inicial, numero_final, ano, justificativa, protocolo, status_sefaz, motivo_sefaz, data_hora, created_at')
+      .eq('cliente_id', clienteId)
+      .in('status_sefaz', ['102', '204', '563'])
+
+    const inutsCompletoMes = (rawInutsCompleto || []).filter((inut: any) => {
+      const d = inut.data_hora || inut.created_at
+      return d && d >= inicioMes && d <= fimMes
+    })
+    const inutsNfceCompleto = inutsCompletoMes.filter((i: any) => i.modelo === '65' || i.modelo === 'NFC-e')
+    const inutsNfeCompleto = inutsCompletoMes.filter((i: any) => i.modelo === '55' || i.modelo === 'NF-e')
+
+    const numIniNfce = cliente.numero_inicial_nfce || 1
+    const numIniNfe = cliente.numero_inicial_nfe || 1
+    const quebrasNfceCompleto = detectarQuebrasFechamento(nfceList, 'NFC-e (Mod 65)', numIniNfce)
+    const quebrasNfeCompleto = detectarQuebrasFechamento(nfeSaidasList, 'NF-e (Mod 55)', numIniNfe)
+    const totalQuebrasCompleto = quebrasNfceCompleto.length + quebrasNfeCompleto.length
+
     return NextResponse.json({
       empresa: empresaDados,
       competencia: mesAno,
@@ -327,13 +431,21 @@ export async function GET(request: Request) {
         nfse_entradas: nfseEntradasList.length,
         nfse_saidas: nfseSaidasList.length,
         tem_monofasicos: temMonofasicos,
+        quebras_total: totalQuebrasCompleto,
+        quebras_nfce: quebrasNfceCompleto.length,
+        quebras_nfe: quebrasNfeCompleto.length,
+        inutilizadas_total: inutsCompletoMes.length,
+        inutilizadas_nfce: inutsNfceCompleto.length,
+        inutilizadas_nfe: inutsNfeCompleto.length,
         sugestoes: {
           relNfeEntrada: nfeEntradasList.length > 0,
           relNfseEntrada: nfseEntradasList.length > 0,
           relNfeSaida: nfeSaidasList.length > 0,
           relNfseSaida: nfseSaidasList.length > 0,
           relNfceSaida: nfceList.length > 0,
-          relMonofasicos: temMonofasicos
+          relMonofasicos: temMonofasicos,
+          relQuebraSequencia: totalQuebrasCompleto > 0,
+          relNotasInutilizadas: inutsCompletoMes.length > 0
         }
       },
       documentos: {
@@ -342,6 +454,16 @@ export async function GET(request: Request) {
         nfe_entradas: nfeEntradasList,
         nfse_entradas: nfseEntradasList,
         nfse_saidas: nfseSaidasList
+      },
+      quebras_sequencia: {
+        total: totalQuebrasCompleto,
+        nfce: quebrasNfceCompleto,
+        nfe: quebrasNfeCompleto
+      },
+      inutilizadas: {
+        total: inutsCompletoMes.length,
+        nfce: inutsNfceCompleto,
+        nfe: inutsNfeCompleto
       }
     })
 

@@ -304,6 +304,26 @@ export function exportarCSV(
       ].join(';'))
     })
 
+  } else if (tipo === 'inutilizadas') {
+    linhas.push('TITULO;RELATORIO DE NOTAS INUTILIZADAS NA SEFAZ')
+    linhas.push('MODELO;SERIE;FAIXA INUTILIZADA;QUANTIDADE NOTAS;PROTOCOLO SEFAZ;DATA / HORA;JUSTIFICATIVA;SITUACAO')
+    const inuts = [...(dados.inutilizadas?.nfe || []), ...(dados.inutilizadas?.nfce || [])]
+    inuts.forEach((it: any) => {
+      const modNome = (it.modelo === '55' || it.modelo?.includes?.('55')) ? 'NF-e (55)' : 'NFC-e (65)'
+      const faixa = it.numero_inicial === it.numero_final ? `Nº ${it.numero_inicial}` : `Nº ${it.numero_inicial} até ${it.numero_final}`
+      const qtd = (it.numero_final - it.numero_inicial + 1) || 1
+      linhas.push([
+        modNome,
+        it.serie || '1',
+        faixa,
+        qtd,
+        it.protocolo || '—',
+        it.data_hora ? formatDate(it.data_hora) : '—',
+        `"${(it.justificativa || '—').replace(/"/g, '""')}"`,
+        it.motivo_sefaz || 'Inutilização Homologada'
+      ].join(';'))
+    })
+
   } else if (tipo === 'nao_assinadas') {
     linhas.push('TITULO;RELATORIO DE NOTAS NAO ASSINADAS OU SEM PROTOCOLO')
     linhas.push('NUMERO;CHAVE DE ACESSO;VALOR (R$);DATA EMISSAO;ASSINATURA;STATUS SEFAZ')
@@ -596,6 +616,27 @@ export function exportarExcel(
       ])
     })
 
+  } else if (tipo === 'inutilizadas') {
+    sheetName = 'Notas Inutilizadas'
+    rows.push(['RELATÓRIO DE NOTAS INUTILIZADAS NA SEFAZ'])
+    rows.push(['Modelo', 'Série', 'Faixa Inutilizada', 'Qtd. Notas', 'Protocolo SEFAZ', 'Data / Hora', 'Justificativa', 'Situação SEFAZ'])
+    const inuts = [...(dados.inutilizadas?.nfe || []), ...(dados.inutilizadas?.nfce || [])]
+    inuts.forEach((it: any) => {
+      const modNome = (it.modelo === '55' || it.modelo?.includes?.('55')) ? 'NF-e (Mod 55)' : 'NFC-e (Mod 65)'
+      const faixa = it.numero_inicial === it.numero_final ? `Nº ${it.numero_inicial}` : `Nº ${it.numero_inicial} até ${it.numero_final}`
+      const qtd = (it.numero_final - it.numero_inicial + 1) || 1
+      rows.push([
+        modNome,
+        it.serie || '1',
+        faixa,
+        qtd,
+        it.protocolo || '—',
+        it.data_hora ? formatDate(it.data_hora) : '—',
+        it.justificativa || '—',
+        it.motivo_sefaz || 'Inutilização Homologada'
+      ])
+    })
+
   } else if (tipo === 'nao_assinadas') {
     sheetName = 'Não Assinadas'
     rows.push(['NOTAS NÃO ASSINADAS OU SEM PROTOCOLO'])
@@ -686,7 +727,7 @@ export function exportarPDF(
   dados: any
 ) {
   // Configura orientação paisagem para relatórios com chave de 44 dígitos
-  const orientation = (tipo === 'nfe' || tipo === 'nfce' || tipo === 'consolidado' || tipo === 'monofasicos' || tipo === 'nao_assinadas') ? 'landscape' : 'portrait'
+  const orientation = (tipo === 'nfe' || tipo === 'nfce' || tipo === 'consolidado' || tipo === 'monofasicos' || tipo === 'nao_assinadas' || tipo === 'inutilizadas') ? 'landscape' : 'portrait'
   const doc = new jsPDF({ orientation, unit: 'mm', format: 'a4' })
   const dataHoje = new Date().toLocaleString('pt-BR', { timeZone: FUSO_BRASIL })
 
@@ -713,6 +754,7 @@ export function exportarPDF(
   if (tipo === 'consolidado') tituloRelatorio = 'Faturamento Consolidado & Segregação Fiscal'
   if (tipo === 'monofasicos') tituloRelatorio = 'Auditor de Produtos Monofásicos (PIS & COFINS)'
   if (tipo === 'quebra') tituloRelatorio = 'Auditoria de Quebras de Sequência de Numeração'
+  if (tipo === 'inutilizadas') tituloRelatorio = 'Auditoria de Notas Inutilizadas na SEFAZ'
   if (tipo === 'nao_assinadas') tituloRelatorio = 'Auditoria de Notas Sem Assinatura / Sem Protocolo'
   if (tipo === 'certificados') tituloRelatorio = 'Controle de Validade dos Certificados Digitais A1'
 
@@ -1196,6 +1238,46 @@ export function exportarPDF(
       theme: 'striped',
       headStyles: { fillColor: [185, 28, 28], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
       bodyStyles: { fontSize: 8 },
+      didDrawPage: (data: any) => {
+        renderizarRodapeParatech(doc, data.pageNumber)
+      }
+    })
+
+  } else if (tipo === 'inutilizadas') {
+    const inuts = [...(dados.inutilizadas?.nfe || []), ...(dados.inutilizadas?.nfce || [])]
+    const tableBody = inuts.map((it: any) => {
+      const modNome = (it.modelo === '55' || it.modelo?.includes?.('55')) ? 'NF-e (55)' : 'NFC-e (65)'
+      const faixa = it.numero_inicial === it.numero_final ? `Nº ${it.numero_inicial}` : `Nº ${it.numero_inicial} até ${it.numero_final}`
+      const qtd = (it.numero_final - it.numero_inicial + 1) || 1
+      return [
+        modNome,
+        `Série ${it.serie || '1'}`,
+        faixa,
+        `${qtd} nota(s)`,
+        it.protocolo || '—',
+        it.data_hora ? formatDate(it.data_hora) : '—',
+        it.justificativa || '—',
+        it.motivo_sefaz || 'Homologado'
+      ]
+    })
+
+    autoTable(doc, {
+      startY,
+      head: [['Modelo', 'Série', 'Faixa Inutilizada', 'Qtd', 'Protocolo SEFAZ', 'Data/Hora', 'Justificativa', 'Situação']],
+      body: tableBody,
+      theme: 'striped',
+      headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+      bodyStyles: { fontSize: 7.5 },
+      columnStyles: {
+        0: { cellWidth: 22, fontStyle: 'bold' },
+        1: { cellWidth: 18 },
+        2: { cellWidth: 35, fontStyle: 'bold' },
+        3: { cellWidth: 18, halign: 'center' },
+        4: { cellWidth: 35, font: 'courier' },
+        5: { cellWidth: 24 },
+        6: { cellWidth: 80 },
+        7: { cellWidth: 38 }
+      },
       didDrawPage: (data: any) => {
         renderizarRodapeParatech(doc, data.pageNumber)
       }

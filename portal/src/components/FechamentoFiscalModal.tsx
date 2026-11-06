@@ -5,7 +5,7 @@ import {
   X, Package, Download, CheckCircle2, AlertTriangle, FileText, 
   FileSpreadsheet, FileCode, CheckSquare, Square, FolderArchive, 
   FolderSync, ArrowUpDown, Bookmark, Sparkles, Clock, Loader2,
-  Calendar, Layers, ShieldCheck, Send, Mail, Phone, ChevronUp, ChevronDown
+  Calendar, Layers, ShieldCheck, ShieldAlert, FileX, Send, Mail, Phone, ChevronUp, ChevronDown
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { 
@@ -18,10 +18,14 @@ import {
   gerarRelatorioNfseSaidas,
   gerarRelatorioNfceSaidas,
   gerarRelatorioConsolidadoSaidas,
+  gerarRelatorioQuebrasSequencia,
+  gerarRelatorioNotasInutilizadas,
   gerarRelatorioMonofasicos,
   extractItensFromXml,
   ItemProdutoFechamento,
-  ArquivoGerado
+  ArquivoGerado,
+  QuebraSequenciaItem,
+  InutilizacaoItem
 } from '@/utils/fechamentoFiscalGenerator'
 
 interface FechamentoFiscalModalProps {
@@ -83,6 +87,12 @@ export default function FechamentoFiscalModal({
     nfse_entradas: number
     nfse_saidas: number
     tem_monofasicos: boolean
+    quebras_total?: number
+    quebras_nfce?: number
+    quebras_nfe?: number
+    inutilizadas_total?: number
+    inutilizadas_nfce?: number
+    inutilizadas_nfe?: number
   } | null>(null)
 
   const timerRef = useRef<NodeJS.Timeout | null>(null)
@@ -145,7 +155,9 @@ export default function FechamentoFiscalModal({
                   relNfeSaida: Boolean(dataDiag.totais.sugestoes.relNfeSaida),
                   relNfseSaida: Boolean(dataDiag.totais.sugestoes.relNfseSaida),
                   relNfceSaida: Boolean(dataDiag.totais.sugestoes.relNfceSaida),
-                  relMonofasicos: Boolean(dataDiag.totais.sugestoes.relMonofasicos)
+                  relMonofasicos: Boolean(dataDiag.totais.sugestoes.relMonofasicos),
+                  relQuebraSequencia: Boolean(dataDiag.totais.sugestoes.relQuebraSequencia),
+                  relNotasInutilizadas: Boolean(dataDiag.totais.sugestoes.relNotasInutilizadas)
                 }))
               }
             }
@@ -364,7 +376,7 @@ export default function FechamentoFiscalModal({
         throw new Error(errJson.error || 'Falha ao consultar documentos fiscais da competência.')
       }
 
-      const { empresa, documentos } = await res.json()
+      const { empresa, documentos, quebras_sequencia, inutilizadas } = await res.json()
 
       setProgressoPct(15)
       setEtapaTexto('2/4: Baixando XMLs das modalidades existentes...')
@@ -582,6 +594,44 @@ export default function FechamentoFiscalModal({
             prefs.monofasicosTipo
           )
           relatoriosGerados.push(...rels)
+        }
+      }
+
+      // 7. Relatório de Quebras de Sequência de Numeração (Gaps)
+      if (prefs.relQuebraSequencia) {
+        const quebrasNfe = quebras_sequencia?.nfe || []
+        const quebrasNfce = quebras_sequencia?.nfce || []
+        if (quebrasNfe.length > 0 || quebrasNfce.length > 0) {
+          const relsQuebras = gerarRelatorioQuebrasSequencia({
+            quebrasNfe,
+            quebrasNfce,
+            incluirNfe: Boolean(prefs.quebraModelos?.nfe),
+            incluirNfce: Boolean(prefs.quebraModelos?.nfce),
+            modoAgrupamento: prefs.agrupamentoQuebras || 'consolidado',
+            empresa,
+            competencia: mesCompetencia,
+            formatos: prefs.formatos
+          })
+          relatoriosGerados.push(...relsQuebras)
+        }
+      }
+
+      // 8. Relatório de Notas Inutilizadas na SEFAZ
+      if (prefs.relNotasInutilizadas) {
+        const inutsNfe = inutilizadas?.nfe || []
+        const inutsNfce = inutilizadas?.nfce || []
+        if (inutsNfe.length > 0 || inutsNfce.length > 0) {
+          const relsInut = gerarRelatorioNotasInutilizadas({
+            inutilizadasNfe: inutsNfe,
+            inutilizadasNfce: inutsNfce,
+            incluirNfe: Boolean(prefs.inutilizadasModelos?.nfe),
+            incluirNfce: Boolean(prefs.inutilizadasModelos?.nfce),
+            modoAgrupamento: prefs.agrupamentoInutilizadas || 'consolidado',
+            empresa,
+            competencia: mesCompetencia,
+            formatos: prefs.formatos
+          })
+          relatoriosGerados.push(...relsInut)
         }
       }
 
@@ -918,7 +968,9 @@ export default function FechamentoFiscalModal({
                       relNfeSaida: Boolean(diagnostico.nfe_saidas > 0),
                       relNfseSaida: Boolean(diagnostico.nfse_saidas > 0),
                       relNfceSaida: Boolean(diagnostico.nfce_saidas > 0),
-                      relMonofasicos: Boolean(diagnostico.tem_monofasicos)
+                      relMonofasicos: Boolean(diagnostico.tem_monofasicos),
+                      relQuebraSequencia: Boolean((diagnostico.quebras_total || 0) > 0),
+                      relNotasInutilizadas: Boolean((diagnostico.inutilizadas_total || 0) > 0)
                     }))
                   }}
                   className="inline-flex items-center gap-1 text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md font-bold transition shadow-xs cursor-pointer"
@@ -937,7 +989,9 @@ export default function FechamentoFiscalModal({
                     relNfeSaida: true,
                     relNfseSaida: true,
                     relNfceSaida: true,
-                    relMonofasicos: true
+                    relMonofasicos: true,
+                    relQuebraSequencia: true,
+                    relNotasInutilizadas: true
                   }))}
                   className="text-indigo-600 hover:underline font-semibold"
                 >
@@ -953,7 +1007,9 @@ export default function FechamentoFiscalModal({
                     relNfeSaida: false,
                     relNfseSaida: false,
                     relNfceSaida: false,
-                    relMonofasicos: false
+                    relMonofasicos: false,
+                    relQuebraSequencia: false,
+                    relNotasInutilizadas: false
                   }))}
                   className="text-slate-400 hover:underline font-semibold"
                 >
@@ -1245,6 +1301,306 @@ export default function FechamentoFiscalModal({
                     </span>
                   </div>
                 </label>
+              </div>
+
+              {/* Bloco 4: AUDITORIA DE QUEBRAS DE SEQUÊNCIA (GAPS) */}
+              <div className={`p-3.5 rounded-xl border transition ${
+                prefs.relQuebraSequencia ? 'border-amber-200/90 bg-amber-50/30' : 'border-slate-200 bg-slate-50'
+              }`}>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2 pb-2 border-b border-amber-100">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={prefs.relQuebraSequencia}
+                      onChange={e => setPrefs(p => ({ ...p, relQuebraSequencia: e.target.checked }))}
+                      className="rounded text-amber-600 focus:ring-amber-500"
+                    />
+                    <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <ShieldAlert size={14} className="text-amber-600" />
+                      Auditoria de Quebras de Sequência de Numeração (Gaps)
+                    </span>
+                  </label>
+                  {diagnostico && (
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                      (diagnostico.quebras_total || 0) > 0 ? 'bg-amber-100 text-amber-900' : 'bg-slate-200 text-slate-600'
+                    }`}>
+                      {(diagnostico.quebras_total || 0) > 0
+                        ? `⚠️ ${diagnostico.quebras_total} intervalo(s) faltante(s)`
+                        : '🟢 Sequência 100% íntegra (0 quebras)'}
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-[11px] text-slate-500 leading-tight mb-2.5">
+                  Detecta notas puladas na numeração do emissor fiscal (PDV) antes do fechamento para evitar autuações fiscais.
+                </p>
+
+                {prefs.relQuebraSequencia && (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                      {/* NFC-e */}
+                      <label className={`flex items-start gap-2.5 p-2 rounded-lg border cursor-pointer transition select-none ${
+                        prefs.quebraModelos?.nfce ? 'bg-white border-amber-300 shadow-2xs' : 'bg-slate-50/80 border-slate-200 hover:bg-white'
+                      }`}>
+                        <input
+                          type="checkbox"
+                          checked={prefs.quebraModelos?.nfce}
+                          onChange={e => setPrefs(p => ({
+                            ...p,
+                            quebraModelos: { ...(p.quebraModelos || { nfe: true, nfce: true }), nfce: e.target.checked }
+                          }))}
+                          className="mt-0.5 rounded text-amber-600 focus:ring-amber-500"
+                        />
+                        <div className="w-full">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-bold text-slate-800 text-[11px] block">
+                              NFC-e (Mod 65)
+                            </span>
+                            {diagnostico && (
+                              <span className={`text-[9px] font-bold px-1 py-0.2 rounded ${
+                                (diagnostico.quebras_nfce || 0) > 0 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500'
+                              }`}>
+                                {diagnostico.quebras_nfce || 0} quebra(s)
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">
+                            Gaps em Cupons PDV
+                          </span>
+                        </div>
+                      </label>
+
+                      {/* NF-e */}
+                      <label className={`flex items-start gap-2.5 p-2 rounded-lg border cursor-pointer transition select-none ${
+                        prefs.quebraModelos?.nfe ? 'bg-white border-amber-300 shadow-2xs' : 'bg-slate-50/80 border-slate-200 hover:bg-white'
+                      }`}>
+                        <input
+                          type="checkbox"
+                          checked={prefs.quebraModelos?.nfe}
+                          onChange={e => setPrefs(p => ({
+                            ...p,
+                            quebraModelos: { ...(p.quebraModelos || { nfe: true, nfce: true }), nfe: e.target.checked }
+                          }))}
+                          className="mt-0.5 rounded text-amber-600 focus:ring-amber-500"
+                        />
+                        <div className="w-full">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-bold text-slate-800 text-[11px] block">
+                              NF-e (Mod 55)
+                            </span>
+                            {diagnostico && (
+                              <span className={`text-[9px] font-bold px-1 py-0.2 rounded ${
+                                (diagnostico.quebras_nfe || 0) > 0 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500'
+                              }`}>
+                                {diagnostico.quebras_nfe || 0} quebra(s)
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">
+                            Gaps em Notas Grandes / PJ
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div className="pt-2 border-t border-amber-100/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="text-[11px] text-slate-700">
+                        <span className="font-bold text-amber-950">Apresentação das Quebras:</span>
+                        <span className="text-slate-500 block sm:inline sm:ml-1">
+                          {prefs.agrupamentoQuebras === 'consolidado' && '(Unifica as quebras de NF-e e NFC-e no mesmo relatório com coluna de modelo)'}
+                          {prefs.agrupamentoQuebras === 'separado' && '(Gera relatórios de quebra distintos para cada modelo fiscal)'}
+                          {prefs.agrupamentoQuebras === 'ambos' && '(Gera relatórios separados e também o relatório consolidado unificado)'}
+                        </span>
+                      </div>
+
+                      <div className="inline-flex rounded-lg border border-amber-200 bg-white p-0.5 shrink-0 shadow-2xs">
+                        <button
+                          type="button"
+                          onClick={() => setPrefs(p => ({ ...p, agrupamentoQuebras: 'consolidado' }))}
+                          className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition cursor-pointer ${
+                            prefs.agrupamentoQuebras === 'consolidado'
+                              ? 'bg-amber-600 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-amber-700 hover:bg-amber-50/50'
+                          }`}
+                        >
+                          Unificado
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPrefs(p => ({ ...p, agrupamentoQuebras: 'separado' }))}
+                          className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition cursor-pointer ${
+                            prefs.agrupamentoQuebras === 'separado'
+                              ? 'bg-amber-600 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-amber-700 hover:bg-amber-50/50'
+                          }`}
+                        >
+                          Deixar Separado
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPrefs(p => ({ ...p, agrupamentoQuebras: 'ambos' }))}
+                          className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition cursor-pointer ${
+                            prefs.agrupamentoQuebras === 'ambos'
+                              ? 'bg-amber-600 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-amber-700 hover:bg-amber-50/50'
+                          }`}
+                        >
+                          Ambos
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Bloco 5: NOTAS INUTILIZADAS NA SEFAZ */}
+              <div className={`p-3.5 rounded-xl border transition ${
+                prefs.relNotasInutilizadas ? 'border-emerald-200/90 bg-emerald-50/30' : 'border-slate-200 bg-slate-50'
+              }`}>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2 pb-2 border-b border-emerald-100">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={prefs.relNotasInutilizadas}
+                      onChange={e => setPrefs(p => ({ ...p, relNotasInutilizadas: e.target.checked }))}
+                      className="rounded text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <FileX size={14} className="text-emerald-600" />
+                      Relatório de Notas Inutilizadas na SEFAZ
+                    </span>
+                  </label>
+                  {diagnostico && (
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                      (diagnostico.inutilizadas_total || 0) > 0 ? 'bg-emerald-100 text-emerald-900' : 'bg-slate-200 text-slate-600'
+                    }`}>
+                      {(diagnostico.inutilizadas_total || 0) > 0
+                        ? `🟢 ${diagnostico.inutilizadas_total} faixa(s) homologada(s)`
+                        : '⚪ 0 inutilizações no mês'}
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-[11px] text-slate-500 leading-tight mb-2.5">
+                  Relação oficial de faixas e números inutilizados homologados pela SEFAZ com número de protocolo para auditoria contábil.
+                </p>
+
+                {prefs.relNotasInutilizadas && (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                      {/* NFC-e */}
+                      <label className={`flex items-start gap-2.5 p-2 rounded-lg border cursor-pointer transition select-none ${
+                        prefs.inutilizadasModelos?.nfce ? 'bg-white border-emerald-300 shadow-2xs' : 'bg-slate-50/80 border-slate-200 hover:bg-white'
+                      }`}>
+                        <input
+                          type="checkbox"
+                          checked={prefs.inutilizadasModelos?.nfce}
+                          onChange={e => setPrefs(p => ({
+                            ...p,
+                            inutilizadasModelos: { ...(p.inutilizadasModelos || { nfe: true, nfce: true }), nfce: e.target.checked }
+                          }))}
+                          className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <div className="w-full">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-bold text-slate-800 text-[11px] block">
+                              NFC-e (Mod 65)
+                            </span>
+                            {diagnostico && (
+                              <span className={`text-[9px] font-bold px-1 py-0.2 rounded ${
+                                (diagnostico.inutilizadas_nfce || 0) > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'
+                              }`}>
+                                {diagnostico.inutilizadas_nfce || 0} faixa(s)
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">
+                            Inutilizações de Cupons PDV
+                          </span>
+                        </div>
+                      </label>
+
+                      {/* NF-e */}
+                      <label className={`flex items-start gap-2.5 p-2 rounded-lg border cursor-pointer transition select-none ${
+                        prefs.inutilizadasModelos?.nfe ? 'bg-white border-emerald-300 shadow-2xs' : 'bg-slate-50/80 border-slate-200 hover:bg-white'
+                      }`}>
+                        <input
+                          type="checkbox"
+                          checked={prefs.inutilizadasModelos?.nfe}
+                          onChange={e => setPrefs(p => ({
+                            ...p,
+                            inutilizadasModelos: { ...(p.inutilizadasModelos || { nfe: true, nfce: true }), nfe: e.target.checked }
+                          }))}
+                          className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <div className="w-full">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-bold text-slate-800 text-[11px] block">
+                              NF-e (Mod 55)
+                            </span>
+                            {diagnostico && (
+                              <span className={`text-[9px] font-bold px-1 py-0.2 rounded ${
+                                (diagnostico.inutilizadas_nfe || 0) > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'
+                              }`}>
+                                {diagnostico.inutilizadas_nfe || 0} faixa(s)
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">
+                            Inutilizações de Notas Grandes / PJ
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div className="pt-2 border-t border-emerald-100/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="text-[11px] text-slate-700">
+                        <span className="font-bold text-emerald-950">Apresentação das Inutilizações:</span>
+                        <span className="text-slate-500 block sm:inline sm:ml-1">
+                          {prefs.agrupamentoInutilizadas === 'consolidado' && '(Unifica as inutilizações de NF-e e NFC-e no mesmo relatório com coluna de modelo)'}
+                          {prefs.agrupamentoInutilizadas === 'separado' && '(Gera relatórios de inutilização distintos para cada modelo fiscal)'}
+                          {prefs.agrupamentoInutilizadas === 'ambos' && '(Gera relatórios separados e também o relatório consolidado unificado)'}
+                        </span>
+                      </div>
+
+                      <div className="inline-flex rounded-lg border border-emerald-200 bg-white p-0.5 shrink-0 shadow-2xs">
+                        <button
+                          type="button"
+                          onClick={() => setPrefs(p => ({ ...p, agrupamentoInutilizadas: 'consolidado' }))}
+                          className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition cursor-pointer ${
+                            prefs.agrupamentoInutilizadas === 'consolidado'
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-emerald-700 hover:bg-emerald-50/50'
+                          }`}
+                        >
+                          Unificado
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPrefs(p => ({ ...p, agrupamentoInutilizadas: 'separado' }))}
+                          className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition cursor-pointer ${
+                            prefs.agrupamentoInutilizadas === 'separado'
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-emerald-700 hover:bg-emerald-50/50'
+                          }`}
+                        >
+                          Deixar Separado
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPrefs(p => ({ ...p, agrupamentoInutilizadas: 'ambos' }))}
+                          className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition cursor-pointer ${
+                            prefs.agrupamentoInutilizadas === 'ambos'
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-emerald-700 hover:bg-emerald-50/50'
+                          }`}
+                        >
+                          Ambos
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
             </div>

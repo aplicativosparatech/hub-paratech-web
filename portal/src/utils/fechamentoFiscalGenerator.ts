@@ -55,6 +55,31 @@ export interface ItemAgrupadoFechamento {
   is_monofasico: boolean
 }
 
+export interface QuebraSequenciaItem {
+  modelo: string // 'NF-e (Mod 55)' | 'NFC-e (Mod 65)'
+  serie: string
+  esperado_de: number
+  esperado_ate: number
+  quantidade_faltante: number
+  anterior_emitido: number
+  posterior_emitido: number
+}
+
+export interface InutilizacaoItem {
+  id?: string
+  modelo: string // '55' | '65' | 'NF-e (Mod 55)' | 'NFC-e (Mod 65)'
+  serie: string
+  numero_inicial: number
+  numero_final: number
+  ano?: string
+  justificativa?: string
+  protocolo?: string
+  status_sefaz?: string
+  motivo_sefaz?: string
+  data_hora?: string
+  created_at?: string
+}
+
 export interface FechamentoPreferencias {
   // Relatórios selecionados
   relNfeEntrada: boolean
@@ -69,6 +94,16 @@ export interface FechamentoPreferencias {
   // - 'separado': Gera relatórios isolados distintos para cada modelo
   // - 'ambos': Gera tanto os relatórios separados quanto o relatório consolidado unificado
   agrupamentoSaidas: 'consolidado' | 'separado' | 'ambos'
+
+  // Quebras de Sequência (Gaps)
+  relQuebraSequencia: boolean
+  quebraModelos: { nfe: boolean; nfce: boolean }
+  agrupamentoQuebras: 'consolidado' | 'separado' | 'ambos'
+
+  // Notas Inutilizadas na SEFAZ
+  relNotasInutilizadas: boolean
+  inutilizadasModelos: { nfe: boolean; nfce: boolean }
+  agrupamentoInutilizadas: 'consolidado' | 'separado' | 'ambos'
 
   // Local dos relatórios no ZIP
   localRelatorios: 'pasta_relatorios' | 'pasta_modalidade'
@@ -98,6 +133,15 @@ export const PREFERENCIAS_FECHAMENTO_PADRAO: FechamentoPreferencias = {
   relNfceSaida: true,
   relMonofasicos: true,
   agrupamentoSaidas: 'consolidado',
+
+  relQuebraSequencia: true,
+  quebraModelos: { nfe: true, nfce: true },
+  agrupamentoQuebras: 'consolidado',
+
+  relNotasInutilizadas: true,
+  inutilizadasModelos: { nfe: true, nfce: true },
+  agrupamentoInutilizadas: 'consolidado',
+
   localRelatorios: 'pasta_relatorios',
   ordenacao: 'data',
   formatos: ['pdf', 'xlsx'],
@@ -1435,6 +1479,453 @@ export function gerarRelatorioConsolidadoSaidas(params: {
       tipo: 'pdf',
       modalidade: 'Relatorios'
     })
+  }
+
+  return resultados
+}
+
+// ============================================================================
+// GERAÇÃO DE RELATÓRIO DE QUEBRAS DE SEQUÊNCIA DE NUMERAÇÃO (GAPS)
+// Detecta saltos de numeração em NF-e (Mod 55) e NFC-e (Mod 65)
+// Suporta separação por modelo ou consolidação unificada com badges e contagens
+// ============================================================================
+export function gerarRelatorioQuebrasSequencia(params: {
+  quebrasNfe?: QuebraSequenciaItem[]
+  quebrasNfce?: QuebraSequenciaItem[]
+  incluirNfe: boolean
+  incluirNfce: boolean
+  modoAgrupamento: 'consolidado' | 'separado' | 'ambos'
+  empresa: DadosEmpresaFechamento
+  competencia: string
+  formatos: Array<'pdf' | 'xlsx' | 'csv' | 'json'>
+}): ArquivoGerado[] {
+  const {
+    quebrasNfe = [],
+    quebrasNfce = [],
+    incluirNfe,
+    incluirNfce,
+    modoAgrupamento,
+    empresa,
+    competencia,
+    formatos
+  } = params
+
+  const listaNfe = incluirNfe ? (quebrasNfe || []) : []
+  const listaNfce = incluirNfce ? (quebrasNfce || []) : []
+  const resultados: ArquivoGerado[] = []
+
+  function gerarArquivosQuebra(
+    lista: QuebraSequenciaItem[],
+    titulo: string,
+    baseName: string,
+    sheetName: string
+  ) {
+    if (lista.length === 0) return
+
+    const totalNotasPuladas = lista.reduce((acc, q) => acc + (q.quantidade_faltante || 0), 0)
+
+    // CSV
+    if (formatos.includes('csv')) {
+      let csv = '\uFEFF'
+      csv += `RELATÓRIO FISCAL;${titulo}\r\n`
+      csv += `EMPRESA;${empresa.razao_social};CNPJ;${empresa.cnpj};COMPETENCIA;${competencia}\r\n`
+      csv += `TOTAL INTERVALOS PULADOS;${lista.length};TOTAL NOTAS FALTANTES;${totalNotasPuladas}\r\n\r\n`
+      csv += 'MODELO;SERIE;INTERVALO FALTANTE;QUANTIDADE NOTAS PULADAS;NOTA ANTERIOR;NOTA POSTERIOR;STATUS / ACAO SUGERIDA\r\n'
+      lista.forEach(q => {
+        const faixa = q.esperado_de === q.esperado_ate ? `Nº ${q.esperado_de}` : `Nº ${q.esperado_de} até ${q.esperado_ate}`
+        csv += `${q.modelo};Série ${q.serie};${faixa};${q.quantidade_faltante};Nº ${q.anterior_emitido};Nº ${q.posterior_emitido};Pendente de Inutilização SEFAZ\r\n`
+      })
+      csv += `;;TOTAL GERAL NOTAS PULADAS;${totalNotasPuladas};;;\r\n${RODAPE_PARATECH_CSV}`
+      resultados.push({
+        nomeArquivo: `${baseName}.csv`,
+        buffer: csv,
+        tipo: 'csv',
+        modalidade: 'Relatorios'
+      })
+    }
+
+    // JSON
+    if (formatos.includes('json')) {
+      const jsonStr = JSON.stringify({
+        titulo,
+        empresa,
+        competencia,
+        gerado_em: new Date().toISOString(),
+        resumo_executivo: {
+          total_intervalos: lista.length,
+          total_notas_puladas: totalNotasPuladas
+        },
+        quebras: lista.map(q => ({
+          modelo: q.modelo,
+          serie: q.serie,
+          esperado_de: q.esperado_de,
+          esperado_ate: q.esperado_ate,
+          quantidade_faltante: q.quantidade_faltante,
+          anterior_emitido: q.anterior_emitido,
+          posterior_emitido: q.posterior_emitido,
+          status: 'Pendente de Inutilização SEFAZ'
+        }))
+      }, null, 2)
+      resultados.push({
+        nomeArquivo: `${baseName}.json`,
+        buffer: jsonStr,
+        tipo: 'json',
+        modalidade: 'Relatorios'
+      })
+    }
+
+    // EXCEL (XLSX)
+    if (formatos.includes('xlsx')) {
+      const wb = XLSX.utils.book_new()
+      const rows = [
+        ['RELATÓRIO FISCAL:', titulo],
+        ['EMPRESA:', empresa.razao_social, 'CNPJ:', empresa.cnpj, 'COMPETÊNCIA:', competencia],
+        [],
+        ['RESUMO EXECUTIVO DE AUDITORIA FISCAL:'],
+        ['TOTAL DE INTERVALOS COM QUEBRA:', lista.length, 'TOTAL DE NOTAS PULADAS/FALTANTES:', totalNotasPuladas],
+        [],
+        ['Modelo', 'Série', 'Intervalo Faltante', 'Qtd. Pulada', 'Nota Anterior', 'Nota Posterior', 'Situação / Ação'],
+        ...lista.map(q => [
+          q.modelo,
+          `Série ${q.serie}`,
+          q.esperado_de === q.esperado_ate ? `Nº ${q.esperado_de}` : `Nº ${q.esperado_de} até ${q.esperado_ate}`,
+          q.quantidade_faltante,
+          `Nº ${q.anterior_emitido}`,
+          `Nº ${q.posterior_emitido}`,
+          'Pendente de Inutilização SEFAZ'
+        ]),
+        ['', '', 'TOTAL GERAL:', totalNotasPuladas, '', '', ''],
+        ...RODAPE_PARATECH_XLSX_ROWS
+      ]
+      const ws = XLSX.utils.aoa_to_sheet(rows)
+      XLSX.utils.book_append_sheet(wb, ws, sheetName)
+      const xlsxBuf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
+      resultados.push({
+        nomeArquivo: `${baseName}.xlsx`,
+        buffer: new Uint8Array(xlsxBuf),
+        tipo: 'xlsx',
+        modalidade: 'Relatorios'
+      })
+    }
+
+    // PDF PROFISSIONAL COM BANNER E CARDS
+    if (formatos.includes('pdf')) {
+      const cards: CardResumoPdf[] = [
+        {
+          rotulo: 'INTERVALOS COM QUEBRA',
+          valor: `${lista.length} intervalo(s)`,
+          cor: 'amber'
+        },
+        {
+          rotulo: 'NOTAS PULADAS / FALTANTES',
+          valor: `${totalNotasPuladas} nota(s)`,
+          cor: 'amber'
+        },
+        {
+          rotulo: 'SITUAÇÃO SEFAZ',
+          valor: 'Pendentes de Inutilização',
+          cor: 'slate'
+        }
+      ]
+
+      const colunas = ['Modelo', 'Série', 'Intervalo Faltante', 'Qtd. Pulada', 'Nota Anterior', 'Nota Posterior', 'Situação']
+      const linhas = lista.map(q => [
+        q.modelo,
+        `Série ${q.serie}`,
+        q.esperado_de === q.esperado_ate ? `Nº ${q.esperado_de}` : `Nº ${q.esperado_de} até ${q.esperado_ate}`,
+        `${q.quantidade_faltante} nota(s)`,
+        `Nº ${q.anterior_emitido}`,
+        `Nº ${q.posterior_emitido}`,
+        'Pendente de Inutilização'
+      ])
+
+      const pdfBuffer = gerarDocumentoPdfFiscal({
+        titulo,
+        empresa,
+        competencia,
+        totalItens: lista.length,
+        valorTotal: totalNotasPuladas,
+        cardsResumo: cards,
+        colunas,
+        linhas,
+        colunasAlinhadasDireita: [3],
+        orientacao: 'landscape'
+      })
+
+      resultados.push({
+        nomeArquivo: `${baseName}.pdf`,
+        buffer: pdfBuffer,
+        tipo: 'pdf',
+        modalidade: 'Relatorios'
+      })
+    }
+  }
+
+  // 1. GERAÇÃO SEPARADA
+  if (modoAgrupamento === 'separado' || modoAgrupamento === 'ambos') {
+    if (incluirNfe && listaNfe.length > 0) {
+      gerarArquivosQuebra(
+        listaNfe,
+        'Auditoria de Quebras de Sequência de Numeração (NF-e - Mod 55)',
+        `Relatorio_Quebras_Sequencia_NFe_${competencia.replace('-', '_')}`,
+        'Quebras_NFe'
+      )
+    }
+    if (incluirNfce && listaNfce.length > 0) {
+      gerarArquivosQuebra(
+        listaNfce,
+        'Auditoria de Quebras de Sequência de Numeração (NFC-e - Mod 65)',
+        `Relatorio_Quebras_Sequencia_NFCe_${competencia.replace('-', '_')}`,
+        'Quebras_NFCe'
+      )
+    }
+  }
+
+  // 2. GERAÇÃO CONSOLIDADA / UNIFICADA
+  if (modoAgrupamento === 'consolidado' || modoAgrupamento === 'ambos') {
+    const unificadas = [...listaNfe, ...listaNfce]
+    if (unificadas.length > 0) {
+      gerarArquivosQuebra(
+        unificadas,
+        'Auditoria de Quebras de Sequência de Numeração Consolidada (NF-e e NFC-e)',
+        `Relatorio_Quebras_Sequencia_Consolidado_${competencia.replace('-', '_')}`,
+        'Quebras_Consolidado'
+      )
+    }
+  }
+
+  return resultados
+}
+
+// ============================================================================
+// GERAÇÃO DE RELATÓRIO DE NOTAS INUTILIZADAS NA SEFAZ
+// Relaciona todas as faixas e números oficialmente inutilizados junto ao Fisco
+// Suporta separação por modelo ou consolidação unificada com protocolo e datas
+// ============================================================================
+export function gerarRelatorioNotasInutilizadas(params: {
+  inutilizadasNfe?: InutilizacaoItem[]
+  inutilizadasNfce?: InutilizacaoItem[]
+  incluirNfe: boolean
+  incluirNfce: boolean
+  modoAgrupamento: 'consolidado' | 'separado' | 'ambos'
+  empresa: DadosEmpresaFechamento
+  competencia: string
+  formatos: Array<'pdf' | 'xlsx' | 'csv' | 'json'>
+}): ArquivoGerado[] {
+  const {
+    inutilizadasNfe = [],
+    inutilizadasNfce = [],
+    incluirNfe,
+    incluirNfce,
+    modoAgrupamento,
+    empresa,
+    competencia,
+    formatos
+  } = params
+
+  const listaNfe = incluirNfe ? (inutilizadasNfe || []) : []
+  const listaNfce = incluirNfce ? (inutilizadasNfce || []) : []
+  const resultados: ArquivoGerado[] = []
+
+  function gerarArquivosInut(
+    lista: InutilizacaoItem[],
+    titulo: string,
+    baseName: string,
+    sheetName: string
+  ) {
+    if (lista.length === 0) return
+
+    const totalNotasInutilizadas = lista.reduce((acc, it) => {
+      const q = (it.numero_final && it.numero_inicial) ? (it.numero_final - it.numero_inicial + 1) : 1
+      return acc + (q || 1)
+    }, 0)
+
+    // CSV
+    if (formatos.includes('csv')) {
+      let csv = '\uFEFF'
+      csv += `RELATÓRIO FISCAL;${titulo}\r\n`
+      csv += `EMPRESA;${empresa.razao_social};CNPJ;${empresa.cnpj};COMPETENCIA;${competencia}\r\n`
+      csv += `TOTAL FAIXAS INUTILIZADAS;${lista.length};TOTAL NOTAS INUTILIZADAS;${totalNotasInutilizadas}\r\n\r\n`
+      csv += 'MODELO;SERIE;FAIXA INUTILIZADA;QUANTIDADE NOTAS;PROTOCOLO SEFAZ;DATA / HORA;JUSTIFICATIVA SEFAZ;SITUACAO\r\n'
+      lista.forEach(it => {
+        const modNome = (it.modelo === '55' || it.modelo.includes('55')) ? 'NF-e (Mod 55)' : 'NFC-e (Mod 65)'
+        const faixa = it.numero_inicial === it.numero_final ? `Nº ${it.numero_inicial}` : `Nº ${it.numero_inicial} até ${it.numero_final}`
+        const qtd = (it.numero_final - it.numero_inicial + 1) || 1
+        const dt = (it.data_hora || it.created_at) ? formatDateTime(it.data_hora || it.created_at) : '—'
+        csv += `${modNome};Série ${it.serie || '1'};${faixa};${qtd};${it.protocolo || '—'};${dt};"${(it.justificativa || '—').replace(/"/g, '""')}";${it.motivo_sefaz || 'Inutilização Homologada'}\r\n`
+      })
+      csv += `;;TOTAL GERAL NOTAS INUTILIZADAS;${totalNotasInutilizadas};;;;\r\n${RODAPE_PARATECH_CSV}`
+      resultados.push({
+        nomeArquivo: `${baseName}.csv`,
+        buffer: csv,
+        tipo: 'csv',
+        modalidade: 'Relatorios'
+      })
+    }
+
+    // JSON
+    if (formatos.includes('json')) {
+      const jsonStr = JSON.stringify({
+        titulo,
+        empresa,
+        competencia,
+        gerado_em: new Date().toISOString(),
+        resumo_executivo: {
+          total_faixas: lista.length,
+          total_notas_inutilizadas: totalNotasInutilizadas
+        },
+        inutilizacoes: lista.map(it => ({
+          modelo: (it.modelo === '55' || it.modelo.includes('55')) ? 'NF-e (Mod 55)' : 'NFC-e (Mod 65)',
+          serie: it.serie,
+          numero_inicial: it.numero_inicial,
+          numero_final: it.numero_final,
+          quantidade: (it.numero_final - it.numero_inicial + 1) || 1,
+          protocolo: it.protocolo,
+          data_hora: it.data_hora || it.created_at,
+          justificativa: it.justificativa,
+          status_sefaz: it.status_sefaz,
+          motivo_sefaz: it.motivo_sefaz
+        }))
+      }, null, 2)
+      resultados.push({
+        nomeArquivo: `${baseName}.json`,
+        buffer: jsonStr,
+        tipo: 'json',
+        modalidade: 'Relatorios'
+      })
+    }
+
+    // EXCEL (XLSX)
+    if (formatos.includes('xlsx')) {
+      const wb = XLSX.utils.book_new()
+      const rows = [
+        ['RELATÓRIO FISCAL:', titulo],
+        ['EMPRESA:', empresa.razao_social, 'CNPJ:', empresa.cnpj, 'COMPETÊNCIA:', competencia],
+        [],
+        ['RESUMO EXECUTIVO DE INUTILIZAÇÃO NA SEFAZ:'],
+        ['TOTAL DE FAIXAS HOMOLOGADAS:', lista.length, 'TOTAL DE NOTAS INUTILIZADAS:', totalNotasInutilizadas],
+        [],
+        ['Modelo', 'Série', 'Faixa Inutilizada', 'Qtd. Notas', 'Protocolo SEFAZ', 'Data / Hora', 'Justificativa SEFAZ', 'Situação'],
+        ...lista.map(it => {
+          const modNome = (it.modelo === '55' || it.modelo.includes('55')) ? 'NF-e (Mod 55)' : 'NFC-e (Mod 65)'
+          const faixa = it.numero_inicial === it.numero_final ? `Nº ${it.numero_inicial}` : `Nº ${it.numero_inicial} até ${it.numero_final}`
+          const qtd = (it.numero_final - it.numero_inicial + 1) || 1
+          const dt = (it.data_hora || it.created_at) ? formatDateTime(it.data_hora || it.created_at) : '—'
+          return [
+            modNome,
+            `Série ${it.serie || '1'}`,
+            faixa,
+            qtd,
+            it.protocolo || '—',
+            dt,
+            it.justificativa || '—',
+            it.motivo_sefaz || 'Inutilização Homologada'
+          ]
+        }),
+        ['', '', 'TOTAL GERAL:', totalNotasInutilizadas, '', '', '', ''],
+        ...RODAPE_PARATECH_XLSX_ROWS
+      ]
+      const ws = XLSX.utils.aoa_to_sheet(rows)
+      XLSX.utils.book_append_sheet(wb, ws, sheetName)
+      const xlsxBuf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
+      resultados.push({
+        nomeArquivo: `${baseName}.xlsx`,
+        buffer: new Uint8Array(xlsxBuf),
+        tipo: 'xlsx',
+        modalidade: 'Relatorios'
+      })
+    }
+
+    // PDF
+    if (formatos.includes('pdf')) {
+      const cards: CardResumoPdf[] = [
+        {
+          rotulo: 'FAIXAS HOMOLOGADAS',
+          valor: `${lista.length} faixa(s)`,
+          cor: 'verde'
+        },
+        {
+          rotulo: 'NÚMEROS INUTILIZADOS',
+          valor: `${totalNotasInutilizadas} número(s)`,
+          cor: 'verde'
+        },
+        {
+          rotulo: 'SITUAÇÃO FISCAL',
+          valor: 'Homologado SEFAZ',
+          cor: 'azul'
+        }
+      ]
+
+      const colunas = ['Modelo', 'Série', 'Faixa Inutilizada', 'Qtd', 'Protocolo SEFAZ', 'Data/Hora', 'Justificativa']
+      const linhas = lista.map(it => {
+        const modNome = (it.modelo === '55' || it.modelo.includes('55')) ? 'NF-e (55)' : 'NFC-e (65)'
+        const faixa = it.numero_inicial === it.numero_final ? `Nº ${it.numero_inicial}` : `Nº ${it.numero_inicial} até ${it.numero_final}`
+        const qtd = (it.numero_final - it.numero_inicial + 1) || 1
+        const dt = (it.data_hora || it.created_at) ? formatDateTime(it.data_hora || it.created_at) : '—'
+        return [
+          modNome,
+          `Série ${it.serie || '1'}`,
+          faixa,
+          `${qtd}`,
+          it.protocolo || '—',
+          dt,
+          (it.justificativa || '—').slice(0, 35)
+        ]
+      })
+
+      const pdfBuffer = gerarDocumentoPdfFiscal({
+        titulo,
+        empresa,
+        competencia,
+        totalItens: lista.length,
+        valorTotal: totalNotasInutilizadas,
+        cardsResumo: cards,
+        colunas,
+        linhas,
+        colunasAlinhadasDireita: [3],
+        orientacao: 'landscape'
+      })
+
+      resultados.push({
+        nomeArquivo: `${baseName}.pdf`,
+        buffer: pdfBuffer,
+        tipo: 'pdf',
+        modalidade: 'Relatorios'
+      })
+    }
+  }
+
+  // 1. GERAÇÃO SEPARADA
+  if (modoAgrupamento === 'separado' || modoAgrupamento === 'ambos') {
+    if (incluirNfe && listaNfe.length > 0) {
+      gerarArquivosInut(
+        listaNfe,
+        'Relatório de Numerações Inutilizadas na SEFAZ (NF-e - Mod 55)',
+        `Relatorio_Notas_Inutilizadas_NFe_${competencia.replace('-', '_')}`,
+        'Inutilizadas_NFe'
+      )
+    }
+    if (incluirNfce && listaNfce.length > 0) {
+      gerarArquivosInut(
+        listaNfce,
+        'Relatório de Numerações Inutilizadas na SEFAZ (NFC-e - Mod 65)',
+        `Relatorio_Notas_Inutilizadas_NFCe_${competencia.replace('-', '_')}`,
+        'Inutilizadas_NFCe'
+      )
+    }
+  }
+
+  // 2. GERAÇÃO CONSOLIDADA / UNIFICADA
+  if (modoAgrupamento === 'consolidado' || modoAgrupamento === 'ambos') {
+    const unificadas = [...listaNfe, ...listaNfce]
+    if (unificadas.length > 0) {
+      gerarArquivosInut(
+        unificadas,
+        'Relatório de Numerações Inutilizadas na SEFAZ Consolidado (NF-e e NFC-e)',
+        `Relatorio_Notas_Inutilizadas_Consolidado_${competencia.replace('-', '_')}`,
+        'Inutilizadas_Consolidado'
+      )
+    }
   }
 
   return resultados
