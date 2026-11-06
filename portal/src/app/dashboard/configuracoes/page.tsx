@@ -124,7 +124,7 @@ export default function ConfiguracoesPage() {
     // Card 4: Inteligência, Tratamento e Validação de XMLs do Hub
     auto_excluir_divergentes: false,
     apenas_xmls_autorizados: false,
-    analise_ia_xmls: false,
+    analise_ia_xmls_ativa: true,
     support_whatsapp: '',
     intervalo_checagem_horas: 6
   })
@@ -139,12 +139,15 @@ export default function ConfiguracoesPage() {
   }
 
   async function loadClientes() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('clientes')
-      .select('id, razao_social, nome_fantasia, cnpj, hub_token, whatsapp, whatsapp_cobranca, dia_vencimento, valor_mensalidade, dias_carencia, bloquear_recepcao_xml_se_inadimplente, data_inicio_monitoramento, data_inicio_monitoramento_entradas, numero_inicial_nfe, numero_inicial_nfce, numero_inicial_nfse, numero_inicial_cte, numero_inicial_mdfe, numero_inicial_compras_nfe, configuracoes_hub(ultima_sincronizacao, offline_secret, versao_hub_instalada, comando_remoto, comando_remoto_em, auto_excluir_divergentes, apenas_xmls_autorizados, analise_ia_xmls, support_whatsapp, intervalo_checagem_horas)')
+      .select('id, razao_social, nome_fantasia, cnpj, hub_token, whatsapp, whatsapp_cobranca, dia_vencimento, valor_mensalidade, dias_carencia, bloquear_recepcao_xml_se_inadimplente, data_inicio_monitoramento, data_inicio_monitoramento_entradas, numero_inicial_nfe, numero_inicial_nfce, numero_inicial_nfse, numero_inicial_cte, numero_inicial_mdfe, numero_inicial_compras_nfe, configuracoes_hub(ultima_sincronizacao, offline_secret, versao_hub_instalada, comando_remoto, comando_remoto_em, auto_excluir_divergentes, apenas_xmls_autorizados, analise_ia_xmls_ativa, support_whatsapp, intervalo_checagem_horas)')
       .order('razao_social')
     
-    if (data) {
+    if (error) {
+      console.error('Erro ao carregar clientes do Hub:', error)
+      toast.error('Erro ao carregar clientes: ' + error.message)
+    } else if (data) {
       setClientes(data)
       setHubs(data)
     }
@@ -220,7 +223,7 @@ export default function ConfiguracoesPage() {
         // Inteligência & Validação
         auto_excluir_divergentes: Boolean(hub?.auto_excluir_divergentes),
         apenas_xmls_autorizados: Boolean(hub?.apenas_xmls_autorizados),
-        analise_ia_xmls: Boolean(hub?.analise_ia_xmls),
+        analise_ia_xmls_ativa: hub?.analise_ia_xmls_ativa !== undefined ? Boolean(hub.analise_ia_xmls_ativa) : true,
         support_whatsapp: hub?.support_whatsapp || '',
         intervalo_checagem_horas: hub?.intervalo_checagem_horas || 6
       })
@@ -254,7 +257,7 @@ export default function ConfiguracoesPage() {
       numero_inicial_compras_nfe: formData.numero_inicial_compras_nfe || 1,
       auto_excluir_divergentes: Boolean(formData.auto_excluir_divergentes),
       apenas_xmls_autorizados: Boolean(formData.apenas_xmls_autorizados),
-      analise_ia_xmls: Boolean(formData.analise_ia_xmls),
+      analise_ia_xmls_ativa: Boolean(formData.analise_ia_xmls_ativa),
       support_whatsapp: formData.support_whatsapp,
       intervalo_checagem_horas: formData.intervalo_checagem_horas || 6,
       updated_at: new Date().toISOString()
@@ -1050,12 +1053,12 @@ export default function ConfiguracoesPage() {
                       <div className="p-3.5 bg-indigo-50/60 rounded-xl border border-indigo-100 flex items-start gap-3">
                         <input
                           type="checkbox"
-                          id="analise_ia_xmls"
-                          checked={Boolean(formData.analise_ia_xmls)}
-                          onChange={e => setFormData({...formData, analise_ia_xmls: e.target.checked})}
+                          id="analise_ia_xmls_ativa"
+                          checked={Boolean(formData.analise_ia_xmls_ativa)}
+                          onChange={e => setFormData({...formData, analise_ia_xmls_ativa: e.target.checked})}
                           className="mt-1 h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                         />
-                        <label htmlFor="analise_ia_xmls" className="cursor-pointer select-none">
+                        <label htmlFor="analise_ia_xmls_ativa" className="cursor-pointer select-none">
                           <span className="font-bold text-indigo-950 block text-xs flex items-center gap-1.5">
                             <Cpu size={14} className="text-indigo-600" />
                             Auditoria Fiscal & Auditoria IA
