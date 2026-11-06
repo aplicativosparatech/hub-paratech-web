@@ -294,12 +294,27 @@ export async function POST(request: Request) {
     }
 
     // REGRA FISCAL: Filtro de Competência Inicial e Numeração de Ponto de Partida
+    const isReconciliacaoGaps = formData.get('reconciliacao_gaps') === 'true'
     const dataEmissaoStr = emissao ? emissao.split('T')[0] : null
     const numInt = numero ? parseInt(String(numero).replace(/\D/g, ''), 10) : 0
 
+    // Janela de conciliação fiscal: estritamente mês atual e mês anterior
+    const agoraCorte = new Date()
+    const primeiroDiaMesAnterior = new Date(agoraCorte.getFullYear(), agoraCorte.getMonth() - 1, 1).toISOString().split('T')[0]
+
+    // Se veio pela rotina de reconciliação de gaps e a data de emissão é anterior ao mês passado, descarta
+    if (isReconciliacaoGaps && dataEmissaoStr && dataEmissaoStr < primeiroDiaMesAnterior) {
+      return NextResponse.json({
+        ignored: true,
+        ponto_partida: true,
+        reason: `Reconciliação focada no mês atual e anterior. XML com emissão (${dataEmissaoStr}) anterior a ${primeiroDiaMesAnterior}.`
+      }, { status: 200 })
+    }
+
     // Se o número for igual ou superior ao ponto de partida configurado para a empresa,
+    // ou se foi enviado pela reconciliação de gaps para cobrir salto na janela do mês atual/anterior,
     // a nota NUNCA deve ser descartada por data de emissão anterior (pode ser a primeira nota da virada de mês ou ponto inicial acordado)
-    const isPontoPartidaOuSuperior = (
+    const isPontoPartidaOuSuperior = isReconciliacaoGaps || (
       (mod === '55' && cliente.numero_inicial_nfe && numInt >= cliente.numero_inicial_nfe) ||
       (mod === '65' && cliente.numero_inicial_nfce && numInt >= cliente.numero_inicial_nfce)
     )
@@ -312,7 +327,7 @@ export async function POST(request: Request) {
       }, { status: 200 })
     }
 
-    if (tipoPasta === 'vendas') {
+    if (!isReconciliacaoGaps && tipoPasta === 'vendas') {
       if (numInt > 0) {
         if (mod === '55' && cliente.numero_inicial_nfe && numInt < cliente.numero_inicial_nfe) {
           return NextResponse.json({
@@ -329,7 +344,7 @@ export async function POST(request: Request) {
           }, { status: 200 })
         }
       }
-    } else if (tipoPasta === 'compras') {
+    } else if (!isReconciliacaoGaps && tipoPasta === 'compras') {
       const dataInicioCompras = cliente.data_inicio_monitoramento_entradas || cliente.data_inicio_monitoramento
       const numInicialCompras = cliente.numero_inicial_compras_nfe
 

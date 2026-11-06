@@ -882,6 +882,10 @@ namespace HubParatechDesktop
                 {
                     content.Add(new StringContent(hubToken), "hub_token");
                     content.Add(new StringContent(tipoPasta), "tipo_pasta");
+                    if (forceUpload)
+                    {
+                        content.Add(new StringContent("true"), "reconciliacao_gaps");
+                    }
 
                     // Anexa metadados já analisados pelo Hub
                     if (modoProcessamento == "hub")
@@ -971,7 +975,7 @@ namespace HubParatechDesktop
                                 TipoPasta = tipoPasta
                             });
 
-                            return true;
+                            return !forceUpload;
                         }
 
                         // 2. Cria cópia de conferência na pasta Contabilidade_Paratech/{MM-MES-AAAA} apenas se foi aceito com sucesso
@@ -1208,7 +1212,11 @@ namespace HubParatechDesktop
                 int totalFaltantesEsperados = faltantesNfce.Count + faltantesNfe.Count;
                 int recuperados = 0;
 
-                Debug.WriteLine($"[Reconciliação Gaps] {totalFaltantesEsperados} notas faltantes no portal. Iniciando varredura profunda no disco do PDV...");
+                // Janela de conciliação fiscal: estritamente mês atual corrente e mês anterior
+                var agora = DateTime.Today;
+                var primeiroDiaMesAnterior = new DateTime(agora.Year, agora.Month, 1).AddMonths(-1);
+
+                Debug.WriteLine($"[Reconciliação Gaps] {totalFaltantesEsperados} notas faltantes no portal (Janela a partir de {primeiroDiaMesAnterior:yyyy-MM-dd}). Iniciando varredura no disco do PDV...");
 
                 // Mapeia todos os arquivos XML locais em todas as pastas de vendas e subpastas
                 var arquivosLocais = new List<FileInfo>();
@@ -1222,8 +1230,19 @@ namespace HubParatechDesktop
                 foreach (var fileInfo in arquivosLocais)
                 {
                     if (fileInfo.Length < 100) continue;
+                    if (fileInfo.LastWriteTime < primeiroDiaMesAnterior.AddMonths(-1)) continue;
 
                     var meta = ExtrairMetadadosRapidos(fileInfo.FullName);
+
+                    // Pula se for anterior ao mês passado (fora da janela auditada)
+                    if (!string.IsNullOrEmpty(meta.dhEmi))
+                    {
+                        if (DateTime.TryParse(meta.dhEmi, out var dEmi) && dEmi.Date < primeiroDiaMesAnterior.Date)
+                        {
+                            continue;
+                        }
+                    }
+
                     if (long.TryParse(meta.numero, out long numNota) && numNota > 0)
                     {
                         bool precisaEnviar = false;
@@ -1285,7 +1304,18 @@ namespace HubParatechDesktop
                                 foreach (var fileInfo in arquivosPai)
                                 {
                                     if (fileInfo.Length < 100) continue;
+                                    if (fileInfo.LastWriteTime < primeiroDiaMesAnterior.AddMonths(-1)) continue;
+
                                     var meta = ExtrairMetadadosRapidos(fileInfo.FullName);
+
+                                    if (!string.IsNullOrEmpty(meta.dhEmi))
+                                    {
+                                        if (DateTime.TryParse(meta.dhEmi, out var dEmi) && dEmi.Date < primeiroDiaMesAnterior.Date)
+                                        {
+                                            continue;
+                                        }
+                                    }
+
                                     if (long.TryParse(meta.numero, out long numNota) && numNota > 0)
                                     {
                                         bool precisaEnviar = false;
@@ -1380,8 +1410,18 @@ namespace HubParatechDesktop
                             foreach (var fileInfo in arquivosExtras)
                             {
                                 if (fileInfo.Length < 100) continue;
+                                if (fileInfo.LastWriteTime < primeiroDiaMesAnterior.AddMonths(-1)) continue;
 
                                 var meta = ExtrairMetadadosRapidos(fileInfo.FullName);
+
+                                if (!string.IsNullOrEmpty(meta.dhEmi))
+                                {
+                                    if (DateTime.TryParse(meta.dhEmi, out var dEmi) && dEmi.Date < primeiroDiaMesAnterior.Date)
+                                    {
+                                        continue;
+                                    }
+                                }
+
                                 if (long.TryParse(meta.numero, out long numNota) && numNota > 0)
                                 {
                                     bool precisaEnviar = false;
@@ -1424,13 +1464,43 @@ namespace HubParatechDesktop
                     }
                 }
 
-                int ausentes = totalFaltantesEsperados - recuperados;
+                // Reconsulta rápida dos gaps no portal para confirmar estado real pós-sincronização
+                int faltantesRestantes = Math.Max(0, totalFaltantesEsperados - recuperados);
+                try
+                {
+                    var respPos = await client.PostAsync("https://hub-paratech-web.vercel.app/api/hub/reconciliar-gaps", contentReq);
+                    if (respPos.IsSuccessStatusCode)
+                    {
+                        var respPosStr = await respPos.Content.ReadAsStringAsync();
+                        var gapDataPos = JsonSerializer.Deserialize<ReconciliacaoGapsResponse>(respPosStr);
+                        if (gapDataPos != null && gapDataPos.success && gapDataPos.gaps != null)
+                        {
+                            int contagemGapsPos = 0;
+                            foreach (var g in gapDataPos.gaps)
+                            {
+                                contagemGapsPos += (int)(g.numero_final - g.numero_inicial + 1);
+                            }
+                            faltantesRestantes = contagemGapsPos;
+                        }
+                    }
+                }
+                catch { }
 
-                string msg = recuperados > 0
-                    ? $"🎉 Auditoria e Reconciliação Concluída!\n\n• {recuperados} notas foram localizadas no disco do computador do cliente e sincronizadas com sucesso no Portal!\n• {ausentes} números faltantes não possuem arquivo XML no computador do cliente (correspondem a pulos de sequência no PDV, prontos para inutilização segura)."
-                    : $"Auditoria e Reconciliação Concluída!\n\n• Nenhuma das {ausentes} numerações faltantes possui arquivo XML no disco do cliente.\n• Todas as quebras correspondem a saltos de emissão no PDV e estão aptas para inutilização na SEFAZ.";
+                string msg;
+                if (recuperados > 0)
+                {
+                    msg = $"🎉 Auditoria e Reconciliação Concluída!\n\n• {recuperados} nota(s) faltante(s) do mês atual/anterior foram localizadas no computador e sincronizadas com sucesso no Portal!\n• {faltantesRestantes} número(s) faltante(s) não possuem arquivo XML no computador do cliente (saltos de numeração no PDV, prontos para inutilização segura).";
+                }
+                else if (totalFaltantesEsperados == 0 || faltantesRestantes == 0)
+                {
+                    msg = "✅ Sequência fiscal 100% perfeita!\n\nNão há nenhuma quebra ou nota faltante identificada no mês atual ou anterior no Portal Paratech.";
+                }
+                else
+                {
+                    msg = $"Auditoria e Reconciliação Concluída!\n\n• Todas as notas emitidas no computador já estão sincronizadas no Portal (nenhum novo arquivo pendente encontrado no disco).\n• Restam {faltantesRestantes} número(s) sem XML no computador do cliente (correspondem a pulos de sequência no PDV, prontos para inutilização segura na SEFAZ).";
+                }
 
-                return (recuperados, ausentes, msg);
+                return (recuperados, faltantesRestantes, msg);
             }
             catch (Exception ex)
             {

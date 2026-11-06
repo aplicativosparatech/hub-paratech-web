@@ -117,13 +117,24 @@ export async function GET(request: Request) {
       return allNotas
     }
 
+    // Janela de Auditoria Fiscal: Estritamente Mês Atual Corrente e Mês Anterior (evita carregar anos de notas e falsos gaps do passado)
+    const agora = new Date()
+    const anoAgora = agora.getFullYear()
+    const mesAgora = agora.getMonth() // 0 a 11
+    const primeiroDiaMesAnterior = new Date(anoAgora, mesAgora - 1, 1).toISOString().split('T')[0] // Ex: '2026-10-01'
+
+    let dataCorteAuditoria = primeiroDiaMesAnterior
+    if (cliente.data_inicio_monitoramento && cliente.data_inicio_monitoramento > primeiroDiaMesAnterior) {
+      dataCorteAuditoria = cliente.data_inicio_monitoramento
+    }
+
     if (modeloParam === '55' || modeloParam === 'todos') {
-      const nfeData = await carregarTodasNotas('nfe_saidas', cliente_id, cliente.data_inicio_monitoramento)
+      const nfeData = await carregarTodasNotas('nfe_saidas', cliente_id, dataCorteAuditoria)
       resultadosNotas.push({ modelo: '55', data: nfeData })
     }
 
     if (modeloParam === '65' || modeloParam === 'todos') {
-      const nfceData = await carregarTodasNotas('nfce_saidas', cliente_id, cliente.data_inicio_monitoramento)
+      const nfceData = await carregarTodasNotas('nfce_saidas', cliente_id, dataCorteAuditoria)
       resultadosNotas.push({ modelo: '65', data: nfceData })
     }
 
@@ -243,10 +254,14 @@ export async function GET(request: Request) {
         })
       }
 
-      // 1. GAP INICIAL: Se o primeiro número emitido encontrado for superior ao número inicial esperado
-      if (nums[0] > numInicialEsperado) {
+      // 1. GAP INICIAL: Se o primeiro número emitido encontrado for superior ao ponto inicial esperado
+      // Se a empresa já era monitorada antes do mês anterior, o ponto inicial na janela é o primeiro número emitido na própria janela.
+      const isClienteAntigo = cliente.data_inicio_monitoramento && cliente.data_inicio_monitoramento < primeiroDiaMesAnterior
+      const pontoInicialEfetivo = isClienteAntigo ? nums[0] : numInicialEsperado
+
+      if (nums[0] > pontoInicialEfetivo) {
         const primDataRef = grupo.emissaoMap.get(nums[0])
-        testarEAdicionarGap(numInicialEsperado, nums[0] - 1, primDataRef)
+        testarEAdicionarGap(pontoInicialEfetivo, nums[0] - 1, primDataRef)
       }
 
       // 2. GAPS INTERMEDIÁRIOS: Entre números emitidos consecutivos

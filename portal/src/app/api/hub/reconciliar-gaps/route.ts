@@ -63,10 +63,24 @@ export async function POST(request: Request) {
     const numIniNfe = cliente.numero_inicial_nfe || 1
     const numIniNfce = cliente.numero_inicial_nfce || 1
 
-    // 2. Carrega notas cadastradas
+    // 2. Janela de Auditoria Fiscal: Estritamente Mês Atual Corrente e Mês Anterior (evita carregar anos de notas e falsos gaps do passado)
+    const agora = new Date()
+    const anoAgora = agora.getFullYear()
+    const mesAgora = agora.getMonth() // 0 a 11
+    const primeiroDiaMesAnterior = new Date(anoAgora, mesAgora - 1, 1).toISOString().split('T')[0] // Ex: '2026-10-01'
+
+    // Data de corte efetiva:
+    // Se o cliente iniciou depois do dia 1 do mês anterior (ex: contrato recente), respeita a data de início dele.
+    // Se o cliente é antigo (iniciou antes do mês anterior), a auditoria de rotina foca a partir do dia 1 do mês anterior.
+    let dataCorteAuditoria = primeiroDiaMesAnterior
+    if (cliente.data_inicio_monitoramento && cliente.data_inicio_monitoramento > primeiroDiaMesAnterior) {
+      dataCorteAuditoria = cliente.data_inicio_monitoramento
+    }
+
+    // Carrega notas cadastradas dentro da janela auditada (mês atual e anterior)
     const [nfeData, nfceData] = await Promise.all([
-      carregarTodasNotas('nfe_saidas', cliente.id, cliente.data_inicio_monitoramento),
-      carregarTodasNotas('nfce_saidas', cliente.id, cliente.data_inicio_monitoramento)
+      carregarTodasNotas('nfe_saidas', cliente.id, dataCorteAuditoria),
+      carregarTodasNotas('nfce_saidas', cliente.id, dataCorteAuditoria)
     ])
 
     // Agrupa e detecta gaps
@@ -80,7 +94,7 @@ export async function POST(request: Request) {
 
     const maioresNumeros: Record<string, number> = { '55': 0, '65': 0 }
 
-    const processarModelo = (modelo: '55' | '65', notas: typeof nfeData, minNum: number) => {
+    const processarModelo = (modelo: '55' | '65', notas: typeof nfeData, minNumCadastrado: number) => {
       const gruposSerie = new Map<string, number[]>()
 
       for (const n of notas) {
@@ -94,7 +108,7 @@ export async function POST(request: Request) {
           num = parseInt(String(n.numero).replace(/\D/g, ''), 10)
         }
 
-        if (num && !isNaN(num) && num >= minNum) {
+        if (num && !isNaN(num) && num > 0) {
           if (!gruposSerie.has(serie)) gruposSerie.set(serie, [])
           gruposSerie.get(serie)!.push(num)
         }
@@ -109,18 +123,24 @@ export async function POST(request: Request) {
           maioresNumeros[modelo] = max
         }
 
-        // Gap inicial
-        if (nums[0] > minNum) {
+        // Ponto de partida efetivo da janela:
+        // Se a empresa já era monitorada antes do mês anterior, o ponto de partida na janela é o primeiro número emitido na própria janela.
+        // Se a empresa começou a ser monitorada dentro da janela (ex: contrato recente), usa o número inicial contratado.
+        const isClienteAntigo = cliente.data_inicio_monitoramento && cliente.data_inicio_monitoramento < primeiroDiaMesAnterior
+        const pontoInicialEfetivo = isClienteAntigo ? nums[0] : Math.max(minNumCadastrado, 1)
+
+        // Gap inicial (se o menor número presente na janela for superior ao ponto inicial esperado)
+        if (nums[0] > pontoInicialEfetivo) {
           gapsEncontrados.push({
             modelo,
             serie,
-            numero_inicial: minNum,
+            numero_inicial: pontoInicialEfetivo,
             numero_final: nums[0] - 1,
-            quantidade: nums[0] - minNum
+            quantidade: nums[0] - pontoInicialEfetivo
           })
         }
 
-        // Gaps intermediários
+        // Gaps intermediários (saltos reais entre notas na janela)
         for (let i = 0; i < nums.length - 1; i++) {
           const atual = nums[i]
           const prox = nums[i + 1]
