@@ -1,24 +1,29 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { 
   RefreshCw, Download, Clock, ArrowUpCircle, CheckCircle2, AlertTriangle,
   ArrowUpRight, ArrowDownLeft, ShieldAlert, Layers, Calendar, DollarSign,
-  Phone, SlidersHorizontal, Lock, FolderArchive, Sparkles, Inbox, ShoppingBag,
-  Check, FileText, CheckSquare, MessageSquare
+  Phone, SlidersHorizontal, Lock, FolderArchive, Sparkles, Inbox,
+  Check, Copy, Key, Search, X, ShieldCheck, Cpu, MessageSquare
 } from 'lucide-react'
 import { APP_VERSION } from '@/utils/version'
 import { useTableFeatures } from '@/hooks/useTableFeatures'
 import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
 import { ClienteAutocompleteInput } from '@/components/ClienteAutocompleteInput'
 
+const VERSAO_MAIS_RECENTE = '2.8.3'
+const INTERVALO_MS = 15 * 60 * 1000
+const TOLERANCIA_MS = 2 * 60 * 1000
+
 export default function ConfiguracoesPage() {
   const supabase = createClient()
   const [clientes, setClientes] = useState<any[]>([])
   const [hubs, setHubs] = useState<any[]>([])
   const [selectedCliente, setSelectedCliente] = useState<string>('')
+  const [termoBuscaTabela, setTermoBuscaTabela] = useState<string>('')
   const [now, setNow] = useState<number>(() => Date.now())
 
   // Ticker de 1 segundo para atualizar o cronômetro regressivo de batimento cardíaco (15 min)
@@ -26,10 +31,22 @@ export default function ConfiguracoesPage() {
     const timer = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(timer)
   }, [])
+
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [message, setMessage] = useState('')
   const [loadingComandoId, setLoadingComandoId] = useState<string | null>(null)
+
+  // Filtro de busca na tabela
+  const hubsFiltrados = useMemo(() => {
+    if (!termoBuscaTabela.trim()) return hubs
+    const t = termoBuscaTabela.toLowerCase().trim()
+    return hubs.filter((h: any) => 
+      (h.razao_social || '').toLowerCase().includes(t) ||
+      (h.nome_fantasia || '').toLowerCase().includes(t) ||
+      (h.cnpj || '').toLowerCase().includes(t) ||
+      (h.hub_token || '').toLowerCase().includes(t)
+    )
+  }, [hubs, termoBuscaTabela])
 
   const {
     sortedData: hubsOrdenados,
@@ -39,20 +56,22 @@ export default function ConfiguracoesPage() {
     columnWidths,
     handleResizeColumn
   } = useTableFeatures({
-    data: hubs,
-    tableId: 'tabela_hubs_configuracoes',
+    data: hubsFiltrados,
+    tableId: 'tabela_hubs_configuracoes_v2',
     defaultSortKey: 'cliente',
     defaultSortDirection: 'asc',
     initialWidths: {
       cliente: 240,
-      contraSenha: 170,
-      ultimaSync: 160,
-      status: 120,
-      versao: 150,
-      acao: 150
+      token: 130,
+      contraSenha: 140,
+      ultimaSync: 140,
+      status: 160,
+      versao: 130,
+      acao: 220
     },
     customExtractors: {
-      cliente: (h: any) => h.razao_social || '',
+      cliente: (h: any) => h.razao_social || h.nome_fantasia || '',
+      token: (h: any) => h.hub_token || '',
       contraSenha: (h: any) => {
         const config = Array.isArray(h.configuracoes_hub) ? h.configuracoes_hub[0] : h.configuracoes_hub
         return config?.offline_secret || ''
@@ -66,7 +85,7 @@ export default function ConfiguracoesPage() {
         const lastSync = config?.ultima_sincronizacao
         if (!lastSync) return 0
         const diff = Date.now() - new Date(lastSync).getTime()
-        return diff < (15 * 60 * 1000 + 2 * 60 * 1000) ? 1 : 0
+        return diff < (INTERVALO_MS + TOLERANCIA_MS) ? 1 : 0
       },
       versao: (h: any) => {
         const config = Array.isArray(h.configuracoes_hub) ? h.configuracoes_hub[0] : h.configuracoes_hub
@@ -100,13 +119,29 @@ export default function ConfiguracoesPage() {
     dias_tolerancia_bloqueio: 3,
     mensagem_aviso_previo: 'AVISO DE VENCIMENTO: Sua mensalidade vence em breve. Regularize via Pix no Hub para evitar bloqueio.',
     mensagem_bloqueio: 'SISTEMA BLOQUEADO. Por favor, regularize seu pagamento.',
-    bloquear_recepcao_xml_se_inadimplente: false
+    bloquear_recepcao_xml_se_inadimplente: false,
+
+    // Card 4: Inteligência, Tratamento e Validação de XMLs do Hub
+    auto_excluir_divergentes: false,
+    apenas_xmls_autorizados: false,
+    analise_ia_xmls: false,
+    support_whatsapp: '',
+    intervalo_checagem_horas: 6
   })
+
+  const copyToClipboard = (text?: string, label?: string) => {
+    if (!text) {
+      toast.error('Nenhum dado para copiar.')
+      return
+    }
+    navigator.clipboard.writeText(text)
+    toast.success(`${label || 'Dado'} copiado para a área de transferência!`)
+  }
 
   async function loadClientes() {
     const { data } = await supabase
       .from('clientes')
-      .select('id, razao_social, nome_fantasia, cnpj, configuracoes_hub(ultima_sincronizacao, offline_secret, versao_hub_instalada, comando_remoto, comando_remoto_em)')
+      .select('id, razao_social, nome_fantasia, cnpj, hub_token, whatsapp, whatsapp_cobranca, dia_vencimento, valor_mensalidade, dias_carencia, bloquear_recepcao_xml_se_inadimplente, data_inicio_monitoramento, data_inicio_monitoramento_entradas, numero_inicial_nfe, numero_inicial_nfce, numero_inicial_nfse, numero_inicial_cte, numero_inicial_mdfe, numero_inicial_compras_nfe, configuracoes_hub(ultima_sincronizacao, offline_secret, versao_hub_instalada, comando_remoto, comando_remoto_em, auto_excluir_divergentes, apenas_xmls_autorizados, analise_ia_xmls, support_whatsapp, intervalo_checagem_horas)')
       .order('razao_social')
     
     if (data) {
@@ -180,7 +215,14 @@ export default function ConfiguracoesPage() {
         dias_tolerancia_bloqueio: cli?.dias_carencia ?? (hub?.dias_tolerancia_bloqueio ?? 3),
         mensagem_aviso_previo: hub?.mensagem_aviso_previo || 'AVISO DE VENCIMENTO: Sua mensalidade vence em breve. Regularize via Pix no Hub para evitar bloqueio.',
         mensagem_bloqueio: hub?.mensagem_bloqueio || 'SISTEMA BLOQUEADO. Por favor, regularize seu pagamento.',
-        bloquear_recepcao_xml_se_inadimplente: Boolean(cli?.bloquear_recepcao_xml_se_inadimplente ?? hub?.bloquear_recepcao_xml_se_inadimplente)
+        bloquear_recepcao_xml_se_inadimplente: Boolean(cli?.bloquear_recepcao_xml_se_inadimplente ?? hub?.bloquear_recepcao_xml_se_inadimplente),
+
+        // Inteligência & Validação
+        auto_excluir_divergentes: Boolean(hub?.auto_excluir_divergentes),
+        apenas_xmls_autorizados: Boolean(hub?.apenas_xmls_autorizados),
+        analise_ia_xmls: Boolean(hub?.analise_ia_xmls),
+        support_whatsapp: hub?.support_whatsapp || '',
+        intervalo_checagem_horas: hub?.intervalo_checagem_horas || 6
       })
       setLoading(false)
     }
@@ -191,7 +233,6 @@ export default function ConfiguracoesPage() {
     e.preventDefault()
     if (!selectedCliente) return
     setSaving(true)
-    setMessage('')
 
     const dataInicioVendas = formData.data_inicio_monitoramento ? `${formData.data_inicio_monitoramento}-01` : null
     const dataInicioCompras = formData.data_inicio_monitoramento_entradas ? `${formData.data_inicio_monitoramento_entradas}-01` : null
@@ -211,6 +252,11 @@ export default function ConfiguracoesPage() {
       bloquear_recepcao_xml_se_inadimplente: Boolean(formData.bloquear_recepcao_xml_se_inadimplente),
       data_inicio_monitoramento_entradas: dataInicioCompras,
       numero_inicial_compras_nfe: formData.numero_inicial_compras_nfe || 1,
+      auto_excluir_divergentes: Boolean(formData.auto_excluir_divergentes),
+      apenas_xmls_autorizados: Boolean(formData.apenas_xmls_autorizados),
+      analise_ia_xmls: Boolean(formData.analise_ia_xmls),
+      support_whatsapp: formData.support_whatsapp,
+      intervalo_checagem_horas: formData.intervalo_checagem_horas || 6,
       updated_at: new Date().toISOString()
     }
 
@@ -245,9 +291,20 @@ export default function ConfiguracoesPage() {
   }
 
   const clienteSelecionadoObj = clientes.find(c => c.id === selectedCliente)
+  const configSelected = Array.isArray(clienteSelecionadoObj?.configuracoes_hub) 
+    ? clienteSelecionadoObj?.configuracoes_hub[0] 
+    : clienteSelecionadoObj?.configuracoes_hub
+  const lastSyncSelected = configSelected?.ultima_sincronizacao
+  const diffMinSelected = lastSyncSelected ? Math.floor((now - new Date(lastSyncSelected).getTime()) / (1000 * 60)) : null
+  const isOnlineSelected = diffMinSelected !== null && diffMinSelected <= 15
+  const versaoHubSelected = configSelected?.versao_hub_instalada || (lastSyncSelected ? '2.8.0' : null)
+  const isAtualizadoSelected = versaoHubSelected === VERSAO_MAIS_RECENTE
+  const isPendenteAtualizacaoSelected = configSelected?.comando_remoto === 'atualizar_hub'
+  const offlineSecretSelected = configSelected?.offline_secret || 'Não gerada'
 
   return (
     <div className="w-full space-y-6 animate-in fade-in duration-300">
+      {/* Cabeçalho Geral da Página */}
       <header className="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center gap-2.5">
@@ -256,657 +313,1125 @@ export default function ConfiguracoesPage() {
               v{APP_VERSION}
             </span>
           </div>
-          <p className="text-slate-500 mt-1">Gerencie regras de monitoramento, pontos de partida fiscais de entrada/saída e bloqueio financeiro.</p>
+          <p className="text-slate-500 mt-1">
+            Gerencie regras de monitoramento, tokens de conexão, pontos de partida fiscais e bloqueio financeiro.
+          </p>
         </div>
         <div className="flex items-center gap-3">
-          <a href="/HubParatech.zip" download className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-indigo-700 transition flex items-center gap-2 shadow-sm text-xs">
+          <a 
+            href="/HubParatech.zip" 
+            download 
+            className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-indigo-700 transition flex items-center gap-2 shadow-sm text-xs"
+          >
             <Download size={16} />
-            Baixar Hub v{APP_VERSION} (.zip)
+            Baixar Hub Executável v{APP_VERSION} (.zip)
           </a>
-          <button onClick={() => loadClientes()} className="bg-slate-100 text-slate-700 px-4 py-2 rounded-xl font-semibold hover:bg-slate-200 transition flex items-center gap-2 text-xs">
+          <button 
+            onClick={() => loadClientes()} 
+            className="bg-slate-100 text-slate-700 px-4 py-2 rounded-xl font-semibold hover:bg-slate-200 transition flex items-center gap-2 text-xs cursor-pointer"
+          >
             <RefreshCw size={15} />
-            Atualizar Tabela
+            Atualizar Status
           </button>
         </div>
       </header>
 
-      {/* Seletor de Cliente */}
+      {/* Seletor de Cliente com Autocomplete */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
         <ClienteAutocompleteInput
           clientes={clientes}
           selectedId={selectedCliente}
-          onSelect={id => setSelectedCliente(id)}
+          onSelect={id => {
+            setSelectedCliente(id)
+            if (id) {
+              setTimeout(() => {
+                document.getElementById('painel-configuracao')?.scrollIntoView({ behavior: 'smooth' })
+              }, 100)
+            }
+          }}
           label="Selecione a Empresa / Cliente para Configurar o Hub"
           placeholder="Digite a Razão Social, Nome Fantasia ou CNPJ..."
         />
       </div>
 
+      {/* Formulário & Painel do Cliente Selecionado */}
       {selectedCliente && (
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {loading ? (
-            <div className="p-8 text-center text-slate-500 bg-white rounded-2xl border border-slate-200">
-              <RefreshCw size={24} className="animate-spin mx-auto text-indigo-600 mb-2" />
-              Carregando regras de monitoramento do cliente...
+        <div id="painel-configuracao" className="space-y-6 pt-2">
+          {/* BANNER DE IDENTIFICAÇÃO, TOKEN DO HUB E COMANDOS REMOTOS */}
+          <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 border border-indigo-900/60 rounded-2xl p-6 text-white shadow-xl">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-indigo-900/60">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-xl font-bold text-white tracking-tight">
+                    {clienteSelecionadoObj?.razao_social || clienteSelecionadoObj?.nome_fantasia || 'Empresa Selecionada'}
+                  </h2>
+                  {clienteSelecionadoObj?.nome_fantasia && (
+                    <span className="text-xs text-indigo-300 font-medium">({clienteSelecionadoObj.nome_fantasia})</span>
+                  )}
+                  <span className="text-xs font-mono bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-md border border-indigo-500/30">
+                    CNPJ: {clienteSelecionadoObj?.cnpj || 'Não informado'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Estação monitorada em tempo real pelo Hub Desktop. Gerencie tokens, diretórios e atualizações.
+                </p>
+              </div>
+
+              {/* Botões de Ação Rápida no Topo do Cliente */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Botão de Atualizar Hub Remotamente se estiver desatualizado */}
+                {!isAtualizadoSelected && lastSyncSelected && (
+                  <button
+                    type="button"
+                    onClick={() => handleDispararComando(selectedCliente, isPendenteAtualizacaoSelected ? 'cancelar' : 'atualizar_hub')}
+                    disabled={loadingComandoId === selectedCliente}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer ${
+                      isPendenteAtualizacaoSelected
+                        ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30'
+                        : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-900/20'
+                    }`}
+                  >
+                    <ArrowUpCircle size={14} />
+                    {loadingComandoId === selectedCliente ? 'Enviando...' : isPendenteAtualizacaoSelected ? 'Cancelar Atualização' : 'Atualizar Hub para v2.8.3'}
+                  </button>
+                )}
+
+                {/* Botão Reconciliar Gaps no PDV */}
+                <button
+                  type="button"
+                  onClick={() => handleDispararComando(selectedCliente, 'reconciliar_gaps')}
+                  disabled={loadingComandoId === selectedCliente}
+                  className="px-3 py-1.5 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-indigo-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="Enviar comando para o Hub varrer as pastas de notas no PDV"
+                >
+                  <RefreshCw size={13} className={loadingComandoId === selectedCliente ? 'animate-spin' : ''} />
+                  Reconciliar Gaps no PDV
+                </button>
+
+                {/* Botão Fechar Configuração / Voltar */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedCliente('')}
+                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-medium transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <X size={14} />
+                  Fechar Configuração
+                </button>
+              </div>
             </div>
-          ) : (
-            <>
-              {/* ===== CARD 1: MONITORAMENTO DE VENDAS (SAÍDAS) & PONTO DE PARTIDA FISCAL ===== */}
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="px-6 py-4 bg-gradient-to-r from-indigo-50/60 to-purple-50/40 border-b border-indigo-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-xs">
-                      <ArrowUpRight size={18} />
+
+            {/* Linha com Token do Hub, Contra-Senha e Status da Conexão */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-5">
+              {/* Token do Hub */}
+              <div className="bg-slate-900/80 border border-indigo-800/40 rounded-xl p-3.5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-300 flex items-center gap-1.5">
+                    <Key size={13} className="text-indigo-400" />
+                    Token do Hub (Autenticação)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(clienteSelecionadoObj?.hub_token, 'Token do Hub')}
+                    className="text-xs text-indigo-400 hover:text-indigo-200 flex items-center gap-1 font-semibold cursor-pointer"
+                  >
+                    <Copy size={12} /> Copiar
+                  </button>
+                </div>
+                <code className="text-xs font-mono font-bold text-white bg-slate-950 px-3 py-2 rounded-lg border border-slate-800 block truncate select-all">
+                  {clienteSelecionadoObj?.hub_token || 'Nenhum token gerado'}
+                </code>
+                <span className="text-[10px] text-slate-400 mt-1.5 block">
+                  Copie e cole este token no Hub Desktop para autorizar a sincronização com a nuvem.
+                </span>
+              </div>
+
+              {/* Contra-Senha Offline */}
+              <div className="bg-slate-900/80 border border-indigo-800/40 rounded-xl p-3.5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+                    <ShieldAlert size={13} className="text-amber-400" />
+                    Contra-Senha Offline
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(offlineSecretSelected, 'Contra-Senha Offline')}
+                    className="text-xs text-amber-400 hover:text-amber-200 flex items-center gap-1 font-semibold cursor-pointer"
+                  >
+                    <Copy size={12} /> Copiar
+                  </button>
+                </div>
+                <code className="text-xs font-mono font-bold text-amber-300 bg-slate-950 px-3 py-2 rounded-lg border border-slate-800 block truncate select-all">
+                  {offlineSecretSelected}
+                </code>
+                <span className="text-[10px] text-slate-400 mt-1.5 block">
+                  Usada para liberação de emergência (24h) caso o computador do cliente fique sem internet.
+                </span>
+              </div>
+
+              {/* Status de Conexão e Versão */}
+              <div className="bg-slate-900/80 border border-indigo-800/40 rounded-xl p-3.5 flex flex-col justify-between">
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    Versão do Hub & Batimento
+                  </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-indigo-300">
+                      v{versaoHubSelected || 'Desconhecida'}
+                    </span>
+                    {isOnlineSelected ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Online ({diffMinSelected}m)
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span> {diffMinSelected !== null ? `Offline há ${diffMinSelected}m` : 'Offline'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <span className="text-[10px] text-slate-400 mt-1.5 block">
+                  Última sincronização: {lastSyncSelected ? new Date(lastSyncSelected).toLocaleString('pt-BR') : 'Nunca sincronizou'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {loading ? (
+              <div className="p-8 text-center text-slate-500 bg-white rounded-2xl border border-slate-200">
+                <RefreshCw size={24} className="animate-spin mx-auto text-indigo-600 mb-2" />
+                Carregando configurações e regras do cliente...
+              </div>
+            ) : (
+              <>
+                {/* ===== CARD 1: MONITORAMENTO DE VENDAS (SAÍDAS) & PONTO DE PARTIDA FISCAL ===== */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                  <div className="px-6 py-4 bg-gradient-to-r from-indigo-50/60 to-purple-50/40 border-b border-indigo-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-xs">
+                        <ArrowUpRight size={18} />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                          1. Monitoramento de Vendas (Saídas) & Ponto de Partida Fiscal
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          Diretórios locais e ponto de corte numérico das notas fiscais emitidas pelo PDV/ERP.
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
-                        1. Monitoramento de Vendas (Saídas) & Ponto de Partida
-                      </h3>
-                      <p className="text-xs text-slate-500">
-                        Diretórios locais e ponto de corte numérico das notas fiscais emitidas pelo PDV/ERP.
-                      </p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800">
+                        NF-e (55)
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
+                        NFC-e (65)
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-cyan-100 text-cyan-800">
+                        NFS-e
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-100 text-purple-800">
+                        CT-e
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-800">
+                        MDF-e
+                      </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800">
-                      NF-e (55)
-                    </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
-                      NFC-e (65)
-                    </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-cyan-100 text-cyan-800">
-                      NFS-e
-                    </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-100 text-purple-800">
-                      CT-e
-                    </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-800">
-                      MDF-e
-                    </span>
+
+                  <div className="p-6 space-y-5">
+                    {/* Pastas de Vendas */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <FolderArchive size={14} className="text-indigo-600" />
+                          Pastas de Vendas no PDV (XML)
+                        </label>
+                        <span className="text-[11px] text-slate-400">Um caminho por linha</span>
+                      </div>
+                      <textarea 
+                        rows={3} 
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-mono text-xs text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        placeholder="C:\PDV+\temp\DocumentosAutorizados&#10;C:\PDV+\temp\DocumentosAutorizados\NFCe&#10;C:\PDV+\temp\DocumentosAutorizados\NFe"
+                        value={formData.pastas_vendas} 
+                        onChange={e => setFormData({...formData, pastas_vendas: e.target.value})} 
+                      />
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        O monitor do Hub Desktop sincroniza automaticamente qualquer XML autorizado gravado nestas pastas.
+                      </p>
+                    </div>
+
+                    {/* Card Ponto de Partida Fiscal de Saídas */}
+                    <div className="bg-slate-900 border border-indigo-900/50 rounded-2xl p-5 text-white shadow-md">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-indigo-950 mb-4">
+                        <div className="flex items-center gap-2">
+                          <div className="p-1.5 bg-indigo-500/20 text-indigo-400 rounded-lg">
+                            <Layers size={16} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold uppercase tracking-wider text-indigo-300">
+                                PONTO DE PARTIDA FISCAL & COMPETÊNCIA INICIAL
+                              </span>
+                              <span className="text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full border border-indigo-500/30">
+                                Contrato de Monitoramento
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 mt-0.5">
+                              XMLs emitidos antes desta data ou números inferiores ao ponto de partida são ignorados e não geram falsos gaps.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <label className="text-[11px] font-semibold text-slate-300">Mês Início:</label>
+                          <input
+                            type="month"
+                            value={formData.data_inicio_monitoramento}
+                            onChange={e => setFormData({...formData, data_inicio_monitoramento: e.target.value})}
+                            className="bg-slate-800 text-xs font-bold text-white px-3 py-1.5 rounded-xl border border-indigo-700/60 focus:ring-2 focus:ring-indigo-400 outline-none cursor-pointer"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Pills Editáveis de Numeração Inicial de Vendas */}
+                      <div>
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2.5">
+                          Numeração Inicial Contratada (Ponto de Partida):
+                        </span>
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                          <div className="bg-slate-800/80 border border-slate-700/60 rounded-xl p-2.5">
+                            <span className="text-[10px] font-bold text-slate-400 block mb-1">NF-e (55)</span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-emerald-400 text-xs font-bold font-mono">#</span>
+                              <input
+                                type="number"
+                                min={1}
+                                value={formData.numero_inicial_nfe}
+                                onChange={e => setFormData({...formData, numero_inicial_nfe: parseInt(e.target.value) || 1})}
+                                className="w-full bg-transparent text-emerald-400 text-xs font-bold font-mono focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="bg-slate-800/80 border border-slate-700/60 rounded-xl p-2.5">
+                            <span className="text-[10px] font-bold text-slate-400 block mb-1">NFC-e (65)</span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-emerald-400 text-xs font-bold font-mono">#</span>
+                              <input
+                                type="number"
+                                min={1}
+                                value={formData.numero_inicial_nfce}
+                                onChange={e => setFormData({...formData, numero_inicial_nfce: parseInt(e.target.value) || 1})}
+                                className="w-full bg-transparent text-emerald-400 text-xs font-bold font-mono focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="bg-slate-800/80 border border-slate-700/60 rounded-xl p-2.5">
+                            <span className="text-[10px] font-bold text-slate-400 block mb-1">NFS-e</span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-indigo-400 text-xs font-bold font-mono">#</span>
+                              <input
+                                type="number"
+                                min={1}
+                                value={formData.numero_inicial_nfse}
+                                onChange={e => setFormData({...formData, numero_inicial_nfse: parseInt(e.target.value) || 1})}
+                                className="w-full bg-transparent text-indigo-400 text-xs font-bold font-mono focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="bg-slate-800/80 border border-slate-700/60 rounded-xl p-2.5">
+                            <span className="text-[10px] font-bold text-slate-400 block mb-1">CT-e (57)</span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-purple-400 text-xs font-bold font-mono">#</span>
+                              <input
+                                type="number"
+                                min={1}
+                                value={formData.numero_inicial_cte}
+                                onChange={e => setFormData({...formData, numero_inicial_cte: parseInt(e.target.value) || 1})}
+                                className="w-full bg-transparent text-purple-400 text-xs font-bold font-mono focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="bg-slate-800/80 border border-slate-700/60 rounded-xl p-2.5">
+                            <span className="text-[10px] font-bold text-slate-400 block mb-1">MDF-e (58)</span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-blue-400 text-xs font-bold font-mono">#</span>
+                              <input
+                                type="number"
+                                min={1}
+                                value={formData.numero_inicial_mdfe}
+                                onChange={e => setFormData({...formData, numero_inicial_mdfe: parseInt(e.target.value) || 1})}
+                                className="w-full bg-transparent text-blue-400 text-xs font-bold font-mono focus:outline-none"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="p-6 space-y-5">
-                  {/* Pastas de Vendas */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                        <FolderArchive size={14} className="text-indigo-600" />
-                        Pastas de Vendas no PDV (XML)
-                      </label>
-                      <span className="text-[11px] text-slate-400">Um caminho por linha</span>
+                {/* ===== CARD 2: MONITORAMENTO DE COMPRAS (ENTRADAS) & PONTO DE PARTIDA FISCAL ===== */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                  <div className="px-6 py-4 bg-gradient-to-r from-blue-50/60 to-cyan-50/40 border-b border-blue-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 bg-blue-600 text-white rounded-xl shadow-xs">
+                        <ArrowDownLeft size={18} />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                          2. Monitoramento de Compras (Entradas) & Ponto de Partida Fiscal
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          Diretórios de notas fiscais de compra recebidas de fornecedores e data inicial contratada.
+                        </p>
+                      </div>
                     </div>
-                    <textarea 
-                      rows={3} 
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-mono text-xs text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                      placeholder="C:\PDV+\temp\DocumentosAutorizados&#10;C:\PDV+\temp\DocumentosAutorizados\NFCe&#10;C:\PDV+\temp\DocumentosAutorizados\NFe"
-                      value={formData.pastas_vendas} 
-                      onChange={e => setFormData({...formData, pastas_vendas: e.target.value})} 
-                    />
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      O monitor do Hub Desktop sincroniza automaticamente qualquer XML autorizado gravado nestas pastas.
-                    </p>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 self-start sm:self-auto">
+                      NF-e de Compra (Mod. 55) • Fornecedores
+                    </span>
                   </div>
 
-                  {/* Card Réplica do Ponto de Partida Fiscal (Idêntico ao de Quebras de Sequência) */}
-                  <div className="bg-slate-900 border border-indigo-900/50 rounded-2xl p-5 text-white shadow-md">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-indigo-950 mb-4">
-                      <div className="flex items-center gap-2">
-                        <div className="p-1.5 bg-indigo-500/20 text-indigo-400 rounded-lg">
-                          <Layers size={16} />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold uppercase tracking-wider text-indigo-300">
-                              PONTO DE PARTIDA FISCAL & COMPETÊNCIA INICIAL
-                            </span>
-                            <span className="text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full border border-indigo-500/30">
-                              Contrato de Monitoramento
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-400 mt-0.5">
-                            XMLs emitidos antes desta data ou números inferiores ao ponto de partida são ignorados e não geram falsos gaps.
-                          </p>
-                        </div>
+                  <div className="p-6 space-y-5">
+                    {/* Pastas de Compras */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <Inbox size={14} className="text-blue-600" />
+                          Pastas de Compras no Cliente (XML)
+                        </label>
+                        <span className="text-[11px] text-slate-400">Um caminho por linha</span>
                       </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <label className="text-[11px] font-semibold text-slate-300">Mês Início:</label>
-                        <input
-                          type="month"
-                          value={formData.data_inicio_monitoramento}
-                          onChange={e => setFormData({...formData, data_inicio_monitoramento: e.target.value})}
-                          className="bg-slate-800 text-xs font-bold text-white px-3 py-1.5 rounded-xl border border-indigo-700/60 focus:ring-2 focus:ring-indigo-400 outline-none cursor-pointer"
-                        />
-                      </div>
+                      <textarea 
+                        rows={3} 
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-mono text-xs text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        placeholder="C:\Sistema\Compras\XML&#10;C:\GDOOR Sistemas\GDOOR PRO\NFe\XML\Compras"
+                        value={formData.pastas_compras} 
+                        onChange={e => setFormData({...formData, pastas_compras: e.target.value})} 
+                      />
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        O monitor do Hub varre estas pastas para capturar XMLs de aquisição para o fechamento mensal e conciliação com o DF-e.
+                      </p>
                     </div>
 
-                    {/* Pills Editáveis de Numeração Inicial de Vendas */}
-                    <div>
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2.5">
-                        Numeração Inicial Contratada (Ponto de Partida):
-                      </span>
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                        <div className="bg-slate-800/80 border border-slate-700/60 rounded-xl p-2.5">
-                          <span className="text-[10px] font-bold text-slate-400 block mb-1">NF-e (55)</span>
-                          <div className="flex items-center gap-1">
-                            <span className="text-emerald-400 text-xs font-bold font-mono">#</span>
-                            <input
-                              type="number"
-                              min={1}
-                              value={formData.numero_inicial_nfe}
-                              onChange={e => setFormData({...formData, numero_inicial_nfe: parseInt(e.target.value) || 1})}
-                              className="w-full bg-transparent text-emerald-400 text-xs font-bold font-mono focus:outline-none"
-                            />
+                    {/* Card Ponto de Partida Fiscal de Compras */}
+                    <div className="bg-slate-900 border border-blue-900/50 rounded-2xl p-5 text-white shadow-md">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-blue-950 mb-4">
+                        <div className="flex items-center gap-2">
+                          <div className="p-1.5 bg-blue-500/20 text-blue-400 rounded-lg">
+                            <Calendar size={16} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold uppercase tracking-wider text-blue-300">
+                                PONTO DE PARTIDA FISCAL DE COMPRAS (ENTRADAS)
+                              </span>
+                              <span className="text-[10px] font-semibold bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/30">
+                                Aquisições de Fornecedores
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 mt-0.5">
+                              XMLs de compras anteriores a este mês não são sincronizados para evitar carregar notas antigas de anos anteriores.
+                            </p>
                           </div>
                         </div>
 
-                        <div className="bg-slate-800/80 border border-slate-700/60 rounded-xl p-2.5">
-                          <span className="text-[10px] font-bold text-slate-400 block mb-1">NFC-e (65)</span>
-                          <div className="flex items-center gap-1">
-                            <span className="text-emerald-400 text-xs font-bold font-mono">#</span>
-                            <input
-                              type="number"
-                              min={1}
-                              value={formData.numero_inicial_nfce}
-                              onChange={e => setFormData({...formData, numero_inicial_nfce: parseInt(e.target.value) || 1})}
-                              className="w-full bg-transparent text-emerald-400 text-xs font-bold font-mono focus:outline-none"
-                            />
-                          </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <label className="text-[11px] font-semibold text-slate-300">Mês Início Compras:</label>
+                          <input
+                            type="month"
+                            value={formData.data_inicio_monitoramento_entradas}
+                            onChange={e => setFormData({...formData, data_inicio_monitoramento_entradas: e.target.value})}
+                            className="bg-slate-800 text-xs font-bold text-white px-3 py-1.5 rounded-xl border border-blue-700/60 focus:ring-2 focus:ring-blue-400 outline-none cursor-pointer"
+                          />
                         </div>
+                      </div>
 
-                        <div className="bg-slate-800/80 border border-slate-700/60 rounded-xl p-2.5">
-                          <span className="text-[10px] font-bold text-slate-400 block mb-1">NFS-e</span>
-                          <div className="flex items-center gap-1">
-                            <span className="text-indigo-400 text-xs font-bold font-mono">#</span>
-                            <input
-                              type="number"
-                              min={1}
-                              value={formData.numero_inicial_nfse}
-                              onChange={e => setFormData({...formData, numero_inicial_nfse: parseInt(e.target.value) || 1})}
-                              className="w-full bg-transparent text-indigo-400 text-xs font-bold font-mono focus:outline-none"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="bg-slate-800/80 border border-slate-700/60 rounded-xl p-2.5">
-                          <span className="text-[10px] font-bold text-slate-400 block mb-1">CT-e (57)</span>
-                          <div className="flex items-center gap-1">
-                            <span className="text-purple-400 text-xs font-bold font-mono">#</span>
-                            <input
-                              type="number"
-                              min={1}
-                              value={formData.numero_inicial_cte}
-                              onChange={e => setFormData({...formData, numero_inicial_cte: parseInt(e.target.value) || 1})}
-                              className="w-full bg-transparent text-purple-400 text-xs font-bold font-mono focus:outline-none"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="bg-slate-800/80 border border-slate-700/60 rounded-xl p-2.5">
-                          <span className="text-[10px] font-bold text-slate-400 block mb-1">MDF-e (58)</span>
-                          <div className="flex items-center gap-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="bg-slate-800/80 border border-slate-700/60 rounded-xl p-3">
+                          <span className="text-[11px] font-bold text-slate-400 block mb-1">
+                            Primeiro Número de Compra / Ponto Inicial (NF-e Mod. 55):
+                          </span>
+                          <div className="flex items-center gap-2 mt-1">
                             <span className="text-blue-400 text-xs font-bold font-mono">#</span>
                             <input
                               type="number"
                               min={1}
-                              value={formData.numero_inicial_mdfe}
-                              onChange={e => setFormData({...formData, numero_inicial_mdfe: parseInt(e.target.value) || 1})}
-                              className="w-full bg-transparent text-blue-400 text-xs font-bold font-mono focus:outline-none"
+                              value={formData.numero_inicial_compras_nfe}
+                              onChange={e => setFormData({...formData, numero_inicial_compras_nfe: parseInt(e.target.value) || 1})}
+                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-blue-400 text-xs font-bold font-mono focus:outline-none"
+                              placeholder="Ex: 1"
                             />
                           </div>
+                          <span className="text-[10px] text-slate-400 block mt-1">
+                            Notas de compra com numeração igual ou superior nunca são descartadas.
+                          </span>
                         </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
 
-              {/* ===== CARD 2: MONITORAMENTO DE COMPRAS (ENTRADAS) & PONTO DE PARTIDA FISCAL ===== */}
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="px-6 py-4 bg-gradient-to-r from-blue-50/60 to-cyan-50/40 border-b border-blue-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 bg-blue-600 text-white rounded-xl shadow-xs">
-                      <ArrowDownLeft size={18} />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
-                        2. Monitoramento de Compras (Entradas) & Ponto de Partida
-                      </h3>
-                      <p className="text-xs text-slate-500">
-                        Diretórios de notas fiscais de compra recebidas de fornecedores e data inicial contratada.
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 self-start sm:self-auto">
-                    NF-e de Compra (Mod. 55) • Fornecedores
-                  </span>
-                </div>
-
-                <div className="p-6 space-y-5">
-                  {/* Pastas de Compras */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                        <Inbox size={14} className="text-blue-600" />
-                        Pastas de Compras no Cliente (XML)
-                      </label>
-                      <span className="text-[11px] text-slate-400">Um caminho por linha</span>
-                    </div>
-                    <textarea 
-                      rows={3} 
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-mono text-xs text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      placeholder="C:\Sistema\Compras\XML&#10;C:\GDOOR Sistemas\GDOOR PRO\NFe\XML\Compras"
-                      value={formData.pastas_compras} 
-                      onChange={e => setFormData({...formData, pastas_compras: e.target.value})} 
-                    />
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      O monitor do Hub varre estas pastas para capturar XMLs de aquisição para o fechamento mensal e conciliação com o DF-e.
-                    </p>
-                  </div>
-
-                  {/* Card Ponto de Partida Fiscal de Compras */}
-                  <div className="bg-slate-900 border border-blue-900/50 rounded-2xl p-5 text-white shadow-md">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-blue-950 mb-4">
-                      <div className="flex items-center gap-2">
-                        <div className="p-1.5 bg-blue-500/20 text-blue-400 rounded-lg">
-                          <Calendar size={16} />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold uppercase tracking-wider text-blue-300">
-                              PONTO DE PARTIDA FISCAL DE COMPRAS (ENTRADAS)
-                            </span>
-                            <span className="text-[10px] font-semibold bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/30">
-                              Aquisições de Fornecedores
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-400 mt-0.5">
-                            XMLs de compras anteriores a este mês não são sincronizados para evitar carregar notas antigas de anos anteriores.
+                        <div className="p-3 bg-blue-950/40 border border-blue-900/40 rounded-xl flex items-center gap-3">
+                          <Sparkles size={20} className="text-blue-400 shrink-0" />
+                          <p className="text-[11px] text-slate-300 leading-relaxed">
+                            Se o mês de início de compras for deixado em branco, o Hub utilizará a mesma data de início do contrato de vendas configurada no Card 1.
                           </p>
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <label className="text-[11px] font-semibold text-slate-300">Mês Início Compras:</label>
-                        <input
-                          type="month"
-                          value={formData.data_inicio_monitoramento_entradas}
-                          onChange={e => setFormData({...formData, data_inicio_monitoramento_entradas: e.target.value})}
-                          className="bg-slate-800 text-xs font-bold text-white px-3 py-1.5 rounded-xl border border-blue-700/60 focus:ring-2 focus:ring-blue-400 outline-none cursor-pointer"
-                        />
-                      </div>
                     </div>
+                  </div>
+                </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="bg-slate-800/80 border border-slate-700/60 rounded-xl p-3">
-                        <span className="text-[11px] font-bold text-slate-400 block mb-1">
-                          Primeiro Número de Compra / Ponto Inicial (NF-e Mod. 55):
-                        </span>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-blue-400 text-xs font-bold font-mono">#</span>
-                          <input
-                            type="number"
-                            min={1}
-                            value={formData.numero_inicial_compras_nfe}
-                            onChange={e => setFormData({...formData, numero_inicial_compras_nfe: parseInt(e.target.value) || 1})}
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-blue-400 text-xs font-bold font-mono focus:outline-none"
-                            placeholder="Ex: 1"
-                          />
-                        </div>
-                        <span className="text-[10px] text-slate-400 block mt-1">
-                          Notas de compra com numeração igual ou superior nunca são descartadas.
-                        </span>
+                {/* ===== CARD 3: ARQUIVOS .EXE MONITORADOS & REGRAS FINANCEIRAS DE BLOQUEIO ===== */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                  <div className="px-6 py-4 bg-gradient-to-r from-rose-50/70 to-amber-50/50 border-b border-rose-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 bg-rose-600 text-white rounded-xl shadow-xs">
+                        <ShieldAlert size={18} />
                       </div>
-
-                      <div className="p-3 bg-blue-950/40 border border-blue-900/40 rounded-xl flex items-center gap-3">
-                        <Sparkles size={20} className="text-blue-400 shrink-0" />
-                        <p className="text-[11px] text-slate-300 leading-relaxed">
-                          Se o mês de início de compras for deixado em branco, o Hub utilizará a mesma data de início do contrato de vendas configurada no Card 1.
+                      <div>
+                        <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                          3. Arquivos .exe Monitorados & Regras de Cobrança (Bloqueio)
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          Processos executáveis do ERP/PDV monitorados no Windows e condições de vencimento para bloqueio automático.
                         </p>
                       </div>
                     </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 self-start sm:self-auto">
+                      Travamento por Inadimplência
+                    </span>
                   </div>
-                </div>
-              </div>
 
-              {/* ===== CARD 3: ARQUIVOS .EXE MONITORADOS & REGRAS FINANCEIRAS DE BLOQUEIO ===== */}
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="px-6 py-4 bg-gradient-to-r from-rose-50/70 to-amber-50/50 border-b border-rose-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 bg-rose-600 text-white rounded-xl shadow-xs">
-                      <ShieldAlert size={18} />
-                    </div>
+                  <div className="p-6 space-y-6">
+                    {/* Tríade de Cobrança: Vencimento, Valor da Mensalidade e WhatsApp que recebe cobrança */}
                     <div>
-                      <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
-                        3. Arquivos .exe Monitorados & Regras de Cobrança (Bloqueio)
-                      </h3>
-                      <p className="text-xs text-slate-500">
-                        Processos executáveis do ERP/PDV monitorados no Windows e condições de vencimento para bloqueio automático.
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 self-start sm:self-auto">
-                    Travamento por Inadimplência
-                  </span>
-                </div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-1.5">
+                        <DollarSign size={15} className="text-emerald-600" />
+                        Dados Financeiros da Mensalidade & Destino da Cobrança
+                      </h4>
 
-                <div className="p-6 space-y-6">
-                  {/* Tríade de Cobrança: Vencimento, Valor da Mensalidade e WhatsApp que recebe cobrança */}
-                  <div>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-1.5">
-                      <DollarSign size={15} className="text-emerald-600" />
-                      Dados Financeiros da Mensalidade & Destino da Cobrança
-                    </h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        {/* 1. Dia de Vencimento */}
+                        <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                          <label className="text-xs font-bold text-slate-700 block mb-1 flex items-center gap-1">
+                            <Calendar size={13} className="text-indigo-600" />
+                            Dia do Vencimento:
+                          </label>
+                          <div className="relative">
+                            <input 
+                              type="number" 
+                              required 
+                              min="1" 
+                              max="31" 
+                              className="w-full bg-white px-3 py-2 rounded-lg border border-slate-300 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                              value={formData.dia_vencimento} 
+                              onChange={e => setFormData({...formData, dia_vencimento: parseInt(e.target.value) || 10})} 
+                            />
+                            <span className="absolute right-3 top-2.5 text-[10px] font-bold text-slate-400 uppercase">
+                              todo dia
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-slate-500 mt-1 block">Dia do mês em que vence a fatura.</span>
+                        </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      {/* 1. Dia de Vencimento */}
-                      <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-                        <label className="text-xs font-bold text-slate-700 block mb-1 flex items-center gap-1">
-                          <Calendar size={13} className="text-indigo-600" />
-                          Dia do Vencimento:
-                        </label>
-                        <div className="relative">
+                        {/* 2. Valor da Mensalidade */}
+                        <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                          <label className="text-xs font-bold text-slate-700 block mb-1 flex items-center gap-1">
+                            <DollarSign size={13} className="text-emerald-600" />
+                            Valor da Mensalidade (R$):
+                          </label>
                           <input 
                             type="number" 
                             required 
-                            min="1" 
-                            max="31" 
-                            className="w-full bg-white px-3 py-2 rounded-lg border border-slate-300 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                            value={formData.dia_vencimento} 
-                            onChange={e => setFormData({...formData, dia_vencimento: parseInt(e.target.value) || 10})} 
+                            step="0.01" 
+                            className="w-full bg-white px-3 py-2 rounded-lg border border-slate-300 text-xs font-bold text-emerald-700 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                            value={formData.valor_mensalidade} 
+                            onChange={e => setFormData({...formData, valor_mensalidade: parseFloat(e.target.value) || 0})} 
                           />
-                          <span className="absolute right-3 top-2.5 text-[10px] font-bold text-slate-400 uppercase">
-                            todo dia
+                          <span className="text-[11px] text-slate-500 mt-1 block">Valor cobrado mensalmente do cliente.</span>
+                        </div>
+
+                        {/* 3. WhatsApp que Recebe a Cobrança */}
+                        <div className="p-3.5 bg-emerald-50/70 rounded-xl border border-emerald-200">
+                          <label className="text-xs font-bold text-emerald-950 block mb-1 flex items-center gap-1">
+                            <Phone size={13} className="text-emerald-600" />
+                            WhatsApp que Recebe a Cobrança:
+                          </label>
+                          <input 
+                            type="text" 
+                            placeholder="Ex: 37999998888"
+                            className="w-full bg-white px-3 py-2 rounded-lg border border-emerald-300 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none placeholder-slate-400"
+                            value={formData.whatsapp_cobranca} 
+                            onChange={e => setFormData({...formData, whatsapp_cobranca: e.target.value})} 
+                          />
+                          <span className="text-[11px] text-emerald-800 mt-1 block">
+                            Receberá alertas prévios, link PIX e avisos de vencimento.
                           </span>
                         </div>
-                        <span className="text-[11px] text-slate-500 mt-1 block">Dia do mês em que vence a fatura.</span>
                       </div>
+                    </div>
 
-                      {/* 2. Valor da Mensalidade */}
-                      <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-                        <label className="text-xs font-bold text-slate-700 block mb-1 flex items-center gap-1">
-                          <DollarSign size={13} className="text-emerald-600" />
-                          Valor da Mensalidade (R$):
+                    {/* Textarea de Executáveis Monitorados */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <Lock size={14} className="text-rose-600" />
+                          Arquivos .exe Monitorados (Para Bloqueio por Inadimplência)
                         </label>
+                        <span className="text-[11px] text-slate-400">Um processo por linha</span>
+                      </div>
+                      <textarea 
+                        rows={3} 
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-mono text-xs text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                        placeholder="pdv_mais.exe&#10;Paratech.exe&#10;vendas.exe&#10;gdoor.exe"
+                        value={formData.exes_monitorados} 
+                        onChange={e => setFormData({...formData, exes_monitorados: e.target.value})} 
+                      />
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        O Hub Desktop monitora esses executáveis no computador do cliente e aplica encerramento caso a carência seja excedida.
+                      </p>
+                    </div>
+
+                    {/* Prazos de Tolerância e Aviso */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t border-slate-100">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Dias p/ Aviso Prévio</label>
                         <input 
                           type="number" 
                           required 
-                          step="0.01" 
-                          className="w-full bg-white px-3 py-2 rounded-lg border border-slate-300 text-xs font-bold text-emerald-700 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                          value={formData.valor_mensalidade} 
-                          onChange={e => setFormData({...formData, valor_mensalidade: parseFloat(e.target.value) || 0})} 
+                          min="1" 
+                          max="30" 
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold"
+                          value={formData.dias_aviso_previo} 
+                          onChange={e => setFormData({...formData, dias_aviso_previo: parseInt(e.target.value) || 7})} 
                         />
-                        <span className="text-[11px] text-slate-500 mt-1 block">Valor cobrado mensalmente do cliente.</span>
+                        <span className="text-[11px] text-slate-400 mt-0.5 block">Exibe aviso X dias antes do vencimento</span>
                       </div>
 
-                      {/* 3. WhatsApp que Recebe a Cobrança */}
-                      <div className="p-3.5 bg-emerald-50/70 rounded-xl border border-emerald-200">
-                        <label className="text-xs font-bold text-emerald-950 block mb-1 flex items-center gap-1">
-                          <Phone size={13} className="text-emerald-600" />
-                          WhatsApp que Recebe a Cobrança:
-                        </label>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Reaviso na Tela (Horas)</label>
                         <input 
-                          type="text" 
-                          placeholder="Ex: 37999998888"
-                          className="w-full bg-white px-3 py-2 rounded-lg border border-emerald-300 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none placeholder-slate-400"
-                          value={formData.whatsapp_cobranca} 
-                          onChange={e => setFormData({...formData, whatsapp_cobranca: e.target.value})} 
+                          type="number" 
+                          required 
+                          min="1" 
+                          max="24" 
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold"
+                          value={formData.intervalo_aviso_horas} 
+                          onChange={e => setFormData({...formData, intervalo_aviso_horas: parseInt(e.target.value) || 4})} 
                         />
-                        <span className="text-[11px] text-emerald-800 mt-1 block">
-                          Receberá alertas prévios, link PIX e avisos de vencimento.
-                        </span>
+                        <span className="text-[11px] text-slate-400 mt-0.5 block">Reapresenta na tela a cada X horas</span>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Dias de Carência / Bloqueio</label>
+                        <input 
+                          type="number" 
+                          required 
+                          min="0" 
+                          max="60" 
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-rose-700"
+                          value={formData.dias_tolerancia_bloqueio} 
+                          onChange={e => setFormData({...formData, dias_tolerancia_bloqueio: parseInt(e.target.value) || 0})} 
+                        />
+                        <span className="text-[11px] text-slate-400 mt-0.5 block">Tolerância após o vencimento antes de travar</span>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Textarea de Executáveis Monitorados */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                        <Lock size={14} className="text-rose-600" />
-                        Arquivos .exe Monitorados (Para Bloqueio por Inadimplência)
+                    {/* Mensagens de Notificação */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Mensagem de Aviso Prévio na Tela</label>
+                        <textarea 
+                          rows={2} 
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs"
+                          placeholder="AVISO DE VENCIMENTO: Sua mensalidade vence em breve..."
+                          value={formData.mensagem_aviso_previo} 
+                          onChange={e => setFormData({...formData, mensagem_aviso_previo: e.target.value})} 
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Mensagem de Bloqueio na Tela</label>
+                        <textarea 
+                          rows={2} 
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs"
+                          placeholder="SISTEMA BLOQUEADO. Por favor, regularize seu pagamento."
+                          value={formData.mensagem_bloqueio} 
+                          onChange={e => setFormData({...formData, mensagem_bloqueio: e.target.value})} 
+                        />
+                      </div>
+                    </div>
+
+                    {/* Trava de Suspensão de XML */}
+                    <div className="p-3.5 bg-rose-50 rounded-xl border border-rose-200 flex items-start gap-3">
+                      <input 
+                        type="checkbox" 
+                        id="bloquear_recepcao_xml_se_inadimplente"
+                        checked={Boolean(formData.bloquear_recepcao_xml_se_inadimplente)}
+                        onChange={e => setFormData({ ...formData, bloquear_recepcao_xml_se_inadimplente: e.target.checked })}
+                        className="mt-1 h-4 w-4 rounded border-rose-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                      />
+                      <label htmlFor="bloquear_recepcao_xml_se_inadimplente" className="cursor-pointer select-none">
+                        <span className="font-bold text-slate-900 block text-xs">
+                          Suspender Recepção de XMLs em caso de Inadimplência
+                        </span>
+                        <span className="text-[11px] text-slate-600 leading-relaxed block mt-0.5">
+                          Se marcado, o Hub Desktop receberá recusa (HTTP 403) no envio de novos XMLs caso o cliente esteja com fatura vencida além da carência.
+                        </span>
                       </label>
-                      <span className="text-[11px] text-slate-400">Um processo por linha</span>
                     </div>
-                    <textarea 
-                      rows={3} 
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-mono text-xs text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-rose-500 focus:outline-none"
-                      placeholder="pdv_mais.exe&#10;Paratech.exe&#10;vendas.exe&#10;gdoor.exe"
-                      value={formData.exes_monitorados} 
-                      onChange={e => setFormData({...formData, exes_monitorados: e.target.value})} 
-                    />
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      O Hub Desktop monitora esses executáveis no computador do cliente e aplica encerramento caso a carência seja excedida.
-                    </p>
-                  </div>
-
-                  {/* Prazos de Tolerância e Aviso */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t border-slate-100">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Dias p/ Aviso Prévio</label>
-                      <input 
-                        type="number" 
-                        required 
-                        min="1" 
-                        max="30" 
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold"
-                        value={formData.dias_aviso_previo} 
-                        onChange={e => setFormData({...formData, dias_aviso_previo: parseInt(e.target.value) || 7})} 
-                      />
-                      <span className="text-[11px] text-slate-400 mt-0.5 block">Exibe aviso X dias antes do vencimento</span>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Reaviso na Tela (Horas)</label>
-                      <input 
-                        type="number" 
-                        required 
-                        min="1" 
-                        max="24" 
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold"
-                        value={formData.intervalo_aviso_horas} 
-                        onChange={e => setFormData({...formData, intervalo_aviso_horas: parseInt(e.target.value) || 4})} 
-                      />
-                      <span className="text-[11px] text-slate-400 mt-0.5 block">Reapresenta na tela a cada X horas</span>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Dias de Carência / Bloqueio</label>
-                      <input 
-                        type="number" 
-                        required 
-                        min="0" 
-                        max="60" 
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-rose-700"
-                        value={formData.dias_tolerancia_bloqueio} 
-                        onChange={e => setFormData({...formData, dias_tolerancia_bloqueio: parseInt(e.target.value) || 0})} 
-                      />
-                      <span className="text-[11px] text-slate-400 mt-0.5 block">Tolerância após o vencimento antes de travar</span>
-                    </div>
-                  </div>
-
-                  {/* Mensagens de Notificação */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Mensagem de Aviso Prévio na Tela</label>
-                      <textarea 
-                        rows={2} 
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs"
-                        placeholder="AVISO DE VENCIMENTO: Sua mensalidade vence em breve..."
-                        value={formData.mensagem_aviso_previo} 
-                        onChange={e => setFormData({...formData, mensagem_aviso_previo: e.target.value})} 
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Mensagem de Bloqueio na Tela</label>
-                      <textarea 
-                        rows={2} 
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs"
-                        placeholder="SISTEMA BLOQUEADO. Por favor, regularize seu pagamento."
-                        value={formData.mensagem_bloqueio} 
-                        onChange={e => setFormData({...formData, mensagem_bloqueio: e.target.value})} 
-                      />
-                    </div>
-                  </div>
-
-                  {/* Trava de Suspensão de XML */}
-                  <div className="p-3.5 bg-rose-50 rounded-xl border border-rose-200 flex items-start gap-3">
-                    <input 
-                      type="checkbox" 
-                      id="bloquear_recepcao_xml_se_inadimplente"
-                      checked={Boolean(formData.bloquear_recepcao_xml_se_inadimplente)}
-                      onChange={e => setFormData({ ...formData, bloquear_recepcao_xml_se_inadimplente: e.target.checked })}
-                      className="mt-1 h-4 w-4 rounded border-rose-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
-                    />
-                    <label htmlFor="bloquear_recepcao_xml_se_inadimplente" className="cursor-pointer select-none">
-                      <span className="font-bold text-slate-900 block text-xs">
-                        Suspender Recepção de XMLs em caso de Inadimplência
-                      </span>
-                      <span className="text-[11px] text-slate-600 leading-relaxed block mt-0.5">
-                        Se marcado, o Hub Desktop receberá recusa (HTTP 403) no envio de novos XMLs caso o cliente esteja com fatura vencida além da carência.
-                      </span>
-                    </label>
                   </div>
                 </div>
-              </div>
 
-              {/* Botão Salvar Todas as Configurações */}
-              <div className="pt-2">
-                <button 
-                  type="submit" 
-                  disabled={saving}
-                  className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold py-3.5 rounded-xl transition shadow-md disabled:opacity-50 text-sm flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  {saving ? (
-                    <>
-                      <RefreshCw size={18} className="animate-spin" />
-                      Salvando Configurações no Banco...
-                    </>
-                  ) : (
-                    <>
-                      <Check size={18} />
-                      Salvar Regras do Hub, Pontos de Partida e Cobrança
-                    </>
-                  )}
-                </button>
-              </div>
-            </>
-          )}
-        </form>
-      )}
+                {/* ===== CARD 4: INTELIGÊNCIA, TRATAMENTO E VALIDAÇÃO DE XMLS DO HUB ===== */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                  <div className="px-6 py-4 bg-gradient-to-r from-emerald-50/70 to-teal-50/50 border-b border-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 bg-emerald-600 text-white rounded-xl shadow-xs">
+                        <ShieldCheck size={18} />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                          4. Inteligência, Tratamento e Validação de XMLs do Hub
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          Filtros de integridade fiscal, descarte inteligente de lixo eletrônico e inteligência artificial.
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 self-start sm:self-auto">
+                      Saneamento & IA Fiscal
+                    </span>
+                  </div>
 
-      {/* Tabela de Hubs Ativos */}
-      {!selectedCliente && (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 mt-8 overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-            <div>
-              <h3 className="font-semibold text-lg text-slate-800">Hubs Ativos (Monitoramento)</h3>
-              <p className="text-xs text-slate-500">Acompanhamento em tempo real de conexão, versões instaladas e comandos remotos</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
-              <span className="flex items-center gap-1.5 font-medium text-emerald-700">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span> Online (&lt; 15 min)
-              </span>
-              <span className="text-slate-300">•</span>
-              <span className="flex items-center gap-1.5 font-medium text-rose-700">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Offline / Alerta
-              </span>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[700px]">
-              <thead>
-                <tr className="bg-slate-50/75 border-b border-slate-200 text-slate-600 uppercase text-[11px] tracking-wider">
-                  <ResizableSortableTh columnId="cliente" label="Cliente / Empresa" currentSortKey={sortKey} currentSortDirection={sortDirection} onSort={handleSort} width={columnWidths.cliente} onResize={handleResizeColumn} />
-                  <ResizableSortableTh columnId="contraSenha" label="Contra-Senha (Offline)" currentSortKey={sortKey} currentSortDirection={sortDirection} onSort={handleSort} width={columnWidths.contraSenha} onResize={handleResizeColumn} />
-                  <ResizableSortableTh columnId="ultimaSync" label="Última Conexão" currentSortKey={sortKey} currentSortDirection={sortDirection} onSort={handleSort} width={columnWidths.ultimaSync} onResize={handleResizeColumn} />
-                  <ResizableSortableTh columnId="status" label="Status" currentSortKey={sortKey} currentSortDirection={sortDirection} onSort={handleSort} width={columnWidths.status} onResize={handleResizeColumn} />
-                  <ResizableSortableTh columnId="versao" label="Versão Hub" currentSortKey={sortKey} currentSortDirection={sortDirection} onSort={handleSort} width={columnWidths.versao} onResize={handleResizeColumn} />
-                  <th className="py-3 px-4 font-semibold text-center" style={{ width: columnWidths.acao }}>Comando Remoto</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-xs">
-                {hubsOrdenados.map((h: any) => {
-                  const config = Array.isArray(h.configuracoes_hub) ? h.configuracoes_hub[0] : h.configuracoes_hub
-                  const lastSync = config?.ultima_sincronizacao
-                  const diffMin = lastSync ? Math.floor((now - new Date(lastSync).getTime()) / (1000 * 60)) : null
-                  const isOnline = diffMin !== null && diffMin <= 15
-                  const versaoHub = config?.versao_hub_instalada || 'Desconhecida'
-                  const offlineSecret = config?.offline_secret || 'Não gerada'
-                  const comandoPendente = config?.comando_remoto
-
-                  return (
-                    <tr key={h.id} className="hover:bg-slate-50/80 transition">
-                      <td className="py-3.5 px-4">
-                        <span className="font-bold text-slate-800 block text-xs">{h.razao_social || h.nome_fantasia}</span>
-                        <span className="text-[10px] text-slate-400 font-mono">{h.cnpj}</span>
-                      </td>
-                      <td className="py-3.5 px-4 font-mono text-slate-600 font-bold">
-                        {offlineSecret}
-                      </td>
-                      <td className="py-3.5 px-4 text-slate-600">
-                        {lastSync ? (
-                          <div>
-                            <span className="font-semibold block">{new Date(lastSync).toLocaleTimeString('pt-BR')}</span>
-                            <span className="text-[10px] text-slate-400">{new Date(lastSync).toLocaleDateString('pt-BR')}</span>
-                          </div>
-                        ) : (
-                          <span className="text-slate-400 italic">Nunca conectou</span>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        {isOnline ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span> Online ({diffMin}m)
+                  <div className="p-6 space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Auto-excluir Divergentes */}
+                      <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          id="auto_excluir_divergentes"
+                          checked={Boolean(formData.auto_excluir_divergentes)}
+                          onChange={e => setFormData({...formData, auto_excluir_divergentes: e.target.checked})}
+                          className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                        />
+                        <label htmlFor="auto_excluir_divergentes" className="cursor-pointer select-none">
+                          <span className="font-bold text-slate-900 block text-xs">
+                            Auto-descartar XMLs Divergentes
                           </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span> {diffMin !== null ? `Offline há ${diffMin}m` : 'Offline'}
+                          <span className="text-[11px] text-slate-500 leading-relaxed block mt-0.5">
+                            Rejeita e descarta automaticamente notas cujo CNPJ ou IE do emitente não correspondam a esta empresa.
                           </span>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                          {versaoHub}
+                        </label>
+                      </div>
+
+                      {/* Apenas XMLs Autorizados */}
+                      <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          id="apenas_xmls_autorizados"
+                          checked={Boolean(formData.apenas_xmls_autorizados)}
+                          onChange={e => setFormData({...formData, apenas_xmls_autorizados: e.target.checked})}
+                          className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                        />
+                        <label htmlFor="apenas_xmls_autorizados" className="cursor-pointer select-none">
+                          <span className="font-bold text-slate-900 block text-xs">
+                            Apenas XMLs Autorizados (cStat 100)
+                          </span>
+                          <span className="text-[11px] text-slate-500 leading-relaxed block mt-0.5">
+                            Ignora rascunhos sem protocolo SEFAZ, enviando para quarentena ou descarte seguro.
+                          </span>
+                        </label>
+                      </div>
+
+                      {/* Auditoria com IA */}
+                      <div className="p-3.5 bg-indigo-50/60 rounded-xl border border-indigo-100 flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          id="analise_ia_xmls"
+                          checked={Boolean(formData.analise_ia_xmls)}
+                          onChange={e => setFormData({...formData, analise_ia_xmls: e.target.checked})}
+                          className="mt-1 h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        />
+                        <label htmlFor="analise_ia_xmls" className="cursor-pointer select-none">
+                          <span className="font-bold text-indigo-950 block text-xs flex items-center gap-1.5">
+                            <Cpu size={14} className="text-indigo-600" />
+                            Auditoria Fiscal & Auditoria IA
+                          </span>
+                          <span className="text-[11px] text-indigo-800/80 leading-relaxed block mt-0.5">
+                            Realiza pré-análise e classificação automática de inconsistências fiscais em segundo plano.
+                          </span>
+                        </label>
+                      </div>
+
+                      {/* Intervalo de Checagem Offline */}
+                      <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                        <label className="text-xs font-bold text-slate-700 block mb-1">
+                          Intervalo de Checagem Offline (Horas):
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={72}
+                          value={formData.intervalo_checagem_horas}
+                          onChange={e => setFormData({...formData, intervalo_checagem_horas: parseInt(e.target.value) || 6})}
+                          className="w-full bg-white px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                        />
+                        <span className="text-[10px] text-slate-500 mt-1 block">
+                          Frequência com que o executável revalida a licença quando sem internet.
                         </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleDispararComando(h.id, 'sync_imediato')}
-                            disabled={loadingComandoId === h.id || Boolean(comandoPendente)}
-                            className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 font-bold text-[11px] transition disabled:opacity-50"
-                            title="Forçar sincronização de XMLs na próxima conexão"
-                          >
-                            Forçar Sync
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDispararComando(h.id, 'reiniciar_servico')}
-                            disabled={loadingComandoId === h.id || Boolean(comandoPendente)}
-                            className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 font-semibold text-[11px] transition disabled:opacity-50"
-                            title="Reiniciar monitor de arquivos do Hub Desktop"
-                          >
-                            Reiniciar
-                          </button>
-                        </div>
-                        {comandoPendente && (
-                          <span className="text-[10px] text-amber-600 font-medium block mt-1">
-                            Comando ({comandoPendente}) pendente...
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+                      </div>
+                    </div>
+
+                    {/* WhatsApp de Suporte da TI */}
+                    <div className="pt-2">
+                      <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                        <MessageSquare size={14} className="text-emerald-600" />
+                        WhatsApp de Suporte da TI (Exibido no Hub Desktop):
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ex: 37999998888"
+                        value={formData.support_whatsapp}
+                        onChange={e => setFormData({...formData, support_whatsapp: e.target.value})}
+                        className="w-full sm:w-1/2 px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                      />
+                      <span className="text-[11px] text-slate-400 mt-1 block">
+                        Número de contato exibido na barra de notificações e no alerta de cobrança do Hub no computador do cliente.
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Botão Salvar Todas as Configurações */}
+                <div className="pt-2">
+                  <button 
+                    type="submit" 
+                    disabled={saving}
+                    className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold py-3.5 rounded-xl transition shadow-md disabled:opacity-50 text-sm flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {saving ? (
+                      <>
+                        <RefreshCw size={18} className="animate-spin" />
+                        Salvando Configurações no Banco...
+                      </>
+                    ) : (
+                      <>
+                        <Check size={18} />
+                        Salvar Regras do Hub, Pontos de Partida e Cobrança
+                      </>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+          </form>
         </div>
       )}
+
+      {/* ===== TABELA DE HUBS ATIVOS (MONITORAMENTO) ===== */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 mt-8 overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-lg text-slate-800 flex items-center gap-2">
+              <SlidersHorizontal size={18} className="text-indigo-600" />
+              Hubs Ativos (Monitoramento em Tempo Real)
+            </h3>
+            <p className="text-xs text-slate-500">
+              Acompanhamento de batimentos, tokens de conexão, versões instaladas e comandos remotos.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            {/* Campo de Busca Rápida na Tabela */}
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Buscar cliente, CNPJ ou token..."
+                value={termoBuscaTabela}
+                onChange={e => setTermoBuscaTabela(e.target.value)}
+                className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-60"
+              />
+              {termoBuscaTabela && (
+                <button
+                  type="button"
+                  onClick={() => setTermoBuscaTabela('')}
+                  className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+
+            {/* Legenda Visual */}
+            <div className="flex flex-wrap items-center gap-2 text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 shadow-xs">
+              <span className="flex items-center gap-1 font-medium text-emerald-700">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Online
+              </span>
+              <span className="text-slate-300">•</span>
+              <span className="flex items-center gap-1 font-medium text-amber-700">
+                <span className="w-2 h-2 rounded-full bg-amber-500"></span> Desatualizado
+              </span>
+              <span className="text-slate-300">•</span>
+              <span className="flex items-center gap-1 font-medium text-rose-700">
+                <span className="w-2 h-2 rounded-full bg-rose-500"></span> Offline
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[850px]">
+            <thead>
+              <tr className="bg-slate-50/75 border-b border-slate-200 text-slate-600 uppercase text-[11px] tracking-wider">
+                <ResizableSortableTh columnId="cliente" label="Cliente / Empresa" currentSortKey={sortKey} currentSortDirection={sortDirection} onSort={handleSort} width={columnWidths.cliente} onResize={handleResizeColumn} />
+                <ResizableSortableTh columnId="token" label="Token do Hub" currentSortKey={sortKey} currentSortDirection={sortDirection} onSort={handleSort} width={columnWidths.token} onResize={handleResizeColumn} />
+                <ResizableSortableTh columnId="contraSenha" label="Contra-Senha (Offline)" currentSortKey={sortKey} currentSortDirection={sortDirection} onSort={handleSort} width={columnWidths.contraSenha} onResize={handleResizeColumn} />
+                <ResizableSortableTh columnId="ultimaSync" label="Última Conexão" currentSortKey={sortKey} currentSortDirection={sortDirection} onSort={handleSort} width={columnWidths.ultimaSync} onResize={handleResizeColumn} />
+                <ResizableSortableTh columnId="status" label="Status do Hub" currentSortKey={sortKey} currentSortDirection={sortDirection} onSort={handleSort} width={columnWidths.status} onResize={handleResizeColumn} />
+                <ResizableSortableTh columnId="versao" label="Versão Hub" currentSortKey={sortKey} currentSortDirection={sortDirection} onSort={handleSort} width={columnWidths.versao} onResize={handleResizeColumn} />
+                <th className="py-3 px-4 font-semibold text-center text-[11px]" style={{ width: columnWidths.acao }}>Ações & Comandos</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-xs">
+              {hubsOrdenados.map((hub: any) => {
+                const config = Array.isArray(hub.configuracoes_hub) ? hub.configuracoes_hub[0] : hub.configuracoes_hub
+                const lastSync = config?.ultima_sincronizacao
+                const offlineSecret = config?.offline_secret || 'Não gerada'
+                const versaoHub = config?.versao_hub_instalada || (lastSync ? '2.8.0' : null)
+                const comandoRemoto = config?.comando_remoto
+                const isAtualizado = versaoHub === VERSAO_MAIS_RECENTE
+                const isPendenteAtualizacao = comandoRemoto === 'atualizar_hub'
+
+                let statusElement: React.ReactNode
+
+                if (!lastSync) {
+                  statusElement = (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500">
+                      Não instalado
+                    </span>
+                  )
+                } else {
+                  const diff = now - new Date(lastSync).getTime()
+                  if (diff <= INTERVALO_MS) {
+                    const restanteMs = Math.max(0, INTERVALO_MS - diff)
+                    const min = Math.floor(restanteMs / 60000)
+                    const sec = Math.floor((restanteMs % 60000) / 1000)
+                    const mmss = `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`
+                    statusElement = (
+                      <div className="flex flex-col gap-0.5">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-700 w-fit">
+                          <span className="w-2 h-2 rounded-full bg-green-500 mr-1.5 animate-pulse"></span>
+                          Online
+                        </span>
+                        <span className="text-[11px] font-mono text-slate-500 flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-slate-400" />
+                          Próximo pulso: <strong className="text-emerald-600">{mmss}</strong>
+                        </span>
+                      </div>
+                    )
+                  } else if (diff <= (INTERVALO_MS + TOLERANCIA_MS)) {
+                    const atrasoSec = Math.floor((diff - INTERVALO_MS) / 1000)
+                    statusElement = (
+                      <div className="flex flex-col gap-0.5">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 w-fit">
+                          <span className="w-2 h-2 rounded-full bg-amber-500 mr-1.5 animate-ping"></span>
+                          Aguardando Sinal
+                        </span>
+                        <span className="text-[10px] text-amber-700">
+                          Tolerância (+{atrasoSec}s)
+                        </span>
+                      </div>
+                    )
+                  } else {
+                    const diffMin = Math.floor(diff / 60000)
+                    const decorrido = diffMin < 60 ? `${diffMin} min` : diffMin < 1440 ? `${Math.floor(diffMin / 60)} h` : `${Math.floor(diffMin / 1440)} dias`
+                    statusElement = (
+                      <div className="flex flex-col gap-0.5">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-rose-50 text-rose-700 w-fit">
+                          <span className="w-2 h-2 rounded-full bg-rose-500 mr-1.5"></span>
+                          Offline
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          Último sinal há {decorrido}
+                        </span>
+                      </div>
+                    )
+                  }
+                }
+
+                return (
+                  <tr 
+                    key={hub.id} 
+                    className={`hover:bg-slate-50/80 transition ${selectedCliente === hub.id ? 'bg-indigo-50/50' : ''}`}
+                  >
+                    {/* Cliente */}
+                    <td className="py-3 px-4">
+                      <span className="font-bold text-slate-800 block text-xs truncate max-w-[220px]" title={hub.razao_social}>
+                        {hub.razao_social || hub.nome_fantasia}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-mono block">
+                        {hub.cnpj}
+                      </span>
+                    </td>
+
+                    {/* Token do Hub */}
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-1.5">
+                        <code className="text-[11px] font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200 max-w-[95px] truncate" title={hub.hub_token}>
+                          {hub.hub_token ? `${hub.hub_token.substring(0, 8)}...` : 'Sem Token'}
+                        </code>
+                        {hub.hub_token && (
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(hub.hub_token, 'Token do Hub')}
+                            className="p-1 text-slate-400 hover:text-indigo-600 rounded hover:bg-slate-100 transition cursor-pointer"
+                            title="Copiar Token do Hub"
+                          >
+                            <Copy size={13} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Contra-Senha Offline */}
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-1.5">
+                        <code className="text-[11px] font-mono font-bold bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200 max-w-[110px] truncate" title={offlineSecret}>
+                          {offlineSecret}
+                        </code>
+                        {offlineSecret !== 'Não gerada' && (
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(offlineSecret, 'Contra-Senha Offline')}
+                            className="p-1 text-slate-400 hover:text-indigo-600 rounded hover:bg-slate-100 transition cursor-pointer"
+                            title="Copiar Contra-Senha Offline"
+                          >
+                            <Copy size={13} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Última Conexão */}
+                    <td className="py-3 px-4 text-slate-600">
+                      {lastSync ? (
+                        <div>
+                          <span className="font-semibold block">{new Date(lastSync).toLocaleTimeString('pt-BR')}</span>
+                          <span className="text-[10px] text-slate-400">{new Date(lastSync).toLocaleDateString('pt-BR')}</span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 italic">Nunca</span>
+                      )}
+                    </td>
+
+                    {/* Status */}
+                    <td className="py-3 px-4">
+                      {statusElement}
+                    </td>
+
+                    {/* Versão Hub */}
+                    <td className="py-3 px-4">
+                      {isPendenteAtualizacao ? (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 animate-pulse border border-blue-200 w-fit" title="Atualização solicitada. O Hub aplicará na próxima conexão.">
+                            <ArrowUpCircle className="w-3.5 h-3.5 mr-1 text-blue-600" />
+                            Atualização enviada ⏳
+                          </span>
+                        </div>
+                      ) : versaoHub ? (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${
+                          isAtualizado 
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>
+                          {isAtualizado ? (
+                            <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-500" />
+                          ) : (
+                            <AlertTriangle className="w-3.5 h-3.5 mr-1 text-amber-500" />
+                          )}
+                          v{versaoHub} {isAtualizado ? '(Atual)' : '(Desatualizado)'}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs text-slate-400 bg-slate-100">
+                          Não instalado
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Ações & Comandos */}
+                    <td className="py-3 px-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                        {/* Botão Configurar */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedCliente(hub.id)
+                            setTimeout(() => {
+                              document.getElementById('painel-configuracao')?.scrollIntoView({ behavior: 'smooth' })
+                            }, 100)
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 font-bold text-[11px] transition flex items-center gap-1 cursor-pointer"
+                          title="Carregar formulário de configuração deste cliente"
+                        >
+                          <SlidersHorizontal size={12} />
+                          Configurar
+                        </button>
+
+                        {/* Botão Atualizar Hub */}
+                        {!isAtualizado && lastSync && (
+                          <button
+                            type="button"
+                            onClick={() => handleDispararComando(hub.id, isPendenteAtualizacao ? 'cancelar' : 'atualizar_hub')}
+                            disabled={loadingComandoId === hub.id}
+                            title={isPendenteAtualizacao ? 'Cancelar ordem de atualização pendente' : 'Enviar comando remoto para o Hub atualizar sozinho para a v2.8.3'}
+                            className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition flex items-center gap-1 cursor-pointer ${
+                              isPendenteAtualizacao
+                                ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'
+                                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                            }`}
+                          >
+                            <ArrowUpCircle size={12} />
+                            {loadingComandoId === hub.id ? '...' : isPendenteAtualizacao ? 'Cancelar' : 'Atualizar Hub'}
+                          </button>
+                        )}
+
+                        {/* Botão Reconciliar Gaps */}
+                        <button
+                          type="button"
+                          onClick={() => handleDispararComando(hub.id, 'reconciliar_gaps')}
+                          disabled={loadingComandoId === hub.id}
+                          className="px-2 py-1 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 font-semibold text-[11px] transition cursor-pointer"
+                          title="Enviar comando remoto para forçar varredura e reconciliação de XMLs no PDV"
+                        >
+                          Reconciliar Gaps
+                        </button>
+                      </div>
+
+                      {comandoRemoto && (
+                        <span className="text-[10px] text-amber-600 font-medium block mt-1">
+                          Comando ({comandoRemoto}) pendente...
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+
+              {hubsFiltrados.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-slate-500">
+                    Nenhum cliente ou Hub encontrado{termoBuscaTabela ? ` para a busca "${termoBuscaTabela}"` : ''}.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   )
 }
