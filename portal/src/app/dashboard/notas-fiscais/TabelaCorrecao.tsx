@@ -84,6 +84,9 @@ export default function TabelaCorrecao() {
   const [processandoLote, setProcessandoLote] = useState(false)
   const [salvandoManual, setSalvandoManual] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [itensObsoletos, setItensObsoletos] = useState<any[]>([])
+  const [modalSaneamentoOpen, setModalSaneamentoOpen] = useState(false)
+  const [saneando, setSaneando] = useState(false)
 
   const [ultimaSincronizacaoHub, setUltimaSincronizacaoHub] = useState<string | null>(null)
 
@@ -165,7 +168,38 @@ export default function TabelaCorrecao() {
       })
       .map((n: any) => ({ ...n, _tabela: 'nfe_entradas', _tipo: 'NF-e de Entrada' }))
 
-    setNotas([...pendentesNfce, ...pendentesNfe, ...pendentesEntradas])
+    const todasPendentes = [...pendentesNfce, ...pendentesNfe, ...pendentesEntradas]
+
+    // Diagnóstico inteligente e 100% seguro de tentativas rejeitadas já regularizadas na nuvem
+    try {
+      const diagRes = await fetch('/api/notas-fiscais/sanear-quarentena', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cliente_id: targetClienteId,
+          acao: 'diagnosticar'
+        })
+      })
+      if (diagRes.ok) {
+        const diagData = await diagRes.json()
+        if (diagData.success && Array.isArray(diagData.itens)) {
+          setItensObsoletos(diagData.itens)
+          const mapaSubstitutas = new Map(diagData.itens.map((it: any) => [it.id, it.nota_oficial]))
+          const pendentesComSubstituta = todasPendentes.map(n => ({
+            ...n,
+            nota_oficial_substituta: mapaSubstitutas.get(n.id) || null
+          }))
+          setNotas(pendentesComSubstituta)
+          setLoading(false)
+          return
+        }
+      }
+    } catch (errDiag) {
+      console.warn('Falha no diagnóstico automático de quarentena:', errDiag)
+    }
+
+    setItensObsoletos([])
+    setNotas(todasPendentes)
     setLoading(false)
   }
 
@@ -381,6 +415,38 @@ export default function TabelaCorrecao() {
       toast.error(msg, { id: toastId })
     }
     loadNotas()
+  }
+
+  // Ação 2.5: Executar Saneamento Seguro de Tentativas Obsoletas
+  const handleExecutarSaneamento = async (ids?: string[]) => {
+    const targetClienteId = selectedCliente || (clientes?.length > 0 ? clientes[0].id : null)
+    if (!targetClienteId) return
+
+    setSaneando(true)
+    const toastId = toast.loading('Saneando arquivos rejeitados obsoletos...')
+    try {
+      const res = await fetch('/api/notas-fiscais/sanear-quarentena', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cliente_id: targetClienteId,
+          acao: 'executar',
+          ids_para_excluir: ids
+        })
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Falha ao executar saneamento')
+      }
+
+      toast.success(data.message || `${data.total_removidas} tentativa(s) obsoleta(s) removida(s) com sucesso!`, { id: toastId })
+      setModalSaneamentoOpen(false)
+      loadNotas()
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao sanear notas', { id: toastId })
+    } finally {
+      setSaneando(false)
+    }
   }
 
   // Ação 3: Salvar Correção Manual
@@ -635,15 +701,59 @@ export default function TabelaCorrecao() {
           </p>
         </div>
 
-        <button 
-          onClick={loadNotas} 
-          disabled={loading}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition disabled:opacity-50 self-start sm:self-auto"
-        >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> 
-          Atualizar Dados
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          {itensObsoletos.length > 0 && (
+            <button
+              onClick={() => setModalSaneamentoOpen(true)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-sm cursor-pointer animate-pulse"
+              title="Existem arquivos rejeitados cujas notas oficiais já foram autorizadas no Portal"
+            >
+              <Sparkles size={14} />
+              Sanear Tentativas Regularizadas ({itensObsoletos.length})
+            </button>
+          )}
+
+          <button 
+            onClick={loadNotas} 
+            disabled={loading}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition disabled:opacity-50 cursor-pointer"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> 
+            Atualizar Dados
+          </button>
+        </div>
       </div>
+
+      {/* BANNER DE AUTO-SANEAMENTO SEGURO */}
+      {itensObsoletos.length > 0 && (
+        <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm animate-in fade-in duration-200">
+          <div className="flex items-start gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
+              <CheckCircle2 size={22} />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="text-sm font-bold text-emerald-950">
+                  {itensObsoletos.length} Arquivo(s) Rejeitado(s) já Regularizado(s) no Portal
+                </h4>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-200 text-emerald-900 border border-emerald-300">
+                  🛡️ Risco Zero • Nota Oficial Preservada
+                </span>
+              </div>
+              <p className="text-xs text-emerald-800 mt-1 leading-relaxed">
+                O sistema verificou e confirmou que a tentativa rejeitada da nota <strong>{itensObsoletos.map(i => `Nº ${i.numero}`).join(', ')}</strong> (erro de código numérico ou sem protocolo) <strong>já possui seu XML oficial correspondente 100% autorizado pela SEFAZ</strong> arquivado no Portal. Você pode limpar esta tentativa obsoleta com total segurança fiscal.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setModalSaneamentoOpen(true)}
+            className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition shadow-md shrink-0 cursor-pointer whitespace-nowrap"
+          >
+            <Trash2 size={14} />
+            Revisar e Limpar ({itensObsoletos.length})
+          </button>
+        </div>
+      )}
 
       {/* PAINEL DE FILTROS AVANÇADOS: MÊS, DATA, NÚMERO E BUSCA */}
       <div className="bg-slate-50/90 p-3.5 rounded-2xl border border-slate-200 space-y-3">
@@ -899,20 +1009,46 @@ export default function TabelaCorrecao() {
                             Status SEFAZ: {n.cstat} {n.motivo_sefaz ? `(${n.motivo_sefaz})` : ''}
                           </span>
                         )}
+
+                        {/* Indicador de Nota Oficial Já Autorizada no Portal */}
+                        {n.nota_oficial_substituta && (
+                          <div className="mt-1 p-2 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-950 text-[11px] leading-tight shadow-2xs">
+                            <div className="font-bold flex items-center gap-1 text-emerald-800">
+                              <CheckCircle2 size={13} className="shrink-0 text-emerald-600" />
+                              Nota Oficial #{n.numero} Já Autorizada no Portal!
+                            </div>
+                            <div className="text-[10px] text-emerald-700 font-mono mt-0.5">
+                              Protocolo: {n.nota_oficial_substituta.protocolo} • R$ {Number(n.nota_oficial_substituta.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </td>
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center gap-2">
-                        {/* Botão Consultar SEFAZ */}
-                        <button
-                          onClick={() => handleCorrigirSefaz(n)}
-                          disabled={isCorrigindo}
-                          className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold border border-blue-200 transition flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
-                          title="Consulta a situação desta chave na SEFAZ e anexa o protocolo/assinatura automaticamente"
-                        >
-                          <Sparkles size={14} className={isCorrigindo ? 'animate-spin' : ''} />
-                          {isCorrigindo ? 'Consultando...' : 'Consultar SEFAZ'}
-                        </button>
+                        {/* Se a nota já foi substituída pela oficial autorizada, botão direto de descarte seguro */}
+                        {n.nota_oficial_substituta ? (
+                          <button
+                            onClick={() => handleExecutarSaneamento([n.id])}
+                            disabled={saneando}
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
+                            title="A nota oficial já está no portal. Descartar este arquivo rejeitado com segurança total."
+                          >
+                            <Trash2 size={13} />
+                            Descartar Lixo
+                          </button>
+                        ) : (
+                          /* Botão Consultar SEFAZ */
+                          <button
+                            onClick={() => handleCorrigirSefaz(n)}
+                            disabled={isCorrigindo}
+                            className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold border border-blue-200 transition flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
+                            title="Consulta a situação desta chave na SEFAZ e anexa o protocolo/assinatura automaticamente"
+                          >
+                            <Sparkles size={14} className={isCorrigindo ? 'animate-spin' : ''} />
+                            {isCorrigindo ? 'Consultando...' : 'Consultar SEFAZ'}
+                          </button>
+                        )}
 
                         {/* Botão Correção Manual */}
                         <button
@@ -1124,6 +1260,103 @@ export default function TabelaCorrecao() {
               >
                 {deleting ? 'Excluindo...' : 'Sim, Excluir'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CENTRALIZADO: Saneamento Seguro de Tentativas Obsoletas */}
+      {modalSaneamentoOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-6 border border-slate-100 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
+            <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-100">
+              <div className="w-11 h-11 bg-emerald-100 text-emerald-700 rounded-2xl flex items-center justify-center shrink-0">
+                <CheckCircle2 size={24} />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                  Saneamento Seguro de Tentativas Rejeitadas
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    Risco Zero
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Os arquivos abaixo são tentativas rejeitadas cujas notas fiscais oficiais <strong>já estão 100% autorizadas</strong> pela SEFAZ no Portal.
+                </p>
+              </div>
+              <button
+                onClick={() => setModalSaneamentoOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto space-y-3 flex-1 pr-1">
+              {itensObsoletos.map(item => (
+                <div key={item.id} className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-900 text-sm">
+                      {item.tipo_nome} • Nº {item.numero} (Série {item.serie})
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                      Rejeição SEFAZ {item.cstat}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                    {/* Tentativa Rejeitada */}
+                    <div className="p-2.5 rounded-xl bg-red-50/70 border border-red-200 text-red-950">
+                      <div className="font-bold text-red-700 flex items-center gap-1 text-[11px] uppercase tracking-wide">
+                        <Trash2 size={12} /> Tentativa Rejeitada (Será Limpa)
+                      </div>
+                      <div className="font-mono text-[11px] text-slate-600 mt-1 break-all">
+                        Chave: {item.chave_rejeitada}
+                      </div>
+                      <div className="text-[11px] text-red-600 mt-1">
+                        Motivo: {item.motivo_sefaz}
+                      </div>
+                    </div>
+
+                    {/* Nota Oficial Preservada */}
+                    <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950">
+                      <div className="font-bold text-emerald-700 flex items-center gap-1 text-[11px] uppercase tracking-wide">
+                        <CheckCircle2 size={12} /> Nota Oficial (Preservada no Portal)
+                      </div>
+                      <div className="font-mono text-[11px] text-slate-600 mt-1 break-all">
+                        Chave: {item.nota_oficial.chave}
+                      </div>
+                      <div className="text-[11px] text-emerald-800 font-semibold mt-1">
+                        Protocolo: {item.nota_oficial.protocolo} • R$ {Number(item.nota_oficial.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-4 mt-3 flex items-center justify-between border-t border-slate-100">
+              <span className="text-xs text-slate-500 font-medium">
+                {itensObsoletos.length} arquivo(s) serão descartados com segurança.
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setModalSaneamentoOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-semibold text-xs hover:bg-slate-50 transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={saneando}
+                  onClick={() => handleExecutarSaneamento()}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs transition shadow-sm flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 size={14} />
+                  {saneando ? 'Saneando...' : `Confirmar e Limpar ${itensObsoletos.length} Tentativa(s)`}
+                </button>
+              </div>
             </div>
           </div>
         </div>

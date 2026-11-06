@@ -554,6 +554,33 @@ export async function POST(request: Request) {
       }
     }
 
+    // Se a nota foi autorizada pela SEFAZ, limpa qualquer tentativa anterior rejeitada (ex: erro 562) do mesmo número e série
+    if (tipoPasta === 'vendas' && numInt > 0 && isAutorizada) {
+      try {
+        const serieStr = serie || '1'
+        const { data: obsoletos } = await supabaseAdmin
+          .from(tabela)
+          .select('id, storage_path')
+          .eq('cliente_id', cliente.id)
+          .eq('numero', String(numInt))
+          .eq('serie', serieStr)
+          .neq('chave', chave)
+          .not('cstat', 'eq', '100')
+
+        if (obsoletos && obsoletos.length > 0) {
+          const idsDel = obsoletos.map(o => o.id)
+          const pathsDel = obsoletos.map(o => o.storage_path).filter(Boolean) as string[]
+          if (pathsDel.length > 0) {
+            await supabaseAdmin.storage.from('xmls').remove(pathsDel).catch(() => {})
+          }
+          await supabaseAdmin.from(tabela).delete().in('id', idsDel)
+          console.log(`[Upload Auto-Saneamento] Limpas ${obsoletos.length} tentativas rejeitadas obsoletas para a nota ${numInt} da empresa ${cliente.razao_social}`)
+        }
+      } catch (errSanear: any) {
+        console.warn('Erro ao sanear tentativas obsoletas pós-upload:', errSanear?.message)
+      }
+    }
+
     return NextResponse.json({ 
       success: true, 
       tabela, 
