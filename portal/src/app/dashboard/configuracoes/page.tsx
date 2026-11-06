@@ -3,7 +3,12 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
-import { RefreshCw, Download, Clock, ArrowUpCircle, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { 
+  RefreshCw, Download, Clock, ArrowUpCircle, CheckCircle2, AlertTriangle,
+  ArrowUpRight, ArrowDownLeft, ShieldAlert, Layers, Calendar, DollarSign,
+  Phone, SlidersHorizontal, Lock, FolderArchive, Sparkles, Inbox, ShoppingBag,
+  Check, FileText, CheckSquare, MessageSquare
+} from 'lucide-react'
 import { APP_VERSION } from '@/utils/version'
 import { useTableFeatures } from '@/hooks/useTableFeatures'
 import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
@@ -71,16 +76,30 @@ export default function ConfiguracoesPage() {
   })
 
   const [formData, setFormData] = useState({
+    // Card 1: Monitoramento de Vendas (Saídas) & Ponto de Partida
+    pastas_vendas: '',
+    data_inicio_monitoramento: '',
+    numero_inicial_nfe: 1,
+    numero_inicial_nfce: 1,
+    numero_inicial_nfse: 1,
+    numero_inicial_cte: 1,
+    numero_inicial_mdfe: 1,
+
+    // Card 2: Monitoramento de Compras (Entradas) & Ponto de Partida
+    pastas_compras: '',
+    data_inicio_monitoramento_entradas: '',
+    numero_inicial_compras_nfe: 1,
+
+    // Card 3: Executáveis Monitorados & Cobrança
+    exes_monitorados: '',
     dia_vencimento: 10,
     valor_mensalidade: 150.00,
+    whatsapp_cobranca: '',
     dias_aviso_previo: 7,
     intervalo_aviso_horas: 4,
     dias_tolerancia_bloqueio: 3,
     mensagem_aviso_previo: 'AVISO DE VENCIMENTO: Sua mensalidade vence em breve. Regularize via Pix no Hub para evitar bloqueio.',
     mensagem_bloqueio: 'SISTEMA BLOQUEADO. Por favor, regularize seu pagamento.',
-    pastas_vendas: '',
-    pastas_compras: '',
-    exes_monitorados: '',
     bloquear_recepcao_xml_se_inadimplente: false
   })
 
@@ -126,32 +145,43 @@ export default function ConfiguracoesPage() {
     if (!selectedCliente) return
     async function loadConfig() {
       setLoading(true)
-      const { data } = await supabase.from('configuracoes_hub').select('*').eq('cliente_id', selectedCliente).single()
+      const [hubRes, cliRes] = await Promise.all([
+        supabase.from('configuracoes_hub').select('*').eq('cliente_id', selectedCliente).maybeSingle(),
+        supabase.from('clientes').select('*').eq('id', selectedCliente).maybeSingle()
+      ])
+
+      const hub = hubRes.data
+      const cli = cliRes.data
       
-      if (data) {
-        setFormData({
-          dia_vencimento: data.dia_vencimento || 10,
-          valor_mensalidade: data.valor_mensalidade || 150.00,
-          dias_aviso_previo: data.dias_aviso_previo || 7,
-          intervalo_aviso_horas: data.intervalo_aviso_horas || 4,
-          dias_tolerancia_bloqueio: data.dias_tolerancia_bloqueio || 3,
-          mensagem_aviso_previo: data.mensagem_aviso_previo || 'AVISO DE VENCIMENTO: Sua mensalidade vence em breve. Regularize via Pix no Hub para evitar bloqueio.',
-          mensagem_bloqueio: data.mensagem_bloqueio || '',
-          pastas_vendas: Array.isArray(data.pastas_vendas) ? data.pastas_vendas.map((p: string) => p.replace(/\\\\+/g, '\\')).join('\n') : '',
-          pastas_compras: Array.isArray(data.pastas_compras) ? data.pastas_compras.map((p: string) => p.replace(/\\\\+/g, '\\')).join('\n') : '',
-          exes_monitorados: Array.isArray(data.exes_monitorados) ? data.exes_monitorados.join('\n') : '',
-          bloquear_recepcao_xml_se_inadimplente: Boolean(data.bloquear_recepcao_xml_se_inadimplente)
-        })
-      } else {
-        // Reseta se nao tiver
-        setFormData({
-          dia_vencimento: 10, valor_mensalidade: 150.00, dias_aviso_previo: 7, intervalo_aviso_horas: 4, dias_tolerancia_bloqueio: 3,
-          mensagem_aviso_previo: 'AVISO DE VENCIMENTO: Sua mensalidade vence em breve. Regularize via Pix no Hub para evitar bloqueio.',
-          mensagem_bloqueio: 'SISTEMA BLOQUEADO. Por favor, regularize seu pagamento.',
-          pastas_vendas: 'C:\\Sistemas\\Vendas\\XML', pastas_compras: '', exes_monitorados: 'vendas.exe',
-          bloquear_recepcao_xml_se_inadimplente: false
-        })
-      }
+      setFormData({
+        // Vendas
+        pastas_vendas: Array.isArray(hub?.pastas_vendas) ? hub.pastas_vendas.map((p: string) => p.replace(/\\\\+/g, '\\')).join('\n') : '',
+        data_inicio_monitoramento: cli?.data_inicio_monitoramento ? cli.data_inicio_monitoramento.substring(0, 7) : '',
+        numero_inicial_nfe: cli?.numero_inicial_nfe || 1,
+        numero_inicial_nfce: cli?.numero_inicial_nfce || 1,
+        numero_inicial_nfse: cli?.numero_inicial_nfse || 1,
+        numero_inicial_cte: cli?.numero_inicial_cte || 1,
+        numero_inicial_mdfe: cli?.numero_inicial_mdfe || 1,
+
+        // Compras
+        pastas_compras: Array.isArray(hub?.pastas_compras) ? hub.pastas_compras.map((p: string) => p.replace(/\\\\+/g, '\\')).join('\n') : '',
+        data_inicio_monitoramento_entradas: cli?.data_inicio_monitoramento_entradas 
+          ? cli.data_inicio_monitoramento_entradas.substring(0, 7) 
+          : (hub?.data_inicio_monitoramento_entradas ? hub.data_inicio_monitoramento_entradas.substring(0, 7) : ''),
+        numero_inicial_compras_nfe: cli?.numero_inicial_compras_nfe || hub?.numero_inicial_compras_nfe || 1,
+
+        // Cobrança & Bloqueio
+        dia_vencimento: cli?.dia_vencimento || hub?.dia_vencimento || 10,
+        valor_mensalidade: cli?.valor_mensalidade || hub?.valor_mensalidade || 150.00,
+        whatsapp_cobranca: cli?.whatsapp_cobranca || cli?.whatsapp || '',
+        exes_monitorados: Array.isArray(hub?.exes_monitorados) ? hub.exes_monitorados.join('\n') : '',
+        dias_aviso_previo: hub?.dias_aviso_previo || 7,
+        intervalo_aviso_horas: hub?.intervalo_aviso_horas || 4,
+        dias_tolerancia_bloqueio: cli?.dias_carencia ?? (hub?.dias_tolerancia_bloqueio ?? 3),
+        mensagem_aviso_previo: hub?.mensagem_aviso_previo || 'AVISO DE VENCIMENTO: Sua mensalidade vence em breve. Regularize via Pix no Hub para evitar bloqueio.',
+        mensagem_bloqueio: hub?.mensagem_bloqueio || 'SISTEMA BLOQUEADO. Por favor, regularize seu pagamento.',
+        bloquear_recepcao_xml_se_inadimplente: Boolean(cli?.bloquear_recepcao_xml_se_inadimplente ?? hub?.bloquear_recepcao_xml_se_inadimplente)
+      })
       setLoading(false)
     }
     loadConfig()
@@ -163,8 +193,14 @@ export default function ConfiguracoesPage() {
     setSaving(true)
     setMessage('')
 
-    const payload = {
+    const dataInicioVendas = formData.data_inicio_monitoramento ? `${formData.data_inicio_monitoramento}-01` : null
+    const dataInicioCompras = formData.data_inicio_monitoramento_entradas ? `${formData.data_inicio_monitoramento_entradas}-01` : null
+
+    const hubPayload = {
       cliente_id: selectedCliente,
+      pastas_vendas: formData.pastas_vendas.split('\n').filter(Boolean).map(s => s.trim().replace(/\\\\+/g, '\\')),
+      pastas_compras: formData.pastas_compras.split('\n').filter(Boolean).map(s => s.trim().replace(/\\\\+/g, '\\')),
+      exes_monitorados: formData.exes_monitorados.split('\n').filter(Boolean).map(s => s.trim()),
       dia_vencimento: formData.dia_vencimento,
       valor_mensalidade: formData.valor_mensalidade,
       dias_aviso_previo: formData.dias_aviso_previo,
@@ -172,22 +208,43 @@ export default function ConfiguracoesPage() {
       dias_tolerancia_bloqueio: formData.dias_tolerancia_bloqueio,
       mensagem_aviso_previo: formData.mensagem_aviso_previo,
       mensagem_bloqueio: formData.mensagem_bloqueio,
-      pastas_vendas: formData.pastas_vendas.split('\n').filter(Boolean).map(s => s.trim().replace(/\\\\+/g, '\\')),
-      pastas_compras: formData.pastas_compras.split('\n').filter(Boolean).map(s => s.trim().replace(/\\\\+/g, '\\')),
-      exes_monitorados: formData.exes_monitorados.split('\n').filter(Boolean).map(s => s.trim()),
       bloquear_recepcao_xml_se_inadimplente: Boolean(formData.bloquear_recepcao_xml_se_inadimplente),
+      data_inicio_monitoramento_entradas: dataInicioCompras,
+      numero_inicial_compras_nfe: formData.numero_inicial_compras_nfe || 1,
       updated_at: new Date().toISOString()
     }
 
-    const { error } = await supabase.from('configuracoes_hub').upsert(payload, { onConflict: 'cliente_id' })
+    const cliPayload = {
+      dia_vencimento: formData.dia_vencimento,
+      valor_mensalidade: formData.valor_mensalidade,
+      whatsapp_cobranca: formData.whatsapp_cobranca,
+      bloquear_recepcao_xml_se_inadimplente: Boolean(formData.bloquear_recepcao_xml_se_inadimplente),
+      data_inicio_monitoramento: dataInicioVendas,
+      numero_inicial_nfe: Math.max(1, parseInt(String(formData.numero_inicial_nfe || 1), 10)),
+      numero_inicial_nfce: Math.max(1, parseInt(String(formData.numero_inicial_nfce || 1), 10)),
+      numero_inicial_nfse: Math.max(1, parseInt(String(formData.numero_inicial_nfse || 1), 10)),
+      numero_inicial_cte: Math.max(1, parseInt(String(formData.numero_inicial_cte || 1), 10)),
+      numero_inicial_mdfe: Math.max(1, parseInt(String(formData.numero_inicial_mdfe || 1), 10)),
+      data_inicio_monitoramento_entradas: dataInicioCompras,
+      numero_inicial_compras_nfe: Math.max(1, parseInt(String(formData.numero_inicial_compras_nfe || 1), 10)),
+      dias_carencia: formData.dias_tolerancia_bloqueio
+    }
+
+    const [hubRes, cliRes] = await Promise.all([
+      supabase.from('configuracoes_hub').upsert(hubPayload, { onConflict: 'cliente_id' }),
+      supabase.from('clientes').update(cliPayload).eq('id', selectedCliente)
+    ])
     
-    if (error) {
-      toast.error('Erro: ' + error.message)
+    if (hubRes.error || cliRes.error) {
+      toast.error('Erro ao salvar: ' + (hubRes.error?.message || cliRes.error?.message))
     } else {
-      toast.success('Configurações salvas com sucesso!')
+      toast.success('Regras do Hub, Pontos de Partida e Cobrança salvos com sucesso!')
+      await loadClientes()
     }
     setSaving(false)
   }
+
+  const clienteSelecionadoObj = clientes.find(c => c.id === selectedCliente)
 
   return (
     <div className="w-full space-y-6 animate-in fade-in duration-300">
@@ -195,30 +252,31 @@ export default function ConfiguracoesPage() {
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-3xl font-bold text-slate-900">Configurações do Hub</h1>
-            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
-              {APP_VERSION}
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200">
+              v{APP_VERSION}
             </span>
           </div>
-          <p className="text-slate-500 mt-1">Defina as regras de bloqueio e monitoramento por cliente.</p>
+          <p className="text-slate-500 mt-1">Gerencie regras de monitoramento, pontos de partida fiscais de entrada/saída e bloqueio financeiro.</p>
         </div>
         <div className="flex items-center gap-3">
-          <a href="/HubParatech.zip" download className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition flex items-center gap-2 shadow-sm">
-            <Download size={20} />
-            Baixar Hub {APP_VERSION} (.zip)
+          <a href="/HubParatech.zip" download className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-indigo-700 transition flex items-center gap-2 shadow-sm text-xs">
+            <Download size={16} />
+            Baixar Hub v{APP_VERSION} (.zip)
           </a>
-          <button onClick={() => loadClientes()} className="bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-2">
-            <RefreshCw size={20} />
+          <button onClick={() => loadClientes()} className="bg-slate-100 text-slate-700 px-4 py-2 rounded-xl font-semibold hover:bg-slate-200 transition flex items-center gap-2 text-xs">
+            <RefreshCw size={15} />
             Atualizar Tabela
           </button>
         </div>
       </header>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+      {/* Seletor de Cliente */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
         <ClienteAutocompleteInput
           clientes={clientes}
           selectedId={selectedCliente}
           onSelect={id => setSelectedCliente(id)}
-          label="Selecione o Cliente para Configurar"
+          label="Selecione a Empresa / Cliente para Configurar o Hub"
           placeholder="Digite a Razão Social, Nome Fantasia ou CNPJ..."
         />
       </div>
@@ -226,55 +284,474 @@ export default function ConfiguracoesPage() {
       {selectedCliente && (
         <form onSubmit={handleSubmit} className="space-y-6">
           {loading ? (
-            <div className="p-4 text-slate-500">Carregando configurações...</div>
+            <div className="p-8 text-center text-slate-500 bg-white rounded-2xl border border-slate-200">
+              <RefreshCw size={24} className="animate-spin mx-auto text-indigo-600 mb-2" />
+              Carregando regras de monitoramento do cliente...
+            </div>
           ) : (
             <>
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="md:col-span-2">
-                  <h3 className="font-semibold text-lg text-slate-800 border-b pb-2">Regras Financeiras</h3>
+              {/* ===== CARD 1: MONITORAMENTO DE VENDAS (SAÍDAS) & PONTO DE PARTIDA FISCAL ===== */}
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="px-6 py-4 bg-gradient-to-r from-indigo-50/60 to-purple-50/40 border-b border-indigo-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-xs">
+                      <ArrowUpRight size={18} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                        1. Monitoramento de Vendas (Saídas) & Ponto de Partida
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        Diretórios locais e ponto de corte numérico das notas fiscais emitidas pelo PDV/ERP.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800">
+                      NF-e (55)
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
+                      NFC-e (65)
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-cyan-100 text-cyan-800">
+                      NFS-e
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-100 text-purple-800">
+                      CT-e
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-800">
+                      MDF-e
+                    </span>
+                  </div>
                 </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Dia do Vencimento</label>
-                  <input type="number" required min="1" max="31" className="w-full px-4 py-2 rounded-lg border border-slate-200"
-                    value={formData.dia_vencimento} onChange={e => setFormData({...formData, dia_vencimento: parseInt(e.target.value)})} />
+
+                <div className="p-6 space-y-5">
+                  {/* Pastas de Vendas */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <FolderArchive size={14} className="text-indigo-600" />
+                        Pastas de Vendas no PDV (XML)
+                      </label>
+                      <span className="text-[11px] text-slate-400">Um caminho por linha</span>
+                    </div>
+                    <textarea 
+                      rows={3} 
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-mono text-xs text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      placeholder="C:\PDV+\temp\DocumentosAutorizados&#10;C:\PDV+\temp\DocumentosAutorizados\NFCe&#10;C:\PDV+\temp\DocumentosAutorizados\NFe"
+                      value={formData.pastas_vendas} 
+                      onChange={e => setFormData({...formData, pastas_vendas: e.target.value})} 
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      O monitor do Hub Desktop sincroniza automaticamente qualquer XML autorizado gravado nestas pastas.
+                    </p>
+                  </div>
+
+                  {/* Card Réplica do Ponto de Partida Fiscal (Idêntico ao de Quebras de Sequência) */}
+                  <div className="bg-slate-900 border border-indigo-900/50 rounded-2xl p-5 text-white shadow-md">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-indigo-950 mb-4">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-indigo-500/20 text-indigo-400 rounded-lg">
+                          <Layers size={16} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold uppercase tracking-wider text-indigo-300">
+                              PONTO DE PARTIDA FISCAL & COMPETÊNCIA INICIAL
+                            </span>
+                            <span className="text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full border border-indigo-500/30">
+                              Contrato de Monitoramento
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            XMLs emitidos antes desta data ou números inferiores ao ponto de partida são ignorados e não geram falsos gaps.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <label className="text-[11px] font-semibold text-slate-300">Mês Início:</label>
+                        <input
+                          type="month"
+                          value={formData.data_inicio_monitoramento}
+                          onChange={e => setFormData({...formData, data_inicio_monitoramento: e.target.value})}
+                          className="bg-slate-800 text-xs font-bold text-white px-3 py-1.5 rounded-xl border border-indigo-700/60 focus:ring-2 focus:ring-indigo-400 outline-none cursor-pointer"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Pills Editáveis de Numeração Inicial de Vendas */}
+                    <div>
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2.5">
+                        Numeração Inicial Contratada (Ponto de Partida):
+                      </span>
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                        <div className="bg-slate-800/80 border border-slate-700/60 rounded-xl p-2.5">
+                          <span className="text-[10px] font-bold text-slate-400 block mb-1">NF-e (55)</span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-emerald-400 text-xs font-bold font-mono">#</span>
+                            <input
+                              type="number"
+                              min={1}
+                              value={formData.numero_inicial_nfe}
+                              onChange={e => setFormData({...formData, numero_inicial_nfe: parseInt(e.target.value) || 1})}
+                              className="w-full bg-transparent text-emerald-400 text-xs font-bold font-mono focus:outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="bg-slate-800/80 border border-slate-700/60 rounded-xl p-2.5">
+                          <span className="text-[10px] font-bold text-slate-400 block mb-1">NFC-e (65)</span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-emerald-400 text-xs font-bold font-mono">#</span>
+                            <input
+                              type="number"
+                              min={1}
+                              value={formData.numero_inicial_nfce}
+                              onChange={e => setFormData({...formData, numero_inicial_nfce: parseInt(e.target.value) || 1})}
+                              className="w-full bg-transparent text-emerald-400 text-xs font-bold font-mono focus:outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="bg-slate-800/80 border border-slate-700/60 rounded-xl p-2.5">
+                          <span className="text-[10px] font-bold text-slate-400 block mb-1">NFS-e</span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-indigo-400 text-xs font-bold font-mono">#</span>
+                            <input
+                              type="number"
+                              min={1}
+                              value={formData.numero_inicial_nfse}
+                              onChange={e => setFormData({...formData, numero_inicial_nfse: parseInt(e.target.value) || 1})}
+                              className="w-full bg-transparent text-indigo-400 text-xs font-bold font-mono focus:outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="bg-slate-800/80 border border-slate-700/60 rounded-xl p-2.5">
+                          <span className="text-[10px] font-bold text-slate-400 block mb-1">CT-e (57)</span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-purple-400 text-xs font-bold font-mono">#</span>
+                            <input
+                              type="number"
+                              min={1}
+                              value={formData.numero_inicial_cte}
+                              onChange={e => setFormData({...formData, numero_inicial_cte: parseInt(e.target.value) || 1})}
+                              className="w-full bg-transparent text-purple-400 text-xs font-bold font-mono focus:outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="bg-slate-800/80 border border-slate-700/60 rounded-xl p-2.5">
+                          <span className="text-[10px] font-bold text-slate-400 block mb-1">MDF-e (58)</span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-blue-400 text-xs font-bold font-mono">#</span>
+                            <input
+                              type="number"
+                              min={1}
+                              value={formData.numero_inicial_mdfe}
+                              onChange={e => setFormData({...formData, numero_inicial_mdfe: parseInt(e.target.value) || 1})}
+                              className="w-full bg-transparent text-blue-400 text-xs font-bold font-mono focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Valor da Mensalidade (R$)</label>
-                  <input type="number" required step="0.01" className="w-full px-4 py-2 rounded-lg border border-slate-200"
-                    value={formData.valor_mensalidade} onChange={e => setFormData({...formData, valor_mensalidade: parseFloat(e.target.value)})} />
+              </div>
+
+              {/* ===== CARD 2: MONITORAMENTO DE COMPRAS (ENTRADAS) & PONTO DE PARTIDA FISCAL ===== */}
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="px-6 py-4 bg-gradient-to-r from-blue-50/60 to-cyan-50/40 border-b border-blue-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-blue-600 text-white rounded-xl shadow-xs">
+                      <ArrowDownLeft size={18} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                        2. Monitoramento de Compras (Entradas) & Ponto de Partida
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        Diretórios de notas fiscais de compra recebidas de fornecedores e data inicial contratada.
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 self-start sm:self-auto">
+                    NF-e de Compra (Mod. 55) • Fornecedores
+                  </span>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Dias p/ Aviso Prévio</label>
-                  <input type="number" required min="1" max="30" className="w-full px-4 py-2 rounded-lg border border-slate-200"
-                    value={formData.dias_aviso_previo} onChange={e => setFormData({...formData, dias_aviso_previo: parseInt(e.target.value)})} />
-                  <span className="text-xs text-slate-500 mt-0.5 block">Exibe aviso ao abrir o app quando faltar X dias p/ vencer</span>
+
+                <div className="p-6 space-y-5">
+                  {/* Pastas de Compras */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <Inbox size={14} className="text-blue-600" />
+                        Pastas de Compras no Cliente (XML)
+                      </label>
+                      <span className="text-[11px] text-slate-400">Um caminho por linha</span>
+                    </div>
+                    <textarea 
+                      rows={3} 
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-mono text-xs text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      placeholder="C:\Sistema\Compras\XML&#10;C:\GDOOR Sistemas\GDOOR PRO\NFe\XML\Compras"
+                      value={formData.pastas_compras} 
+                      onChange={e => setFormData({...formData, pastas_compras: e.target.value})} 
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      O monitor do Hub varre estas pastas para capturar XMLs de aquisição para o fechamento mensal e conciliação com o DF-e.
+                    </p>
+                  </div>
+
+                  {/* Card Ponto de Partida Fiscal de Compras */}
+                  <div className="bg-slate-900 border border-blue-900/50 rounded-2xl p-5 text-white shadow-md">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-blue-950 mb-4">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-blue-500/20 text-blue-400 rounded-lg">
+                          <Calendar size={16} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold uppercase tracking-wider text-blue-300">
+                              PONTO DE PARTIDA FISCAL DE COMPRAS (ENTRADAS)
+                            </span>
+                            <span className="text-[10px] font-semibold bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/30">
+                              Aquisições de Fornecedores
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            XMLs de compras anteriores a este mês não são sincronizados para evitar carregar notas antigas de anos anteriores.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <label className="text-[11px] font-semibold text-slate-300">Mês Início Compras:</label>
+                        <input
+                          type="month"
+                          value={formData.data_inicio_monitoramento_entradas}
+                          onChange={e => setFormData({...formData, data_inicio_monitoramento_entradas: e.target.value})}
+                          className="bg-slate-800 text-xs font-bold text-white px-3 py-1.5 rounded-xl border border-blue-700/60 focus:ring-2 focus:ring-blue-400 outline-none cursor-pointer"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="bg-slate-800/80 border border-slate-700/60 rounded-xl p-3">
+                        <span className="text-[11px] font-bold text-slate-400 block mb-1">
+                          Primeiro Número de Compra / Ponto Inicial (NF-e Mod. 55):
+                        </span>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-blue-400 text-xs font-bold font-mono">#</span>
+                          <input
+                            type="number"
+                            min={1}
+                            value={formData.numero_inicial_compras_nfe}
+                            onChange={e => setFormData({...formData, numero_inicial_compras_nfe: parseInt(e.target.value) || 1})}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-blue-400 text-xs font-bold font-mono focus:outline-none"
+                            placeholder="Ex: 1"
+                          />
+                        </div>
+                        <span className="text-[10px] text-slate-400 block mt-1">
+                          Notas de compra com numeração igual ou superior nunca são descartadas.
+                        </span>
+                      </div>
+
+                      <div className="p-3 bg-blue-950/40 border border-blue-900/40 rounded-xl flex items-center gap-3">
+                        <Sparkles size={20} className="text-blue-400 shrink-0" />
+                        <p className="text-[11px] text-slate-300 leading-relaxed">
+                          Se o mês de início de compras for deixado em branco, o Hub utilizará a mesma data de início do contrato de vendas configurada no Card 1.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Intervalo p/ Reaviso na Tela (Horas)</label>
-                  <input type="number" required min="1" max="24" className="w-full px-4 py-2 rounded-lg border border-slate-200"
-                    value={formData.intervalo_aviso_horas} onChange={e => setFormData({...formData, intervalo_aviso_horas: parseInt(e.target.value)})} />
-                  <span className="text-xs text-slate-500 mt-0.5 block">Reapresenta na tela a cada X horas se o app continuar aberto</span>
+              </div>
+
+              {/* ===== CARD 3: ARQUIVOS .EXE MONITORADOS & REGRAS FINANCEIRAS DE BLOQUEIO ===== */}
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="px-6 py-4 bg-gradient-to-r from-rose-50/70 to-amber-50/50 border-b border-rose-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-rose-600 text-white rounded-xl shadow-xs">
+                      <ShieldAlert size={18} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                        3. Arquivos .exe Monitorados & Regras de Cobrança (Bloqueio)
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        Processos executáveis do ERP/PDV monitorados no Windows e condições de vencimento para bloqueio automático.
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 self-start sm:self-auto">
+                    Travamento por Inadimplência
+                  </span>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Dias p/ Bloqueio (Tolerância)</label>
-                  <input type="number" required min="0" max="60" className="w-full px-4 py-2 rounded-lg border border-slate-200"
-                    value={formData.dias_tolerancia_bloqueio} onChange={e => setFormData({...formData, dias_tolerancia_bloqueio: parseInt(e.target.value)})} />
-                  <span className="text-xs text-slate-500 mt-0.5 block">Dias de carência após o vencimento antes de fechar o ERP</span>
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Mensagem de Aviso Prévio na Tela</label>
-                  <textarea rows={2} className="w-full px-4 py-2 rounded-lg border border-slate-200"
-                    placeholder="AVISO DE VENCIMENTO: Sua mensalidade vence em breve. Regularize via Pix no Hub para evitar bloqueio."
-                    value={formData.mensagem_aviso_previo} onChange={e => setFormData({...formData, mensagem_aviso_previo: e.target.value})} />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Mensagem de Bloqueio na Tela</label>
-                  <textarea rows={2} className="w-full px-4 py-2 rounded-lg border border-slate-200"
-                    value={formData.mensagem_bloqueio} onChange={e => setFormData({...formData, mensagem_bloqueio: e.target.value})} />
-                </div>
-                <div className="md:col-span-2 pt-2 border-t border-slate-100">
-                  <div className="flex items-start gap-3 p-3.5 bg-rose-50 rounded-xl border border-rose-200">
+
+                <div className="p-6 space-y-6">
+                  {/* Tríade de Cobrança: Vencimento, Valor da Mensalidade e WhatsApp que recebe cobrança */}
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-1.5">
+                      <DollarSign size={15} className="text-emerald-600" />
+                      Dados Financeiros da Mensalidade & Destino da Cobrança
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {/* 1. Dia de Vencimento */}
+                      <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                        <label className="text-xs font-bold text-slate-700 block mb-1 flex items-center gap-1">
+                          <Calendar size={13} className="text-indigo-600" />
+                          Dia do Vencimento:
+                        </label>
+                        <div className="relative">
+                          <input 
+                            type="number" 
+                            required 
+                            min="1" 
+                            max="31" 
+                            className="w-full bg-white px-3 py-2 rounded-lg border border-slate-300 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                            value={formData.dia_vencimento} 
+                            onChange={e => setFormData({...formData, dia_vencimento: parseInt(e.target.value) || 10})} 
+                          />
+                          <span className="absolute right-3 top-2.5 text-[10px] font-bold text-slate-400 uppercase">
+                            todo dia
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-slate-500 mt-1 block">Dia do mês em que vence a fatura.</span>
+                      </div>
+
+                      {/* 2. Valor da Mensalidade */}
+                      <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                        <label className="text-xs font-bold text-slate-700 block mb-1 flex items-center gap-1">
+                          <DollarSign size={13} className="text-emerald-600" />
+                          Valor da Mensalidade (R$):
+                        </label>
+                        <input 
+                          type="number" 
+                          required 
+                          step="0.01" 
+                          className="w-full bg-white px-3 py-2 rounded-lg border border-slate-300 text-xs font-bold text-emerald-700 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                          value={formData.valor_mensalidade} 
+                          onChange={e => setFormData({...formData, valor_mensalidade: parseFloat(e.target.value) || 0})} 
+                        />
+                        <span className="text-[11px] text-slate-500 mt-1 block">Valor cobrado mensalmente do cliente.</span>
+                      </div>
+
+                      {/* 3. WhatsApp que Recebe a Cobrança */}
+                      <div className="p-3.5 bg-emerald-50/70 rounded-xl border border-emerald-200">
+                        <label className="text-xs font-bold text-emerald-950 block mb-1 flex items-center gap-1">
+                          <Phone size={13} className="text-emerald-600" />
+                          WhatsApp que Recebe a Cobrança:
+                        </label>
+                        <input 
+                          type="text" 
+                          placeholder="Ex: 37999998888"
+                          className="w-full bg-white px-3 py-2 rounded-lg border border-emerald-300 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none placeholder-slate-400"
+                          value={formData.whatsapp_cobranca} 
+                          onChange={e => setFormData({...formData, whatsapp_cobranca: e.target.value})} 
+                        />
+                        <span className="text-[11px] text-emerald-800 mt-1 block">
+                          Receberá alertas prévios, link PIX e avisos de vencimento.
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Textarea de Executáveis Monitorados */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <Lock size={14} className="text-rose-600" />
+                        Arquivos .exe Monitorados (Para Bloqueio por Inadimplência)
+                      </label>
+                      <span className="text-[11px] text-slate-400">Um processo por linha</span>
+                    </div>
+                    <textarea 
+                      rows={3} 
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-mono text-xs text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                      placeholder="pdv_mais.exe&#10;Paratech.exe&#10;vendas.exe&#10;gdoor.exe"
+                      value={formData.exes_monitorados} 
+                      onChange={e => setFormData({...formData, exes_monitorados: e.target.value})} 
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      O Hub Desktop monitora esses executáveis no computador do cliente e aplica encerramento caso a carência seja excedida.
+                    </p>
+                  </div>
+
+                  {/* Prazos de Tolerância e Aviso */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t border-slate-100">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Dias p/ Aviso Prévio</label>
+                      <input 
+                        type="number" 
+                        required 
+                        min="1" 
+                        max="30" 
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold"
+                        value={formData.dias_aviso_previo} 
+                        onChange={e => setFormData({...formData, dias_aviso_previo: parseInt(e.target.value) || 7})} 
+                      />
+                      <span className="text-[11px] text-slate-400 mt-0.5 block">Exibe aviso X dias antes do vencimento</span>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Reaviso na Tela (Horas)</label>
+                      <input 
+                        type="number" 
+                        required 
+                        min="1" 
+                        max="24" 
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold"
+                        value={formData.intervalo_aviso_horas} 
+                        onChange={e => setFormData({...formData, intervalo_aviso_horas: parseInt(e.target.value) || 4})} 
+                      />
+                      <span className="text-[11px] text-slate-400 mt-0.5 block">Reapresenta na tela a cada X horas</span>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Dias de Carência / Bloqueio</label>
+                      <input 
+                        type="number" 
+                        required 
+                        min="0" 
+                        max="60" 
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-rose-700"
+                        value={formData.dias_tolerancia_bloqueio} 
+                        onChange={e => setFormData({...formData, dias_tolerancia_bloqueio: parseInt(e.target.value) || 0})} 
+                      />
+                      <span className="text-[11px] text-slate-400 mt-0.5 block">Tolerância após o vencimento antes de travar</span>
+                    </div>
+                  </div>
+
+                  {/* Mensagens de Notificação */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Mensagem de Aviso Prévio na Tela</label>
+                      <textarea 
+                        rows={2} 
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs"
+                        placeholder="AVISO DE VENCIMENTO: Sua mensalidade vence em breve..."
+                        value={formData.mensagem_aviso_previo} 
+                        onChange={e => setFormData({...formData, mensagem_aviso_previo: e.target.value})} 
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Mensagem de Bloqueio na Tela</label>
+                      <textarea 
+                        rows={2} 
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs"
+                        placeholder="SISTEMA BLOQUEADO. Por favor, regularize seu pagamento."
+                        value={formData.mensagem_bloqueio} 
+                        onChange={e => setFormData({...formData, mensagem_bloqueio: e.target.value})} 
+                      />
+                    </div>
+                  </div>
+
+                  {/* Trava de Suspensão de XML */}
+                  <div className="p-3.5 bg-rose-50 rounded-xl border border-rose-200 flex items-start gap-3">
                     <input 
                       type="checkbox" 
                       id="bloquear_recepcao_xml_se_inadimplente"
@@ -283,312 +760,148 @@ export default function ConfiguracoesPage() {
                       className="mt-1 h-4 w-4 rounded border-rose-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
                     />
                     <label htmlFor="bloquear_recepcao_xml_se_inadimplente" className="cursor-pointer select-none">
-                      <span className="font-bold text-slate-900 block text-sm">
+                      <span className="font-bold text-slate-900 block text-xs">
                         Suspender Recepção de XMLs em caso de Inadimplência
                       </span>
-                      <span className="text-xs text-slate-600 leading-relaxed block mt-0.5">
-                        Se marcado, o Hub Desktop e sistemas da Paratech receberão recusa 403 no envio de novos XMLs caso o cliente esteja com fatura vencida além da carência.
+                      <span className="text-[11px] text-slate-600 leading-relaxed block mt-0.5">
+                        Se marcado, o Hub Desktop receberá recusa (HTTP 403) no envio de novos XMLs caso o cliente esteja com fatura vencida além da carência.
                       </span>
                     </label>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 grid grid-cols-1 gap-6">
-                <div>
-                  <h3 className="font-semibold text-lg text-slate-800 border-b pb-2">Regras do Hub (Monitoramento)</h3>
-                  <p className="text-sm text-slate-500 mt-1">Coloque um item por linha.</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Pastas de Vendas (XML)</label>
-                  <textarea rows={3} className="w-full px-4 py-2 rounded-lg border border-slate-200 placeholder-slate-400"
-                    placeholder="C:\Sistema\Vendas\XML"
-                    value={formData.pastas_vendas} onChange={e => setFormData({...formData, pastas_vendas: e.target.value})} />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Pastas de Compras (XML)</label>
-                  <textarea rows={3} className="w-full px-4 py-2 rounded-lg border border-slate-200 placeholder-slate-400"
-                    value={formData.pastas_compras} onChange={e => setFormData({...formData, pastas_compras: e.target.value})} />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Arquivos .exe Monitorados (Para bloqueio)</label>
-                  <textarea rows={3} className="w-full px-4 py-2 rounded-lg border border-slate-200 placeholder-slate-400"
-                    placeholder="vendas.exe&#10;pdv.exe"
-                    value={formData.exes_monitorados} onChange={e => setFormData({...formData, exes_monitorados: e.target.value})} />
-                </div>
+              {/* Botão Salvar Todas as Configurações */}
+              <div className="pt-2">
+                <button 
+                  type="submit" 
+                  disabled={saving}
+                  className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold py-3.5 rounded-xl transition shadow-md disabled:opacity-50 text-sm flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {saving ? (
+                    <>
+                      <RefreshCw size={18} className="animate-spin" />
+                      Salvando Configurações no Banco...
+                    </>
+                  ) : (
+                    <>
+                      <Check size={18} />
+                      Salvar Regras do Hub, Pontos de Partida e Cobrança
+                    </>
+                  )}
+                </button>
               </div>
-
-              {message && (
-                <div className={`p-4 rounded-lg font-medium ${message.includes('Erro') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
-                  {message}
-                </div>
-              )}
-
-              <button 
-                type="submit" disabled={saving}
-                className="w-full bg-blue-600 text-white font-medium py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
-              >
-                {saving ? 'Salvando...' : 'Salvar Configurações no Banco'}
-              </button>
             </>
           )}
         </form>
       )}
 
-      {/* Tabela de Hubs */}
+      {/* Tabela de Hubs Ativos */}
       {!selectedCliente && (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 mt-8 overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 mt-8 overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
             <div>
               <h3 className="font-semibold text-lg text-slate-800">Hubs Ativos (Monitoramento)</h3>
               <p className="text-xs text-slate-500">Acompanhamento em tempo real de conexão, versões instaladas e comandos remotos</p>
             </div>
-            {/* Legenda visual com bolinhas estilizadas */}
             <div className="flex flex-wrap items-center gap-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
-              <span className="font-semibold text-slate-600 mr-1">Legenda:</span>
-              <span className="inline-flex items-center gap-1.5 font-medium text-emerald-700">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-200"></span>
-                v2.8.3 (Atual)
+              <span className="flex items-center gap-1.5 font-medium text-emerald-700">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span> Online (&lt; 15 min)
               </span>
               <span className="text-slate-300">•</span>
-              <span className="inline-flex items-center gap-1.5 font-medium text-amber-700">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 ring-2 ring-amber-200"></span>
-                v2.8.0 (Desatualizado)
-              </span>
-              <span className="text-slate-300">•</span>
-              <span className="inline-flex items-center gap-1.5 font-medium text-blue-700">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-600"></span>
-                </span>
-                Atualização enviada ⏳
-              </span>
-              <span className="text-slate-300">•</span>
-              <span className="inline-flex items-center gap-1.5 font-medium text-slate-500">
-                <span className="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
-                Não instalado
+              <span className="flex items-center gap-1.5 font-medium text-rose-700">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Offline / Alerta
               </span>
             </div>
           </div>
+
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse" style={{ tableLayout: 'fixed' }}>
+            <table className="w-full text-left border-collapse min-w-[700px]">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-sm text-slate-500">
-                  <ResizableSortableTh
-                    columnId="cliente"
-                    label="Cliente"
-                    sortKey="cliente"
-                    currentSortKey={sortKey}
-                    currentSortDirection={sortDirection}
-                    onSort={handleSort}
-                    width={columnWidths.cliente}
-                    onResize={handleResizeColumn}
-                    minWidth={160}
-                  />
-                  <ResizableSortableTh
-                    columnId="contraSenha"
-                    label="Contra-Senha (Offline)"
-                    sortKey="contraSenha"
-                    currentSortKey={sortKey}
-                    currentSortDirection={sortDirection}
-                    onSort={handleSort}
-                    width={columnWidths.contraSenha}
-                    onResize={handleResizeColumn}
-                    minWidth={150}
-                  />
-                  <ResizableSortableTh
-                    columnId="ultimaSync"
-                    label="Última Sincronização"
-                    sortKey="ultimaSync"
-                    currentSortKey={sortKey}
-                    currentSortDirection={sortDirection}
-                    onSort={handleSort}
-                    width={columnWidths.ultimaSync}
-                    onResize={handleResizeColumn}
-                    minWidth={150}
-                  />
-                  <ResizableSortableTh
-                    columnId="status"
-                    label="Status do Hub"
-                    sortKey="status"
-                    currentSortKey={sortKey}
-                    currentSortDirection={sortDirection}
-                    onSort={handleSort}
-                    width={columnWidths.status}
-                    onResize={handleResizeColumn}
-                    minWidth={110}
-                  />
-                  <ResizableSortableTh
-                    columnId="versao"
-                    label="Versão do Hub"
-                    sortKey="versao"
-                    currentSortKey={sortKey}
-                    currentSortDirection={sortDirection}
-                    onSort={handleSort}
-                    width={columnWidths.versao || 150}
-                    onResize={handleResizeColumn}
-                    minWidth={130}
-                  />
-                  <ResizableSortableTh
-                    columnId="acao"
-                    label="Ação"
-                    disableSort
-                    width={columnWidths.acao}
-                    onResize={handleResizeColumn}
-                    minWidth={140}
-                    align="right"
-                  />
+                <tr className="bg-slate-50/75 border-b border-slate-200 text-slate-600 uppercase text-[11px] tracking-wider">
+                  <ResizableSortableTh columnId="cliente" label="Cliente / Empresa" currentSortKey={sortKey} currentSortDirection={sortDirection} onSort={handleSort} width={columnWidths.cliente} onResize={handleResizeColumn} />
+                  <ResizableSortableTh columnId="contraSenha" label="Contra-Senha (Offline)" currentSortKey={sortKey} currentSortDirection={sortDirection} onSort={handleSort} width={columnWidths.contraSenha} onResize={handleResizeColumn} />
+                  <ResizableSortableTh columnId="ultimaSync" label="Última Conexão" currentSortKey={sortKey} currentSortDirection={sortDirection} onSort={handleSort} width={columnWidths.ultimaSync} onResize={handleResizeColumn} />
+                  <ResizableSortableTh columnId="status" label="Status" currentSortKey={sortKey} currentSortDirection={sortDirection} onSort={handleSort} width={columnWidths.status} onResize={handleResizeColumn} />
+                  <ResizableSortableTh columnId="versao" label="Versão Hub" currentSortKey={sortKey} currentSortDirection={sortDirection} onSort={handleSort} width={columnWidths.versao} onResize={handleResizeColumn} />
+                  <th className="py-3 px-4 font-semibold text-center" style={{ width: columnWidths.acao }}>Comando Remoto</th>
                 </tr>
               </thead>
-              <tbody>
-                {hubsOrdenados.map((hub) => {
-                  const config = Array.isArray(hub.configuracoes_hub) ? hub.configuracoes_hub[0] : hub.configuracoes_hub;
-                  const lastSync = config?.ultima_sincronizacao;
-                  const offlineSecret = config?.offline_secret || 'Não gerada';
-                  let statusElement;
-                  const INTERVALO_MS = 15 * 60 * 1000;
-                  const TOLERANCIA_MS = 2 * 60 * 1000;
-
-                  if (!lastSync) {
-                    statusElement = (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500">
-                        Nunca
-                      </span>
-                    );
-                  } else {
-                    const diff = now - new Date(lastSync).getTime();
-                    if (diff <= INTERVALO_MS) {
-                      const restanteMs = Math.max(0, INTERVALO_MS - diff);
-                      const min = Math.floor(restanteMs / 60000);
-                      const sec = Math.floor((restanteMs % 60000) / 1000);
-                      const mmss = `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
-                      statusElement = (
-                        <div className="flex flex-col gap-0.5">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-700 w-fit">
-                            <span className="w-2 h-2 rounded-full bg-green-500 mr-1.5 animate-pulse"></span>
-                            Online
-                          </span>
-                          <span className="text-[11px] font-mono text-slate-500 flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-slate-400" />
-                            Próximo pulso: <strong className="text-emerald-600">{mmss}</strong>
-                          </span>
-                        </div>
-                      );
-                    } else if (diff <= (INTERVALO_MS + TOLERANCIA_MS)) {
-                      const atrasoSec = Math.floor((diff - INTERVALO_MS) / 1000);
-                      statusElement = (
-                        <div className="flex flex-col gap-0.5">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 w-fit">
-                            <span className="w-2 h-2 rounded-full bg-amber-500 mr-1.5 animate-ping"></span>
-                            Aguardando Sinal
-                          </span>
-                          <span className="text-[10px] text-amber-700">
-                            Tolerância (+{atrasoSec}s)
-                          </span>
-                        </div>
-                      );
-                    } else {
-                      const diffMin = Math.floor(diff / 60000);
-                      const decorrido = diffMin < 60 ? `${diffMin} min` : diffMin < 1440 ? `${Math.floor(diffMin / 60)} h` : `${Math.floor(diffMin / 1440)} dias`;
-                      statusElement = (
-                        <div className="flex flex-col gap-0.5">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 w-fit">
-                            Offline
-                          </span>
-                          <span className="text-[10px] text-slate-400">
-                            Último sinal há {decorrido}
-                          </span>
-                        </div>
-                      );
-                    }
-                  }
-
-                  const versaoHub = config?.versao_hub_instalada || (lastSync ? '2.8.0' : null);
-                  const comandoRemoto = config?.comando_remoto;
-                  const VERSAO_MAIS_RECENTE = '2.8.3';
-                  const isAtualizado = versaoHub === VERSAO_MAIS_RECENTE;
-                  const isPendenteAtualizacao = comandoRemoto === 'atualizar_hub';
+              <tbody className="divide-y divide-slate-100 text-xs">
+                {hubsOrdenados.map((h: any) => {
+                  const config = Array.isArray(h.configuracoes_hub) ? h.configuracoes_hub[0] : h.configuracoes_hub
+                  const lastSync = config?.ultima_sincronizacao
+                  const diffMin = lastSync ? Math.floor((now - new Date(lastSync).getTime()) / (1000 * 60)) : null
+                  const isOnline = diffMin !== null && diffMin <= 15
+                  const versaoHub = config?.versao_hub_instalada || 'Desconhecida'
+                  const offlineSecret = config?.offline_secret || 'Não gerada'
+                  const comandoPendente = config?.comando_remoto
 
                   return (
-                    <tr key={hub.id} className="border-b border-slate-100 hover:bg-slate-50">
-                      <td className="p-4 text-sm font-medium text-slate-800 truncate" title={hub.razao_social}>{hub.razao_social}</td>
-                      <td className="p-4 text-sm text-slate-600 font-mono truncate">
-                        <span className="bg-slate-100 rounded px-2 py-1 select-all">{offlineSecret}</span>
+                    <tr key={h.id} className="hover:bg-slate-50/80 transition">
+                      <td className="py-3.5 px-4">
+                        <span className="font-bold text-slate-800 block text-xs">{h.razao_social || h.nome_fantasia}</span>
+                        <span className="text-[10px] text-slate-400 font-mono">{h.cnpj}</span>
                       </td>
-                      <td className="p-4 text-sm text-slate-600 truncate">
-                        {lastSync ? new Date(lastSync).toLocaleString('pt-BR') : 'Nunca'}
+                      <td className="py-3.5 px-4 font-mono text-slate-600 font-bold">
+                        {offlineSecret}
                       </td>
-                      <td className="p-4 text-sm truncate">
-                        {statusElement}
-                      </td>
-                      <td className="p-4 text-sm truncate">
-                        {isPendenteAtualizacao ? (
-                          <div className="flex flex-col gap-0.5">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 animate-pulse border border-blue-200 w-fit" title="Comando gravado na nuvem. O executável no cliente aplicará a atualização silenciosa no próximo pulso ou quando for iniciado.">
-                              <ArrowUpCircle className="w-3.5 h-3.5 mr-1 text-blue-600" />
-                              Atualização enviada ⏳
-                            </span>
-                            <span className="text-[10px] text-blue-600 font-medium">
-                              Aguardando pulso do cliente
-                            </span>
+                      <td className="py-3.5 px-4 text-slate-600">
+                        {lastSync ? (
+                          <div>
+                            <span className="font-semibold block">{new Date(lastSync).toLocaleTimeString('pt-BR')}</span>
+                            <span className="text-[10px] text-slate-400">{new Date(lastSync).toLocaleDateString('pt-BR')}</span>
                           </div>
-                        ) : versaoHub ? (
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-                            isAtualizado 
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                              : 'bg-amber-50 text-amber-700 border-amber-200'
-                          }`}>
-                            {isAtualizado ? (
-                              <CheckCircle2 className="w-3 h-3 mr-1 text-emerald-500" />
-                            ) : (
-                              <AlertTriangle className="w-3 h-3 mr-1 text-amber-500" />
-                            )}
-                            v{versaoHub} {isAtualizado ? '(Atual)' : '(Desatualizado)'}
+                        ) : (
+                          <span className="text-slate-400 italic">Nunca conectou</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {isOnline ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span> Online ({diffMin}m)
                           </span>
                         ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs text-slate-400 bg-slate-100">
-                            Não instalado
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span> {diffMin !== null ? `Offline há ${diffMin}m` : 'Offline'}
                           </span>
                         )}
                       </td>
-                      <td className="p-4 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-2">
-                          {!isAtualizado && lastSync && (
-                            <button
-                              onClick={() => handleDispararComando(hub.id, isPendenteAtualizacao ? 'cancelar' : 'atualizar_hub')}
-                              disabled={loadingComandoId === hub.id}
-                              title={isPendenteAtualizacao ? 'Cancelar ordem de atualização pendente' : 'Enviar comando remoto para o Hub atualizar sozinho para a v2.8.3 no próximo pulso'}
-                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                                isPendenteAtualizacao
-                                  ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'
-                                  : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200'
-                              }`}
-                            >
-                              <ArrowUpCircle className="w-3.5 h-3.5" />
-                              {loadingComandoId === hub.id ? 'Enviando...' : isPendenteAtualizacao ? 'Cancelar' : 'Atualizar Hub'}
-                            </button>
-                          )}
+                      <td className="py-3.5 px-4">
+                        <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                          {versaoHub}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
                           <button
-                            onClick={() => setSelectedCliente(hub.id)}
-                            className="text-blue-600 hover:text-blue-800 text-sm font-medium hover:underline"
+                            type="button"
+                            onClick={() => handleDispararComando(h.id, 'sync_imediato')}
+                            disabled={loadingComandoId === h.id || Boolean(comandoPendente)}
+                            className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 font-bold text-[11px] transition disabled:opacity-50"
+                            title="Forçar sincronização de XMLs na próxima conexão"
                           >
-                            Configurar
+                            Forçar Sync
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDispararComando(h.id, 'reiniciar_servico')}
+                            disabled={loadingComandoId === h.id || Boolean(comandoPendente)}
+                            className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 font-semibold text-[11px] transition disabled:opacity-50"
+                            title="Reiniciar monitor de arquivos do Hub Desktop"
+                          >
+                            Reiniciar
                           </button>
                         </div>
+                        {comandoPendente && (
+                          <span className="text-[10px] text-amber-600 font-medium block mt-1">
+                            Comando ({comandoPendente}) pendente...
+                          </span>
+                        )}
                       </td>
                     </tr>
                   )
                 })}
-                {hubs.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="p-8 text-center text-slate-500">
-                      Nenhum cliente encontrado.
-                    </td>
-                  </tr>
-                )}
               </tbody>
             </table>
           </div>

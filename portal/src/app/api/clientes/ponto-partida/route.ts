@@ -15,14 +15,16 @@ export async function POST(request: Request) {
       numero_inicial_nfce,
       numero_inicial_nfse,
       numero_inicial_cte,
-      numero_inicial_mdfe
+      numero_inicial_mdfe,
+      data_inicio_monitoramento_entradas,
+      numero_inicial_compras_nfe
     } = body
 
     if (!cliente_id) {
       return NextResponse.json({ error: 'ID do cliente é obrigatório.' }, { status: 400 })
     }
 
-    const payload = {
+    const payload: any = {
       data_inicio_monitoramento: data_inicio_monitoramento || null,
       numero_inicial_nfe: Math.max(1, parseInt(String(numero_inicial_nfe || 1), 10)),
       numero_inicial_nfce: Math.max(1, parseInt(String(numero_inicial_nfce || 1), 10)),
@@ -31,16 +33,33 @@ export async function POST(request: Request) {
       numero_inicial_mdfe: Math.max(1, parseInt(String(numero_inicial_mdfe || 1), 10))
     }
 
+    if (data_inicio_monitoramento_entradas !== undefined) {
+      payload.data_inicio_monitoramento_entradas = data_inicio_monitoramento_entradas || null
+    }
+
+    if (numero_inicial_compras_nfe !== undefined) {
+      payload.numero_inicial_compras_nfe = Math.max(1, parseInt(String(numero_inicial_compras_nfe || 1), 10))
+    }
+
     const { data, error } = await supabaseAdmin
       .from('clientes')
       .update(payload)
       .eq('id', cliente_id)
-      .select('id, razao_social, data_inicio_monitoramento, numero_inicial_nfe, numero_inicial_nfce, numero_inicial_nfse, numero_inicial_cte, numero_inicial_mdfe')
+      .select('id, razao_social, data_inicio_monitoramento, numero_inicial_nfe, numero_inicial_nfce, numero_inicial_nfse, numero_inicial_cte, numero_inicial_mdfe, data_inicio_monitoramento_entradas, numero_inicial_compras_nfe')
       .single()
 
     if (error) {
       return NextResponse.json({ error: 'Erro ao atualizar ponto de partida fiscal: ' + error.message }, { status: 500 })
     }
+
+    // Espelha também em configuracoes_hub
+    await supabaseAdmin
+      .from('configuracoes_hub')
+      .update({
+        data_inicio_monitoramento_entradas: payload.data_inicio_monitoramento_entradas,
+        numero_inicial_compras_nfe: payload.numero_inicial_compras_nfe
+      })
+      .eq('cliente_id', cliente_id)
 
     return NextResponse.json({
       success: true,

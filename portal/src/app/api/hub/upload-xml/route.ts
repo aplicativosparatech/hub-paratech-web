@@ -135,7 +135,7 @@ export async function POST(request: Request) {
     // 1. Validar Cliente e configurações
     const { data: cliente } = await supabaseAdmin
       .from('clientes')
-      .select('id, cnpj, razao_social, inscricao_estadual, is_ativo, is_associacao, certificado_url, certificado_senha, data_inicio_monitoramento, numero_inicial_nfe, numero_inicial_nfce, dias_carencia, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, modo_processamento_xml, dias_tolerancia_bloqueio, bloquear_recepcao_xml_se_inadimplente)')
+      .select('id, cnpj, razao_social, inscricao_estadual, is_ativo, is_associacao, certificado_url, certificado_senha, data_inicio_monitoramento, data_inicio_monitoramento_entradas, numero_inicial_nfe, numero_inicial_nfce, numero_inicial_compras_nfe, dias_carencia, configuracoes_hub(auto_excluir_divergentes, apenas_xmls_autorizados, auto_corrigir_assinar_xmls, modo_processamento_xml, dias_tolerancia_bloqueio, bloquear_recepcao_xml_se_inadimplente)')
       .eq('hub_token', token)
       .single()
 
@@ -328,6 +328,27 @@ export async function POST(request: Request) {
             reason: `NFC-e número ${numInt} anterior ao número inicial de contagem da empresa (${cliente.numero_inicial_nfce}).`
           }, { status: 200 })
         }
+      }
+    } else if (tipoPasta === 'compras') {
+      const dataInicioCompras = cliente.data_inicio_monitoramento_entradas || cliente.data_inicio_monitoramento
+      const numInicialCompras = cliente.numero_inicial_compras_nfe
+
+      const isPontoPartidaComprasOuSuperior = numInicialCompras && numInt >= numInicialCompras
+
+      if (!isPontoPartidaComprasOuSuperior && dataInicioCompras && dataEmissaoStr && dataEmissaoStr < dataInicioCompras) {
+        return NextResponse.json({
+          ignored: true,
+          ponto_partida: true,
+          reason: `XML de compra com data (${dataEmissaoStr}) anterior ao início de monitoramento de compras (${dataInicioCompras}).`
+        }, { status: 200 })
+      }
+
+      if (numInt > 0 && numInicialCompras && numInt < numInicialCompras) {
+        return NextResponse.json({
+          ignored: true,
+          ponto_partida: true,
+          reason: `NF-e de compra número ${numInt} anterior ao número inicial de compras (${numInicialCompras}).`
+        }, { status: 200 })
       }
     }
 
