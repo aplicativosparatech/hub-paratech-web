@@ -30,8 +30,6 @@ export default function TabelaCorrecao() {
     loadingClientes,
     selectedCliente,
     setSelectedCliente,
-    clientSearchTerm,
-    setClientSearchTerm,
     filtroMes,
     setFiltroMes,
     dataInicio,
@@ -518,109 +516,6 @@ export default function TabelaCorrecao() {
 
   return (
     <div className="space-y-4">
-      {/* Barra de Filtro de Clientes */}
-      {userRole !== 'cliente' && clientes.length > 0 && (
-        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div className="flex-1 max-w-lg space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
-                {userRole === 'admin' ? '🔍 Localizar Cliente (Admin)' : '🏢 Empresa Selecionada'}
-              </span>
-              {userRole === 'admin' && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-blue-600 font-medium">
-                    {selectedCliente ? 'Filtrado por empresa' : 'Exibindo todas as empresas'}
-                  </span>
-                  {selectedCliente && (
-                    <button
-                      type="button"
-                      onClick={() => { setSelectedCliente(''); setClientSearchTerm(''); }}
-                      className="text-[11px] text-slate-400 hover:text-rose-600 font-semibold flex items-center gap-0.5 transition"
-                      title="Exibir todas as empresas"
-                    >
-                      <X size={12} /> Limpar
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <div className="relative w-full sm:w-1/2">
-                <input 
-                  type="text" 
-                  placeholder="Filtrar por nome, fantasia ou CNPJ..." 
-                  value={clientSearchTerm}
-                  onChange={e => {
-                    const term = e.target.value
-                    setClientSearchTerm(term)
-                    if (term.trim()) {
-                      const t = term.toLowerCase().trim()
-                      const ct = limparDocumento(t)
-                      const match = clientes.find(c => {
-                        const doc = (c.cnpj || '').toLowerCase()
-                        const cleanDoc = limparDocumento(doc)
-                        return (
-                          (c.razao_social && c.razao_social.toLowerCase().includes(t)) ||
-                          (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(t)) ||
-                          doc.includes(t) ||
-                          (ct && cleanDoc.includes(ct))
-                        )
-                      })
-                      if (match && match.id !== selectedCliente) {
-                        setSelectedCliente(match.id)
-                      }
-                    } else {
-                      setSelectedCliente('')
-                    }
-                  }}
-                  className="w-full bg-white border border-slate-200 px-3 py-1.5 pr-7 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-                />
-                {clientSearchTerm && (
-                  <button
-                    type="button"
-                    onClick={() => { setClientSearchTerm(''); setSelectedCliente(''); }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
-                    title="Limpar busca"
-                  >
-                    <X size={12} />
-                  </button>
-                )}
-              </div>
-              <select
-                value={selectedCliente}
-                onChange={e => setSelectedCliente(e.target.value)}
-                className="w-full sm:w-1/2 bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-              >
-                {userRole === 'admin' && <option value="">-- Todos os Clientes --</option>}
-                {clientes
-                  .filter(c => {
-                    if (!clientSearchTerm) return true
-                    const term = clientSearchTerm.toLowerCase().trim()
-                    const cleanTerm = limparDocumento(term)
-                    const doc = (c.cnpj || '').toLowerCase()
-                    const cleanDoc = limparDocumento(doc)
-                    return (
-                      (c.razao_social && c.razao_social.toLowerCase().includes(term)) ||
-                      (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(term)) ||
-                      doc.includes(term) ||
-                      (cleanTerm && cleanDoc.includes(cleanTerm))
-                    )
-                  })
-                  .map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.razao_social} {c.nome_fantasia ? `(${c.nome_fantasia})` : ''} {c.cnpj ? `— ${formatarCnpjCpf(c.cnpj)}` : ''}
-                    </option>
-                  ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="text-xs text-slate-500 text-right sm:self-end">
-            <span className="font-semibold text-amber-700">{notas.length}</span> arquivo(s) aguardando correção
-          </div>
-        </div>
-      )}
-
       {/* Banner Informativo Explicando o Funcionamento */}
       <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-amber-950 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
         <div className="flex items-start gap-3.5">
