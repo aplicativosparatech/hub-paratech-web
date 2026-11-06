@@ -64,6 +64,12 @@ export interface FechamentoPreferencias {
   relNfceSaida: boolean
   relMonofasicos: boolean
 
+  // Modo de Apresentação das Saídas / Vendas:
+  // - 'consolidado': Soma e unifica NF-e + NFC-e + NFS-e em um único relatório com subtotais por modelo e total geral
+  // - 'separado': Gera relatórios isolados distintos para cada modelo
+  // - 'ambos': Gera tanto os relatórios separados quanto o relatório consolidado unificado
+  agrupamentoSaidas: 'consolidado' | 'separado' | 'ambos'
+
   // Local dos relatórios no ZIP
   localRelatorios: 'pasta_relatorios' | 'pasta_modalidade'
 
@@ -91,6 +97,7 @@ export const PREFERENCIAS_FECHAMENTO_PADRAO: FechamentoPreferencias = {
   relNfseSaida: true,
   relNfceSaida: true,
   relMonofasicos: true,
+  agrupamentoSaidas: 'consolidado',
   localRelatorios: 'pasta_relatorios',
   ordenacao: 'data',
   formatos: ['pdf', 'xlsx'],
@@ -264,6 +271,12 @@ export interface ArquivoGerado {
 // ============================================================================
 // MOTOR DE LAYOUT PDF FISCAL DE ALTO PADRÃO EXECUTIVO (HUB PARATECH)
 // ============================================================================
+export interface CardResumoPdf {
+  rotulo: string
+  valor: string
+  cor?: 'verde' | 'azul' | 'amber' | 'slate' | 'indigo'
+}
+
 export interface ConfigPdfFiscal {
   titulo: string
   subtitulo?: string
@@ -272,6 +285,7 @@ export interface ConfigPdfFiscal {
   totalItens: number
   valorTotal: number
   valorMonofasicos?: number
+  cardsResumo?: CardResumoPdf[]
   colunas: string[]
   linhas: (string | number)[][]
   colunasAlinhadasDireita?: number[]
@@ -321,62 +335,91 @@ export function gerarDocumentoPdfFiscal(cfg: ConfigPdfFiscal): Uint8Array {
   doc.text('Inteligência Contábil & Fiscal', margem + contentWidth - 5, 21.5, { align: 'right' })
 
   // 2. Quadro de Resumo Executivo (NO INÍCIO - Exatamente como solicitado pelo usuário!)
-  // Cards: TOTAL DE ITENS, VALOR TOTAL MOVIMENTADO, TOTAL PRODUTOS MONOFÁSICOS
   const cardY = 29
   const cardHeight = 13.5
-  const numCards = 3
   const cardGap = 3
-  const cardWidth = (contentWidth - ((numCards - 1) * cardGap)) / numCards
 
-  // Card 1: TOTAL DE DOCUMENTOS / ITENS
-  doc.setFillColor(248, 250, 252) // Slate 50
-  doc.setDrawColor(226, 232, 240) // Slate 200
-  doc.setLineWidth(0.25)
-  doc.roundedRect(margem, cardY, cardWidth, cardHeight, 1.5, 1.5, 'FD')
+  if (cfg.cardsResumo && cfg.cardsResumo.length > 0) {
+    const numCards = cfg.cardsResumo.length
+    const cardWidth = (contentWidth - ((numCards - 1) * cardGap)) / numCards
 
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(6.5)
-  doc.setTextColor(100, 116, 139) // Slate 500
-  doc.text('TOTAL DE DOCUMENTOS / ITENS', margem + 3.5, cardY + 4.5)
+    cfg.cardsResumo.forEach((card, idx) => {
+      const cardX = margem + idx * (cardWidth + cardGap)
+      doc.setFillColor(248, 250, 252)
+      doc.setDrawColor(226, 232, 240)
+      doc.setLineWidth(0.25)
+      doc.roundedRect(cardX, cardY, cardWidth, cardHeight, 1.5, 1.5, 'FD')
 
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(10)
-  doc.setTextColor(15, 23, 42)
-  doc.text(`${cfg.totalItens} ${cfg.totalItens === 1 ? 'registro' : 'registros'}`, margem + 3.5, cardY + 10.5)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(6)
+      doc.setTextColor(100, 116, 139)
+      doc.text(card.rotulo.toUpperCase(), cardX + 3, cardY + 4.5)
 
-  // Card 2: VALOR TOTAL MOVIMENTADO
-  const card2X = margem + cardWidth + cardGap
-  doc.setFillColor(248, 250, 252)
-  doc.roundedRect(card2X, cardY, cardWidth, cardHeight, 1.5, 1.5, 'FD')
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(9)
+      if (card.cor === 'verde') doc.setTextColor(16, 115, 60)
+      else if (card.cor === 'indigo') doc.setTextColor(79, 70, 229)
+      else if (card.cor === 'azul') doc.setTextColor(37, 99, 235)
+      else if (card.cor === 'amber') doc.setTextColor(180, 83, 9)
+      else doc.setTextColor(15, 23, 42)
 
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(6.5)
-  doc.setTextColor(100, 116, 139)
-  doc.text('VALOR TOTAL MOVIMENTADO', card2X + 3.5, cardY + 4.5)
-
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(10)
-  doc.setTextColor(16, 115, 60) // Verde escuro
-  doc.text(`R$ ${formatMoney(cfg.valorTotal)}`, card2X + 3.5, cardY + 10.5)
-
-  // Card 3: PRODUTOS MONOFÁSICOS (PIS/COFINS)
-  const card3X = card2X + cardWidth + cardGap
-  doc.setFillColor(248, 250, 252)
-  doc.roundedRect(card3X, cardY, cardWidth, cardHeight, 1.5, 1.5, 'FD')
-
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(6.5)
-  doc.setTextColor(100, 116, 139)
-  doc.text('TOTAL PRODUTOS MONOFÁSICOS', card3X + 3.5, cardY + 4.5)
-
-  doc.setFont('helvetica', 'bold')
-  const valMono = cfg.valorMonofasicos !== undefined ? cfg.valorMonofasicos : 0
-  if (valMono > 0) {
-    doc.setTextColor(180, 83, 9)
+      doc.text(card.valor, cardX + 3, cardY + 10.5)
+    })
   } else {
-    doc.setTextColor(71, 85, 105)
+    // Layout padrão: 3 cards (Total itens, valor total, monofásicos)
+    const numCards = 3
+    const cardWidth = (contentWidth - ((numCards - 1) * cardGap)) / numCards
+
+    // Card 1: TOTAL DE DOCUMENTOS / ITENS
+    doc.setFillColor(248, 250, 252) // Slate 50
+    doc.setDrawColor(226, 232, 240) // Slate 200
+    doc.setLineWidth(0.25)
+    doc.roundedRect(margem, cardY, cardWidth, cardHeight, 1.5, 1.5, 'FD')
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(6.5)
+    doc.setTextColor(100, 116, 139) // Slate 500
+    doc.text('TOTAL DE DOCUMENTOS / ITENS', margem + 3.5, cardY + 4.5)
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10)
+    doc.setTextColor(15, 23, 42)
+    doc.text(`${cfg.totalItens} ${cfg.totalItens === 1 ? 'registro' : 'registros'}`, margem + 3.5, cardY + 10.5)
+
+    // Card 2: VALOR TOTAL MOVIMENTADO
+    const card2X = margem + cardWidth + cardGap
+    doc.setFillColor(248, 250, 252)
+    doc.roundedRect(card2X, cardY, cardWidth, cardHeight, 1.5, 1.5, 'FD')
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(6.5)
+    doc.setTextColor(100, 116, 139)
+    doc.text('VALOR TOTAL MOVIMENTADO', card2X + 3.5, cardY + 4.5)
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10)
+    doc.setTextColor(16, 115, 60) // Verde escuro
+    doc.text(`R$ ${formatMoney(cfg.valorTotal)}`, card2X + 3.5, cardY + 10.5)
+
+    // Card 3: PRODUTOS MONOFÁSICOS (PIS/COFINS)
+    const card3X = card2X + cardWidth + cardGap
+    doc.setFillColor(248, 250, 252)
+    doc.roundedRect(card3X, cardY, cardWidth, cardHeight, 1.5, 1.5, 'FD')
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(6.5)
+    doc.setTextColor(100, 116, 139)
+    doc.text('TOTAL PRODUTOS MONOFÁSICOS', card3X + 3.5, cardY + 4.5)
+
+    doc.setFont('helvetica', 'bold')
+    const valMono = cfg.valorMonofasicos !== undefined ? cfg.valorMonofasicos : 0
+    if (valMono > 0) {
+      doc.setTextColor(180, 83, 9)
+    } else {
+      doc.setTextColor(71, 85, 105)
+    }
+    doc.text(`R$ ${formatMoney(valMono)}`, card3X + 3.5, cardY + 10.5)
   }
-  doc.text(`R$ ${formatMoney(valMono)}`, card3X + 3.5, cardY + 10.5)
 
   // 3. Tabela de Dados (autoTable)
   let bodyData = cfg.linhas
@@ -1164,6 +1207,233 @@ export function gerarRelatorioNfceSaidas(
       buffer: pdfBuffer,
       tipo: 'pdf',
       modalidade: 'NFCE_Saidas'
+    })
+  }
+
+  return resultados
+}
+
+// ============================================================================
+// GERAÇÃO DE RELATÓRIO CONSOLIDADO / UNIFICADO DE SAÍDAS (VENDAS)
+// Reúne NF-e (Mod 55), NFC-e (Mod 65) e NFS-e (Serviços) em um único relatório
+// Apura subtotais por modelo e Total Geral Faturado (atendendo contabilidades
+// que exigem o faturamento unificado e contabilidades que exigem tudo somado)
+// ============================================================================
+export function gerarRelatorioConsolidadoSaidas(params: {
+  nfeDocs?: DocumentoFiscalFechamento[]
+  nfceDocs?: DocumentoFiscalFechamento[]
+  nfseDocs?: DocumentoFiscalFechamento[]
+  incluirNfe: boolean
+  incluirNfce: boolean
+  incluirNfse: boolean
+  empresa: DadosEmpresaFechamento
+  competencia: string
+  formatos: Array<'pdf' | 'xlsx' | 'csv' | 'json'>
+  ordenacao: 'data' | 'numero' | 'contato'
+}): ArquivoGerado[] {
+  const {
+    nfeDocs = [],
+    nfceDocs = [],
+    nfseDocs = [],
+    incluirNfe,
+    incluirNfce,
+    incluirNfse,
+    empresa,
+    competencia,
+    formatos,
+    ordenacao
+  } = params
+
+  const listaNfe = incluirNfe ? (nfeDocs || []) : []
+  const listaNfce = incluirNfce ? (nfceDocs || []) : []
+  const listaNfse = incluirNfse ? (nfseDocs || []) : []
+
+  // Anota o modelo legível de cada nota
+  const docsComModelo: Array<DocumentoFiscalFechamento & { modeloRotulo: string }> = [
+    ...listaNfe.map(d => ({ ...d, modeloRotulo: 'NF-e (Mod 55)' })),
+    ...listaNfce.map(d => ({ ...d, modeloRotulo: 'NFC-e (Mod 65)' })),
+    ...listaNfse.map(d => ({ ...d, modeloRotulo: 'NFS-e (Serviço)' }))
+  ]
+
+  // Se não houver nenhum documento das modalidades selecionadas, retorna vazio
+  if (docsComModelo.length === 0) {
+    return []
+  }
+
+  // Ordena a lista unificada
+  const lista = ordenarDocumentos(docsComModelo, ordenacao) as Array<DocumentoFiscalFechamento & { modeloRotulo: string }>
+
+  // Subtotais por modalidade e total consolidado
+  const totalNfe = listaNfe.reduce((acc, d) => acc + (d.valor || 0), 0)
+  const totalNfce = listaNfce.reduce((acc, d) => acc + (d.valor || 0), 0)
+  const totalNfse = listaNfse.reduce((acc, d) => acc + (d.valor || 0), 0)
+  const totalGeral = totalNfe + totalNfce + totalNfse
+
+  const titulo = 'Resumo Consolidado de Notas Fiscais de Vendas e Saídas (Unificado)'
+  const baseName = `Relatorio_Resumo_Vendas_Consolidado_${competencia.replace('-', '_')}`
+  const resultados: ArquivoGerado[] = []
+
+  // CSV
+  if (formatos.includes('csv')) {
+    let csv = '\uFEFF'
+    csv += `RELATÓRIO FISCAL;${titulo}\r\n`
+    csv += `EMPRESA;${empresa.razao_social};CNPJ;${empresa.cnpj};COMPETENCIA;${competencia}\r\n`
+    csv += `TOTAL CONSOLIDADO;${totalGeral.toFixed(2).replace('.', ',')};DOCUMENTOS TOTAIS;${lista.length}\r\n`
+    if (incluirNfce) csv += `SUBTOTAL NFC-E (MOD 65);${totalNfce.toFixed(2).replace('.', ',')};NOTAS;${listaNfce.length}\r\n`
+    if (incluirNfe) csv += `SUBTOTAL NF-E (MOD 55);${totalNfe.toFixed(2).replace('.', ',')};NOTAS;${listaNfe.length}\r\n`
+    if (incluirNfse) csv += `SUBTOTAL NFS-E (SERVICOS);${totalNfse.toFixed(2).replace('.', ',')};NOTAS;${listaNfse.length}\r\n`
+    csv += '\r\nMODELO;NUMERO;DATA/HORA;CLIENTE / DESTINATARIO;CIDADE/UF;VALOR (R$);CHAVE DE ACESSO / CODIGO\r\n'
+
+    lista.forEach(d => {
+      const contato = (d.contato_nome || (d.modalidade === 'nfce_saidas' ? 'Consumidor Final' : '—')).replace(/"/g, '""')
+      const localidade = d.cidade ? `${d.cidade}/${d.uf || ''}` : '—'
+      csv += `${d.modeloRotulo};${d.numero || '—'};${formatDateTime(d.data_emissao)};"${contato}";${localidade};${(d.valor || 0).toFixed(2).replace('.', ',')};${d.chave || '—'}\r\n`
+    })
+
+    csv += `;;;;TOTAL GERAL CONSOLIDADO;${totalGeral.toFixed(2).replace('.', ',')};\r\n${RODAPE_PARATECH_CSV}`
+    resultados.push({
+      nomeArquivo: `${baseName}.csv`,
+      buffer: csv,
+      tipo: 'csv',
+      modalidade: 'Relatorios'
+    })
+  }
+
+  // JSON
+  if (formatos.includes('json')) {
+    const jsonStr = JSON.stringify({
+      titulo,
+      empresa,
+      competencia,
+      gerado_em: new Date().toISOString(),
+      resumo_executivo: {
+        total_documentos_geral: lista.length,
+        valor_total_consolidado: totalGeral,
+        subtotais: {
+          nfce_mod65: { quantidade: listaNfce.length, valor_total: totalNfce },
+          nfe_mod55: { quantidade: listaNfe.length, valor_total: totalNfe },
+          nfse_servicos: { quantidade: listaNfse.length, valor_total: totalNfse }
+        }
+      },
+      documentos: lista.map(d => ({
+        modelo: d.modeloRotulo,
+        numero: d.numero,
+        data_hora: d.data_emissao,
+        cliente_destinatario: d.contato_nome || (d.modalidade === 'nfce_saidas' ? 'Consumidor Final' : '—'),
+        cidade: d.cidade,
+        uf: d.uf,
+        valor: d.valor,
+        chave: d.chave
+      }))
+    }, null, 2)
+    resultados.push({
+      nomeArquivo: `${baseName}.json`,
+      buffer: jsonStr,
+      tipo: 'json',
+      modalidade: 'Relatorios'
+    })
+  }
+
+  // EXCEL
+  if (formatos.includes('xlsx')) {
+    const wb = XLSX.utils.book_new()
+    const rows = [
+      ['RELATÓRIO FISCAL:', titulo],
+      ['EMPRESA:', empresa.razao_social, 'CNPJ:', empresa.cnpj, 'COMPETÊNCIA:', competencia],
+      [],
+      ['DEMONSTRATIVO CONSOLIDADO DO FATURAMENTO (VENDAS):'],
+      ['FATURAMENTO BRUTO CONSOLIDADO (R$):', totalGeral, 'TOTAL DE DOCUMENTOS:', lista.length],
+      ...(incluirNfce ? [['Subtotal NFC-e (Modelo 65):', totalNfce, 'Qtd Notas:', listaNfce.length]] : []),
+      ...(incluirNfe ? [['Subtotal NF-e (Modelo 55):', totalNfe, 'Qtd Notas:', listaNfe.length]] : []),
+      ...(incluirNfse ? [['Subtotal NFS-e (Serviços):', totalNfse, 'Qtd Notas:', listaNfse.length]] : []),
+      [],
+      ['Modelo', 'Número', 'Data / Hora', 'Cliente / Destinatário', 'Cidade / UF', 'Valor (R$)', 'Chave de Acesso / Código'],
+      ...lista.map(d => [
+        d.modeloRotulo,
+        d.numero || '—',
+        formatDateTime(d.data_emissao),
+        d.contato_nome || (d.modalidade === 'nfce_saidas' ? 'Consumidor Final' : '—'),
+        d.cidade ? `${d.cidade} / ${d.uf || ''}` : '—',
+        d.valor || 0,
+        d.chave || '—'
+      ]),
+      ['', '', '', '', 'TOTAL CONSOLIDADO:', totalGeral, ''],
+      ...RODAPE_PARATECH_XLSX_ROWS
+    ]
+    const ws = XLSX.utils.aoa_to_sheet(rows)
+    XLSX.utils.book_append_sheet(wb, ws, 'Vendas_Consolidadas')
+    const xlsxBuf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
+    resultados.push({
+      nomeArquivo: `${baseName}.xlsx`,
+      buffer: new Uint8Array(xlsxBuf),
+      tipo: 'xlsx',
+      modalidade: 'Relatorios'
+    })
+  }
+
+  // PDF
+  if (formatos.includes('pdf')) {
+    const cards: CardResumoPdf[] = [
+      {
+        rotulo: 'FATURAMENTO TOTAL CONSOLIDADO',
+        valor: `R$ ${formatMoney(totalGeral)} (${lista.length} notas)`,
+        cor: 'verde'
+      }
+    ]
+
+    if (incluirNfce) {
+      cards.push({
+        rotulo: 'SUBTOTAL NFC-E (MOD 65)',
+        valor: `R$ ${formatMoney(totalNfce)} (${listaNfce.length} notas)`,
+        cor: 'indigo'
+      })
+    }
+
+    if (incluirNfe) {
+      cards.push({
+        rotulo: 'SUBTOTAL NF-E (MOD 55)',
+        valor: `R$ ${formatMoney(totalNfe)} (${listaNfe.length} notas)`,
+        cor: 'azul'
+      })
+    }
+
+    if (incluirNfse) {
+      cards.push({
+        rotulo: 'SUBTOTAL NFS-E (SERVIÇOS)',
+        valor: `R$ ${formatMoney(totalNfse)} (${listaNfse.length} notas)`,
+        cor: 'amber'
+      })
+    }
+
+    const colunas = ['Modelo', 'Número', 'Data/Hora', 'Cliente / Destinatário', 'Cidade/UF', 'Valor', 'Chave / Protocolo']
+    const linhas = lista.map(d => [
+      d.modeloRotulo,
+      d.numero || '—',
+      formatDateTime(d.data_emissao),
+      (d.contato_nome || (d.modalidade === 'nfce_saidas' ? 'Consumidor Final' : '—')).slice(0, 32),
+      d.cidade ? `${d.cidade.slice(0, 14)}/${d.uf || ''}` : '—',
+      `R$ ${formatMoney(d.valor)}`,
+      (d.chave || '—').slice(0, 26) + (d.chave && d.chave.length > 26 ? '...' : '')
+    ])
+
+    const pdfBuffer = gerarDocumentoPdfFiscal({
+      titulo,
+      empresa,
+      competencia,
+      totalItens: lista.length,
+      valorTotal: totalGeral,
+      cardsResumo: cards,
+      colunas,
+      linhas,
+      colunasAlinhadasDireita: [5],
+      orientacao: 'landscape'
+    })
+
+    resultados.push({
+      nomeArquivo: `${baseName}.pdf`,
+      buffer: pdfBuffer,
+      tipo: 'pdf',
+      modalidade: 'Relatorios'
     })
   }
 

@@ -17,6 +17,7 @@ import {
   gerarRelatorioNfeSaidas,
   gerarRelatorioNfseSaidas,
   gerarRelatorioNfceSaidas,
+  gerarRelatorioConsolidadoSaidas,
   gerarRelatorioMonofasicos,
   extractItensFromXml,
   ItemProdutoFechamento,
@@ -504,40 +505,66 @@ export default function FechamentoFiscalModal({
         relatoriosGerados.push(...rels)
       }
 
-      // 3. Relatório Saídas NF-e
-      if (prefs.relNfeSaida) {
-        const rels = gerarRelatorioNfeSaidas(
-          documentos.nfe_saidas || [],
-          empresa,
-          mesCompetencia,
-          prefs.formatos,
-          prefs.ordenacao
-        )
-        relatoriosGerados.push(...rels)
+      // 3. Relatórios de Saídas / Vendas Emitidas (NF-e, NFC-e, NFS-e)
+      // Suporta:
+      // - Separado: gera relatórios individuais distintos por modelo
+      // - Consolidado: soma e unifica as notas emitidas selecionadas em um único relatório com subtotais e faturamento consolidado
+      // - Ambos: gera tanto os relatórios separados quanto o relatório consolidado unificado no ZIP
+      const modoAgrup = prefs.agrupamentoSaidas || 'consolidado'
+
+      // Geração em arquivos separados por modalidade
+      if (modoAgrup === 'separado' || modoAgrup === 'ambos') {
+        if (prefs.relNfeSaida) {
+          const rels = gerarRelatorioNfeSaidas(
+            documentos.nfe_saidas || [],
+            empresa,
+            mesCompetencia,
+            prefs.formatos,
+            prefs.ordenacao
+          )
+          relatoriosGerados.push(...rels)
+        }
+
+        if (prefs.relNfseSaida) {
+          const rels = gerarRelatorioNfseSaidas(
+            documentos.nfse_saidas || [],
+            empresa,
+            mesCompetencia,
+            prefs.formatos,
+            prefs.ordenacao
+          )
+          relatoriosGerados.push(...rels)
+        }
+
+        if (prefs.relNfceSaida) {
+          const rels = gerarRelatorioNfceSaidas(
+            documentos.nfce_saidas || [],
+            empresa,
+            mesCompetencia,
+            prefs.formatos,
+            prefs.ordenacao
+          )
+          relatoriosGerados.push(...rels)
+        }
       }
 
-      // 4. Relatório Serviços Prestados NFS-e
-      if (prefs.relNfseSaida) {
-        const rels = gerarRelatorioNfseSaidas(
-          documentos.nfse_saidas || [],
-          empresa,
-          mesCompetencia,
-          prefs.formatos,
-          prefs.ordenacao
-        )
-        relatoriosGerados.push(...rels)
-      }
-
-      // 5. Relatório Vendas NFC-e
-      if (prefs.relNfceSaida) {
-        const rels = gerarRelatorioNfceSaidas(
-          documentos.nfce_saidas || [],
-          empresa,
-          mesCompetencia,
-          prefs.formatos,
-          prefs.ordenacao
-        )
-        relatoriosGerados.push(...rels)
+      // Geração consolidada / unificada (Somar NF-e + NFC-e + NFS-e no mesmo relatório)
+      if (modoAgrup === 'consolidado' || modoAgrup === 'ambos') {
+        if (prefs.relNfceSaida || prefs.relNfeSaida || prefs.relNfseSaida) {
+          const relsConsolidados = gerarRelatorioConsolidadoSaidas({
+            nfeDocs: documentos.nfe_saidas || [],
+            nfceDocs: documentos.nfce_saidas || [],
+            nfseDocs: documentos.nfse_saidas || [],
+            incluirNfe: Boolean(prefs.relNfeSaida),
+            incluirNfce: Boolean(prefs.relNfceSaida),
+            incluirNfse: Boolean(prefs.relNfseSaida),
+            empresa,
+            competencia: mesCompetencia,
+            formatos: prefs.formatos,
+            ordenacao: prefs.ordenacao
+          })
+          relatoriosGerados.push(...relsConsolidados)
+        }
       }
 
       // 6. Relatório de Monofásicos (PIS/COFINS)
@@ -952,206 +979,273 @@ export default function FechamentoFiscalModal({
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div className="space-y-3">
               
-              {/* Opção 1: Compras NF-e */}
-              <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition select-none ${
-                prefs.relNfeEntrada ? 'bg-indigo-50/50 border-indigo-200' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
-              }`}>
-                <input
-                  type="checkbox"
-                  checked={prefs.relNfeEntrada}
-                  onChange={e => setPrefs(p => ({ ...p, relNfeEntrada: e.target.checked }))}
-                  className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
-                />
-                <div className="w-full">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-bold text-slate-800 text-xs block">
-                      Resumo de Entradas (Compras - NF-e)
+              {/* Bloco 1: ENTRADAS & SERVIÇOS RECEBIDOS */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {/* Opção 1: Compras NF-e */}
+                <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition select-none ${
+                  prefs.relNfeEntrada ? 'bg-indigo-50/50 border-indigo-200' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                }`}>
+                  <input
+                    type="checkbox"
+                    checked={prefs.relNfeEntrada}
+                    onChange={e => setPrefs(p => ({ ...p, relNfeEntrada: e.target.checked }))}
+                    className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <div className="w-full">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-slate-800 text-xs block">
+                        Resumo de Entradas (Compras - NF-e)
+                      </span>
+                      {diagnostico && (
+                        diagnostico.nfe_entradas > 0 ? (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0">
+                            🟢 {diagnostico.nfe_entradas} XML(s)
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0">
+                            ⚪ 0 XMLs (Omitido)
+                          </span>
+                        )
+                      )}
+                    </div>
+                    <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
+                      Número, Data da Nota, Data Entrada, Fornecedor, Cidade/UF, Valor, Chave + Total Geral.
                     </span>
-                    {diagnostico && (
-                      diagnostico.nfe_entradas > 0 ? (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0">
-                          🟢 {diagnostico.nfe_entradas} XML(s)
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0">
-                          ⚪ 0 XMLs (Omitido)
-                        </span>
-                      )
-                    )}
                   </div>
-                  <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
-                    Número, Data da Nota, Data Entrada, Fornecedor, Cidade/UF, Valor, Chave + Total Geral.
-                  </span>
-                </div>
-              </label>
+                </label>
 
-              {/* Opção 2: Serviços Recebidos NFS-e */}
-              <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition select-none ${
-                prefs.relNfseEntrada ? 'bg-indigo-50/50 border-indigo-200' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
-              }`}>
-                <input
-                  type="checkbox"
-                  checked={prefs.relNfseEntrada}
-                  onChange={e => setPrefs(p => ({ ...p, relNfseEntrada: e.target.checked }))}
-                  className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
-                />
-                <div className="w-full">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-bold text-slate-800 text-xs block">
-                      Resumo de Serviços Recebidos (NFS-e Tomados)
+                {/* Opção 2: Serviços Recebidos NFS-e */}
+                <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition select-none ${
+                  prefs.relNfseEntrada ? 'bg-indigo-50/50 border-indigo-200' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                }`}>
+                  <input
+                    type="checkbox"
+                    checked={prefs.relNfseEntrada}
+                    onChange={e => setPrefs(p => ({ ...p, relNfseEntrada: e.target.checked }))}
+                    className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <div className="w-full">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-slate-800 text-xs block">
+                        Resumo de Serviços Recebidos (NFS-e Tomados)
+                      </span>
+                      {diagnostico && (
+                        diagnostico.nfse_entradas > 0 ? (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0">
+                            🟢 {diagnostico.nfse_entradas} nota(s)
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0">
+                            ⚪ 0 notas (Omitido)
+                          </span>
+                        )
+                      )}
+                    </div>
+                    <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
+                      Número, Data Nota, Data Entrada, Prestador, Cidade/UF, Valor, Chave/Código + Total Geral.
                     </span>
-                    {diagnostico && (
-                      diagnostico.nfse_entradas > 0 ? (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0">
-                          🟢 {diagnostico.nfse_entradas} nota(s)
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0">
-                          ⚪ 0 notas (Omitido)
-                        </span>
-                      )
-                    )}
                   </div>
-                  <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
-                    Número, Data Nota, Data Entrada, Prestador, Cidade/UF, Valor, Chave/Código + Total Geral.
-                  </span>
-                </div>
-              </label>
+                </label>
+              </div>
 
-              {/* Opção 3: Saídas NF-e */}
-              <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition select-none ${
-                prefs.relNfeSaida ? 'bg-indigo-50/50 border-indigo-200' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
-              }`}>
-                <input
-                  type="checkbox"
-                  checked={prefs.relNfeSaida}
-                  onChange={e => setPrefs(p => ({ ...p, relNfeSaida: e.target.checked }))}
-                  className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
-                />
-                <div className="w-full">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-bold text-slate-800 text-xs block">
-                      Resumo de Notas Emitidas (NF-e - Mod 55)
+              {/* Bloco 2: RESUMO DE VENDAS & SAÍDAS EMITIDAS (UNIFICADO / CONSOLIDADO / SEPARADO) */}
+              <div className="p-3.5 rounded-xl border border-indigo-200/90 bg-indigo-50/30">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2 pb-2 border-b border-indigo-100">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
+                      <Package size={14} className="text-indigo-600" />
+                      Resumo de Vendas e Saídas Emitidas
                     </span>
-                    {diagnostico && (
-                      diagnostico.nfe_saidas > 0 ? (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0">
-                          🟢 {diagnostico.nfe_saidas} XML(s)
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0">
-                          ⚪ 0 XMLs (Omitido)
-                        </span>
-                      )
-                    )}
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      (NFC-e, NF-e e NFS-e)
+                    </span>
                   </div>
-                  <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
-                    Número, Data/Hora, Cliente, Valor, Chave de Acesso + Total Geral.
-                  </span>
+                  {diagnostico && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-900">
+                      Total: {(diagnostico.nfce_saidas || 0) + (diagnostico.nfe_saidas || 0) + (diagnostico.nfse_saidas || 0)} nota(s) emitida(s)
+                    </span>
+                  )}
                 </div>
-              </label>
 
-              {/* Opção 4: Serviços Prestados NFS-e */}
-              <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition select-none ${
-                prefs.relNfseSaida ? 'bg-indigo-50/50 border-indigo-200' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
-              }`}>
-                <input
-                  type="checkbox"
-                  checked={prefs.relNfseSaida}
-                  onChange={e => setPrefs(p => ({ ...p, relNfseSaida: e.target.checked }))}
-                  className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
-                />
-                <div className="w-full">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-bold text-slate-800 text-xs block">
-                      Resumo de Serviços Emitidos (NFS-e Prestados)
-                    </span>
-                    {diagnostico && (
-                      diagnostico.nfse_saidas > 0 ? (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0">
-                          🟢 {diagnostico.nfse_saidas} nota(s)
+                {/* Seleção dos modelos incluídos no resumo de vendas */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+                  {/* NFC-e Mod 65 */}
+                  <label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition select-none ${
+                    prefs.relNfceSaida ? 'bg-white border-indigo-300 shadow-2xs' : 'bg-slate-50/80 border-slate-200 hover:bg-white'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={prefs.relNfceSaida}
+                      onChange={e => setPrefs(p => ({ ...p, relNfceSaida: e.target.checked }))}
+                      className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <div className="w-full">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-bold text-slate-800 text-[11px] block">
+                          NFC-e (Mod 65)
                         </span>
-                      ) : (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0">
-                          ⚪ 0 notas (Omitido)
-                        </span>
-                      )
-                    )}
-                  </div>
-                  <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
-                    Número, Data/Hora, Tomador/Cliente, Valor, Chave/Código + Total Geral.
-                  </span>
-                </div>
-              </label>
+                        {diagnostico && (
+                          <span className={`text-[9px] font-bold px-1 py-0.2 rounded ${
+                            diagnostico.nfce_saidas > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            {diagnostico.nfce_saidas} XML(s)
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">
+                        Consumidor / Cupom PDV
+                      </span>
+                    </div>
+                  </label>
 
-              {/* Opção 5: Consumidor NFC-e */}
-              <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition select-none ${
-                prefs.relNfceSaida ? 'bg-indigo-50/50 border-indigo-200' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
-              }`}>
-                <input
-                  type="checkbox"
-                  checked={prefs.relNfceSaida}
-                  onChange={e => setPrefs(p => ({ ...p, relNfceSaida: e.target.checked }))}
-                  className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
-                />
-                <div className="w-full">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-bold text-slate-800 text-xs block">
-                      Resumo de Notas ao Consumidor (NFC-e - Mod 65)
-                    </span>
-                    {diagnostico && (
-                      diagnostico.nfce_saidas > 0 ? (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0">
-                          🟢 {diagnostico.nfce_saidas.toLocaleString('pt-BR')} XML(s)
+                  {/* NF-e Mod 55 */}
+                  <label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition select-none ${
+                    prefs.relNfeSaida ? 'bg-white border-indigo-300 shadow-2xs' : 'bg-slate-50/80 border-slate-200 hover:bg-white'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={prefs.relNfeSaida}
+                      onChange={e => setPrefs(p => ({ ...p, relNfeSaida: e.target.checked }))}
+                      className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <div className="w-full">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-bold text-slate-800 text-[11px] block">
+                          NF-e (Mod 55)
                         </span>
-                      ) : (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0">
-                          ⚪ 0 XMLs (Omitido)
-                        </span>
-                      )
-                    )}
-                  </div>
-                  <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
-                    Número, Data/Hora, Consumidor, Valor, Chave de Acesso + Total Geral.
-                  </span>
-                </div>
-              </label>
+                        {diagnostico && (
+                          <span className={`text-[9px] font-bold px-1 py-0.2 rounded ${
+                            diagnostico.nfe_saidas > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            {diagnostico.nfe_saidas} XML(s)
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">
+                        Mercantil / Grandes Vendas
+                      </span>
+                    </div>
+                  </label>
 
-              {/* Opção 6: Relatório de Monofásicos */}
-              <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition select-none ${
-                prefs.relMonofasicos ? 'bg-indigo-50/50 border-indigo-200' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
-              }`}>
-                <input
-                  type="checkbox"
-                  checked={prefs.relMonofasicos}
-                  onChange={e => setPrefs(p => ({ ...p, relMonofasicos: e.target.checked }))}
-                  className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
-                />
-                <div className="w-full">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-bold text-slate-800 text-xs block flex items-center gap-1">
-                      Relatório de Produtos Monofásicos (PIS/COFINS)
-                      <Sparkles size={13} className="text-amber-500" />
-                    </span>
-                    {diagnostico && (
-                      diagnostico.tem_monofasicos ? (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0">
-                          🟢 Monofásicos identificados
+                  {/* NFS-e Serviços Prestados */}
+                  <label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition select-none ${
+                    prefs.relNfseSaida ? 'bg-white border-indigo-300 shadow-2xs' : 'bg-slate-50/80 border-slate-200 hover:bg-white'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={prefs.relNfseSaida}
+                      onChange={e => setPrefs(p => ({ ...p, relNfseSaida: e.target.checked }))}
+                      className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <div className="w-full">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-bold text-slate-800 text-[11px] block">
+                          NFS-e (Serviços)
                         </span>
-                      ) : (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0">
-                          ⚪ Sem monofásicos (Omitido)
-                        </span>
-                      )
-                    )}
-                  </div>
-                  <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
-                    Segregação por NCM e Alíquotas PIS/COFINS (Bebidas, Autopeças, Farmácia) + Somatório.
-                  </span>
+                        {diagnostico && (
+                          <span className={`text-[9px] font-bold px-1 py-0.2 rounded ${
+                            diagnostico.nfse_saidas > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            {diagnostico.nfse_saidas} nota(s)
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">
+                        Serviços Emitidos
+                      </span>
+                    </div>
+                  </label>
                 </div>
-              </label>
+
+                {/* Seletor de Modo de Agrupamento das Vendas (Separado x Consolidado x Ambos) */}
+                <div className="pt-2 border-t border-indigo-100/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="text-[11px] text-slate-700">
+                    <span className="font-bold text-indigo-950">Apresentação das Vendas na Contabilidade:</span>
+                    <span className="text-slate-500 block sm:inline sm:ml-1">
+                      {prefs.agrupamentoSaidas === 'consolidado' && '(Unifica e soma NF-e + NFC-e + NFS-e no mesmo relatório com subtotais por modelo)'}
+                      {prefs.agrupamentoSaidas === 'separado' && '(Gera relatórios individuais distintos para cada modelo fiscal)'}
+                      {prefs.agrupamentoSaidas === 'ambos' && '(Gera os relatórios separados e também o relatório consolidado unificado)'}
+                    </span>
+                  </div>
+
+                  <div className="inline-flex rounded-lg border border-indigo-200 bg-white p-0.5 shrink-0 shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => setPrefs(p => ({ ...p, agrupamentoSaidas: 'consolidado' }))}
+                      className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition cursor-pointer ${
+                        prefs.agrupamentoSaidas === 'consolidado'
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-indigo-700 hover:bg-indigo-50/50'
+                      }`}
+                      title="Soma e consolida todas as notas emitidas em um único relatório de faturamento"
+                    >
+                      Somar (Consolidado)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPrefs(p => ({ ...p, agrupamentoSaidas: 'separado' }))}
+                      className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition cursor-pointer ${
+                        prefs.agrupamentoSaidas === 'separado'
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-indigo-700 hover:bg-indigo-50/50'
+                      }`}
+                      title="Gera um relatório isolado para cada modalidade (NF-e, NFC-e, NFS-e)"
+                    >
+                      Deixar Separado
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPrefs(p => ({ ...p, agrupamentoSaidas: 'ambos' }))}
+                      className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition cursor-pointer ${
+                        prefs.agrupamentoSaidas === 'ambos'
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-indigo-700 hover:bg-indigo-50/50'
+                      }`}
+                      title="Gera tanto os relatórios separados quanto o relatório consolidado no ZIP"
+                    >
+                      Ambos
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bloco 3: RELATÓRIO DE PRODUTOS MONOFÁSICOS (PIS/COFINS) */}
+              <div className={`p-3 rounded-xl border transition ${
+                prefs.relMonofasicos ? 'bg-indigo-50/50 border-indigo-200' : 'bg-slate-50 border-slate-200'
+              }`}>
+                <label className="flex items-start gap-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={prefs.relMonofasicos}
+                    onChange={e => setPrefs(p => ({ ...p, relMonofasicos: e.target.checked }))}
+                    className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <div className="w-full">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-slate-800 text-xs block flex items-center gap-1">
+                        Relatório de Produtos Monofásicos (PIS/COFINS)
+                        <Sparkles size={13} className="text-amber-500" />
+                      </span>
+                      {diagnostico && (
+                        diagnostico.tem_monofasicos ? (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0">
+                            🟢 Monofásicos identificados
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0">
+                            ⚪ Sem monofásicos (Omitido)
+                          </span>
+                        )
+                      )}
+                    </div>
+                    <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
+                      Segregação por NCM e Alíquotas PIS/COFINS (Bebidas, Autopeças, Farmácia) + Somatório para abatimento do DAS.
+                    </span>
+                  </div>
+                </label>
+              </div>
 
             </div>
           </div>

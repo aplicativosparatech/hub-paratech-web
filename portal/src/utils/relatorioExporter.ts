@@ -131,7 +131,8 @@ export function exportarCSV(
 
     const todos = [
       ...(dados.notas_detalhadas?.nfe || []).map((n: any) => ({ ...n, modelo: 'NF-e (55)' })),
-      ...(dados.notas_detalhadas?.nfce || []).map((n: any) => ({ ...n, modelo: 'NFC-e (65)' }))
+      ...(dados.notas_detalhadas?.nfce || []).map((n: any) => ({ ...n, modelo: 'NFC-e (65)' })),
+      ...(dados.notas_detalhadas?.nfse || []).map((n: any) => ({ ...n, modelo: 'NFS-e' }))
     ]
 
     todos.forEach((n: any) => {
@@ -168,7 +169,8 @@ export function exportarCSV(
     linhas.push('MODELO;NUMERO;SERIE;CHAVE;DATA;VALOR NOTA (R$);FORMA DE PAGAMENTO;VALOR PARCELA (R$)')
     const todos = [
       ...(dados.notas_detalhadas?.nfe || []).map((n: any) => ({ ...n, modelo: 'NF-e (55)' })),
-      ...(dados.notas_detalhadas?.nfce || []).map((n: any) => ({ ...n, modelo: 'NFC-e (65)' }))
+      ...(dados.notas_detalhadas?.nfce || []).map((n: any) => ({ ...n, modelo: 'NFC-e (65)' })),
+      ...(dados.notas_detalhadas?.nfse || []).map((n: any) => ({ ...n, modelo: 'NFS-e' }))
     ]
     todos.forEach((n: any) => {
       if (Array.isArray(n.formas_pagamento) && n.formas_pagamento.length > 0) {
@@ -421,7 +423,8 @@ export function exportarExcel(
 
     const todos = [
       ...(dados.notas_detalhadas?.nfe || []).map((n: any) => ({ ...n, modelo: 'NF-e (55)' })),
-      ...(dados.notas_detalhadas?.nfce || []).map((n: any) => ({ ...n, modelo: 'NFC-e (65)' }))
+      ...(dados.notas_detalhadas?.nfce || []).map((n: any) => ({ ...n, modelo: 'NFC-e (65)' })),
+      ...(dados.notas_detalhadas?.nfse || []).map((n: any) => ({ ...n, modelo: 'NFS-e' }))
     ]
 
     todos.forEach((n: any) => {
@@ -454,7 +457,8 @@ export function exportarExcel(
     rows.push(['Modelo', 'Número', 'Série', 'Chave de Acesso', 'Data Emissão', 'Valor Total Nota (R$)', 'Forma de Pagamento', 'Valor Parcela (R$)'])
     const todos = [
       ...(dados.notas_detalhadas?.nfe || []).map((n: any) => ({ ...n, modelo: 'NF-e (55)' })),
-      ...(dados.notas_detalhadas?.nfce || []).map((n: any) => ({ ...n, modelo: 'NFC-e (65)' }))
+      ...(dados.notas_detalhadas?.nfce || []).map((n: any) => ({ ...n, modelo: 'NFC-e (65)' })),
+      ...(dados.notas_detalhadas?.nfse || []).map((n: any) => ({ ...n, modelo: 'NFS-e' }))
     ]
     todos.forEach((n: any) => {
       if (Array.isArray(n.formas_pagamento) && n.formas_pagamento.length > 0) {
@@ -844,7 +848,8 @@ export function exportarPDF(
     // Relação Analítica de Notas
     const todos = [
       ...(dados.notas_detalhadas?.nfe || []).map((n: any) => ({ ...n, modelo: '55' })),
-      ...(dados.notas_detalhadas?.nfce || []).map((n: any) => ({ ...n, modelo: '65' }))
+      ...(dados.notas_detalhadas?.nfce || []).map((n: any) => ({ ...n, modelo: '65' })),
+      ...(dados.notas_detalhadas?.nfse || []).map((n: any) => ({ ...n, modelo: 'NFS-e' }))
     ]
 
     const tableBody = todos.map((n: any) => [
