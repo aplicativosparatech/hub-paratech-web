@@ -1329,6 +1329,101 @@ namespace HubParatechDesktop
                     }
                 }
 
+                // 3. Camada de Varredura Profunda: Pastas Contabilidade_Paratech e Raiz Geral de XMLs
+                if (numerosRecuperados.Count < totalFaltantesEsperados)
+                {
+                    var pastasExtras = new List<string>();
+
+                    try
+                    {
+                        // Unidades de disco fixas (C:\, D:\, etc.)
+                        foreach (var drive in DriveInfo.GetDrives().Where(d => d.IsReady && d.DriveType == DriveType.Fixed))
+                        {
+                            pastasExtras.Add(Path.Combine(drive.RootDirectory.FullName, "Contabilidade_Paratech"));
+                            pastasExtras.Add(Path.Combine(drive.RootDirectory.FullName, "Contabilidade"));
+                        }
+
+                        // Pastas do usuário atual e públicas
+                        pastasExtras.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "Contabilidade_Paratech"));
+                        pastasExtras.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Contabilidade_Paratech"));
+                        pastasExtras.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory), "Contabilidade_Paratech"));
+                        pastasExtras.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Contabilidade_Paratech"));
+
+                        // Ancestrais de 2 níveis (avô) das pastas monitoradas
+                        foreach (var m in monitores.Where(x => x.tipoPasta == "vendas"))
+                        {
+                            try
+                            {
+                                var p1 = Directory.GetParent(m.rootPath);
+                                if (p1 != null)
+                                {
+                                    var p2 = Directory.GetParent(p1.FullName);
+                                    if (p2 != null && p2.Exists) pastasExtras.Add(p2.FullName);
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                    catch { }
+
+                    var monitorEnvio = monitores.FirstOrDefault(x => x.tipoPasta == "vendas") ?? monitores[0];
+                    var pastasProcessadas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var pastaExtra in pastasExtras)
+                    {
+                        if (string.IsNullOrWhiteSpace(pastaExtra) || !Directory.Exists(pastaExtra)) continue;
+                        if (!pastasProcessadas.Add(pastaExtra)) continue;
+
+                        try
+                        {
+                            var arquivosExtras = SafeEnumerateXmlFiles(pastaExtra);
+                            foreach (var fileInfo in arquivosExtras)
+                            {
+                                if (fileInfo.Length < 100) continue;
+
+                                var meta = ExtrairMetadadosRapidos(fileInfo.FullName);
+                                if (long.TryParse(meta.numero, out long numNota) && numNota > 0)
+                                {
+                                    bool precisaEnviar = false;
+                                    if (meta.modelo == "65" && faltantesNfce.Contains(numNota) && !numerosRecuperados.Contains(numNota))
+                                        precisaEnviar = true;
+                                    else if (meta.modelo == "55" && faltantesNfe.Contains(numNota) && !numerosRecuperados.Contains(numNota))
+                                        precisaEnviar = true;
+
+                                    if (precisaEnviar)
+                                    {
+                                        string fileId = $"{fileInfo.Name}_{fileInfo.Length}";
+                                        XmlUploadCache.RemoveKey(fileId);
+                                        if (!string.IsNullOrEmpty(meta.chave)) XmlUploadCache.RemoveKey(meta.chave);
+
+                                        bool ok = await monitorEnvio.ProcessFileAsync(fileInfo.FullName, isRealTime: false, forceUpload: true);
+                                        if (ok)
+                                        {
+                                            recuperados++;
+                                            numerosRecuperados.Add(numNota);
+                                            LiveMonitorForm.AddLog(new XmlLogItem
+                                            {
+                                                Timestamp = DateTime.Now,
+                                                TipoPasta = "Saída (Contabilidade_Paratech)",
+                                                Modelo = meta.modelo ?? "65",
+                                                Numero = numNota.ToString(),
+                                                Serie = meta.serie ?? "1",
+                                                DataEmissao = meta.dhEmi ?? DateTime.Now.ToString("yyyy-MM-dd"),
+                                                ValorTotal = meta.valor,
+                                                Chave = meta.chave ?? "-",
+                                                Status = "Recuperado & Enviado (Gap)",
+                                                Arquivo = fileInfo.FullName,
+                                                IsRealTime = false
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+                }
+
                 int ausentes = totalFaltantesEsperados - recuperados;
 
                 string msg = recuperados > 0

@@ -295,7 +295,16 @@ export async function POST(request: Request) {
 
     // REGRA FISCAL: Filtro de Competência Inicial e Numeração de Ponto de Partida
     const dataEmissaoStr = emissao ? emissao.split('T')[0] : null
-    if (cliente.data_inicio_monitoramento && dataEmissaoStr && dataEmissaoStr < cliente.data_inicio_monitoramento) {
+    const numInt = numero ? parseInt(String(numero).replace(/\D/g, ''), 10) : 0
+
+    // Se o número for igual ou superior ao ponto de partida configurado para a empresa,
+    // a nota NUNCA deve ser descartada por data de emissão anterior (pode ser a primeira nota da virada de mês ou ponto inicial acordado)
+    const isPontoPartidaOuSuperior = (
+      (mod === '55' && cliente.numero_inicial_nfe && numInt >= cliente.numero_inicial_nfe) ||
+      (mod === '65' && cliente.numero_inicial_nfce && numInt >= cliente.numero_inicial_nfce)
+    )
+
+    if (!isPontoPartidaOuSuperior && cliente.data_inicio_monitoramento && dataEmissaoStr && dataEmissaoStr < cliente.data_inicio_monitoramento) {
       return NextResponse.json({
         ignored: true,
         ponto_partida: true,
@@ -304,7 +313,6 @@ export async function POST(request: Request) {
     }
 
     if (tipoPasta === 'vendas') {
-      const numInt = numero ? parseInt(String(numero).replace(/\D/g, ''), 10) : 0
       if (numInt > 0) {
         if (mod === '55' && cliente.numero_inicial_nfe && numInt < cliente.numero_inicial_nfe) {
           return NextResponse.json({
@@ -529,6 +537,22 @@ export async function POST(request: Request) {
       .from('configuracoes_hub')
       .update({ ultima_sincronizacao: new Date().toISOString() })
       .eq('cliente_id', cliente.id)
+
+    // Se o XML é de vendas e possui número, limpa rejeições obsoletas de inutilização para essa numeração (ex: status 241/256/206)
+    if (tipoPasta === 'vendas' && numInt > 0 && (mod === '55' || mod === '65')) {
+      try {
+        await supabaseAdmin
+          .from('inutilizacoes_saidas')
+          .delete()
+          .eq('cliente_id', cliente.id)
+          .eq('modelo', mod)
+          .lte('numero_inicial', numInt)
+          .gte('numero_final', numInt)
+          .not('status_sefaz', 'in', '(102,204,563)')
+      } catch (errInut: any) {
+        console.warn('Erro ao limpar pendência de inutilização pós-upload:', errInut?.message)
+      }
+    }
 
     return NextResponse.json({ 
       success: true, 

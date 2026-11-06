@@ -6,6 +6,7 @@ using System.Linq;
 using System.Windows.Forms;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace HubParatechDesktop
 {
@@ -90,6 +91,8 @@ namespace HubParatechDesktop
         private ComboBox cmbFiltroData;
         private DateTimePicker dtpFiltro;
         private Label lblContadorFiltro;
+        private TextBox txtBuscaRapida;
+        private Button btnLimparBusca;
         private System.Windows.Forms.Timer refreshTimer;
         private ToolTip toolTipGlobal = new ToolTip();
 
@@ -449,11 +452,11 @@ namespace HubParatechDesktop
 
             Controls.Add(statsPanel);
 
-            // 2.5 Barra de Progresso e Filtro por Data
+            // 2.5 Barra de Progresso, Busca Rápida e Filtro por Data
             var toolBarPanel = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 52,
+                Height = 88,
                 BackColor = Color.White,
                 Padding = new Padding(20, 6, 20, 6)
             };
@@ -466,11 +469,11 @@ namespace HubParatechDesktop
             };
             toolBarPanel.Controls.Add(toolBarBorder);
 
-            // Lado Esquerdo: Progresso da Sincronização / Varredura
+            // Linha 1 - Lado Esquerdo: Progresso da Sincronização / Varredura
             var pnlProgress = new Panel
             {
                 Location = new Point(20, 6),
-                Size = new Size(380, 40),
+                Size = new Size(380, 36),
                 Anchor = AnchorStyles.Top | AnchorStyles.Left,
                 BackColor = Color.Transparent
             };
@@ -487,7 +490,7 @@ namespace HubParatechDesktop
 
             pbSync = new ProgressBar
             {
-                Location = new Point(0, 20),
+                Location = new Point(0, 18),
                 Size = new Size(240, 14),
                 Minimum = 0,
                 Maximum = 100,
@@ -501,17 +504,17 @@ namespace HubParatechDesktop
                 Text = "100%",
                 Font = new Font("Segoe UI", 8f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(16, 185, 129),
-                Location = new Point(245, 19),
+                Location = new Point(245, 17),
                 AutoSize = true
             };
             pnlProgress.Controls.Add(lblProgressPercent);
 
             toolBarPanel.Controls.Add(pnlProgress);
 
-            // Lado Direito: Filtro por Data de Emissão (com suporte a Todas as Datas, Hoje, Ontem, etc.)
+            // Linha 1 - Lado Direito: Filtro por Data de Emissão (com suporte a Todas as Datas, Hoje, Ontem, etc.)
             var pnlFilter = new Panel
             {
-                Size = new Size(580, 40),
+                Size = new Size(580, 36),
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
                 Location = new Point(toolBarPanel.Width - 600, 6),
                 BackColor = Color.Transparent
@@ -522,7 +525,7 @@ namespace HubParatechDesktop
                 Text = "📅 Emissão:",
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(71, 85, 105),
-                Location = new Point(0, 9),
+                Location = new Point(0, 7),
                 AutoSize = true
             };
             pnlFilter.Controls.Add(lblFiltro);
@@ -532,7 +535,7 @@ namespace HubParatechDesktop
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 Font = new Font("Segoe UI", 8.5f),
                 Size = new Size(180, 26),
-                Location = new Point(78, 6)
+                Location = new Point(78, 4)
             };
             cmbFiltroData.Items.Add("Todas as Datas (Geral)");
             cmbFiltroData.Items.Add($"Hoje ({DateTime.Today:dd/MM})");
@@ -554,7 +557,7 @@ namespace HubParatechDesktop
                 Format = DateTimePickerFormat.Short,
                 Font = new Font("Segoe UI", 8.5f),
                 Size = new Size(95, 24),
-                Location = new Point(264, 6),
+                Location = new Point(264, 4),
                 Value = DateTime.Today,
                 Enabled = false
             };
@@ -565,15 +568,84 @@ namespace HubParatechDesktop
                 Text = "Carregando...",
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(14, 116, 144),
-                Location = new Point(365, 9),
+                Location = new Point(365, 7),
                 AutoSize = true
             };
             pnlFilter.Controls.Add(lblContadorFiltro);
 
             toolBarPanel.Controls.Add(pnlFilter);
 
+            // Linha 2 - Barra de Busca em Tempo Real Multi-Campos (Número, Data, Valor, Chave)
+            var pnlBuscaRapida = new Panel
+            {
+                Location = new Point(20, 48),
+                Size = new Size(toolBarPanel.Width - 40, 32),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+                BackColor = Color.FromArgb(248, 250, 252)
+            };
+
+            var lblBuscaIcone = new Label
+            {
+                Text = "🔍 BUSCAR NOTA:",
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(30, 41, 59),
+                Location = new Point(8, 7),
+                AutoSize = true
+            };
+            pnlBuscaRapida.Controls.Add(lblBuscaIcone);
+
+            txtBuscaRapida = new TextBox
+            {
+                Font = new Font("Segoe UI", 9f),
+                Location = new Point(125, 4),
+                Size = new Size(380, 24),
+                ForeColor = Color.FromArgb(15, 23, 42),
+                BorderStyle = BorderStyle.FixedSingle
+            };
+            toolTipGlobal.SetToolTip(txtBuscaRapida, "Digite para pesquisar instantaneamente por:\n• Número da Nota (ex: 2954)\n• Data de Emissão (ex: 01/10/2026 ou 01/10)\n• Valor Total em R$ (ex: 158,59 ou 158.59)\n• Chave de Acesso (44 dígitos ou parcial)\n• Caminho do Arquivo ou Status");
+            txtBuscaRapida.TextChanged += (s, e) => {
+                RefreshDataGrid();
+            };
+            pnlBuscaRapida.Controls.Add(txtBuscaRapida);
+
+            btnLimparBusca = new Button
+            {
+                Text = "✕ Limpar",
+                Font = new Font("Segoe UI", 8f, FontStyle.Bold),
+                Location = new Point(512, 4),
+                Size = new Size(68, 24),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.White,
+                ForeColor = Color.FromArgb(100, 116, 139),
+                Cursor = Cursors.Hand
+            };
+            btnLimparBusca.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
+            btnLimparBusca.Click += (s, e) => {
+                txtBuscaRapida.Text = "";
+                txtBuscaRapida.Focus();
+                RefreshDataGrid();
+            };
+            pnlBuscaRapida.Controls.Add(btnLimparBusca);
+
+            var lblDicaBusca = new Label
+            {
+                Text = "Filtro em tempo real por Número, Data de Emissão, Valor Total (R$) ou Chave de Acesso",
+                Font = new Font("Segoe UI", 8f, FontStyle.Italic),
+                ForeColor = Color.FromArgb(100, 116, 139),
+                Location = new Point(590, 7),
+                AutoSize = true
+            };
+            pnlBuscaRapida.Controls.Add(lblDicaBusca);
+
+            toolBarPanel.Controls.Add(pnlBuscaRapida);
+
             toolBarPanel.Resize += (s, e) => {
                 pnlFilter.Location = new Point(toolBarPanel.Width - pnlFilter.Width - 20, 6);
+                pnlBuscaRapida.Width = toolBarPanel.Width - 40;
+                int maxTxtWidth = Math.Max(260, Math.Min(480, pnlBuscaRapida.Width - 440));
+                txtBuscaRapida.Width = maxTxtWidth;
+                btnLimparBusca.Location = new Point(txtBuscaRapida.Right + 6, 4);
+                lblDicaBusca.Location = new Point(btnLimparBusca.Right + 12, 7);
             };
 
             cmbFiltroData.SelectedIndexChanged += (s, e) => {
@@ -1057,6 +1129,62 @@ namespace HubParatechDesktop
                     filtered = allCopy;
                 }
 
+                // 6. Filtragem por busca rápida textual (Número, Data da Emissão, Valor Total, Chave de Acesso)
+                string termoBusca = (txtBuscaRapida?.Text ?? "").Trim();
+                if (!string.IsNullOrEmpty(termoBusca))
+                {
+                    string termoLower = termoBusca.ToLowerInvariant();
+                    string termoDigitos = Regex.Replace(termoBusca, @"[^\d]", "");
+                    string termoVirgula = termoBusca.Replace(".", ",");
+                    string termoPonto = termoBusca.Replace(",", ".");
+
+                    filtered = filtered.Where(x =>
+                    {
+                        // 1. Número da Nota (ex: 2954, 4543)
+                        if (!string.IsNullOrEmpty(x.Numero))
+                        {
+                            if (x.Numero.Equals(termoBusca, StringComparison.OrdinalIgnoreCase)) return true;
+                            if (!string.IsNullOrEmpty(termoDigitos) && x.Numero.Equals(termoDigitos, StringComparison.OrdinalIgnoreCase)) return true;
+                            if (x.Numero.Contains(termoLower, StringComparison.OrdinalIgnoreCase)) return true;
+                        }
+
+                        // 2. Chave de Acesso (44 dígitos ou parte dela)
+                        if (!string.IsNullOrEmpty(x.Chave))
+                        {
+                            if (x.Chave.Contains(termoLower, StringComparison.OrdinalIgnoreCase)) return true;
+                            if (!string.IsNullOrEmpty(termoDigitos) && x.Chave.Contains(termoDigitos, StringComparison.OrdinalIgnoreCase)) return true;
+                        }
+
+                        // 3. Data da Emissão (ex: 01/10/2026, 01/10, 2026-10-01)
+                        if (!string.IsNullOrEmpty(x.DataEmissao))
+                        {
+                            if (x.DataEmissao.Contains(termoLower, StringComparison.OrdinalIgnoreCase)) return true;
+                            if (x.DataEmissaoData.HasValue)
+                            {
+                                string d1 = x.DataEmissaoData.Value.ToString("dd/MM/yyyy");
+                                string d2 = x.DataEmissaoData.Value.ToString("dd/MM");
+                                string d3 = x.DataEmissaoData.Value.ToString("yyyy-MM-dd");
+                                if (d1.Contains(termoLower) || d2.Contains(termoLower) || d3.Contains(termoLower)) return true;
+                            }
+                        }
+
+                        // 4. Valor Total (ex: 158,59 ou 158.59 ou 158)
+                        if (x.ValorTotal > 0)
+                        {
+                            string vStrVirgula = x.ValorTotal.ToString("F2");
+                            string vStrPonto = x.ValorTotal.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+                            string vStrInt = ((long)x.ValorTotal).ToString();
+                            if (vStrVirgula.Contains(termoVirgula) || vStrPonto.Contains(termoPonto) || (!string.IsNullOrEmpty(termoDigitos) && vStrInt == termoDigitos)) return true;
+                        }
+
+                        // 5. Arquivo ou Status do Processamento
+                        if (!string.IsNullOrEmpty(x.Arquivo) && x.Arquivo.Contains(termoLower, StringComparison.OrdinalIgnoreCase)) return true;
+                        if (!string.IsNullOrEmpty(x.Status) && x.Status.Contains(termoLower, StringComparison.OrdinalIgnoreCase)) return true;
+
+                        return false;
+                    }).ToList();
+                }
+
                 // Inverter a ordem: Notas finais no início (mais recentes e com maior número no topo)
                 filtered = filtered
                     .OrderByDescending(x => x.DataEmissaoData ?? DateTime.MinValue)
@@ -1067,7 +1195,12 @@ namespace HubParatechDesktop
                 // Atualizar contador do filtro
                 if (lblContadorFiltro != null && !lblContadorFiltro.IsDisposed)
                 {
-                    if (modoFiltro == 1 && filtered.Count == 0 && allCopy.Count > 0)
+                    if (!string.IsNullOrEmpty(termoBusca))
+                    {
+                        lblContadorFiltro.Text = $"Filtrando: {filtered.Count} resultado(s) para \"{termoBusca}\"";
+                        lblContadorFiltro.ForeColor = Color.FromArgb(2, 132, 199); // sky-600
+                    }
+                    else if (modoFiltro == 1 && filtered.Count == 0 && allCopy.Count > 0)
                     {
                         lblContadorFiltro.Text = $"0 notas hoje ({DateTime.Today:dd/MM}) • {allCopy.Count} no histórico geral (Escolha 'Todas as Datas')";
                         lblContadorFiltro.ForeColor = Color.FromArgb(217, 119, 6); // amber

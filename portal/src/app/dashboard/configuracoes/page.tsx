@@ -351,7 +351,7 @@ export default function ConfiguracoesPage() {
               <span className="font-semibold text-slate-600 mr-1">Legenda:</span>
               <span className="inline-flex items-center gap-1.5 font-medium text-emerald-700">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-200"></span>
-                v2.8.2 (Atual)
+                v2.8.3 (Atual)
               </span>
               <span className="text-slate-300">•</span>
               <span className="inline-flex items-center gap-1.5 font-medium text-amber-700">
@@ -508,7 +508,7 @@ export default function ConfiguracoesPage() {
 
                   const versaoHub = config?.versao_hub_instalada || (lastSync ? '2.8.0' : null);
                   const comandoRemoto = config?.comando_remoto;
-                  const VERSAO_MAIS_RECENTE = '2.8.2';
+                  const VERSAO_MAIS_RECENTE = '2.8.3';
                   const isAtualizado = versaoHub === VERSAO_MAIS_RECENTE;
                   const isPendenteAtualizacao = comandoRemoto === 'atualizar_hub';
 
@@ -560,7 +560,7 @@ export default function ConfiguracoesPage() {
                             <button
                               onClick={() => handleDispararComando(hub.id, isPendenteAtualizacao ? 'cancelar' : 'atualizar_hub')}
                               disabled={loadingComandoId === hub.id}
-                              title={isPendenteAtualizacao ? 'Cancelar ordem de atualização pendente' : 'Enviar comando remoto para o Hub atualizar sozinho para a v2.8.2 no próximo pulso'}
+                              title={isPendenteAtualizacao ? 'Cancelar ordem de atualização pendente' : 'Enviar comando remoto para o Hub atualizar sozinho para a v2.8.3 no próximo pulso'}
                               className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
                                 isPendenteAtualizacao
                                   ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'

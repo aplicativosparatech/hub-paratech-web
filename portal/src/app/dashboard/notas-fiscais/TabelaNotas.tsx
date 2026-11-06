@@ -178,27 +178,48 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     loadUltimaSincronizacao()
 
     const targetClienteId = selectedCliente || null
+    const todasNotas: any[] = []
+    const pageSize = 1000
+    let from = 0
+    let hasMore = true
 
-    let query = supabase.from(tabela).select('*').order('data_emissao', { ascending: false })
-    if (targetClienteId) {
-      query = query.eq('cliente_id', targetClienteId)
+    while (hasMore) {
+      let q = supabase.from(tabela).select('*').order('data_emissao', { ascending: false })
+      if (targetClienteId) {
+        q = q.eq('cliente_id', targetClienteId)
+      }
+
+      // Otimização: aplica filtro de período diretamente no banco utilizando os novos índices
+      if (filtroMes && /^\d{4}-\d{2}$/.test(filtroMes)) {
+        const [ano, mes] = filtroMes.split('-').map(Number)
+        const dataInicioMes = new Date(Date.UTC(ano, mes - 1, 1, 0, 0, 0)).toISOString()
+        const dataFimMes = new Date(Date.UTC(ano, mes, 0, 23, 59, 59, 999)).toISOString()
+        q = q.gte('data_emissao', dataInicioMes).lte('data_emissao', dataFimMes)
+      } else if (dataInicio || dataFim) {
+        if (dataInicio) q = q.gte('data_emissao', `${dataInicio}T00:00:00.000Z`)
+        if (dataFim) q = q.lte('data_emissao', `${dataFim}T23:59:59.999Z`)
+      } else if (!targetClienteId) {
+        q = q.limit(200)
+        const { data } = await q
+        todasNotas.push(...(data || []))
+        break
+      }
+
+      q = q.range(from, from + pageSize - 1)
+      const { data, error } = await q
+      if (error || !data || data.length === 0) {
+        hasMore = false
+        break
+      }
+
+      todasNotas.push(...data)
+      from += pageSize
+      if (data.length < pageSize) {
+        hasMore = false
+      }
     }
 
-    // Otimização: aplica filtro de período diretamente no banco utilizando os novos índices
-    if (filtroMes && /^\d{4}-\d{2}$/.test(filtroMes)) {
-      const [ano, mes] = filtroMes.split('-').map(Number)
-      const dataInicioMes = new Date(Date.UTC(ano, mes - 1, 1, 0, 0, 0)).toISOString()
-      const dataFimMes = new Date(Date.UTC(ano, mes, 0, 23, 59, 59, 999)).toISOString()
-      query = query.gte('data_emissao', dataInicioMes).lte('data_emissao', dataFimMes)
-    } else if (dataInicio || dataFim) {
-      if (dataInicio) query = query.gte('data_emissao', `${dataInicio}T00:00:00.000Z`)
-      if (dataFim) query = query.lte('data_emissao', `${dataFim}T23:59:59.999Z`)
-    } else if (!targetClienteId) {
-      query = query.limit(200)
-    }
-
-    const { data } = await query
-    setNotas(data || [])
+    setNotas(todasNotas)
     setLoading(false)
   }
 
@@ -341,7 +362,19 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
         const term = buscaNumero.trim().toLowerCase()
         const num = String(n.numero || '').toLowerCase()
         const chave = String(n.chave || '').toLowerCase()
-        if (!num.includes(term) && !chave.includes(term)) return false
+
+        // Se o usuário digitou apenas dígitos de até 9 números (ex: "2954", "4543"),
+        // ele busca especificamente o NÚMERO da nota, e não uma substring aleatória no código de barras de 44 dígitos!
+        const isNumeroBuscaCurto = /^\d{1,9}$/.test(term)
+        if (isNumeroBuscaCurto) {
+          const numInt = parseInt(num, 10)
+          const termInt = parseInt(term, 10)
+          const bateExato = num === term || (!isNaN(numInt) && !isNaN(termInt) && numInt === termInt)
+          if (!bateExato) return false
+        } else {
+          // Se tiver mais de 9 dígitos ou caracteres alfanuméricos, pesquisa na chave de acesso ou no número
+          if (!chave.includes(term) && !num.includes(term)) return false
+        }
       }
 
       // 4. Busca Geral (CNPJ, Emitente, Destinatário, Número, Chave, Valor)
