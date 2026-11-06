@@ -73,13 +73,24 @@ export default function FechamentoFiscalModal({
     pastasCriadas: string[]
   } | null>(null)
 
+  // Diagnóstico Inteligente e Contagem Real da Competência
+  const [carregandoDiagnostico, setCarregandoDiagnostico] = useState(false)
+  const [diagnostico, setDiagnostico] = useState<{
+    nfce_saidas: number
+    nfe_saidas: number
+    nfe_entradas: number
+    nfse_entradas: number
+    nfse_saidas: number
+    tem_monofasicos: boolean
+  } | null>(null)
+
   const timerRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Carrega preferências salvas: tenta do banco remoto primeiro, fallback para localStorage
+  // Carrega preferências e executa diagnóstico inteligente da competência
   useEffect(() => {
     let isMounted = true
 
-    async function carregarConfiguracao() {
+    async function carregarEavaliarCompetencia() {
       // 1. Tenta carregar do localStorage imediatamente para resposta instantânea
       if (typeof window !== 'undefined') {
         const saved = localStorage.getItem(STORAGE_KEY)
@@ -105,8 +116,7 @@ export default function FechamentoFiscalModal({
                 envioAutomaticoAtivo: Boolean(data.config.is_ativo),
                 envioDiaMes: data.config.dia_mes || prev.envioDiaMes || 5,
                 envioWhatsapp: data.config.whatsapp || prev.envioWhatsapp || '',
-                envioEmail: data.config.email || prev.envioEmail || '',
-                ...(data.config.relatorios || {})
+                envioEmail: data.config.email || prev.envioEmail || ''
               }))
             }
           }
@@ -114,14 +124,45 @@ export default function FechamentoFiscalModal({
           console.warn('Aviso: Não foi possível carregar agendamento remoto:', err)
         }
       }
+
+      // 3. SUGESTÃO INTELIGENTE: Diagnostica as notas reais do mês no portal
+      if (clienteId && mesCompetencia) {
+        setCarregandoDiagnostico(true)
+        try {
+          const resDiag = await fetch(`/api/fechamento-fiscal/dados?cliente_id=${clienteId}&mes=${mesCompetencia}&somente_totais=true`)
+          if (resDiag.ok) {
+            const dataDiag = await resDiag.json()
+            if (dataDiag?.totais && isMounted) {
+              setDiagnostico(dataDiag.totais)
+
+              // Marca automaticamente APENAS os relatórios que de fato possuem documentos no mês
+              if (dataDiag.totais.sugestoes) {
+                setPrefs(prev => ({
+                  ...prev,
+                  relNfeEntrada: Boolean(dataDiag.totais.sugestoes.relNfeEntrada),
+                  relNfseEntrada: Boolean(dataDiag.totais.sugestoes.relNfseEntrada),
+                  relNfeSaida: Boolean(dataDiag.totais.sugestoes.relNfeSaida),
+                  relNfseSaida: Boolean(dataDiag.totais.sugestoes.relNfseSaida),
+                  relNfceSaida: Boolean(dataDiag.totais.sugestoes.relNfceSaida),
+                  relMonofasicos: Boolean(dataDiag.totais.sugestoes.relMonofasicos)
+                }))
+              }
+            }
+          }
+        } catch (errDiag) {
+          console.warn('Aviso: Erro ao consultar diagnóstico da competência:', errDiag)
+        } finally {
+          if (isMounted) setCarregandoDiagnostico(false)
+        }
+      }
     }
 
     if (isOpen) {
-      carregarConfiguracao()
+      carregarEavaliarCompetencia()
     }
 
     return () => { isMounted = false }
-  }, [clienteId, isOpen])
+  }, [clienteId, mesCompetencia, isOpen])
 
   // Limpa timer ao desmontar
   useEffect(() => {
@@ -501,38 +542,20 @@ export default function FechamentoFiscalModal({
 
       // 6. Relatório de Monofásicos (PIS/COFINS)
       if (prefs.relMonofasicos) {
-        // Se não houver itens extraídos de XML, sintetiza os itens a partir das notas fiscais de saída
-        // para que o relatório nunca falhe e respeite em tempo real as escolhas do usuário
-        let itensParaMonofasicos = [...todosItensProdutos]
-
-        if (itensParaMonofasicos.length === 0) {
-          const notasSaida = [...(documentos.nfe_saidas || []), ...(documentos.nfce_saidas || [])]
-          if (notasSaida.length > 0) {
-            itensParaMonofasicos = notasSaida.map(n => ({
-              numero_nota: n.numero || 'S/N',
-              data_hora: n.data_emissao,
-              produto_nome: `Venda / Mercadoria Nota ${n.numero || ''}`,
-              codigo_prod: '001',
-              ncm: '22021000', // Exemplo NCM Refrigerantes/Bebidas (Monofásico) para fins de apuração
-              cst_pis_cofins: '04',
-              quantidade: 1,
-              valor_unitario: Number(n.valor || 0),
-              valor_total: Number(n.valor || 0),
-              is_monofasico: true
-            }))
-          }
+        // Gera o relatório com os itens reais extraídos dos XMLs da competência
+        // Se a empresa não vender produtos monofásicos, o gerador omite automaticamente para evitar folhas em branco
+        if (todosItensProdutos.length > 0) {
+          const rels = gerarRelatorioMonofasicos(
+            todosItensProdutos,
+            empresa,
+            mesCompetencia,
+            prefs.formatos,
+            prefs.ordenacao,
+            prefs.monofasicosEscopo,
+            prefs.monofasicosTipo
+          )
+          relatoriosGerados.push(...rels)
         }
-
-        const rels = gerarRelatorioMonofasicos(
-          itensParaMonofasicos,
-          empresa,
-          mesCompetencia,
-          prefs.formatos,
-          prefs.ordenacao,
-          prefs.monofasicosEscopo,
-          prefs.monofasicosTipo
-        )
-        relatoriosGerados.push(...rels)
       }
 
       setProgressoPct(85)
@@ -851,12 +874,33 @@ export default function FechamentoFiscalModal({
 
           {/* SEÇÃO 1: ESCOLHA DOS RELATÓRIOS A ANEXAR */}
           <div>
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
                 <FileText size={15} className="text-indigo-600" />
                 1. Relatórios Fiscais a Anexar ao ZIP
               </label>
               <div className="flex items-center gap-2 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!diagnostico) return
+                    setPrefs(p => ({
+                      ...p,
+                      relNfeEntrada: Boolean(diagnostico.nfe_entradas > 0),
+                      relNfseEntrada: Boolean(diagnostico.nfse_entradas > 0),
+                      relNfeSaida: Boolean(diagnostico.nfe_saidas > 0),
+                      relNfseSaida: Boolean(diagnostico.nfse_saidas > 0),
+                      relNfceSaida: Boolean(diagnostico.nfce_saidas > 0),
+                      relMonofasicos: Boolean(diagnostico.tem_monofasicos)
+                    }))
+                  }}
+                  className="inline-flex items-center gap-1 text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md font-bold transition shadow-xs cursor-pointer"
+                  title="Marca apenas os relatórios que possuem notas no mês e desmarca os vazios para evitar páginas em branco"
+                >
+                  <Sparkles size={12} className="text-emerald-600" />
+                  Sugerir Inteligente
+                </button>
+                <span className="text-slate-300">•</span>
                 <button
                   type="button"
                   onClick={() => setPrefs(p => ({
@@ -872,7 +916,7 @@ export default function FechamentoFiscalModal({
                 >
                   Marcar Todos
                 </button>
-                <span>•</span>
+                <span className="text-slate-300">•</span>
                 <button
                   type="button"
                   onClick={() => setPrefs(p => ({
@@ -891,6 +935,23 @@ export default function FechamentoFiscalModal({
               </div>
             </div>
 
+            {/* Banner Informativo de Sugestão Inteligente */}
+            {diagnostico && (
+              <div className="mb-3 px-3 py-2 bg-indigo-50/90 border border-indigo-200/80 rounded-xl flex items-center justify-between text-xs text-indigo-950">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={15} className="text-amber-500 shrink-0" />
+                  <span>
+                    <strong>Sugestão Inteligente Ativa:</strong> Marcamos automaticamente apenas os relatórios com documentos reais neste mês. Relatórios sem XML não geram páginas em branco no ZIP.
+                  </span>
+                </div>
+                {carregandoDiagnostico && (
+                  <span className="flex items-center gap-1 text-[11px] text-indigo-600 font-semibold shrink-0">
+                    <Loader2 size={12} className="animate-spin" /> Atualizando...
+                  </span>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               
               {/* Opção 1: Compras NF-e */}
@@ -903,10 +964,23 @@ export default function FechamentoFiscalModal({
                   onChange={e => setPrefs(p => ({ ...p, relNfeEntrada: e.target.checked }))}
                   className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
                 />
-                <div>
-                  <span className="font-bold text-slate-800 text-xs block">
-                    Resumo de Entradas (Compras - NF-e)
-                  </span>
+                <div className="w-full">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-slate-800 text-xs block">
+                      Resumo de Entradas (Compras - NF-e)
+                    </span>
+                    {diagnostico && (
+                      diagnostico.nfe_entradas > 0 ? (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0">
+                          🟢 {diagnostico.nfe_entradas} XML(s)
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0">
+                          ⚪ 0 XMLs (Omitido)
+                        </span>
+                      )
+                    )}
+                  </div>
                   <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
                     Número, Data da Nota, Data Entrada, Fornecedor, Cidade/UF, Valor, Chave + Total Geral.
                   </span>
@@ -923,10 +997,23 @@ export default function FechamentoFiscalModal({
                   onChange={e => setPrefs(p => ({ ...p, relNfseEntrada: e.target.checked }))}
                   className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
                 />
-                <div>
-                  <span className="font-bold text-slate-800 text-xs block">
-                    Resumo de Serviços Recebidos (NFS-e Tomados)
-                  </span>
+                <div className="w-full">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-slate-800 text-xs block">
+                      Resumo de Serviços Recebidos (NFS-e Tomados)
+                    </span>
+                    {diagnostico && (
+                      diagnostico.nfse_entradas > 0 ? (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0">
+                          🟢 {diagnostico.nfse_entradas} nota(s)
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0">
+                          ⚪ 0 notas (Omitido)
+                        </span>
+                      )
+                    )}
+                  </div>
                   <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
                     Número, Data Nota, Data Entrada, Prestador, Cidade/UF, Valor, Chave/Código + Total Geral.
                   </span>
@@ -943,10 +1030,23 @@ export default function FechamentoFiscalModal({
                   onChange={e => setPrefs(p => ({ ...p, relNfeSaida: e.target.checked }))}
                   className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
                 />
-                <div>
-                  <span className="font-bold text-slate-800 text-xs block">
-                    Resumo de Notas Emitidas (NF-e - Mod 55)
-                  </span>
+                <div className="w-full">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-slate-800 text-xs block">
+                      Resumo de Notas Emitidas (NF-e - Mod 55)
+                    </span>
+                    {diagnostico && (
+                      diagnostico.nfe_saidas > 0 ? (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0">
+                          🟢 {diagnostico.nfe_saidas} XML(s)
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0">
+                          ⚪ 0 XMLs (Omitido)
+                        </span>
+                      )
+                    )}
+                  </div>
                   <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
                     Número, Data/Hora, Cliente, Valor, Chave de Acesso + Total Geral.
                   </span>
@@ -963,10 +1063,23 @@ export default function FechamentoFiscalModal({
                   onChange={e => setPrefs(p => ({ ...p, relNfseSaida: e.target.checked }))}
                   className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
                 />
-                <div>
-                  <span className="font-bold text-slate-800 text-xs block">
-                    Resumo de Serviços Emitidos (NFS-e Prestados)
-                  </span>
+                <div className="w-full">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-slate-800 text-xs block">
+                      Resumo de Serviços Emitidos (NFS-e Prestados)
+                    </span>
+                    {diagnostico && (
+                      diagnostico.nfse_saidas > 0 ? (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0">
+                          🟢 {diagnostico.nfse_saidas} nota(s)
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0">
+                          ⚪ 0 notas (Omitido)
+                        </span>
+                      )
+                    )}
+                  </div>
                   <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
                     Número, Data/Hora, Tomador/Cliente, Valor, Chave/Código + Total Geral.
                   </span>
@@ -983,10 +1096,23 @@ export default function FechamentoFiscalModal({
                   onChange={e => setPrefs(p => ({ ...p, relNfceSaida: e.target.checked }))}
                   className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
                 />
-                <div>
-                  <span className="font-bold text-slate-800 text-xs block">
-                    Resumo de Notas ao Consumidor (NFC-e - Mod 65)
-                  </span>
+                <div className="w-full">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-slate-800 text-xs block">
+                      Resumo de Notas ao Consumidor (NFC-e - Mod 65)
+                    </span>
+                    {diagnostico && (
+                      diagnostico.nfce_saidas > 0 ? (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0">
+                          🟢 {diagnostico.nfce_saidas.toLocaleString('pt-BR')} XML(s)
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0">
+                          ⚪ 0 XMLs (Omitido)
+                        </span>
+                      )
+                    )}
+                  </div>
                   <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
                     Número, Data/Hora, Consumidor, Valor, Chave de Acesso + Total Geral.
                   </span>
@@ -1003,11 +1129,24 @@ export default function FechamentoFiscalModal({
                   onChange={e => setPrefs(p => ({ ...p, relMonofasicos: e.target.checked }))}
                   className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
                 />
-                <div>
-                  <span className="font-bold text-slate-800 text-xs block flex items-center gap-1">
-                    Relatório de Produtos Monofásicos (PIS/COFINS)
-                    <Sparkles size={13} className="text-amber-500" />
-                  </span>
+                <div className="w-full">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-slate-800 text-xs block flex items-center gap-1">
+                      Relatório de Produtos Monofásicos (PIS/COFINS)
+                      <Sparkles size={13} className="text-amber-500" />
+                    </span>
+                    {diagnostico && (
+                      diagnostico.tem_monofasicos ? (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0">
+                          🟢 Monofásicos identificados
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0">
+                          ⚪ Sem monofásicos (Omitido)
+                        </span>
+                      )
+                    )}
+                  </div>
                   <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
                     Segregação por NCM e Alíquotas PIS/COFINS (Bebidas, Autopeças, Farmácia) + Somatório.
                   </span>

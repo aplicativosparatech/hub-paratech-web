@@ -1,11 +1,19 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 
+function isMonofasicoNcmOrCst(xml: string): boolean {
+  if (/<CST>04<\/CST>|<CST>06<\/CST>/.test(xml)) return true
+  const monofasicoPrefixes = ['2201', '2202', '2203', '2402', '2710', '2711', '3003', '3004', '3303', '3304', '3305', '3307', '4011', '8708']
+  const ncms = [...xml.matchAll(/<NCM>(\d+)<\/NCM>/g)].map(m => m[1])
+  return ncms.some(ncm => monofasicoPrefixes.some(p => ncm.startsWith(p)))
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const clienteId = searchParams.get('cliente_id')
     const mesAno = searchParams.get('mes') // formato YYYY-MM, ex: '2026-10'
+    const somenteTotais = searchParams.get('somente_totais') === 'true'
 
     if (!clienteId) {
       return NextResponse.json({ error: 'Parâmetro cliente_id é obrigatório.' }, { status: 400 })
@@ -20,7 +28,7 @@ export async function GET(request: Request) {
     // 1. Busca dados do Cliente
     const { data: cliente, error: errCli } = await supabase
       .from('clientes')
-      .select('id, razao_social, nome_fantasia, cnpj, cidade, uf, whatsapp, regime_tributario, contabilidades(razao_social)')
+      .select('id, razao_social, nome_fantasia, cnpj, cidade, uf, whatsapp, regime_tributario, ramo_atividade, contabilidades(razao_social)')
       .eq('id', clienteId)
       .single()
 
@@ -40,7 +48,8 @@ export async function GET(request: Request) {
       cidade: cliente.cidade || '—',
       uf: cliente.uf || '—',
       regime_tributario: cliente.regime_tributario || 'simples_nacional',
-      contabilidade_nome: contabNome || 'Não vinculada'
+      contabilidade_nome: contabNome || 'Não vinculada',
+      ramo_atividade: cliente.ramo_atividade || ''
     }
 
     // Calcula intervalo de datas no mês (UTC)
@@ -48,7 +57,75 @@ export async function GET(request: Request) {
     const inicioMes = new Date(Date.UTC(ano, mes - 1, 1, 0, 0, 0)).toISOString()
     const fimMes = new Date(Date.UTC(ano, mes, 0, 23, 59, 59, 999)).toISOString()
 
-    // Consulta paralela em todas as modalidades fiscais
+    // MODO LEVE: Apenas contagens para diagnóstico imediato e sugestão inteligente de relatórios
+    if (somenteTotais) {
+      const [countNfce, countNfeSaidas, countNfeEntradas, countDfeNotas] = await Promise.all([
+        supabase.from('nfce_saidas').select('id', { count: 'exact', head: true }).eq('cliente_id', clienteId).gte('data_emissao', inicioMes).lte('data_emissao', fimMes),
+        supabase.from('nfe_saidas').select('id', { count: 'exact', head: true }).eq('cliente_id', clienteId).gte('data_emissao', inicioMes).lte('data_emissao', fimMes),
+        supabase.from('nfe_entradas').select('id', { count: 'exact', head: true }).eq('cliente_id', clienteId).gte('data_emissao', inicioMes).lte('data_emissao', fimMes),
+        supabase.from('dfe_notas_destinadas').select('id', { count: 'exact', head: true }).eq('cliente_id', clienteId).or(`competencia.eq.${mesAno},and(data_emissao.gte.${inicioMes},data_emissao.lte.${fimMes})`)
+      ])
+
+      const totalNfce = countNfce.count || 0
+      const totalNfeSaidas = countNfeSaidas.count || 0
+      const totalNfeEntradas = (countNfeEntradas.count || 0) + (countDfeNotas.count || 0)
+      const totalNfseEntradas = 0
+      const totalNfseSaidas = 0
+
+      // Detecção de produtos monofásicos por amostragem rápida
+      let temMonofasicos = false
+      if (totalNfce > 0 || totalNfeSaidas > 0) {
+        const { data: amostras } = await supabase
+          .from('nfce_saidas')
+          .select('storage_path')
+          .eq('cliente_id', clienteId)
+          .gte('data_emissao', inicioMes)
+          .lte('data_emissao', fimMes)
+          .not('storage_path', 'is', null)
+          .limit(3)
+
+        if (amostras && amostras.length > 0) {
+          for (const item of amostras) {
+            if (item.storage_path) {
+              const { data: blob } = await supabase.storage.from('xmls').download(item.storage_path)
+              if (blob) {
+                const txt = await blob.text()
+                if (isMonofasicoNcmOrCst(txt)) {
+                  temMonofasicos = true
+                  break
+                }
+              }
+            }
+          }
+        }
+      }
+
+      const totalDocumentos = totalNfce + totalNfeSaidas + totalNfeEntradas + totalNfseEntradas + totalNfseSaidas
+
+      return NextResponse.json({
+        empresa: empresaDados,
+        competencia: mesAno,
+        totais: {
+          totalDocumentos,
+          nfce_saidas: totalNfce,
+          nfe_saidas: totalNfeSaidas,
+          nfe_entradas: totalNfeEntradas,
+          nfse_entradas: totalNfseEntradas,
+          nfse_saidas: totalNfseSaidas,
+          tem_monofasicos: temMonofasicos,
+          sugestoes: {
+            relNfeEntrada: totalNfeEntradas > 0,
+            relNfseEntrada: totalNfseEntradas > 0,
+            relNfeSaida: totalNfeSaidas > 0,
+            relNfseSaida: totalNfseSaidas > 0,
+            relNfceSaida: totalNfce > 0,
+            relMonofasicos: temMonofasicos
+          }
+        }
+      })
+    }
+
+    // Consulta paralela completa em todas as modalidades fiscais
     const qNfce = supabase
       .from('nfce_saidas')
       .select('*')
@@ -222,6 +299,24 @@ export async function GET(request: Request) {
       nfseEntradasList.length +
       nfseSaidasList.length
 
+    // Verificação de monofásicos
+    let temMonofasicos = false
+    const amostrasSaida = [...nfceList, ...nfeSaidasList].filter(n => n.storage_path).slice(0, 3)
+    if (amostrasSaida.length > 0) {
+      for (const item of amostrasSaida) {
+        if (item.storage_path) {
+          const { data: blob } = await supabase.storage.from('xmls').download(item.storage_path)
+          if (blob) {
+            const txt = await blob.text()
+            if (isMonofasicoNcmOrCst(txt)) {
+              temMonofasicos = true
+              break
+            }
+          }
+        }
+      }
+    }
+
     return NextResponse.json({
       empresa: empresaDados,
       competencia: mesAno,
@@ -231,7 +326,16 @@ export async function GET(request: Request) {
         nfe_saidas: nfeSaidasList.length,
         nfe_entradas: nfeEntradasList.length,
         nfse_entradas: nfseEntradasList.length,
-        nfse_saidas: nfseSaidasList.length
+        nfse_saidas: nfseSaidasList.length,
+        tem_monofasicos: temMonofasicos,
+        sugestoes: {
+          relNfeEntrada: nfeEntradasList.length > 0,
+          relNfseEntrada: nfseEntradasList.length > 0,
+          relNfeSaida: nfeSaidasList.length > 0,
+          relNfseSaida: nfseSaidasList.length > 0,
+          relNfceSaida: nfceList.length > 0,
+          relMonofasicos: temMonofasicos
+        }
       },
       documentos: {
         nfce_saidas: nfceList,

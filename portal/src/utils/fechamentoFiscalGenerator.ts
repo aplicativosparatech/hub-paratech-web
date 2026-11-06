@@ -493,6 +493,11 @@ export function gerarRelatorioNfeCompras(
   formatos: Array<'pdf' | 'xlsx' | 'csv' | 'json'>,
   ordenacao: 'data' | 'numero' | 'contato'
 ): ArquivoGerado[] {
+  // Se não houver XMLs de compras, não gera relatório para evitar páginas em branco
+  if (!docs || docs.length === 0) {
+    return []
+  }
+
   const lista = ordenarDocumentos(docs, ordenacao)
   const totalGeral = lista.reduce((acc, d) => acc + (d.valor || 0), 0)
   const titulo = 'Resumo de Documentos Fiscais Recebidos (Compras - NF-e)'
@@ -629,6 +634,11 @@ export function gerarRelatorioNfseEntrada(
   formatos: Array<'pdf' | 'xlsx' | 'csv' | 'json'>,
   ordenacao: 'data' | 'numero' | 'contato'
 ): ArquivoGerado[] {
+  // Se não houver serviços tomados, não gera relatório para evitar páginas em branco
+  if (!docs || docs.length === 0) {
+    return []
+  }
+
   const lista = ordenarDocumentos(docs, ordenacao)
   const totalGeral = lista.reduce((acc, d) => acc + (d.valor || 0), 0)
   const titulo = 'Resumo de Serviços Recebidos (NFS-e Tomados)'
@@ -765,6 +775,11 @@ export function gerarRelatorioNfeSaidas(
   formatos: Array<'pdf' | 'xlsx' | 'csv' | 'json'>,
   ordenacao: 'data' | 'numero' | 'contato'
 ): ArquivoGerado[] {
+  // Se não houver NF-e 55 emitidas, não gera relatório para evitar páginas em branco
+  if (!docs || docs.length === 0) {
+    return []
+  }
+
   const lista = ordenarDocumentos(docs, ordenacao)
   const totalGeral = lista.reduce((acc, d) => acc + (d.valor || 0), 0)
   const titulo = 'Resumo de Notas Fiscais Eletrônicas Emitidas (NF-e - Mod 55)'
@@ -896,6 +911,11 @@ export function gerarRelatorioNfseSaidas(
   formatos: Array<'pdf' | 'xlsx' | 'csv' | 'json'>,
   ordenacao: 'data' | 'numero' | 'contato'
 ): ArquivoGerado[] {
+  // Se não houver serviços prestados, não gera relatório para evitar páginas em branco
+  if (!docs || docs.length === 0) {
+    return []
+  }
+
   const lista = ordenarDocumentos(docs, ordenacao)
   const totalGeral = lista.reduce((acc, d) => acc + (d.valor || 0), 0)
   const titulo = 'Resumo de Notas Fiscais de Serviços Emitidas (NFS-e de Saída)'
@@ -1025,6 +1045,11 @@ export function gerarRelatorioNfceSaidas(
   formatos: Array<'pdf' | 'xlsx' | 'csv' | 'json'>,
   ordenacao: 'data' | 'numero' | 'contato'
 ): ArquivoGerado[] {
+  // Se não houver NFC-e 65 emitidas, não gera relatório para evitar páginas em branco
+  if (!docs || docs.length === 0) {
+    return []
+  }
+
   const lista = ordenarDocumentos(docs, ordenacao)
   const totalGeral = lista.reduce((acc, d) => acc + (d.valor || 0), 0)
   const titulo = 'Resumo de Notas Fiscais ao Consumidor Eletrônicas (NFC-e - Mod 65)'
@@ -1163,6 +1188,11 @@ export function gerarRelatorioMonofasicos(
   const itensFiltrados = escopo === 'apenas_monofasicos'
     ? itensBrutos.filter(it => it.is_monofasico)
     : itensBrutos
+
+  // Se não houver itens para o escopo selecionado, não gera relatório para evitar páginas em branco
+  if (!itensFiltrados || itensFiltrados.length === 0) {
+    return []
+  }
 
   const titulo = escopo === 'apenas_monofasicos'
     ? (tipoVisualizacao === 'detalhado' ? 'Relatório Detalhado de Produtos Monofásicos (PIS/COFINS)' : 'Relatório Agrupado de Produtos Monofásicos (PIS/COFINS)')
