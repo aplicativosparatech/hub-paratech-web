@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { obterIntervaloMesBrasil } from '@/utils/dateBrasil'
 
 function isMonofasicoNcmOrCst(xml: string): boolean {
   if (/<CST>04<\/CST>|<CST>06<\/CST>/.test(xml)) return true
@@ -52,10 +53,8 @@ export async function GET(request: Request) {
       ramo_atividade: cliente.ramo_atividade || ''
     }
 
-    // Calcula intervalo de datas no mês (UTC)
-    const [ano, mes] = mesAno.split('-').map(Number)
-    const inicioMes = new Date(Date.UTC(ano, mes - 1, 1, 0, 0, 0)).toISOString()
-    const fimMes = new Date(Date.UTC(ano, mes, 0, 23, 59, 59, 999)).toISOString()
+    // Calcula intervalo exato de datas no mês considerando o fuso oficial de Brasília (UTC-3)
+    const { startDate: inicioMes, endDate: fimMes } = obterIntervaloMesBrasil(mesAno)
 
     // MODO LEVE: Apenas contagens para diagnóstico imediato e sugestão inteligente de relatórios
     if (somenteTotais) {

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { obterIntervaloMesBrasil } from '@/utils/dateBrasil'
 import JSZip from 'jszip'
 
 export async function GET(request: Request) {
@@ -18,9 +19,9 @@ export async function GET(request: Request) {
     let endDate: string | null = null
 
     if (mesAno) {
-      const [ano, mes] = mesAno.split('-').map(Number)
-      startDate = new Date(Date.UTC(ano, mes - 1, 1, 0, 0, 0)).toISOString()
-      endDate = new Date(Date.UTC(ano, mes, 0, 23, 59, 59, 999)).toISOString()
+      const { startDate: sDate, endDate: eDate } = obterIntervaloMesBrasil(mesAno)
+      startDate = sDate
+      endDate = eDate
     }
 
     // Busca notas dos 3 tipos

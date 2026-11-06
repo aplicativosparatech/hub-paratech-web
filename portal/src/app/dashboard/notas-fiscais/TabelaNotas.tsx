@@ -18,7 +18,8 @@ import {
   formatarDataBrasil, 
   formatarHoraBrasil, 
   extrairCompetenciaBrasil, 
-  extrairDataIsoBrasil 
+  extrairDataIsoBrasil,
+  obterIntervaloMesBrasil 
 } from '@/utils/dateBrasil'
 import { limparDocumento, formatarCnpjCpf } from '@/utils/cnpjAlfanumerico'
 import ResizableSortableTh from '@/components/ui/ResizableSortableTh'
@@ -189,15 +190,19 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
         q = q.eq('cliente_id', targetClienteId)
       }
 
-      // Otimização: aplica filtro de período diretamente no banco utilizando os novos índices
+      // Otimização: aplica filtro de período diretamente no banco utilizando o fuso oficial de Minas Gerais / Brasília (-03:00)
       if (filtroMes && /^\d{4}-\d{2}$/.test(filtroMes)) {
-        const [ano, mes] = filtroMes.split('-').map(Number)
-        const dataInicioMes = new Date(Date.UTC(ano, mes - 1, 1, 0, 0, 0)).toISOString()
-        const dataFimMes = new Date(Date.UTC(ano, mes, 0, 23, 59, 59, 999)).toISOString()
-        q = q.gte('data_emissao', dataInicioMes).lte('data_emissao', dataFimMes)
+        const { startDate, endDate } = obterIntervaloMesBrasil(filtroMes)
+        q = q.gte('data_emissao', startDate).lte('data_emissao', endDate)
       } else if (dataInicio || dataFim) {
-        if (dataInicio) q = q.gte('data_emissao', `${dataInicio}T00:00:00.000Z`)
-        if (dataFim) q = q.lte('data_emissao', `${dataFim}T23:59:59.999Z`)
+        if (dataInicio) {
+          const startIso = new Date(`${dataInicio}T00:00:00-03:00`).toISOString()
+          q = q.gte('data_emissao', startIso)
+        }
+        if (dataFim) {
+          const endIso = new Date(`${dataFim}T23:59:59.999-03:00`).toISOString()
+          q = q.lte('data_emissao', endIso)
+        }
       } else if (!targetClienteId) {
         q = q.limit(200)
         const { data } = await q

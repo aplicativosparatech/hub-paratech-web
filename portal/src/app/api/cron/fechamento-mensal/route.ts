@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { sendWhatsAppMessage } from '@/utils/whatsapp'
+import { obterIntervaloMesBrasil } from '@/utils/dateBrasil'
 
 function formatCurrency(val: number) {
   return Number(val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -68,9 +69,8 @@ export async function GET(request: Request) {
 
     const disparosRealizados: any[] = []
 
-    // Intervalo de datas da competência
-    const inicioMes = new Date(Date.UTC(anoComp, mesComp - 1, 1, 0, 0, 0)).toISOString()
-    const fimMes = new Date(Date.UTC(anoComp, mesComp, 0, 23, 59, 59, 999)).toISOString()
+    // Intervalo de datas da competência no fuso oficial de Brasília (UTC-3)
+    const { startDate: inicioMes, endDate: fimMes } = obterIntervaloMesBrasil(competenciaStr)
 
     for (const ag of agendamentos) {
       const cred = ag.credenciais || {}
