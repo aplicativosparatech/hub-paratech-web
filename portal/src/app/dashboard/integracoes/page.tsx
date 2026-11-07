@@ -260,11 +260,18 @@ export default function IntegracoesPage() {
   }, [])
 
   const getIntegracao = (provedor: string) => {
-    return integracoes.find(i => i.provedor === provedor) || { is_ativo: false, credenciais: {} }
+    return integracoes.find(i => i.provedor === provedor) || { id: '', tipo: 'outros', provedor, is_ativo: false, credenciais: {} }
   }
 
   const updateIntegracaoLocal = (provedor: string, updates: Partial<Integracao>) => {
-    setIntegracoes(prev => prev.map(i => i.provedor === provedor ? { ...i, ...updates } : i))
+    setIntegracoes(prev => {
+      const exists = prev.some(i => i.provedor === provedor)
+      if (exists) {
+        return prev.map(i => i.provedor === provedor ? { ...i, ...updates } : i)
+      } else {
+        return [...prev, { id: crypto.randomUUID(), tipo: 'outros', provedor, is_ativo: false, credenciais: {}, ...updates } as Integracao]
+      }
+    })
   }
 
   const handleCredencialChange = (provedor: string, key: string, value: string) => {
