@@ -98,7 +98,7 @@ namespace HubParatechDesktop
                 {
                     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                     {
-                        FileName = "https://hub-paratech-web.vercel.app/dashboard/clientes",
+                        FileName = AppConfig.ClientesUrl,
                         UseShellExecute = true
                     });
                 }

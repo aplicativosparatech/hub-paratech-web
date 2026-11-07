@@ -128,14 +128,14 @@ namespace HubParatechDesktop
             };
             var lnkPortal = new LinkLabel
             {
-                Text = "https://hub-paratech-web.vercel.app",
+                Text = AppConfig.BasePortalUrl,
                 Font = new Font("Segoe UI", 9f, FontStyle.Regular),
                 LinkColor = Color.FromArgb(2, 132, 199),
                 Location = new Point(210, cardY),
                 AutoSize = true,
                 Cursor = Cursors.Hand
             };
-            lnkPortal.LinkClicked += (s, e) => OpenUrl("https://hub-paratech-web.vercel.app");
+            lnkPortal.LinkClicked += (s, e) => OpenUrl(AppConfig.BasePortalUrl);
             infoCard.Controls.Add(lblPortalTitle);
             infoCard.Controls.Add(lnkPortal);
             cardY += 30;

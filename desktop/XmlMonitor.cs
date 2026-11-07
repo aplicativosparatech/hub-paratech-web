@@ -910,7 +910,7 @@ namespace HubParatechDesktop
                     fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("application/xml");
                     content.Add(fileContent, "xml_file", fileName);
 
-                    var response = await http.PostAsync("https://hub-paratech-web.vercel.app/api/hub/upload-xml", content);
+                    var response = await http.PostAsync(AppConfig.UploadXmlApiUrl, content);
 
                     if (response.IsSuccessStatusCode)
                     {
@@ -1177,7 +1177,7 @@ namespace HubParatechDesktop
                 var jsonReq = JsonSerializer.Serialize(new { hub_token = hubToken });
                 var contentReq = new StringContent(jsonReq, System.Text.Encoding.UTF8, "application/json");
 
-                var resp = await client.PostAsync("https://hub-paratech-web.vercel.app/api/hub/reconciliar-gaps", contentReq);
+                var resp = await client.PostAsync(AppConfig.ReconciliarGapsApiUrl, contentReq);
                 if (!resp.IsSuccessStatusCode)
                 {
                     return (0, 0, $"Falha ao consultar gaps no portal: HTTP {(int)resp.StatusCode}");
@@ -1468,7 +1468,7 @@ namespace HubParatechDesktop
                 int faltantesRestantes = Math.Max(0, totalFaltantesEsperados - recuperados);
                 try
                 {
-                    var respPos = await client.PostAsync("https://hub-paratech-web.vercel.app/api/hub/reconciliar-gaps", contentReq);
+                    var respPos = await client.PostAsync(AppConfig.ReconciliarGapsApiUrl, contentReq);
                     if (respPos.IsSuccessStatusCode)
                     {
                         var respPosStr = await respPos.Content.ReadAsStringAsync();

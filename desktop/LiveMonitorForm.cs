@@ -749,20 +749,20 @@ namespace HubParatechDesktop
             };
             btnPortal.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
             btnPortal.Click += (s, e) => {
-                string url = "https://hub-paratech-web.vercel.app/dashboard/notas-fiscais/saidas/nfce";
+                string url = AppConfig.NfceSaidasUrl;
                 lock (LogLock)
                 {
                     if (GlobalLogItems.Any(x => x.Modelo == "65"))
                     {
-                        url = "https://hub-paratech-web.vercel.app/dashboard/notas-fiscais/saidas/nfce";
+                        url = AppConfig.NfceSaidasUrl;
                     }
                     else if (GlobalLogItems.Any(x => x.Modelo == "55"))
                     {
-                        url = "https://hub-paratech-web.vercel.app/dashboard/notas-fiscais/saidas/nfe";
+                        url = AppConfig.NfeSaidasUrl;
                     }
                     else if (GlobalLogItems.Any(x => x.TipoPasta == "Entrada"))
                     {
-                        url = "https://hub-paratech-web.vercel.app/dashboard/notas-fiscais/entradas/nfe";
+                        url = AppConfig.NfeEntradasUrl;
                     }
                 }
                 OpenWebPortal(url);

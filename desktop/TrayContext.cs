@@ -481,7 +481,7 @@ namespace HubParatechDesktop
                 });
                 var content = new StringContent(jsonReq, System.Text.Encoding.UTF8, "application/json");
                 
-                var response = await http.PostAsync("https://hub-paratech-web.vercel.app/api/hub/sync", content);
+                var response = await http.PostAsync(AppConfig.SyncApiUrl, content);
                 
                 if (response.IsSuccessStatusCode)
                 {

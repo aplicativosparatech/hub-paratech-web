@@ -25,9 +25,9 @@ namespace HubParatechDesktop
     public static class UpdateManager
     {
         private static readonly HttpClient http = new HttpClient { Timeout = TimeSpan.FromSeconds(35) };
-        private const string CheckApiUrl = "https://hub-paratech-web.vercel.app/api/hub/versoes/check";
-        public const string VersaoAtual = "2.8.4";
-        public const int BuildNumberAtual = 284;
+        private const string CheckApiUrl = AppConfig.CheckUpdateApiUrl;
+        public const string VersaoAtual = "2.8.5";
+        public const int BuildNumberAtual = 285;
         private static bool isUpdating = false;
 
         private static void LogUpdate(string message)
