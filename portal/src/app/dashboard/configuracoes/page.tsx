@@ -14,7 +14,7 @@ import { useTableFeatures } from '@/hooks/useTableFeatures'
 import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
 import { ClienteAutocompleteInput } from '@/components/ClienteAutocompleteInput'
 
-const VERSAO_MAIS_RECENTE = '2.8.3'
+const VERSAO_MAIS_RECENTE = '2.8.5'
 const INTERVALO_MS = 15 * 60 * 1000
 const TOLERANCIA_MS = 2 * 60 * 1000
 
@@ -395,7 +395,7 @@ export default function ConfiguracoesPage() {
                     }`}
                   >
                     <ArrowUpCircle size={14} />
-                    {loadingComandoId === selectedCliente ? 'Enviando...' : isPendenteAtualizacaoSelected ? 'Cancelar Atualização' : 'Atualizar Hub para v2.8.3'}
+                    {loadingComandoId === selectedCliente ? 'Enviando...' : isPendenteAtualizacaoSelected ? 'Cancelar Atualização' : `Atualizar Hub para v${VERSAO_MAIS_RECENTE}`}
                   </button>
                 )}
 
@@ -1385,20 +1385,22 @@ export default function ConfiguracoesPage() {
                         </button>
 
                         {/* Botão Atualizar Hub */}
-                        {!isAtualizado && lastSync && (
+                        {lastSync && (
                           <button
                             type="button"
                             onClick={() => handleDispararComando(hub.id, isPendenteAtualizacao ? 'cancelar' : 'atualizar_hub')}
                             disabled={loadingComandoId === hub.id}
-                            title={isPendenteAtualizacao ? 'Cancelar ordem de atualização pendente' : 'Enviar comando remoto para o Hub atualizar sozinho para a v2.8.3'}
+                            title={isPendenteAtualizacao ? 'Cancelar ordem de atualização pendente' : `Enviar comando remoto para o Hub atualizar sozinho para a v${VERSAO_MAIS_RECENTE}`}
                             className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition flex items-center gap-1 cursor-pointer ${
                               isPendenteAtualizacao
                                 ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'
-                                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                                : !isAtualizado
+                                  ? 'bg-amber-500 text-white hover:bg-amber-600 shadow-sm animate-pulse'
+                                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
                             }`}
                           >
                             <ArrowUpCircle size={12} />
-                            {loadingComandoId === hub.id ? '...' : isPendenteAtualizacao ? 'Cancelar' : 'Atualizar Hub'}
+                            {loadingComandoId === hub.id ? '...' : isPendenteAtualizacao ? 'Cancelar' : !isAtualizado ? `Atualizar v${VERSAO_MAIS_RECENTE}` : 'Reinstalar Hub'}
                           </button>
                         )}
 

@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { consultarSefazProtocolo, gerarProcNFeFinal } from '@/utils/sefazXmlService'
 import { limparDocumento, limparChaveAcesso, validarChaveAcessoNfe } from '@/utils/cnpjAlfanumerico'
 import { calculateEffectiveDates } from '@/utils/businessDays'
+import { replicateDualWrite, getMirrorSupabase } from '@/utils/dualWrite'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -567,6 +568,14 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Erro ao gravar nota no banco: ' + fallbackError.message }, { status: 500 })
       }
     }
+
+    // DUAL-WRITE: Grava a nota fiscal no banco espelho (Cloud se VPS / VPS se Cloud)
+    replicateDualWrite(tabela, 'upsert', dbPayload, { column: 'chave', value: chave })
+    replicateDualWrite('configuracoes_hub', 'update', { ultima_sincronizacao: new Date().toISOString() }, { column: 'cliente_id', value: cliente.id })
+    try {
+      const mirror = getMirrorSupabase()
+      mirror.storage.from('xmls').upload(filePath, bufferFinal, { upsert: true }).catch(() => {})
+    } catch {}
 
     // Atualiza o registro da última sincronização do Hub para esta empresa
     await supabaseAdmin
