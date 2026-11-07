@@ -198,56 +198,6 @@ export async function POST(request: Request) {
 
     const nomeEmpresa = cliente.nome_fantasia || cliente.razao_social || cliente.nome_sistema_utilizado || 'Cliente Paratech'
 
-    const responseData = {
-      bloqueado: isBloqueado,
-      aviso_previo_ativo: avisoPrevioAtivo,
-      intervalo_aviso_horas: intervaloAvisoHoras,
-      mensagem_aviso_previo: config?.mensagem_aviso_previo || 'AVISO: Sua mensalidade vence em breve. Regularize via Pix no Hub para evitar bloqueio.',
-      desbloqueio_confianca: confiancaInfo,
-      motivo: !cliente.is_ativo ? 'administrativo' : (faturaVencida ? 'inadimplencia' : null),
-      mensagem_bloqueio: config?.mensagem_bloqueio || 'SISTEMA BLOQUEADO. Por favor, regularize sua mensalidade.',
-      cliente_nome: nomeEmpresa,
-      executavel: cliente.nome_sistema_utilizado,
-      executaveis: config?.exes_monitorados || [],
-      pastas_vendas: config?.pastas_vendas || [],
-      pastas_compras: config?.pastas_compras || [],
-      offline_secret: config?.offline_secret || '123456',
-      modo_processamento: config?.modo_processamento_xml || 'hub',
-      valor_mensalidade: Number(cliente.valor_mensalidade || 0),
-      dia_vencimento: Number(cliente.dia_vencimento || 10),
-      data_inicio_monitoramento: cliente.data_inicio_monitoramento || null,
-      numero_inicial_nfe: cliente.numero_inicial_nfe || 1,
-      numero_inicial_nfce: cliente.numero_inicial_nfce || 1,
-      numero_inicial_nfse: cliente.numero_inicial_nfse || 1,
-      numero_inicial_cte: cliente.numero_inicial_cte || 1,
-      numero_inicial_mdfe: cliente.numero_inicial_mdfe || 1,
-      banner_url: config?.banner_url || null,
-      support_whatsapp: config?.support_whatsapp || null,
-      ultimas_faturas_pagas: (faturasPagas || []).map(f => ({
-        id: f.id,
-        competencia: f.competencia,
-        valor: Number(f.valor),
-        data_vencimento: f.data_vencimento,
-        data_pagamento: f.data_pagamento
-      })),
-      features: {
-        sugestao_tributaria: config?.feature_sugestao_tributaria ?? true,
-        nuvem_produtos: config?.feature_nuvem_produtos ?? true,
-        loja_virtual: config?.feature_loja_virtual ?? false,
-        nfce: config?.feature_nfce ?? true,
-        nfe: config?.feature_nfe ?? true,
-        contas_pagar: config?.feature_contas_pagar ?? true,
-        estoque_avancado: config?.feature_estoque_avancado ?? true,
-      },
-      fatura: faturaPrincipal ? {
-        id: faturaPrincipal.id,
-        valor: faturaPrincipal.valor,
-        pix_payload: finalPix || 'ERRO_PIX',
-        data_vencimento: faturaPrincipal.data_vencimento,
-        cliente_nome: nomeEmpresa,
-        desbloqueio_confianca_em: faturaPrincipal.desbloqueio_confianca_em,
-        confianca_qtd: faturaPrincipal.confianca_qtd
-      } : null,
     // Detecta se o Hub precisa atualizar para a versão mais recente oficial (v2.8.5 / build 285)
     const versaoDesatualizada = !versaoHub || versaoHub < '2.8.5' || (buildNumber !== null && buildNumber < 285)
     const deveForcarAtualizacao = config?.comando_remoto === 'atualizar_hub' || versaoDesatualizada
