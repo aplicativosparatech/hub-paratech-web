@@ -106,6 +106,19 @@ export default function ClientesPage() {
 
   const handleDelete = async () => {
     setDeleting(true)
+    try {
+      // Regra anti-lixo: limpa o certificado físico do storage ao excluir o cliente
+      const { data: cli } = await supabase
+        .from('clientes')
+        .select('certificado_url')
+        .eq('id', deleteModal.id)
+        .single()
+      if (cli?.certificado_url) {
+        await supabase.storage.from('certificados').remove([cli.certificado_url])
+        await supabase.storage.from('xmls').remove([cli.certificado_url])
+      }
+    } catch {}
+
     const { error } = await supabase.from('clientes').delete().eq('id', deleteModal.id)
     if (error) {
       toast.error('Erro ao excluir: ' + error.message)
