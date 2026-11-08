@@ -214,10 +214,13 @@ export function ClienteAutocompleteInput({
 
       {/* Dropdown de Autocomplete com Resultados Instantâneos */}
       {isOpen && (
-        <div className="absolute z-50 left-0 right-0 mt-1.5 max-h-72 overflow-y-auto bg-white rounded-xl shadow-2xl border border-slate-200 py-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
-          <div className="px-3.5 py-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between border-b border-slate-100 mb-1">
+        <div 
+          className="absolute z-[999] left-0 right-0 mt-2 max-h-96 overflow-y-auto bg-white rounded-2xl shadow-2xl border border-slate-200 py-2"
+          style={{ minHeight: sugestoes.length > 0 ? '140px' : 'auto' }}
+        >
+          <div className="px-4 py-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between border-b border-slate-100 mb-1">
             <span>Resultados ({sugestoes.length})</span>
-            <span className="font-normal text-slate-400">Pressione Enter ou clique</span>
+            <span className="font-normal text-slate-400">Pressione Enter ou clique na empresa</span>
           </div>
 
           {sugestoes.length === 0 ? (
@@ -235,37 +238,43 @@ export function ClienteAutocompleteInput({
                   type="button"
                   onClick={() => handleSelect(c)}
                   onMouseEnter={() => setHighlightedIndex(idx)}
-                  className={`w-full text-left px-3.5 py-2.5 text-sm flex items-center justify-between transition cursor-pointer ${
-                    isHighlighted ? 'bg-blue-50 text-blue-900' : 'text-slate-700 hover:bg-slate-50'
+                  className={`w-full text-left px-4 py-3 text-sm flex items-center justify-between transition cursor-pointer border-b border-slate-50 last:border-b-0 ${
+                    isHighlighted ? 'bg-indigo-50/80 text-indigo-950' : 'text-slate-800 hover:bg-slate-50'
                   }`}
                 >
-                  <div className="flex items-center gap-2.5 overflow-hidden">
-                    <Building2
-                      size={16}
-                      className={isHighlighted ? 'text-blue-600 shrink-0' : 'text-slate-400 shrink-0'}
-                    />
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                      isHighlighted ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      <Building2 size={16} />
+                    </div>
                     <div className="truncate">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-slate-900 text-sm">
                           {c.razao_social}
                         </span>
                         {c.nome_fantasia && (
-                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
                             {c.nome_fantasia}
                           </span>
                         )}
                       </div>
                       {c.cnpj && (
-                        <span className="text-xs text-slate-400 block font-mono">
+                        <span className="text-xs text-slate-500 block font-mono mt-0.5">
                           CNPJ: {c.cnpj}
                         </span>
                       )}
                     </div>
                   </div>
 
-                  {isSelected && (
-                    <Check size={18} className="text-blue-600 shrink-0 ml-2" />
-                  )}
+                  <div className="flex items-center gap-2 shrink-0 ml-3">
+                    <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md hidden sm:inline">
+                      Selecionar
+                    </span>
+                    {isSelected && (
+                      <Check size={18} className="text-emerald-600 shrink-0" />
+                    )}
+                  </div>
                 </button>
               )
             })

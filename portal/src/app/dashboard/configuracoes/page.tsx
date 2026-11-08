@@ -962,7 +962,7 @@ export default function ConfiguracoesPage() {
           </div>
 
           {/* Formulário & Painel do Cliente Selecionado */}
-          {selectedCliente && (
+          {selectedCliente ? (
             <div id="painel-configuracao" className="space-y-6 pt-2">
               {/* BANNER DE IDENTIFICAÇÃO, TOKEN DO HUB E COMANDOS REMOTOS */}
               <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 border border-indigo-900/60 rounded-2xl p-6 text-white shadow-xl">
@@ -1410,6 +1410,55 @@ export default function ConfiguracoesPage() {
                   </>
                 )}
               </form>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-6 shadow-xs">
+              <div className="max-w-md mx-auto space-y-2">
+                <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+                  <Building2 size={28} />
+                </div>
+                <h3 className="text-lg font-bold text-slate-800">
+                  Nenhuma Empresa Selecionada
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Utilize o campo de busca acima ou clique em uma das empresas abaixo para abrir o formulário completo de parâmetros, certificados, diretórios fiscais e tokens do Hub.
+                </p>
+              </div>
+
+              {/* Grade de Seleção Rápida de Empresas */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 text-left pt-2">
+                {clientes.slice(0, 16).map((c: any) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedCliente(c.id)
+                      setTimeout(() => {
+                        document.getElementById('painel-configuracao')?.scrollIntoView({ behavior: 'smooth' })
+                      }, 100)
+                    }}
+                    className="p-3.5 rounded-xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/40 transition cursor-pointer flex flex-col justify-between gap-2 group bg-white shadow-2xs"
+                  >
+                    <div>
+                      <h4 className="font-bold text-xs text-slate-900 group-hover:text-indigo-600 line-clamp-1">
+                        {c.razao_social}
+                      </h4>
+                      {c.nome_fantasia && (
+                        <p className="text-[11px] text-indigo-600 font-semibold line-clamp-1">
+                          {c.nome_fantasia}
+                        </p>
+                      )}
+                      <p className="text-[10px] font-mono text-slate-400 mt-1">
+                        CNPJ: {c.cnpj || 'Não informado'}
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-100">
+                      <span>Configurar</span>
+                      <span className="text-indigo-600 font-bold group-hover:translate-x-0.5 transition-transform">→</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
