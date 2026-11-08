@@ -15,9 +15,28 @@ import { useTableFeatures } from '@/hooks/useTableFeatures'
 import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
 import { ClienteAutocompleteInput } from '@/components/ClienteAutocompleteInput'
 
-const VERSAO_MAIS_RECENTE = '2.8.6'
+const VERSAO_MAIS_RECENTE = '2.8.7'
 const INTERVALO_MS = 15 * 60 * 1000
 const TOLERANCIA_MS = 2 * 60 * 1000
+
+function compararSemVer(v1?: string | null, v2?: string | null): number {
+  if (!v1 && !v2) return 0
+  if (!v1) return -1
+  if (!v2) return 1
+  const p1 = v1.replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0)
+  const p2 = v2.replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0)
+  for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
+    const num1 = p1[i] || 0
+    const num2 = p2[i] || 0
+    if (num1 > num2) return 1
+    if (num1 < num2) return -1
+  }
+  return 0
+}
+
+function isVersaoAtual(versaoHub?: string | null, versaoAlvo: string = VERSAO_MAIS_RECENTE): boolean {
+  return compararSemVer(versaoHub, versaoAlvo) >= 0
+}
 
 export default function ConfiguracoesPage() {
   const supabase = createClient()
@@ -197,7 +216,12 @@ export default function ConfiguracoesPage() {
     apenas_xmls_autorizados: false,
     analise_ia_xmls_ativa: true,
     support_whatsapp: '',
-    intervalo_checagem_horas: 6
+    intervalo_checagem_horas: 6,
+
+    // Card 5: Hardware & Rede (Wake-on-LAN)
+    mac_address: '',
+    ip_local: '',
+    computador_nome: ''
   })
 
   const copyToClipboard = (text?: string, label?: string) => {
@@ -311,7 +335,12 @@ export default function ConfiguracoesPage() {
         apenas_xmls_autorizados: Boolean(hub?.apenas_xmls_autorizados ?? false),
         analise_ia_xmls_ativa: Boolean(hub?.analise_ia_xmls_ativa ?? true),
         support_whatsapp: hub?.support_whatsapp || '',
-        intervalo_checagem_horas: hub?.intervalo_checagem_horas || 6
+        intervalo_checagem_horas: hub?.intervalo_checagem_horas || 6,
+
+        // Hardware & Rede (Wake-on-LAN)
+        mac_address: hub?.mac_address || '',
+        ip_local: hub?.ip_local || '',
+        computador_nome: hub?.computador_nome || ''
       })
       setLoading(false)
     }
@@ -346,6 +375,7 @@ export default function ConfiguracoesPage() {
       analise_ia_xmls_ativa: Boolean(formData.analise_ia_xmls_ativa),
       support_whatsapp: formData.support_whatsapp,
       intervalo_checagem_horas: formData.intervalo_checagem_horas || 6,
+      mac_address: formData.mac_address?.trim() || null,
       updated_at: new Date().toISOString()
     }
 
@@ -387,7 +417,7 @@ export default function ConfiguracoesPage() {
   const diffMinSelected = lastSyncSelected ? Math.floor((now - new Date(lastSyncSelected).getTime()) / (1000 * 60)) : null
   const isOnlineSelected = diffMinSelected !== null && diffMinSelected <= 15
   const versaoHubSelected = configSelected?.versao_hub_instalada || (lastSyncSelected ? '2.8.0' : null)
-  const isAtualizadoSelected = versaoHubSelected === VERSAO_MAIS_RECENTE
+  const isAtualizadoSelected = isVersaoAtual(versaoHubSelected, VERSAO_MAIS_RECENTE)
   const isPendenteAtualizacaoSelected = configSelected?.comando_remoto === 'atualizar_hub'
   const offlineSecretSelected = configSelected?.offline_secret || 'Não gerada'
 
@@ -548,7 +578,7 @@ export default function ConfiguracoesPage() {
               const offlineSecret = config?.offline_secret || 'Não gerada'
               const versaoHub = config?.versao_hub_instalada || (lastSync ? '2.8.0' : null)
               const comandoRemoto = config?.comando_remoto
-              const isAtualizado = versaoHub === VERSAO_MAIS_RECENTE
+              const isAtualizado = isVersaoAtual(versaoHub, VERSAO_MAIS_RECENTE)
               const isPendenteAtualizacao = comandoRemoto === 'atualizar_hub'
               const uptimeSegundos = config?.uptime_segundos
               const computadorNome = config?.computador_nome
@@ -773,6 +803,23 @@ export default function ConfiguracoesPage() {
                         <span className="text-slate-400 italic">Desligado / Sem sinal</span>
                       )}
                     </div>
+
+                    {/* REDE / WAKE-ON-LAN (IP E MAC DA PLACA FÍSICA) */}
+                    {(macAddress || config?.ip_local) && (
+                      <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-2 text-[10px] flex items-center justify-between font-mono" title={`Host: ${computadorNome || 'PC'} | IP: ${config?.ip_local || 'N/D'} | MAC: ${macAddress || 'N/D'}`}>
+                        <div className="flex items-center gap-1 text-slate-500 truncate max-w-[95px]">
+                          <Laptop size={11} className="text-indigo-500 shrink-0" />
+                          <span className="truncate">{config?.ip_local || 'IP N/D'}</span>
+                        </div>
+                        {macAddress ? (
+                          <span className="font-bold text-slate-700 bg-white px-1.5 py-0.5 rounded border border-slate-200 text-[9px] shrink-0" title="MAC da placa Ethernet para Wake-on-LAN">
+                            {macAddress}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 italic text-[9px]">Sem MAC</span>
+                        )}
+                      </div>
+                    )}
 
                     {/* TOTAL GERAL DOS XMLS POR TIPO DE NOTA */}
                     <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-2 space-y-1">
@@ -1392,6 +1439,104 @@ export default function ConfiguracoesPage() {
                           />
                         </div>
                       </div>
+
+                      {/* CARD 5: HARDWARE, REDE LOCAL & WAKE-ON-LAN (LIGAR COMPUTADOR REMOTAMENTE) */}
+                      <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-4 lg:col-span-2">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-3 flex-wrap gap-2">
+                          <div className="flex items-center gap-2 text-indigo-600 font-semibold">
+                            <Zap size={20} className="text-amber-500" />
+                            <h3 className="text-slate-800 font-bold">5. Hardware, Rede Local & Wake-on-LAN (Ligar Computador Remoto)</h3>
+                          </div>
+                          <span className="text-[11px] text-slate-500 font-mono bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
+                            WOL Magic Packet (UDP Porta 9)
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          {/* Campo Endereço MAC (Editável) */}
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                                <Laptop size={12} className="text-indigo-600" />
+                                Endereço MAC da Placa de Rede
+                              </label>
+                              {formData.mac_address && (
+                                <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-medium border border-emerald-200">
+                                  ✓ Coletado pelo Hub
+                                </span>
+                              )}
+                            </div>
+                            <input
+                              type="text"
+                              placeholder="Ex: E0:D5:5E:F6:A3:E2"
+                              value={formData.mac_address}
+                              onChange={e => setFormData({ ...formData, mac_address: e.target.value.toUpperCase() })}
+                              className="w-full text-xs font-mono font-bold p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                            <span className="text-[10px] text-slate-400 mt-1 block">
+                              O Hub v2.8.7 coleta o MAC da placa Ethernet automaticamente. Você pode preencher ou corrigir manualmente para o Wake-on-LAN.
+                            </span>
+                          </div>
+
+                          {/* Exibição IP Local */}
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                              IP Local na Rede Interna
+                            </label>
+                            <input
+                              type="text"
+                              readOnly
+                              value={formData.ip_local || 'Aguardando pulso do Hub...'}
+                              className="w-full text-xs font-mono p-2.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-xl cursor-default"
+                            />
+                            <span className="text-[10px] text-slate-400 mt-1 block">
+                              Endereço IPv4 reportado na última sincronização do Hub Desktop.
+                            </span>
+                          </div>
+
+                          {/* Exibição Nome da Máquina */}
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                              Nome do Computador (Hostname)
+                            </label>
+                            <input
+                              type="text"
+                              readOnly
+                              value={formData.computador_nome || 'Não identificado'}
+                              className="w-full text-xs font-mono p-2.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-xl cursor-default"
+                            />
+                            <span className="text-[10px] text-slate-400 mt-1 block">
+                              Nome da máquina no sistema operacional Windows do cliente.
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Ação rápida Wake-on-LAN */}
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-3 border-t border-slate-100 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200">
+                          <div className="text-xs text-slate-600">
+                            💡 <strong>Como funciona o Wake-on-LAN:</strong> Envia um pacote de ativação para a placa física. Se a placa e a BIOS/UEFI da máquina estiverem configuradas com WOL ligado, ela iniciará remotamente mesmo se estiver desligada.
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setModalEnergia({
+                              open: true,
+                              tipo: 'acordar_pc',
+                              clienteId: selectedCliente,
+                              nome: clientes.find(c => c.id === selectedCliente)?.nome_fantasia || 'Cliente',
+                              mac: formData.mac_address
+                            })}
+                            disabled={!formData.mac_address}
+                            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
+                              formData.mac_address
+                                ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-sm cursor-pointer'
+                                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                            }`}
+                          >
+                            <Zap size={14} />
+                            Testar Wake-on-LAN Agora
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
                     {/* BOTÃO SALVAR CONFIGURAÇÕES */}
@@ -1483,7 +1628,7 @@ export default function ConfiguracoesPage() {
                   const offlineSecret = config?.offline_secret || 'Não gerada'
                   const versaoHub = config?.versao_hub_instalada || (lastSync ? '2.8.0' : null)
                   const comandoRemoto = config?.comando_remoto
-                  const isAtualizado = versaoHub === VERSAO_MAIS_RECENTE
+                  const isAtualizado = isVersaoAtual(versaoHub, VERSAO_MAIS_RECENTE)
                   const isPendenteAtualizacao = comandoRemoto === 'atualizar_hub'
 
                   let statusElement: React.ReactNode
@@ -1556,6 +1701,17 @@ export default function ConfiguracoesPage() {
                         <span className="text-[10px] text-slate-400 font-mono block">
                           {hub.cnpj}
                         </span>
+                        {(config?.ip_local || config?.mac_address) && (
+                          <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono mt-0.5 truncate" title={`Host: ${config?.computador_nome || 'PC'} | IP: ${config?.ip_local || 'N/D'} | MAC: ${config?.mac_address || 'N/D'}`}>
+                            <Laptop size={10} className="text-indigo-500 shrink-0" />
+                            <span>{config?.ip_local || 'IP N/D'}</span>
+                            {config?.mac_address && (
+                              <span className="text-slate-700 font-bold bg-slate-100 px-1 rounded text-[9px]">
+                                {config.mac_address}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
 
                       {/* Token do Hub */}
@@ -1691,6 +1847,55 @@ export default function ConfiguracoesPage() {
                           >
                             Reconciliar Gaps
                           </button>
+
+                          {/* Botões Rápidos de Energia / WOL */}
+                          <div className="flex items-center gap-1 border-l border-slate-200 pl-1.5 ml-0.5">
+                            {/* Wake-on-LAN */}
+                            <button
+                              type="button"
+                              onClick={() => setModalEnergia({
+                                open: true,
+                                tipo: 'acordar_pc',
+                                clienteId: hub.id,
+                                nome: hub.nome_fantasia || hub.razao_social,
+                                mac: config?.mac_address
+                              })}
+                              className="p-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-200 transition cursor-pointer"
+                              title={config?.mac_address ? `Acordar PC via Wake-on-LAN (MAC: ${config.mac_address})` : 'Acordar PC via Wake-on-LAN (Aguardando MAC)'}
+                            >
+                              <Zap size={12} />
+                            </button>
+
+                            {/* Reiniciar PC */}
+                            <button
+                              type="button"
+                              onClick={() => setModalEnergia({
+                                open: true,
+                                tipo: 'reiniciar_pc',
+                                clienteId: hub.id,
+                                nome: hub.nome_fantasia || hub.razao_social
+                              })}
+                              className="p-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-600 border border-amber-200 transition cursor-pointer"
+                              title="Reiniciar Computador Remoto"
+                            >
+                              <RotateCcw size={12} />
+                            </button>
+
+                            {/* Desligar PC */}
+                            <button
+                              type="button"
+                              onClick={() => setModalEnergia({
+                                open: true,
+                                tipo: 'desligar_pc',
+                                clienteId: hub.id,
+                                nome: hub.nome_fantasia || hub.razao_social
+                              })}
+                              className="p-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition cursor-pointer"
+                              title="Desligar Computador Remoto"
+                            >
+                              <Power size={12} />
+                            </button>
+                          </div>
                         </div>
 
                         {comandoRemoto && (

@@ -48,7 +48,7 @@ namespace HubParatechDesktop
         }
 
         /// <summary>
-        /// Obtém o primeiro IP local IPv4 ativo e o MAC Address da placa física
+        /// Obtém o primeiro IP local IPv4 ativo e o MAC Address da placa física (priorizando Ethernet para Wake-on-LAN)
         /// </summary>
         public static (string ipLocal, string macAddress) GetLocalNetworkInfo()
         {
@@ -56,28 +56,29 @@ namespace HubParatechDesktop
             string mac = "";
             try
             {
-                foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+                var interfaces = NetworkInterface.GetAllNetworkInterfaces()
+                    .Where(nic => nic.OperationalStatus == OperationalStatus.Up &&
+                                  nic.NetworkInterfaceType != NetworkInterfaceType.Loopback &&
+                                  nic.NetworkInterfaceType != NetworkInterfaceType.Tunnel)
+                    .OrderByDescending(nic => nic.NetworkInterfaceType == NetworkInterfaceType.Ethernet);
+
+                foreach (var nic in interfaces)
                 {
-                    if (nic.OperationalStatus == OperationalStatus.Up &&
-                        nic.NetworkInterfaceType != NetworkInterfaceType.Loopback &&
-                        nic.NetworkInterfaceType != NetworkInterfaceType.Tunnel)
+                    var props = nic.GetIPProperties();
+                    foreach (var addr in props.UnicastAddresses)
                     {
-                        var props = nic.GetIPProperties();
-                        foreach (var addr in props.UnicastAddresses)
+                        if (addr.Address.AddressFamily == AddressFamily.InterNetwork)
                         {
-                            if (addr.Address.AddressFamily == AddressFamily.InterNetwork)
+                            ip = addr.Address.ToString();
+                            byte[] bytes = nic.GetPhysicalAddress().GetAddressBytes();
+                            if (bytes != null && bytes.Length == 6)
                             {
-                                ip = addr.Address.ToString();
-                                byte[] bytes = nic.GetPhysicalAddress().GetAddressBytes();
-                                if (bytes != null && bytes.Length == 6)
-                                {
-                                    mac = string.Join(":", bytes.Select(b => b.ToString("X2")));
-                                }
-                                break;
+                                mac = string.Join(":", bytes.Select(b => b.ToString("X2")));
                             }
+                            break;
                         }
-                        if (!string.IsNullOrEmpty(ip) && !string.IsNullOrEmpty(mac)) break;
                     }
+                    if (!string.IsNullOrEmpty(ip) && !string.IsNullOrEmpty(mac)) break;
                 }
             }
             catch { }
