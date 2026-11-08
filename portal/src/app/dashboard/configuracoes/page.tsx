@@ -15,7 +15,7 @@ import { useTableFeatures } from '@/hooks/useTableFeatures'
 import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
 import { ClienteAutocompleteInput } from '@/components/ClienteAutocompleteInput'
 
-const VERSAO_MAIS_RECENTE = '2.8.5'
+const VERSAO_MAIS_RECENTE = '2.8.6'
 const INTERVALO_MS = 15 * 60 * 1000
 const TOLERANCIA_MS = 2 * 60 * 1000
 

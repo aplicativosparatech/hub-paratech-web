@@ -26,8 +26,8 @@ namespace HubParatechDesktop
     {
         private static readonly HttpClient http = new HttpClient { Timeout = TimeSpan.FromSeconds(35) };
         private const string CheckApiUrl = AppConfig.CheckUpdateApiUrl;
-        public const string VersaoAtual = "2.8.5";
-        public const int BuildNumberAtual = 285;
+        public const string VersaoAtual = "2.8.6";
+        public const int BuildNumberAtual = 286;
         private static bool isUpdating = false;
 
         private static void LogUpdate(string message)
