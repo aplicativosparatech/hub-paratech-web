@@ -27,8 +27,8 @@ export default function ConfiguracoesPage() {
   const [termoBuscaTabela, setTermoBuscaTabela] = useState<string>('')
   const [now, setNow] = useState<number>(() => Date.now())
 
-  // Controle de Abas: 'mapa' (Cards em até 6 colunas), 'configuracao' (Formulário), 'tabela' (Tabela)
-  const [abaAtiva, setAbaAtiva] = useState<'mapa' | 'configuracao' | 'tabela'>('mapa')
+  // Controle de Abas: 'mapa' (Cards em até 6 colunas) ou 'tabela' (Tabela Detalhada & Parâmetros Unificada)
+  const [abaAtiva, setAbaAtiva] = useState<'mapa' | 'tabela'>('mapa')
   const [filtroStatus, setFiltroStatus] = useState<'todos' | 'online' | 'aguardando' | 'offline' | 'nao_instalado'>('todos')
   
   // Totais de XMLs por cliente e modelo (NFC-e 65, NF-e 55, Entradas)
@@ -425,7 +425,7 @@ export default function ConfiguracoesPage() {
         </div>
       </header>
 
-      {/* ABAS DE NAVEGAÇÃO PRINCIPAL */}
+      {/* ABAS DE NAVEGAÇÃO PRINCIPAL (UNIFICADA) */}
       <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto">
         <button
           type="button"
@@ -447,22 +447,6 @@ export default function ConfiguracoesPage() {
 
         <button
           type="button"
-          onClick={() => setAbaAtiva('configuracao')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
-            abaAtiva === 'configuracao'
-              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-          }`}
-        >
-          <SlidersHorizontal size={15} />
-          Parâmetros & Configurações da Empresa
-          {selectedCliente && (
-            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-          )}
-        </button>
-
-        <button
-          type="button"
           onClick={() => setAbaAtiva('tabela')}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
             abaAtiva === 'tabela'
@@ -471,7 +455,10 @@ export default function ConfiguracoesPage() {
           }`}
         >
           <TableProperties size={15} />
-          Tabela Detalhada (Monitoramento em Tempo Real)
+          Tabela Detalhada (Monitoramento e Parâmetros)
+          {selectedCliente && (
+            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+          )}
         </button>
       </div>
 
@@ -822,7 +809,7 @@ export default function ConfiguracoesPage() {
                         type="button"
                         onClick={() => {
                           setSelectedCliente(hub.id)
-                          setAbaAtiva('configuracao')
+                          setAbaAtiva('tabela')
                           setTimeout(() => {
                             document.getElementById('painel-configuracao')?.scrollIntoView({ behavior: 'smooth' })
                           }, 150)
@@ -939,11 +926,11 @@ export default function ConfiguracoesPage() {
       )}
 
       {/* ======================================================== */}
-      {/* ABA 2: PARÂMETROS & CONFIGURAÇÕES (FORMULÁRIO)            */}
+      {/* ABA 2: TABELA DETALHADA & PARÂMETROS DO HUB (UNIFICADA)   */}
       {/* ======================================================== */}
-      {abaAtiva === 'configuracao' && (
+      {abaAtiva === 'tabela' && (
         <div className="space-y-6 animate-in fade-in duration-200">
-          {/* Seletor de Cliente com Autocomplete */}
+          {/* Seletor de Cliente com Autocomplete (O Filtro da Imagem) */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
             <ClienteAutocompleteInput
               clientes={clientes}
@@ -962,7 +949,7 @@ export default function ConfiguracoesPage() {
           </div>
 
           {/* Formulário & Painel do Cliente Selecionado */}
-          {selectedCliente ? (
+          {selectedCliente && (
             <div id="painel-configuracao" className="space-y-6 pt-2">
               {/* BANNER DE IDENTIFICAÇÃO, TOKEN DO HUB E COMANDOS REMOTOS */}
               <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 border border-indigo-900/60 rounded-2xl p-6 text-white shadow-xl">
@@ -1043,6 +1030,17 @@ export default function ConfiguracoesPage() {
                     >
                       <Sparkles size={14} />
                       {loadingComandoId === selectedCliente ? 'Enviando...' : 'Reconciliar Gaps'}
+                    </button>
+
+                    {/* Botão Fechar Painel de Configuração */}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCliente('')}
+                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 cursor-pointer"
+                      title="Fechar parâmetros e visualizar a tabela inteira"
+                    >
+                      <X size={14} />
+                      Fechar Painel
                     </button>
                   </div>
                 </div>
@@ -1411,74 +1409,20 @@ export default function ConfiguracoesPage() {
                 )}
               </form>
             </div>
-          ) : (
-            <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-6 shadow-xs">
-              <div className="max-w-md mx-auto space-y-2">
-                <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
-                  <Building2 size={28} />
-                </div>
-                <h3 className="text-lg font-bold text-slate-800">
-                  Nenhuma Empresa Selecionada
+          )}
+
+          {/* TABELA DETALHADA DE HUBS (MONITORAMENTO EM TEMPO REAL) */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-lg text-slate-800 flex items-center gap-2">
+                  <SlidersHorizontal size={18} className="text-indigo-600" />
+                  Hubs Ativos (Monitoramento em Tempo Real)
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Utilize o campo de busca acima ou clique em uma das empresas abaixo para abrir o formulário completo de parâmetros, certificados, diretórios fiscais e tokens do Hub.
+                  Acompanhamento de batimentos, tokens de conexão, versões instaladas e comandos remotos.
                 </p>
               </div>
-
-              {/* Grade de Seleção Rápida de Empresas */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 text-left pt-2">
-                {clientes.slice(0, 16).map((c: any) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedCliente(c.id)
-                      setTimeout(() => {
-                        document.getElementById('painel-configuracao')?.scrollIntoView({ behavior: 'smooth' })
-                      }, 100)
-                    }}
-                    className="p-3.5 rounded-xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/40 transition cursor-pointer flex flex-col justify-between gap-2 group bg-white shadow-2xs"
-                  >
-                    <div>
-                      <h4 className="font-bold text-xs text-slate-900 group-hover:text-indigo-600 line-clamp-1">
-                        {c.razao_social}
-                      </h4>
-                      {c.nome_fantasia && (
-                        <p className="text-[11px] text-indigo-600 font-semibold line-clamp-1">
-                          {c.nome_fantasia}
-                        </p>
-                      )}
-                      <p className="text-[10px] font-mono text-slate-400 mt-1">
-                        CNPJ: {c.cnpj || 'Não informado'}
-                      </p>
-                    </div>
-                    <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-100">
-                      <span>Configurar</span>
-                      <span className="text-indigo-600 font-bold group-hover:translate-x-0.5 transition-transform">→</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ======================================================== */}
-      {/* ABA 3: TABELA DETALHADA DE HUBS (MONITORAMENTO)           */}
-      {/* ======================================================== */}
-      {abaAtiva === 'tabela' && (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in duration-200">
-          <div className="px-6 py-4 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-            <div>
-              <h3 className="font-semibold text-lg text-slate-800 flex items-center gap-2">
-                <SlidersHorizontal size={18} className="text-indigo-600" />
-                Hubs Ativos (Monitoramento em Tempo Real)
-              </h3>
-              <p className="text-xs text-slate-500">
-                Acompanhamento de batimentos, tokens de conexão, versões instaladas e comandos remotos.
-              </p>
-            </div>
 
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               {/* Campo de Busca Rápida na Tabela */}
@@ -1706,7 +1650,6 @@ export default function ConfiguracoesPage() {
                             type="button"
                             onClick={() => {
                               setSelectedCliente(hub.id)
-                              setAbaAtiva('configuracao')
                               setTimeout(() => {
                                 document.getElementById('painel-configuracao')?.scrollIntoView({ behavior: 'smooth' })
                               }, 100)
@@ -1771,7 +1714,8 @@ export default function ConfiguracoesPage() {
             </table>
           </div>
         </div>
-      )}
+      </div>
+    )}
 
       {/* ======================================================== */}
       {/* MODAL DE CONFIRMAÇÃO DE ENERGIA (DESLIGAR / REINICIAR / WOL) */}
