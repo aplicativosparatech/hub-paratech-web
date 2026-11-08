@@ -258,20 +258,46 @@ export async function POST(request: Request) {
       forcar_atualizacao: deveForcarAtualizacao
     }
 
-    // Registra heartbeat do Hub (Online) e atualiza a versão instalada informada pelo executável
+    // Registra heartbeat do Hub (Online) e atualiza versão, uptime e identificação da máquina
     const updateHubData: any = { ultima_sincronizacao: new Date().toISOString() }
     if (versaoHub) {
       updateHubData.versao_hub_instalada = versaoHub
     }
+    if (body.uptime_segundos !== undefined && body.uptime_segundos !== null) {
+      updateHubData.uptime_segundos = Number(body.uptime_segundos)
+    }
+    if (body.computador_nome) {
+      updateHubData.computador_nome = String(body.computador_nome)
+    }
+    if (body.ip_local) {
+      updateHubData.ip_local = String(body.ip_local)
+    }
+    if (body.mac_address) {
+      updateHubData.mac_address = String(body.mac_address)
+    }
+
     // Se havia um comando pendente que foi entregue nesta resposta, consome o comando
     if (config?.comando_remoto) {
       updateHubData.comando_remoto = null
     }
 
-    const { error: syncError } = await supabase
+    let { error: syncError } = await supabase
       .from('configuracoes_hub')
       .update(updateHubData)
       .eq('cliente_id', cliente.id)
+
+    // Fallback gracioso se as colunas de uptime/hardware ainda não tiverem sido adicionadas no banco
+    if (syncError && syncError.message?.includes('column')) {
+      const basicData: any = { ultima_sincronizacao: updateHubData.ultima_sincronizacao }
+      if (updateHubData.versao_hub_instalada) basicData.versao_hub_instalada = updateHubData.versao_hub_instalada
+      if (updateHubData.comando_remoto === null) basicData.comando_remoto = null
+      
+      const { error: fallbackError } = await supabase
+        .from('configuracoes_hub')
+        .update(basicData)
+        .eq('cliente_id', cliente.id)
+      syncError = fallbackError
+    }
 
     if (syncError) {
       console.error('Erro ao atualizar sincronizacao:', syncError)

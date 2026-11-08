@@ -213,6 +213,43 @@ namespace HubParatechDesktop
             });
 
             trayIcon.ContextMenuStrip.Items.Add("Configurações...", null, SetupToken);
+
+            // Submenu: Controle e Energia do Computador
+            var menuEnergia = new ToolStripMenuItem("⚡ Controle do Computador");
+            menuEnergia.DropDownItems.Add(new ToolStripMenuItem("⏱️ Tempo Ligado (Uptime)", null, (s, e) => {
+                var uptime = TimeSpan.FromMilliseconds(Environment.TickCount64);
+                string txtUptime = uptime.Days > 0 
+                    ? $"{uptime.Days} dia(s), {uptime.Hours} hora(s) e {uptime.Minutes} minuto(s)" 
+                    : $"{uptime.Hours} hora(s) e {uptime.Minutes} minuto(s)";
+                ParatechDialog.ShowInfo($"O computador está ligado continuamente há:\n{txtUptime}\n\nNome da Máquina: {Environment.MachineName}\nUsuário: {Environment.UserName}", "Tempo de Atividade (Uptime)");
+            }));
+            menuEnergia.DropDownItems.Add(new ToolStripSeparator());
+            menuEnergia.DropDownItems.Add(new ToolStripMenuItem("🔄 Reiniciar este Computador", null, (s, e) => {
+                if (MessageBox.Show("Deseja realmente reiniciar o computador em 30 segundos?", "Reiniciar Computador", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                {
+                    try {
+                        Process.Start(new ProcessStartInfo("shutdown", "/r /t 30 /c \"Reinicialização solicitada pelo usuário no Hub\"") { CreateNoWindow = true, UseShellExecute = false });
+                        trayIcon.ShowBalloonTip(5000, "Reinicialização Agendada", "O computador será reiniciado em 30 segundos.", ToolTipIcon.Warning);
+                    } catch (Exception ex) { ParatechDialog.ShowError("Erro ao reiniciar: " + ex.Message, "Falha de Energia"); }
+                }
+            }));
+            menuEnergia.DropDownItems.Add(new ToolStripMenuItem("🔌 Desligar este Computador", null, (s, e) => {
+                if (MessageBox.Show("Deseja realmente desligar o computador em 30 segundos?", "Desligar Computador", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+                {
+                    try {
+                        Process.Start(new ProcessStartInfo("shutdown", "/s /t 30 /c \"Desligamento solicitado pelo usuário no Hub\"") { CreateNoWindow = true, UseShellExecute = false });
+                        trayIcon.ShowBalloonTip(5000, "Desligamento Agendado", "O computador será desligado em 30 segundos.", ToolTipIcon.Warning);
+                    } catch (Exception ex) { ParatechDialog.ShowError("Erro ao desligar: " + ex.Message, "Falha de Energia"); }
+                }
+            }));
+            menuEnergia.DropDownItems.Add(new ToolStripMenuItem("❌ Cancelar Desligamento Agendado", null, (s, e) => {
+                try {
+                    Process.Start(new ProcessStartInfo("shutdown", "/a") { CreateNoWindow = true, UseShellExecute = false });
+                    ParatechDialog.ShowSuccess("Ordem de desligamento/reinício cancelada com sucesso!", "Cancelado");
+                } catch (Exception ex) { ParatechDialog.ShowError("Não havia desligamento ativo ou erro: " + ex.Message, "Aviso"); }
+            }));
+            trayIcon.ContextMenuStrip.Items.Add(menuEnergia);
+
             trayIcon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
 
             trayIcon.ContextMenuStrip.Items.Add("Verificar Atualizações...", null, async (s, e) => {
@@ -474,10 +511,17 @@ namespace HubParatechDesktop
 
             try
             {
+                var (ipLocal, macAddress) = WakeOnLanService.GetLocalNetworkInfo();
+                long uptimeSegundos = Environment.TickCount64 / 1000;
+
                 var jsonReq = JsonSerializer.Serialize(new { 
                     token = config.HubToken,
                     versao = UpdateManager.VersaoAtual,
-                    build_number = UpdateManager.BuildNumberAtual
+                    build_number = UpdateManager.BuildNumberAtual,
+                    uptime_segundos = uptimeSegundos,
+                    computador_nome = Environment.MachineName,
+                    ip_local = ipLocal,
+                    mac_address = macAddress
                 });
                 var content = new StringContent(jsonReq, System.Text.Encoding.UTF8, "application/json");
                 
@@ -660,6 +704,49 @@ namespace HubParatechDesktop
                                 await XmlMonitor.ExecutarReconciliacaoGapsAsync(config.HubToken, http, activeMonitors);
                                 foreach (var m in activeMonitors) m.TriggerScan();
                             });
+                        }
+                        else if (data.comando_remoto == "desligar_pc")
+                        {
+                            Debug.WriteLine("[TrayContext] Comando remoto de DESLIGAR O PC recebido do Portal!");
+                            try
+                            {
+                                trayIcon.ShowBalloonTip(10000, "⚠️ Desligamento do Computador", "O computador será desligado em 60 segundos por comando remoto do Portal.", ToolTipIcon.Warning);
+                                Process.Start(new ProcessStartInfo("shutdown", "/s /t 60 /c \"Desligamento solicitado remotamente via Hub Paratech.\"") { CreateNoWindow = true, UseShellExecute = false });
+                            }
+                            catch (Exception ex) { Debug.WriteLine("Erro ao desligar PC: " + ex.Message); }
+                        }
+                        else if (data.comando_remoto == "reiniciar_pc")
+                        {
+                            Debug.WriteLine("[TrayContext] Comando remoto de REINICIAR O PC recebido do Portal!");
+                            try
+                            {
+                                trayIcon.ShowBalloonTip(10000, "⚠️ Reinicialização do Computador", "O computador será reiniciado em 60 segundos por comando remoto do Portal.", ToolTipIcon.Warning);
+                                Process.Start(new ProcessStartInfo("shutdown", "/r /t 60 /c \"Reinicialização solicitada remotamente via Hub Paratech.\"") { CreateNoWindow = true, UseShellExecute = false });
+                            }
+                            catch (Exception ex) { Debug.WriteLine("Erro ao reiniciar PC: " + ex.Message); }
+                        }
+                        else if (data.comando_remoto == "cancelar_desligamento")
+                        {
+                            Debug.WriteLine("[TrayContext] Comando remoto de CANCELAR DESLIGAMENTO recebido!");
+                            try
+                            {
+                                Process.Start(new ProcessStartInfo("shutdown", "/a") { CreateNoWindow = true, UseShellExecute = false });
+                                trayIcon.ShowBalloonTip(5000, "✅ Cancelado", "O desligamento agendado foi cancelado.", ToolTipIcon.Info);
+                            }
+                            catch (Exception ex) { Debug.WriteLine("Erro ao cancelar: " + ex.Message); }
+                        }
+                        else if (!string.IsNullOrEmpty(data.comando_remoto) && data.comando_remoto.StartsWith("acordar_pc"))
+                        {
+                            string targetMac = "";
+                            if (data.comando_remoto.Contains(":"))
+                            {
+                                targetMac = data.comando_remoto.Substring(data.comando_remoto.IndexOf(':') + 1).Trim();
+                            }
+                            if (!string.IsNullOrEmpty(targetMac))
+                            {
+                                Debug.WriteLine($"[TrayContext] Disparando Wake-on-LAN para MAC {targetMac}");
+                                _ = Task.Run(() => WakeOnLanService.SendWakeOnLan(targetMac));
+                            }
                         }
 
                         // Auto-Auditoria Silenciosa de Gaps (Executa a cada 4 horas ou na inicialização para garantir 100% de precisão)

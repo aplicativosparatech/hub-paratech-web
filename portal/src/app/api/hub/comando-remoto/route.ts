@@ -13,8 +13,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'cliente_id e comando são obrigatórios.' }, { status: 400 })
     }
 
-    const comandosValidos = ['atualizar_hub', 'reconciliar_gaps', 'cancelar']
-    if (!comandosValidos.includes(comando)) {
+    const comandosValidos = [
+      'atualizar_hub',
+      'reconciliar_gaps',
+      'cancelar',
+      'desligar_pc',
+      'reiniciar_pc',
+      'cancelar_desligamento',
+      'acordar_pc'
+    ]
+
+    const isComandoValido = comandosValidos.includes(comando) || comando.startsWith('acordar_pc:')
+    if (!isComandoValido) {
       return NextResponse.json({ error: `Comando inválido. Permitidos: ${comandosValidos.join(', ')}` }, { status: 400 })
     }
 
@@ -34,11 +44,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const msg = comandoFinal === 'atualizar_hub'
-      ? 'Comando de atualização enviado! O Hub do cliente iniciará o download e atualização no próximo pulso.'
-      : comandoFinal === 'reconciliar_gaps'
-        ? 'Comando de reconciliação de gaps enviado! O Hub fará a varredura no próximo pulso.'
-        : 'Comando remoto cancelado com sucesso.'
+    let msg = 'Comando processado com sucesso.'
+    if (comandoFinal === 'atualizar_hub') {
+      msg = 'Comando de atualização enviado! O Hub do cliente atualizará no próximo pulso.'
+    } else if (comandoFinal === 'reconciliar_gaps') {
+      msg = 'Comando de reconciliação de gaps enviado! O Hub fará a varredura no próximo pulso.'
+    } else if (comandoFinal === 'desligar_pc') {
+      msg = 'Comando enviado! O computador do cliente será desligado com aviso prévio de 60 segundos.'
+    } else if (comandoFinal === 'reiniciar_pc') {
+      msg = 'Comando enviado! O computador do cliente será reiniciado com aviso prévio de 60 segundos.'
+    } else if (comandoFinal === 'cancelar_desligamento') {
+      msg = 'Comando enviado! A contagem de desligamento/reinício foi cancelada.'
+    } else if (comandoFinal?.startsWith('acordar_pc')) {
+      msg = 'Comando Wake-on-LAN para acordar o PC enfileirado com sucesso.'
+    } else if (comando === 'cancelar') {
+      msg = 'Comando remoto pendente cancelado.'
+    }
 
     return NextResponse.json({
       success: true,
