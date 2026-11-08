@@ -20,6 +20,10 @@ static class Program
 
         ApplicationConfiguration.Initialize();
 
+        // Blindagem contra instâncias duplicadas (Garante apenas 1 ícone no Tray e 1 processo ativo)
+        const string mutexName = @"Global\HubParatechDesktop_SingleInstance";
+        using var mutex = new System.Threading.Mutex(true, mutexName, out bool isNewInstance);
+
         bool forceStealth = false;
         bool isSetup = false;
         bool isInstall = false;
@@ -32,6 +36,12 @@ static class Program
             if (lower == "--setup" || lower == "--config") isSetup = true;
             if (lower == "--install") isInstall = true;
             if (lower == "--uninstall") isUninstall = true;
+        }
+
+        if (!isNewInstance && !isUninstall && !isSetup)
+        {
+            // Já existe uma instância do Hub Paratech rodando! Encerra silenciosamente para evitar múltiplos ícones.
+            return;
         }
 
         if (isUninstall)

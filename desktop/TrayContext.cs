@@ -903,5 +903,22 @@ namespace HubParatechDesktop
             }
             catch { }
         }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                if (trayIcon != null)
+                {
+                    trayIcon.Visible = false;
+                    trayIcon.Dispose();
+                }
+                syncTimer?.Dispose();
+                countdownTimer?.Dispose();
+                foreach (var m in activeMonitors) m.Stop();
+                activeMonitors.Clear();
+            }
+            base.Dispose(disposing);
+        }
     }
 }
