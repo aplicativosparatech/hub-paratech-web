@@ -5,8 +5,9 @@ ADD COLUMN IF NOT EXISTS computador_nome TEXT,
 ADD COLUMN IF NOT EXISTS ip_local TEXT,
 ADD COLUMN IF NOT EXISTS mac_address TEXT;
 
--- View agregada para totais de XMLs por cliente e modelo de nota
-CREATE OR REPLACE VIEW v_hub_xml_totais AS
+-- View agregada para totais de XMLs por cliente e modelo de nota (com security_invoker = true)
+CREATE OR REPLACE VIEW public.v_hub_xml_totais 
+WITH (security_invoker = true) AS
 SELECT 
     c.id as cliente_id,
     COALESCE(nfce.total, 0)::INT as total_nfce,
