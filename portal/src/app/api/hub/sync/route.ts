@@ -198,8 +198,8 @@ export async function POST(request: Request) {
 
     const nomeEmpresa = cliente.nome_fantasia || cliente.razao_social || cliente.nome_sistema_utilizado || 'Cliente Paratech'
 
-    // Detecta se o Hub precisa atualizar para a versão mais recente oficial (v2.8.7 / build 287)
-    const versaoDesatualizada = !versaoHub || versaoHub < '2.8.7' || (buildNumber !== null && buildNumber < 287)
+    // Detecta se o Hub precisa atualizar para a versão mais recente oficial (v2.8.8 / build 288)
+    const versaoDesatualizada = !versaoHub || versaoHub < '2.8.8' || (buildNumber !== null && buildNumber < 288)
     const deveForcarAtualizacao = config?.comando_remoto === 'atualizar_hub' || versaoDesatualizada
 
     const responseData = {

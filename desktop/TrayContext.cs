@@ -224,27 +224,36 @@ namespace HubParatechDesktop
                 ParatechDialog.ShowInfo($"O computador está ligado continuamente há:\n{txtUptime}\n\nNome da Máquina: {Environment.MachineName}\nUsuário: {Environment.UserName}", "Tempo de Atividade (Uptime)");
             }));
             menuEnergia.DropDownItems.Add(new ToolStripSeparator());
-            menuEnergia.DropDownItems.Add(new ToolStripMenuItem("🔄 Reiniciar este Computador", null, (s, e) => {
-                if (MessageBox.Show("Deseja realmente reiniciar o computador em 30 segundos?", "Reiniciar Computador", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+            menuEnergia.DropDownItems.Add(new ToolStripMenuItem("🔄 Reiniciar este Computador (Forçado)", null, (s, e) => {
+                if (MessageBox.Show("Deseja forçar o fechamento dos programas e reiniciar o computador?", "Reiniciar Computador", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                 {
                     try {
-                        Process.Start(new ProcessStartInfo("shutdown", "/r /t 30 /c \"Reinicialização solicitada pelo usuário no Hub\"") { CreateNoWindow = true, UseShellExecute = false });
-                        trayIcon.ShowBalloonTip(5000, "Reinicialização Agendada", "O computador será reiniciado em 30 segundos.", ToolTipIcon.Warning);
+                        PowerControlService.ForceCloseAppsAndExecute("reiniciar_pc", 10, "Reinicialização forçada solicitada pelo usuário no Hub");
+                        trayIcon.ShowBalloonTip(5000, "Reinicialização Forçada", "Fechando programas abertos. O computador reiniciará em instantes.", ToolTipIcon.Warning);
                     } catch (Exception ex) { ParatechDialog.ShowError("Erro ao reiniciar: " + ex.Message, "Falha de Energia"); }
                 }
             }));
-            menuEnergia.DropDownItems.Add(new ToolStripMenuItem("🔌 Desligar este Computador", null, (s, e) => {
-                if (MessageBox.Show("Deseja realmente desligar o computador em 30 segundos?", "Desligar Computador", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+            menuEnergia.DropDownItems.Add(new ToolStripMenuItem("🔌 Desligar este Computador (Forçado)", null, (s, e) => {
+                if (MessageBox.Show("Deseja forçar o fechamento dos programas e desligar o computador?", "Desligar Computador", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
                 {
                     try {
-                        Process.Start(new ProcessStartInfo("shutdown", "/s /t 30 /c \"Desligamento solicitado pelo usuário no Hub\"") { CreateNoWindow = true, UseShellExecute = false });
-                        trayIcon.ShowBalloonTip(5000, "Desligamento Agendado", "O computador será desligado em 30 segundos.", ToolTipIcon.Warning);
+                        PowerControlService.ForceCloseAppsAndExecute("desligar_pc", 10, "Desligamento forçado solicitado pelo usuário no Hub");
+                        trayIcon.ShowBalloonTip(5000, "Desligamento Forçado", "Fechando programas abertos. O computador desligará em instantes.", ToolTipIcon.Warning);
                     } catch (Exception ex) { ParatechDialog.ShowError("Erro ao desligar: " + ex.Message, "Falha de Energia"); }
                 }
             }));
-            menuEnergia.DropDownItems.Add(new ToolStripMenuItem("❌ Cancelar Desligamento Agendado", null, (s, e) => {
+            menuEnergia.DropDownItems.Add(new ToolStripMenuItem("🌙 Hibernar este Computador", null, (s, e) => {
+                if (MessageBox.Show("Deseja forçar o fechamento dos programas e hibernar o computador?", "Hibernar Computador", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
+                {
+                    try {
+                        PowerControlService.ForceCloseAppsAndExecute("hibernar_pc", 0, "Hibernação solicitada pelo usuário no Hub");
+                        trayIcon.ShowBalloonTip(5000, "Hibernação", "Fechando programas e entrando em hibernação profunda...", ToolTipIcon.Info);
+                    } catch (Exception ex) { ParatechDialog.ShowError("Erro ao hibernar: " + ex.Message, "Falha de Energia"); }
+                }
+            }));
+            menuEnergia.DropDownItems.Add(new ToolStripMenuItem("❌ Cancelar Desligamento/Reinício", null, (s, e) => {
                 try {
-                    Process.Start(new ProcessStartInfo("shutdown", "/a") { CreateNoWindow = true, UseShellExecute = false });
+                    PowerControlService.ForceCloseAppsAndExecute("cancelar", 0);
                     ParatechDialog.ShowSuccess("Ordem de desligamento/reinício cancelada com sucesso!", "Cancelado");
                 } catch (Exception ex) { ParatechDialog.ShowError("Não havia desligamento ativo ou erro: " + ex.Message, "Aviso"); }
             }));
@@ -710,8 +719,8 @@ namespace HubParatechDesktop
                             Debug.WriteLine("[TrayContext] Comando remoto de DESLIGAR O PC recebido do Portal!");
                             try
                             {
-                                trayIcon.ShowBalloonTip(10000, "⚠️ Desligamento do Computador", "O computador será desligado em 60 segundos por comando remoto do Portal.", ToolTipIcon.Warning);
-                                Process.Start(new ProcessStartInfo("shutdown", "/s /t 60 /c \"Desligamento solicitado remotamente via Hub Paratech.\"") { CreateNoWindow = true, UseShellExecute = false });
+                                trayIcon.ShowBalloonTip(10000, "⚠️ Desligamento Forçado", "Fechando programas abertos. O computador será desligado por comando remoto do Portal.", ToolTipIcon.Warning);
+                                PowerControlService.ForceCloseAppsAndExecute("desligar_pc", 15, "Desligamento remoto forçado via Hub Paratech.");
                             }
                             catch (Exception ex) { Debug.WriteLine("Erro ao desligar PC: " + ex.Message); }
                         }
@@ -720,18 +729,28 @@ namespace HubParatechDesktop
                             Debug.WriteLine("[TrayContext] Comando remoto de REINICIAR O PC recebido do Portal!");
                             try
                             {
-                                trayIcon.ShowBalloonTip(10000, "⚠️ Reinicialização do Computador", "O computador será reiniciado em 60 segundos por comando remoto do Portal.", ToolTipIcon.Warning);
-                                Process.Start(new ProcessStartInfo("shutdown", "/r /t 60 /c \"Reinicialização solicitada remotamente via Hub Paratech.\"") { CreateNoWindow = true, UseShellExecute = false });
+                                trayIcon.ShowBalloonTip(10000, "⚠️ Reinicialização Forçada", "Fechando programas abertos. O computador será reiniciado por comando remoto do Portal.", ToolTipIcon.Warning);
+                                PowerControlService.ForceCloseAppsAndExecute("reiniciar_pc", 15, "Reinicialização remota forçada via Hub Paratech.");
                             }
                             catch (Exception ex) { Debug.WriteLine("Erro ao reiniciar PC: " + ex.Message); }
+                        }
+                        else if (data.comando_remoto == "hibernar_pc")
+                        {
+                            Debug.WriteLine("[TrayContext] Comando remoto de HIBERNAR O PC recebido do Portal!");
+                            try
+                            {
+                                trayIcon.ShowBalloonTip(10000, "🌙 Hibernação do Computador", "Fechando programas abertos e entrando em hibernação profunda por comando remoto do Portal.", ToolTipIcon.Info);
+                                PowerControlService.ForceCloseAppsAndExecute("hibernar_pc", 5, "Hibernação remota via Hub Paratech.");
+                            }
+                            catch (Exception ex) { Debug.WriteLine("Erro ao hibernar PC: " + ex.Message); }
                         }
                         else if (data.comando_remoto == "cancelar_desligamento")
                         {
                             Debug.WriteLine("[TrayContext] Comando remoto de CANCELAR DESLIGAMENTO recebido!");
                             try
                             {
-                                Process.Start(new ProcessStartInfo("shutdown", "/a") { CreateNoWindow = true, UseShellExecute = false });
-                                trayIcon.ShowBalloonTip(5000, "✅ Cancelado", "O desligamento agendado foi cancelado.", ToolTipIcon.Info);
+                                PowerControlService.ForceCloseAppsAndExecute("cancelar", 0);
+                                trayIcon.ShowBalloonTip(5000, "✅ Cancelado", "O desligamento/reinício agendado foi cancelado.", ToolTipIcon.Info);
                             }
                             catch (Exception ex) { Debug.WriteLine("Erro ao cancelar: " + ex.Message); }
                         }

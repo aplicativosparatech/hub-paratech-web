@@ -19,6 +19,7 @@ export async function POST(request: Request) {
       'cancelar',
       'desligar_pc',
       'reiniciar_pc',
+      'hibernar_pc',
       'cancelar_desligamento',
       'acordar_pc'
     ]
@@ -50,9 +51,11 @@ export async function POST(request: Request) {
     } else if (comandoFinal === 'reconciliar_gaps') {
       msg = 'Comando de reconciliação de gaps enviado! O Hub fará a varredura no próximo pulso.'
     } else if (comandoFinal === 'desligar_pc') {
-      msg = 'Comando enviado! O computador do cliente será desligado com aviso prévio de 60 segundos.'
+      msg = 'Comando forçado enviado! O computador fechará as aplicações e será desligado com aviso prévio de 60s.'
     } else if (comandoFinal === 'reiniciar_pc') {
-      msg = 'Comando enviado! O computador do cliente será reiniciado com aviso prévio de 60 segundos.'
+      msg = 'Comando forçado enviado! O computador fechará as aplicações e será reiniciado com aviso prévio de 60s.'
+    } else if (comandoFinal === 'hibernar_pc') {
+      msg = 'Comando enviado! O computador fechará as aplicações e entrará em hibernação profunda.'
     } else if (comandoFinal === 'cancelar_desligamento') {
       msg = 'Comando enviado! A contagem de desligamento/reinício foi cancelada.'
     } else if (comandoFinal?.startsWith('acordar_pc')) {

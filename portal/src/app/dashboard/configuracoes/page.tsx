@@ -8,14 +8,15 @@ import {
   ArrowUpRight, ArrowDownLeft, ShieldAlert, Layers, Calendar, DollarSign,
   Phone, SlidersHorizontal, Lock, FolderArchive, Sparkles, Inbox,
   Check, Copy, Key, Search, X, ShieldCheck, Cpu, MessageSquare,
-  Building2, Power, RotateCcw, Zap, Laptop, FileText, LayoutGrid, TableProperties
+  Building2, Power, RotateCcw, Zap, Laptop, FileText, LayoutGrid, TableProperties,
+  Moon
 } from 'lucide-react'
 import { APP_VERSION } from '@/utils/version'
 import { useTableFeatures } from '@/hooks/useTableFeatures'
 import { ResizableSortableTh } from '@/components/ui/ResizableSortableTh'
 import { ClienteAutocompleteInput } from '@/components/ClienteAutocompleteInput'
 
-const VERSAO_MAIS_RECENTE = '2.8.7'
+const VERSAO_MAIS_RECENTE = '2.8.8'
 const INTERVALO_MS = 15 * 60 * 1000
 const TOLERANCIA_MS = 2 * 60 * 1000
 
@@ -56,7 +57,7 @@ export default function ConfiguracoesPage() {
   // Modal de Ações de Energia / Controle Remoto
   const [modalEnergia, setModalEnergia] = useState<{
     open: boolean
-    tipo: 'desligar_pc' | 'reiniciar_pc' | 'acordar_pc'
+    tipo: 'desligar_pc' | 'reiniciar_pc' | 'hibernar_pc' | 'acordar_pc'
     clienteId: string
     nome: string
     mac?: string
@@ -931,9 +932,24 @@ export default function ConfiguracoesPage() {
                             nome: hub.nome_fantasia || hub.razao_social
                           })}
                           className="p-1 rounded-md bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition cursor-pointer"
-                          title="Reiniciar PC Remotamente"
+                          title="Reiniciar PC Remotamente (Forçado)"
                         >
                           <RotateCcw size={11} />
+                        </button>
+
+                        {/* Hibernar PC */}
+                        <button
+                          type="button"
+                          onClick={() => setModalEnergia({
+                            open: true,
+                            tipo: 'hibernar_pc',
+                            clienteId: hub.id,
+                            nome: hub.nome_fantasia || hub.razao_social
+                          })}
+                          className="p-1 rounded-md bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 transition cursor-pointer"
+                          title="Hibernar PC Remotamente"
+                        >
+                          <Moon size={11} />
                         </button>
 
                         {/* Desligar PC */}
@@ -946,7 +962,7 @@ export default function ConfiguracoesPage() {
                             nome: hub.nome_fantasia || hub.razao_social
                           })}
                           className="p-1 rounded-md bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 transition cursor-pointer"
-                          title="Desligar PC Remotamente"
+                          title="Desligar PC Remotamente (Forçado)"
                         >
                           <Power size={11} />
                         </button>
@@ -1516,25 +1532,72 @@ export default function ConfiguracoesPage() {
                           <div className="text-xs text-slate-600">
                             💡 <strong>Como funciona o Wake-on-LAN:</strong> Envia um pacote de ativação para a placa física. Se a placa e a BIOS/UEFI da máquina estiverem configuradas com WOL ligado, ela iniciará remotamente mesmo se estiver desligada.
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => setModalEnergia({
-                              open: true,
-                              tipo: 'acordar_pc',
-                              clienteId: selectedCliente,
-                              nome: clientes.find(c => c.id === selectedCliente)?.nome_fantasia || 'Cliente',
-                              mac: formData.mac_address
-                            })}
-                            disabled={!formData.mac_address}
-                            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-                              formData.mac_address
-                                ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-sm cursor-pointer'
-                                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                            }`}
-                          >
-                            <Zap size={14} />
-                            Testar Wake-on-LAN Agora
-                          </button>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => setModalEnergia({
+                                open: true,
+                                tipo: 'hibernar_pc',
+                                clienteId: selectedCliente,
+                                nome: clientes.find(c => c.id === selectedCliente)?.nome_fantasia || 'Cliente'
+                              })}
+                              className="px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0 bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 cursor-pointer shadow-2xs"
+                              title="Hibernar Computador Remotamente (Salva sessão e desliga)"
+                            >
+                              <Moon size={13} />
+                              Hibernar
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setModalEnergia({
+                                open: true,
+                                tipo: 'reiniciar_pc',
+                                clienteId: selectedCliente,
+                                nome: clientes.find(c => c.id === selectedCliente)?.nome_fantasia || 'Cliente'
+                              })}
+                              className="px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0 bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 cursor-pointer shadow-2xs"
+                              title="Reiniciar Computador Remotamente (Forçado)"
+                            >
+                              <RotateCcw size={13} />
+                              Reiniciar
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setModalEnergia({
+                                open: true,
+                                tipo: 'desligar_pc',
+                                clienteId: selectedCliente,
+                                nome: clientes.find(c => c.id === selectedCliente)?.nome_fantasia || 'Cliente'
+                              })}
+                              className="px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0 bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 cursor-pointer shadow-2xs"
+                              title="Desligar Computador Remotamente (Forçado)"
+                            >
+                              <Power size={13} />
+                              Desligar
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setModalEnergia({
+                                open: true,
+                                tipo: 'acordar_pc',
+                                clienteId: selectedCliente,
+                                nome: clientes.find(c => c.id === selectedCliente)?.nome_fantasia || 'Cliente',
+                                mac: formData.mac_address
+                              })}
+                              disabled={!formData.mac_address}
+                              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
+                                formData.mac_address
+                                  ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-sm cursor-pointer'
+                                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                              }`}
+                            >
+                              <Zap size={14} />
+                              Testar Wake-on-LAN
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1876,9 +1939,24 @@ export default function ConfiguracoesPage() {
                                 nome: hub.nome_fantasia || hub.razao_social
                               })}
                               className="p-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-600 border border-amber-200 transition cursor-pointer"
-                              title="Reiniciar Computador Remoto"
+                              title="Reiniciar Computador Remoto (Forçado)"
                             >
                               <RotateCcw size={12} />
+                            </button>
+
+                            {/* Hibernar PC */}
+                            <button
+                              type="button"
+                              onClick={() => setModalEnergia({
+                                open: true,
+                                tipo: 'hibernar_pc',
+                                clienteId: hub.id,
+                                nome: hub.nome_fantasia || hub.razao_social
+                              })}
+                              className="p-1 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-600 border border-purple-200 transition cursor-pointer"
+                              title="Hibernar Computador Remoto"
+                            >
+                              <Moon size={12} />
                             </button>
 
                             {/* Desligar PC */}
@@ -1891,7 +1969,7 @@ export default function ConfiguracoesPage() {
                                 nome: hub.nome_fantasia || hub.razao_social
                               })}
                               className="p-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition cursor-pointer"
-                              title="Desligar Computador Remoto"
+                              title="Desligar Computador Remoto (Forçado)"
                             >
                               <Power size={12} />
                             </button>
@@ -1934,16 +2012,20 @@ export default function ConfiguracoesPage() {
                   ? 'bg-rose-100 text-rose-600' 
                   : modalEnergia.tipo === 'reiniciar_pc'
                     ? 'bg-amber-100 text-amber-600'
-                    : 'bg-indigo-100 text-indigo-600'
+                    : modalEnergia.tipo === 'hibernar_pc'
+                      ? 'bg-purple-100 text-purple-600'
+                      : 'bg-indigo-100 text-indigo-600'
               }`}>
                 {modalEnergia.tipo === 'desligar_pc' && <Power size={20} />}
                 {modalEnergia.tipo === 'reiniciar_pc' && <RotateCcw size={20} />}
+                {modalEnergia.tipo === 'hibernar_pc' && <Moon size={20} />}
                 {modalEnergia.tipo === 'acordar_pc' && <Zap size={20} />}
               </div>
               <div>
                 <h3 className="font-bold text-base text-slate-900">
-                  {modalEnergia.tipo === 'desligar_pc' && 'Desligar Computador Remotamente'}
-                  {modalEnergia.tipo === 'reiniciar_pc' && 'Reiniciar Computador Remotamente'}
+                  {modalEnergia.tipo === 'desligar_pc' && 'Desligar Computador Remotamente (Forçado)'}
+                  {modalEnergia.tipo === 'reiniciar_pc' && 'Reiniciar Computador Remotamente (Forçado)'}
+                  {modalEnergia.tipo === 'hibernar_pc' && 'Hibernar Computador Remotamente'}
                   {modalEnergia.tipo === 'acordar_pc' && 'Acordar Computador (Wake-on-LAN)'}
                 </h3>
                 <p className="text-xs text-slate-500 font-medium">{modalEnergia.nome}</p>
@@ -1952,16 +2034,34 @@ export default function ConfiguracoesPage() {
 
             <div className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3.5 rounded-xl border border-slate-200">
               {modalEnergia.tipo === 'desligar_pc' && (
-                <p>
-                  Você está prestes a enviar uma ordem remota para <strong>DESLIGAR</strong> a estação deste cliente.
-                  O Windows exibirá uma notificação e executará o desligamento com contagem regressiva de segurança de 60 segundos.
-                </p>
+                <div className="space-y-2">
+                  <p>
+                    Você está prestes a enviar uma ordem remota para <strong>DESLIGAR</strong> a estação deste cliente.
+                  </p>
+                  <p className="text-[11px] text-rose-700 bg-rose-50 p-2 rounded-lg border border-rose-200 font-medium">
+                    ⚡ <strong>Fechamento Forçado:</strong> Todos os arquivos e programas abertos serão forçados a encerrar para que o Windows desligue imediatamente sem travar.
+                  </p>
+                </div>
               )}
               {modalEnergia.tipo === 'reiniciar_pc' && (
-                <p>
-                  Você está prestes a enviar uma ordem remota para <strong>REINICIAR</strong> a estação deste cliente.
-                  O computador será reiniciado com aviso prévio em 60 segundos.
-                </p>
+                <div className="space-y-2">
+                  <p>
+                    Você está prestes a enviar uma ordem remota para <strong>REINICIAR</strong> a estação deste cliente.
+                  </p>
+                  <p className="text-[11px] text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200 font-medium">
+                    ⚡ <strong>Fechamento Forçado:</strong> Todos os arquivos e programas abertos serão forçados a encerrar para que o computador reinicie sem bloqueios.
+                  </p>
+                </div>
+              )}
+              {modalEnergia.tipo === 'hibernar_pc' && (
+                <div className="space-y-2">
+                  <p>
+                    Você está prestes a colocar o computador em <strong>HIBERNAÇÃO PROFUNDA</strong>.
+                  </p>
+                  <p className="text-[11px] text-purple-800 bg-purple-50 p-2 rounded-lg border border-purple-200 font-medium">
+                    🌙 <strong>Economia e Retomada:</strong> Os programas de usuário serão fechados, o estado da máquina salvo no disco e a energia desligada. O computador poderá ser acordado via Wake-on-LAN a qualquer momento.
+                  </p>
+                </div>
               )}
               {modalEnergia.tipo === 'acordar_pc' && (
                 <div className="space-y-2">
@@ -2019,7 +2119,9 @@ export default function ConfiguracoesPage() {
                     ? 'bg-rose-600 hover:bg-rose-700'
                     : modalEnergia.tipo === 'reiniciar_pc'
                       ? 'bg-amber-600 hover:bg-amber-700'
-                      : 'bg-indigo-600 hover:bg-indigo-700'
+                      : modalEnergia.tipo === 'hibernar_pc'
+                        ? 'bg-purple-600 hover:bg-purple-700'
+                        : 'bg-indigo-600 hover:bg-indigo-700'
                 }`}
               >
                 {loadingEnergia ? 'Processando...' : 'Confirmar Execução'}
