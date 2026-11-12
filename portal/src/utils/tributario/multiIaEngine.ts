@@ -81,7 +81,17 @@ function buildSystemPrompt(crt: number, uf: string = 'MG', ramoAtividade?: strin
   ) : false;
 
   const instrucaoFoodService = isFoodService ? `
-REGRAS CRÍTICAS PARA ESTABELECIMENTO DE FOOD SERVICE (BAR, RESTAURANTE, LANCHONETE, PIZZARIA):
+REGRAS CRÍTICAS DE ENQUADRAMENTO FISCAL:
+1. CESTA BÁSICA E GÊNEROS ALIMENTÍCIOS (Arroz, Feijão, Carnes, Café, Açúcar, Farinha, Óleo, Pão):
+   - NÃO SUJEITOS A ICMS-ST no varejo de  (NÃO possuem Substituição Tributária)!
+   - CEST: Obrigatoriamente VAZIO " (sem CEST pois não há ST). NUNCA inventar CEST para arroz/feijão/carnes!
+   - CFOP: Obrigatoriamente 5102!
+   - CSOSN/CST: . NUNCA CSOSN 500 para arroz ou alimentos sem ST!
+   - PIS/COFINS: CST 49 () ou CST 06 (Alíquota Zero no Regime Normal), com is_monofasico: false.
+   - NCM ARROZ: Utilizar 1006.30.21 (arroz polido/beneficiado) ou 1006.30.11 (parboilizado). NUNCA usar 1006.30.00 (inexistente na tabela da CAMEX/SEFAZ).
+   - REFORMA TRIBUTÁRIA (LC 214/2025): Cesta Básica Nacional (Alíquota Zero de IBS e CBS, cst_ibs_cbs: '03').
+
+2. ESTABELECIMENTO DE FOOD SERVICE (BAR, RESTAURANTE, LANCHONETE, PIZZARIA):
 1. REFEIÇÕES E ALIMENTOS PREPARADOS PARA CONSUMO (Ex: COSTELINHA, PICANHA, BIFES, CARNES, PRATOS, PORÇÕES DE PETISCOS, BATATAS FRITAS, PIZZAS, HAMBÚRGUERES, PASTÉIS E SOBREMESAS):
    - NÃO SUJEITOS A ICMS-ST (NÃO têm Substituição Tributária)!
    - NÃO SÃO MONOFÁSICOS de PIS/COFINS!

@@ -34,7 +34,7 @@ function calculateMonofasico(xmlString: string): number {
 export async function POST(request: Request) {
   try {
     const formData = await request.formData()
-    const clienteId = formData.get('cliente_id') as string
+    const clienteId = (formData.get('cliente_id') as string || '').trim()
 
     if (!clienteId) {
       return NextResponse.json({ error: 'Parâmetro cliente_id é obrigatório.' }, { status: 400 })
@@ -42,18 +42,49 @@ export async function POST(request: Request) {
 
     const supabase = createAdminClient()
 
-    // 1. Busca os dados cadastrais do cliente
-    const { data: cliente, error: cliErr } = await supabase
-      .from('clientes')
-      .select('id, razao_social, cnpj, cpf')
-      .eq('id', clienteId)
-      .single()
+    // 1. Busca os dados cadastrais do cliente com fallback seguro
+    let cliente: any = null
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clienteId)
 
-    if (cliErr || !cliente) {
-      return NextResponse.json({ error: 'Cliente não encontrado no portal.' }, { status: 404 })
+    if (isUuid) {
+      const { data, error } = await supabase
+        .from('clientes')
+        .select('id, razao_social, nome_fantasia, cnpj')
+        .eq('id', clienteId)
+        .maybeSingle()
+
+      if (error) {
+        console.error('Erro ao buscar cliente por ID no portal:', error)
+      }
+      cliente = data
     }
 
-    const cleanClienteCnpj = (cliente.cnpj || cliente.cpf || '').replace(/\D/g, '')
+    // Se não encontrou por UUID ou se clienteId for um CNPJ, busca por CNPJ
+    if (!cliente) {
+      const cleanId = clienteId.replace(/\D/g, '')
+      if (cleanId.length >= 8) {
+        const { data, error } = await supabase
+          .from('clientes')
+          .select('id, razao_social, nome_fantasia, cnpj')
+          .ilike('cnpj', `%${cleanId}%`)
+          .limit(1)
+          .maybeSingle()
+
+        if (error) {
+          console.error('Erro ao buscar cliente por CNPJ no portal:', error)
+        }
+        cliente = data
+      }
+    }
+
+    if (!cliente) {
+      console.warn(`[Importar XMLs] Cliente não encontrado com o identificador: "${clienteId}"`)
+      return NextResponse.json({
+        error: `Cliente não encontrado no portal (${clienteId}). Selecione novamente a empresa ativa no menu do topo.`
+      }, { status: 404 })
+    }
+
+    const cleanClienteCnpj = (cliente.cnpj || '').replace(/\D/g, '')
 
     // Coleta todos os arquivos enviados
     const files = formData.getAll('files') as File[]
@@ -112,14 +143,17 @@ export async function POST(request: Request) {
         const valorStr = extractTag(xmlString, 'vNF')
         const valor = valorStr ? parseFloat(valorStr) : 0
 
-        const cnpjEmitente = (extractTag(xmlString, 'emit') ? extractTag(xmlString, 'CNPJ') : null) || ''
-        const emitenteNome = extractTag(xmlString, 'xNome')
+        // Extrai bloco <emit> e <dest> com segurança
+        const emitMatch = xmlString.match(/<emit\b[^>]*>([\s\S]*?)<\/emit>/i)
+        const emitXml = emitMatch ? emitMatch[1] : ''
+        const cnpjEmitente = extractTag(emitXml, 'CNPJ') || extractTag(emitXml, 'CPF') || ''
+        const emitenteNome = extractTag(emitXml, 'xNome') || extractTag(emitXml, 'xFant') || ''
 
         // Destinatário
         const destMatch = xmlString.match(/<dest\b[^>]*>([\s\S]*?)<\/dest>/i)
         const destXml = destMatch ? destMatch[1] : ''
-        const cnpjDestinatario = extractTag(destXml, 'CNPJ') || extractTag(destXml, 'CPF')
-        const destinatarioNome = extractTag(destXml, 'xNome')
+        const cnpjDestinatario = extractTag(destXml, 'CNPJ') || extractTag(destXml, 'CPF') || ''
+        const destinatarioNome = extractTag(destXml, 'xNome') || extractTag(destXml, 'xFant') || ''
 
         // Valida chave e modelo
         if (!chave || chave.length !== 44 || !mod) {
@@ -138,10 +172,10 @@ export async function POST(request: Request) {
 
         // Identifica o Fluxo: Entrada vs Saída
         const cleanEmitente = cnpjEmitente.replace(/\D/g, '')
-        const cleanDest = (cnpjDestinatario || '').replace(/\D/g, '')
+        const cleanDest = cnpjDestinatario.replace(/\D/g, '')
 
         let tipoFluxo: 'saidas' | 'entradas' = 'saidas'
-        if (cleanDest === cleanClienteCnpj && cleanEmitente !== cleanClienteCnpj) {
+        if (cleanClienteCnpj && cleanDest === cleanClienteCnpj && cleanEmitente !== cleanClienteCnpj) {
           tipoFluxo = 'entradas'
         }
 
@@ -156,7 +190,7 @@ export async function POST(request: Request) {
         const { data: notaExistente } = await supabase
           .from(tabelaDestino)
           .select('id, chave, is_autorizada, protocolo')
-          .eq('cliente_id', clienteId)
+          .eq('cliente_id', cliente.id)
           .eq('chave', chave)
           .maybeSingle()
 
@@ -191,12 +225,16 @@ export async function POST(request: Request) {
           dia = '01'
         }
 
-        const storagePath = `${clienteId}/${tabelaDestino}/${ano}/${mes}/${dia}/${file.name}`
+        const storagePath = `${cliente.id}/${tabelaDestino}/${ano}/${mes}/${dia}/${file.name}`
 
-        await supabase.storage.from('xmls').upload(storagePath, buffer, {
-          contentType: 'application/xml',
-          upsert: true
-        })
+        try {
+          await supabase.storage.from('xmls').upload(storagePath, buffer, {
+            contentType: 'application/xml',
+            upsert: true
+          })
+        } catch (storageErr) {
+          console.warn('Aviso: falha ao subir arquivo para bucket xmls:', storageErr)
+        }
 
         // 4. Monta o payload do banco de dados
         const valorMonofasico = calculateMonofasico(xmlString)
@@ -206,7 +244,7 @@ export async function POST(request: Request) {
         }
 
         const dbPayload: any = {
-          cliente_id: clienteId,
+          cliente_id: cliente.id,
           numero: numero || null,
           serie: serie || '1',
           chave: chave,
@@ -224,8 +262,11 @@ export async function POST(request: Request) {
           emitente_nome: emitenteNome || null,
           protocolo: nProt || null,
           cstat: cStat || (isAutorizada ? '100' : null),
-          motivo_sefaz: xMotivo || (isAutorizada ? 'Autorizado o uso da NF-e' : 'Aguardando protocolo SEFAZ'),
-          status_correcao: statusCorrecao
+          motivo_sefaz: xMotivo || (isAutorizada ? 'Autorizado o uso da NF-e' : 'Aguardando protocolo SEFAZ')
+        }
+
+        if (tabelaDestino !== 'nfe_entradas') {
+          dbPayload.status_correcao = statusCorrecao
         }
 
         if (notaExistente) {

@@ -86,7 +86,8 @@ export default function ImportarXmlsModal({
       return
     }
 
-    if (!clienteId) {
+    const targetClienteId = clienteId || (typeof window !== 'undefined' ? localStorage.getItem('hub_paratech_global_cliente') || '' : '')
+    if (!targetClienteId) {
       toast.error('Selecione uma empresa antes de importar os arquivos.')
       return
     }
@@ -96,7 +97,7 @@ export default function ImportarXmlsModal({
 
     try {
       const formData = new FormData()
-      formData.append('cliente_id', clienteId)
+      formData.append('cliente_id', targetClienteId)
       for (const file of arquivos) {
         formData.append('files', file)
       }
