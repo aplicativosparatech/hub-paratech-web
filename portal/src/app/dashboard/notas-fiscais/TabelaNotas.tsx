@@ -234,6 +234,15 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
     }
   }, [tabela, selectedCliente, loadingClientes, filtroMes, dataInicio, dataFim])
 
+  // Auto-refresh quando notas forem importadas, excluídas ou atualizadas
+  useEffect(() => {
+    const handleAtualizacao = () => {
+      load()
+    }
+    window.addEventListener('hub_notas_atualizadas', handleAtualizacao)
+    return () => window.removeEventListener('hub_notas_atualizadas', handleAtualizacao)
+  }, [tabela, selectedCliente, loadingClientes, filtroMes, dataInicio, dataFim])
+
   function formatDoc(doc?: string | null) {
     if (!doc) return '—'
     return formatarCnpjCpf(doc) || doc
@@ -269,6 +278,9 @@ function TabelaNotas({ tabela, label }: { tabela: string, label: string }) {
         setNotas(prev => prev.filter(n => !modalDelete.idsLote!.includes(n.id)))
         setSelectedIds(prev => prev.filter(id => !modalDelete.idsLote!.includes(id)))
         toast.success(`${modalDelete.idsLote.length} notas fiscais excluídas com sucesso!`)
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('hub_notas_atualizadas'))
       }
     } catch (err: any) {
       toast.error('Erro ao excluir: ' + (err.message || 'Falha na exclusão'))

@@ -207,6 +207,15 @@ export default function TabelaCorrecao() {
     }
   }, [selectedCliente, loadingClientes])
 
+  // Auto-refresh quando notas forem importadas, excluídas ou atualizadas
+  useEffect(() => {
+    const handleAtualizacao = () => {
+      loadNotas()
+    }
+    window.addEventListener('hub_notas_atualizadas', handleAtualizacao)
+    return () => window.removeEventListener('hub_notas_atualizadas', handleAtualizacao)
+  }, [selectedCliente, loadingClientes])
+
   // Formatação humanizada do horário da última sincronização do Hub
   function formatRelativeSync(dateStr?: string | null) {
     if (!dateStr) return null
@@ -364,6 +373,9 @@ export default function TabelaCorrecao() {
     } catch (err: any) {
       toast.error(err.message || 'Erro ao consultar SEFAZ', { id: toastId })
       loadNotas()
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('hub_notas_atualizadas'))
+      }
     } finally {
       setCorrigindoId(null)
     }
@@ -413,6 +425,9 @@ export default function TabelaCorrecao() {
       toast.error(msg, { id: toastId })
     }
     loadNotas()
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('hub_notas_atualizadas'))
+    }
   }
 
   // Ação 2.5: Executar Saneamento Seguro de Tentativas Obsoletas
@@ -440,6 +455,9 @@ export default function TabelaCorrecao() {
       toast.success(data.message || `${data.total_removidas} tentativa(s) obsoleta(s) removida(s) com sucesso!`, { id: toastId })
       setModalSaneamentoOpen(false)
       loadNotas()
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('hub_notas_atualizadas'))
+      }
     } catch (err: any) {
       toast.error(err.message || 'Erro ao sanear notas', { id: toastId })
     } finally {
@@ -481,6 +499,10 @@ export default function TabelaCorrecao() {
       toast.success('XML corrigido, assinado e aprovado com sucesso!', { id: toastId })
       setNotas(prev => prev.filter(n => n.id !== modalManual.nota.id))
       setModalManual({ open: false, nProt: '', dhRecbto: '', digVal: '', verAplic: 'W-1.5.11' })
+      loadNotas()
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('hub_notas_atualizadas'))
+      }
     } catch (err: any) {
       toast.error(err.message || 'Falha ao salvar correção manual.', { id: toastId })
     } finally {
@@ -503,6 +525,10 @@ export default function TabelaCorrecao() {
         }
         setNotas([])
         toast.success(`${modalDelete.idsLote.length} arquivos incorretos excluídos com sucesso!`)
+      }
+      loadNotas()
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('hub_notas_atualizadas'))
       }
     } catch (err: any) {
       toast.error('Erro ao excluir: ' + (err.message || 'Falha na exclusão'))

@@ -267,6 +267,9 @@ export default function TabelaInutilizacao() {
       setModalPontoPartida(prev => ({ ...prev, open: false, saving: false }))
       // Recarrega os gaps para refletir o novo ponto de partida
       await carregarGaps(clienteAtualId)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('hub_notas_atualizadas'))
+      }
     } catch (err: any) {
       toast.error('Erro ao salvar: ' + (err.message || ''), { id: toastId })
       setModalPontoPartida(prev => ({ ...prev, saving: false }))
@@ -361,6 +364,9 @@ export default function TabelaInutilizacao() {
       setErrosProcessamento([])
       toast.success('Lista de erros limpa com sucesso!', { id: toastId })
       await carregarGaps()
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('hub_notas_atualizadas'))
+      }
     } catch (err: any) {
       toast.error('Erro ao limpar ocorrências: ' + (err.message || ''), { id: toastId })
     }
@@ -379,6 +385,9 @@ export default function TabelaInutilizacao() {
         toast.success('Ocorrência descartada!')
       }
       await carregarGaps()
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('hub_notas_atualizadas'))
+      }
     } catch (err: any) {
       toast.error('Erro ao descartar: ' + (err.message || ''))
     }
@@ -389,6 +398,17 @@ export default function TabelaInutilizacao() {
       setSelectedGapIds([])
       carregarGaps(clienteAtualId)
     }
+  }, [clienteAtualId, filtroModelo])
+
+  // Auto-refresh quando notas forem importadas, excluídas ou atualizadas
+  useEffect(() => {
+    const handleAtualizacao = () => {
+      if (clienteAtualId) {
+        carregarGaps(clienteAtualId)
+      }
+    }
+    window.addEventListener('hub_notas_atualizadas', handleAtualizacao)
+    return () => window.removeEventListener('hub_notas_atualizadas', handleAtualizacao)
   }, [clienteAtualId, filtroModelo])
 
   // Copiar protocolo com feedback
@@ -486,6 +506,9 @@ export default function TabelaInutilizacao() {
 
       // Recarrega lista atualizada
       await carregarGaps()
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('hub_notas_atualizadas'))
+      }
     } catch (err: any) {
       toast.dismiss(toastId)
       toast.error('Erro ao processar na SEFAZ: ' + (err.message || ''))
@@ -613,6 +636,9 @@ export default function TabelaInutilizacao() {
     }
 
     await carregarGaps()
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('hub_notas_atualizadas'))
+    }
   }
 
   // Lista de competências disponíveis (últimos 12 meses + meses detectados nos dados)
