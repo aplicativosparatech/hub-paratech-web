@@ -277,6 +277,32 @@ export async function POST(request: Request) {
           await supabase.from(tabelaDestino).insert([dbPayload])
         }
 
+        // Auto-saneamento atômico no Hub: se a nota importada for autorizada, remove quaisquer tentativas rejeitadas da mesma série e número
+        if (isAutorizada && numero && tipoFluxo === 'saidas') {
+          try {
+            const { data: obsoletos } = await supabase
+              .from(tabelaDestino)
+              .select('id, storage_path')
+              .eq('cliente_id', cliente.id)
+              .eq('numero', String(numero))
+              .eq('serie', String(serie || '1'))
+              .neq('chave', chave)
+              .not('cstat', 'eq', '100')
+
+            if (obsoletos && obsoletos.length > 0) {
+              const idsDel = obsoletos.map(o => o.id)
+              const pathsDel = obsoletos.map(o => o.storage_path).filter(Boolean) as string[]
+              if (pathsDel.length > 0) {
+                await supabase.storage.from('xmls').remove(pathsDel).catch(() => {})
+              }
+              await supabase.from(tabelaDestino).delete().in('id', idsDel)
+              console.log(`[Importar Lote Auto-Saneamento] Limpas ${obsoletos.length} tentativas rejeitadas obsoletas para a nota ${numero} da empresa ${cliente.razao_social}`)
+            }
+          } catch (errSanear: any) {
+            console.warn('Erro ao sanear tentativas obsoletas pós-importação:', errSanear?.message)
+          }
+        }
+
         // Contabiliza nos totais do relatório
         if (!isAutorizada || !temAssinatura) {
           resumo.quarentena++
