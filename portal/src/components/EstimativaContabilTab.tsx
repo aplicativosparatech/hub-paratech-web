@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react'
 import { 
   Calculator, Download, FileText, CheckCircle2, TrendingUp, 
   ShieldCheck, AlertCircle, FileSpreadsheet, Sparkles, ArrowDownRight,
-  Layers, Percent, Coins, Building, Receipt
+  Layers, Percent, Coins, Building, Receipt, ExternalLink
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { 
@@ -12,6 +12,7 @@ import {
   gerarArquivoSintegraTxt, 
   gerarArquivoSpedFiscalTxt, 
   gerarArquivoSpedContribuicoesTxt, 
+  gerarDemonstrativoDasPdf,
   dispararDownloadTexto,
   DadosEmpresaSped,
   NotaFiscalItemSped
@@ -139,6 +140,38 @@ export default function EstimativaContabilTab({
     }
   }
 
+  // Handler para geração do Extrato / Espelho Oficial da Guia DAS em PDF
+  const handleGerarDemonstrativoDas = () => {
+    try {
+      setGerandoArquivo('das_pdf')
+      gerarDemonstrativoDasPdf(empresa, competencia, estimativa, notasFormatadas.length)
+      toast.success('Espelho Oficial da Guia DAS gerado com sucesso em PDF!')
+    } catch (e: any) {
+      toast.error('Erro ao gerar Espelho da Guia DAS: ' + e.message)
+    } finally {
+      setGerandoArquivo(null)
+    }
+  }
+
+  // Handler para abertura do portal oficial PGDAS-D da Receita Federal
+  const handleAbrirPgdasReceita = () => {
+    try {
+      const cnpjClean = (empresa.cnpj || '').replace(/\D/g, '')
+      if (cnpjClean && typeof navigator !== 'undefined' && navigator.clipboard) {
+        navigator.clipboard.writeText(cnpjClean)
+        toast.success(`CNPJ (${empresa.cnpj}) copiado! Abrindo o portal oficial do Simples Nacional / PGDAS-D...`)
+      } else {
+        toast.success('Abrindo o portal oficial do Simples Nacional / PGDAS-D...')
+      }
+      window.open(
+        'https://www8.receita.fazenda.gov.br/SimplesNacional/ControleAcesso/Autentica.aspx?url=https://www8.receita.fazenda.gov.br/SimplesNacional/Aplicacoes/ATSPO/pgdasd.app/',
+        '_blank'
+      )
+    } catch (e: any) {
+      window.open('https://www8.receita.fazenda.gov.br/SimplesNacional/', '_blank')
+    }
+  }
+
   return (
     <div className="space-y-8 animate-in fade-in duration-200">
       {/* CABEÇALHO DA ABA */}
@@ -155,12 +188,31 @@ export default function EstimativaContabilTab({
           </p>
         </div>
 
-        {/* BOTÕES DE OBRIGAÇÕES ACESSÓRIAS */}
+        {/* BOTÕES DE OBRIGAÇÕES ACESSÓRIAS & GUIA DAS */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Botão Emitir Espelho Guia DAS */}
+          <button
+            onClick={handleGerarDemonstrativoDas}
+            disabled={gerandoArquivo !== null}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition shadow-sm disabled:opacity-50 cursor-pointer"
+            title="Gera e baixa o Espelho Oficial do PGDAS-D com cálculo da Guia DAS e segregação tributária em PDF"
+          >
+            <FileText size={14} /> Espelho Guia DAS (.pdf)
+          </button>
+
+          {/* Botão Emitir no PGDAS-D Receita Federal */}
+          <button
+            onClick={handleAbrirPgdasReceita}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition shadow-sm cursor-pointer"
+            title="Abre o portal oficial do Simples Nacional / PGDAS-D da Receita Federal e copia o CNPJ da empresa"
+          >
+            <ExternalLink size={14} /> Emitir no PGDAS-D (Receita)
+          </button>
+
           <button
             onClick={handleGerarSintegra}
             disabled={gerandoArquivo !== null}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl transition shadow-sm disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl transition shadow-sm disabled:opacity-50 cursor-pointer"
             title="Gera arquivo texto no formato Convênio ICMS 57/95"
           >
             <Download size={14} /> SINTEGRA (.txt)
@@ -169,7 +221,7 @@ export default function EstimativaContabilTab({
           <button
             onClick={handleGerarSpedFiscal}
             disabled={gerandoArquivo !== null}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition shadow-sm disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition shadow-sm disabled:opacity-50 cursor-pointer"
             title="Gera arquivo do SPED Fiscal EFD ICMS/IPI"
           >
             <Download size={14} /> SPED Fiscal (.txt)
@@ -178,7 +230,7 @@ export default function EstimativaContabilTab({
           <button
             onClick={handleGerarSpedContribuicoes}
             disabled={gerandoArquivo !== null}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl transition shadow-sm disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl transition shadow-sm disabled:opacity-50 cursor-pointer"
             title="Gera arquivo do SPED EFD Contribuições (PIS/COFINS)"
           >
             <Download size={14} /> SPED PIS/COFINS (.txt)
@@ -217,16 +269,33 @@ export default function EstimativaContabilTab({
         </div>
 
         {/* Card 3: Guia DAS Estimada com Segregação */}
-        <div className="bg-blue-50/50 p-5 rounded-2xl border border-blue-200">
-          <div className="flex items-center justify-between text-blue-700 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider">Guia DAS Estimada</span>
-            <Calculator size={18} className="text-blue-500" />
+        <div className="bg-blue-50/50 p-5 rounded-2xl border border-blue-200 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between text-blue-700 mb-2">
+              <span className="text-xs font-bold uppercase tracking-wider">Guia DAS Estimada</span>
+              <Calculator size={18} className="text-blue-500" />
+            </div>
+            <div className="text-2xl font-black text-blue-900">
+              R$ {formatMoney(estimativa.valorDasComSegregacao)}
+            </div>
+            <div className="text-xs text-blue-600 mt-1">
+              Alíquota Efetiva: <b>{estimativa.aliquotaEfetiva.toFixed(2)}%</b>
+            </div>
           </div>
-          <div className="text-2xl font-black text-blue-900">
-            R$ {formatMoney(estimativa.valorDasComSegregacao)}
-          </div>
-          <div className="text-xs text-blue-600 mt-1">
-            Alíquota Efetiva: <b>{estimativa.aliquotaEfetiva.toFixed(2)}%</b>
+          <div className="mt-3 pt-2.5 border-t border-blue-100 flex items-center gap-2">
+            <button
+              onClick={handleGerarDemonstrativoDas}
+              className="text-[11px] font-bold text-blue-700 hover:text-blue-900 hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <FileText size={12} /> Espelho PDF
+            </button>
+            <span className="text-blue-300">•</span>
+            <button
+              onClick={handleAbrirPgdasReceita}
+              className="text-[11px] font-bold text-amber-700 hover:text-amber-900 hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <ExternalLink size={12} /> PGDAS-D
+            </button>
           </div>
         </div>
 
@@ -305,6 +374,23 @@ export default function EstimativaContabilTab({
                 <div className="flex justify-between py-1 pt-2 font-bold text-base text-emerald-700">
                   <span>Guia DAS com Desconto Legal:</span>
                   <span>R$ {formatMoney(estimativa.valorDasComSegregacao)}</span>
+                </div>
+                <div className="mt-4 pt-3 border-t border-emerald-200/80 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs text-emerald-800 font-medium">Economia Líquida: <b>R$ {formatMoney(estimativa.economiaMes)}</b></span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleGerarDemonstrativoDas}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition flex items-center gap-1 shadow-sm cursor-pointer"
+                    >
+                      <Download size={13} /> Baixar Espelho Guia DAS (PDF)
+                    </button>
+                    <button
+                      onClick={handleAbrirPgdasReceita}
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg transition flex items-center gap-1 shadow-sm cursor-pointer"
+                    >
+                      <ExternalLink size={13} /> Emitir no PGDAS-D
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

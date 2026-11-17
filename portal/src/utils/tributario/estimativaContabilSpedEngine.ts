@@ -3,6 +3,9 @@
  * Compatível com o ecossistema Hub Paratech.
  */
 
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
+
 export interface DadosEmpresaSped {
   razao_social: string
   nome_fantasia?: string
@@ -330,4 +333,186 @@ export function dispararDownloadTexto(conteudo: string, nomeArquivo: string) {
   a.click()
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
+}
+
+/**
+ * Gera o Relatório / Extrato Oficial do Demonstrativo da Guia DAS (Simples Nacional)
+ * em PDF profissional com Segregação Inteligente de PIS/COFINS Monofásicos e ICMS-ST.
+ */
+export function gerarDemonstrativoDasPdf(
+  empresa: DadosEmpresaSped,
+  competencia: string,
+  estimativa: EstimativaDasResultado,
+  totalNotas: number = 0
+) {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const pageHeight = doc.internal.pageSize.getHeight()
+  const dataHoje = new Date().toLocaleString('pt-BR')
+
+  // 1. Cabeçalho Corporativo Superior (Banner Verde Esmeralda Escuro)
+  doc.setFillColor(15, 23, 42) // slate-900
+  doc.rect(0, 0, pageWidth, 26, 'F')
+
+  // Linha de acento verde
+  doc.setFillColor(16, 185, 129) // emerald-500
+  doc.rect(0, 24, pageWidth, 2, 'F')
+
+  doc.setTextColor(255, 255, 255)
+  doc.setFontSize(13)
+  doc.setFont('helvetica', 'bold')
+  doc.text('HUB PARATECH — GESTÃO & AUDITORIA FISCAL', 14, 11)
+
+  doc.setFontSize(8.5)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(203, 213, 225) // slate-300
+  doc.text(`Demonstrativo Oficial de Apuração Simples Nacional (PGDAS-D) | Emissão: ${dataHoje}`, 14, 18)
+
+  // 2. Título Principal
+  let y = 34
+  doc.setTextColor(15, 23, 42)
+  doc.setFontSize(14)
+  doc.setFont('helvetica', 'bold')
+  doc.text(`EXTRATO DE APURAÇÃO DA GUIA DAS — SIMPLES NACIONAL`, 14, y)
+  
+  y += 5
+  doc.setFontSize(8.5)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(100, 116, 139) // slate-500
+  doc.text(`Competência: ${competencia} | Regime: Simples Nacional (Anexo I - Comércio) | Base Legal: LC 123/2006`, 14, y)
+
+  // 3. Card de Dados Cadastrais da Empresa
+  y += 6
+  doc.setFillColor(248, 250, 252)
+  doc.setDrawColor(226, 232, 240)
+  doc.roundedRect(14, y, pageWidth - 28, 22, 2, 2, 'FD')
+
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(30, 41, 59)
+  doc.text(`Empresa: ${empresa.razao_social || 'NÃO INFORMADA'}`, 18, y + 6)
+  doc.text(`CNPJ: ${empresa.cnpj || '—'}`, 18, y + 12)
+  doc.text(`Inscrição Estadual: ${empresa.ie || 'ISENTO'}`, 18, y + 18)
+
+  doc.text(`Município/UF: ${(empresa.cidade || '—')}/${(empresa.uf || 'MG')}`, (pageWidth / 2) + 5, y + 6)
+  doc.text(`Contabilidade: ${empresa.contabilidade_nome || 'Assessoria Contábil Vinculada'}`, (pageWidth / 2) + 5, y + 12)
+  doc.text(`Total de Notas no Mês: ${totalNotas.toLocaleString('pt-BR')} documento(s)`, (pageWidth / 2) + 5, y + 18)
+
+  y += 28
+
+  const fmt = (v: number) => `R$ ${(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+  // 4. Tabela 1: Resumo do Faturamento e Segregação Tributária
+  autoTable(doc, {
+    startY: y,
+    head: [['Discriminação da Receita no Mês', 'Classificação Fiscal', 'Base de Cálculo (R$)', '% sobre Faturamento']],
+    body: [
+      ['Receita Bruta do Mês (RBM)', 'Faturamento Geral Consolidado', fmt(estimativa.rbm), '100,0%'],
+      ['Receita Tributada Integralmente (Faixa A)', 'Mercadorias Gerais (Alíquota Cheia)', fmt(estimativa.faturamentoTributadoIntegral), `${((estimativa.faturamentoTributadoIntegral / (estimativa.rbm || 1)) * 100).toFixed(1)}%`],
+      ['Segregação de Monofásicos PIS/COFINS (Faixa C)', 'Produtos Monofásicos (CST 04/06)', fmt(estimativa.faturamentoMonofasicoPisCofins), `${((estimativa.faturamentoMonofasicoPisCofins / (estimativa.rbm || 1)) * 100).toFixed(1)}%`],
+      ['Segregação de ICMS Substituição Tributária (Faixa B)', 'ICMS-ST Retido Anteriormente (CSOSN 500)', fmt(estimativa.faturamentoSubstituicaoIcms), `${((estimativa.faturamentoSubstituicaoIcms / (estimativa.rbm || 1)) * 100).toFixed(1)}%`],
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+    bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59] },
+    columnStyles: {
+      0: { cellWidth: 70 },
+      1: { cellWidth: 55 },
+      2: { cellWidth: 35, halign: 'right', fontStyle: 'bold' },
+      3: { cellWidth: 22, halign: 'right' }
+    },
+    margin: { left: 14, right: 14 }
+  })
+
+  // @ts-ignore
+  y = (doc as any).lastAutoTable.finalY + 6
+
+  // 5. Tabela 2: Comparativo Financeiro da Guia DAS
+  autoTable(doc, {
+    startY: y,
+    head: [['Cenário de Apuração', 'Alíquota Efetiva', 'Deduções Legais (ST + Monofásico)', 'Valor da Guia DAS']],
+    body: [
+      ['Pagamento Convencional (SEM Segregação)', `${estimativa.aliquotaEfetiva.toFixed(2)}%`, 'R$ 0,00 (Tributação em duplicidade)', fmt(estimativa.valorDasSemSegregacao)],
+      ['Pagamento Inteligente Paratech (COM Segregação)', `${estimativa.aliquotaEfetiva.toFixed(2)}%`, `Abatimento ICMS-ST e PIS/COFINS`, fmt(estimativa.valorDasComSegregacao)],
+      ['ECONOMIA LÍQUIDA OBTIDA NO MÊS', '—', `Economia de ${estimativa.percentualEconomia.toFixed(1)}% na Guia`, fmt(estimativa.economiaMes)]
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: [5, 150, 105], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+    bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59] },
+    columnStyles: {
+      0: { cellWidth: 75, fontStyle: 'bold' },
+      1: { cellWidth: 30, halign: 'center' },
+      2: { cellWidth: 47, halign: 'left' },
+      3: { cellWidth: 30, halign: 'right', fontStyle: 'bold' }
+    },
+    didParseCell: function(data: any) {
+      if (data.row.index === 1 && data.section === 'body') {
+        data.cell.styles.fillColor = [236, 253, 245]
+        data.cell.styles.textColor = [6, 95, 70]
+      }
+      if (data.row.index === 2 && data.section === 'body') {
+        data.cell.styles.fillColor = [220, 252, 231]
+        data.cell.styles.textColor = [22, 101, 52]
+      }
+    },
+    margin: { left: 14, right: 14 }
+  })
+
+  // @ts-ignore
+  y = (doc as any).lastAutoTable.finalY + 6
+
+  // 6. Tabela 3: Partição dos Tributos Federais e Estaduais (Anexo I)
+  autoTable(doc, {
+    startY: y,
+    head: [['Tributo', 'Competência de Destino', '% da Partição', 'Valor Pago na Guia Segregada']],
+    body: [
+      ['CPP (Previdência Patronal)', 'Federal / INSS', '41,50%', fmt(estimativa.parcelas.cpp)],
+      ['ICMS (Imposto Estadual sobre Circulação)', 'Estadual / SEFAZ', '34,00% (com dedução ST)', fmt(estimativa.parcelas.icms)],
+      ['COFINS (Seguridade Social)', 'Federal / RFB', '12,74% (com dedução Monofásicos)', fmt(estimativa.parcelas.cofins)],
+      ['IRPJ (Imposto de Renda Pessoa Jurídica)', 'Federal / RFB', '5,50%', fmt(estimativa.parcelas.irpj)],
+      ['CSLL (Contribuição Social sobre o Lucro)', 'Federal / RFB', '3,50%', fmt(estimativa.parcelas.csll)],
+      ['PIS/PASEP (Integração Social)', 'Federal / RFB', '2,76% (com dedução Monofásicos)', fmt(estimativa.parcelas.pis)],
+      ['TOTAL CONSOLIDADO DA GUIA DAS', 'Documento Único de Arrecadação', '100,00%', fmt(estimativa.valorDasComSegregacao)]
+    ],
+    theme: 'striped',
+    headStyles: { fillColor: [51, 65, 85], textColor: 255, fontStyle: 'bold', fontSize: 7.5 },
+    bodyStyles: { fontSize: 7, textColor: [30, 41, 59] },
+    columnStyles: {
+      0: { cellWidth: 70, fontStyle: 'bold' },
+      1: { cellWidth: 45 },
+      2: { cellWidth: 37, halign: 'center' },
+      3: { cellWidth: 30, halign: 'right', fontStyle: 'bold' }
+    },
+    margin: { left: 14, right: 14 }
+  })
+
+  // @ts-ignore
+  y = (doc as any).lastAutoTable.finalY + 6
+
+  // 7. Orientações para Lançamento no PGDAS-D
+  doc.setFillColor(241, 245, 249)
+  doc.setDrawColor(203, 213, 225)
+  doc.roundedRect(14, y, pageWidth - 28, 24, 2, 2, 'FD')
+
+  doc.setFontSize(7.5)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(30, 41, 59)
+  doc.text('📌 Orientações Contábeis para Lançamento no PGDAS-D (Receita Federal):', 18, y + 5)
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(7)
+  doc.setTextColor(71, 85, 105)
+  doc.text(`1. Revenda de mercadorias SEM Substituição Tributária / Monofásicos: declarar ${fmt(estimativa.faturamentoTributadoIntegral)}.`, 18, y + 10)
+  doc.text(`2. Revenda de mercadorias COM Substituição Tributária de ICMS e Monofásicos de PIS/COFINS: declarar ${fmt(estimativa.faturamentoMonofasicoPisCofins)}.`, 18, y + 15)
+  doc.text(`3. No PGDAS-D, marque a opção de segregação de ICMS por Substituição Tributária e PIS/COFINS por Tributação Monofásica.`, 18, y + 20)
+
+  // Rodapé
+  doc.setFontSize(7)
+  doc.setTextColor(148, 163, 184)
+  doc.text(`HUB PARATECH — Sistema Integrado de Gestão & Inteligência Fiscal | Documento de Apuração Extraoficial | CNPJ ${empresa.cnpj}`, 14, pageHeight - 5)
+  doc.text(`Página 1 de 1`, pageWidth - 14, pageHeight - 5, { align: 'right' })
+
+  // Salva o PDF
+  const nomeArquivo = `GUIA_DAS_DEMONSTRATIVO_${(empresa.cnpj || '').replace(/\D/g, '')}_${competencia.replace('-', '')}.pdf`
+  doc.save(nomeArquivo)
 }
