@@ -4,8 +4,10 @@ import { useState, useEffect, useMemo } from 'react'
 import { 
   BarChart3, Download, RefreshCw, AlertTriangle, CheckCircle2, 
   FileText, Hash, ShieldAlert, Sparkles, Building2, Calendar, FileArchive,
-  KeyRound, Clock, ShieldCheck, FileSpreadsheet, Filter, Layers, Search, Receipt, ShoppingBag
+  KeyRound, Clock, ShieldCheck, FileSpreadsheet, Filter, Layers, Search, Receipt, ShoppingBag,
+  Calculator
 } from 'lucide-react'
+import EstimativaContabilTab from '@/components/EstimativaContabilTab'
 import { createClient } from '@/utils/supabase/client'
 import toast from 'react-hot-toast'
 import { 
@@ -50,7 +52,7 @@ export default function RelatoriosPage() {
   const [selectedMonth, setSelectedMonth] = useState<string>(defaultMonth)
 
   // Abas do Relatório
-  const [activeTab, setActiveTab] = useState<'faturamento' | 'monofasicos' | 'quebra' | 'nao_assinadas' | 'inutilizadas' | 'certificados'>('faturamento')
+  const [activeTab, setActiveTab] = useState<'faturamento' | 'estimativa_contabil' | 'monofasicos' | 'quebra' | 'nao_assinadas' | 'inutilizadas' | 'certificados'>('faturamento')
 
   // Configurações do Hub do Cliente Atual (permissões de exibição)
   const [configHub, setConfigHub] = useState<{
@@ -1072,6 +1074,15 @@ export default function RelatoriosPage() {
         </button>
 
         <button
+          onClick={() => setActiveTab('estimativa_contabil')}
+          className={`flex items-center gap-2 px-5 py-3 font-semibold text-sm border-b-2 transition whitespace-nowrap ${
+            activeTab === 'estimativa_contabil' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Calculator size={18} /> Estimativa Contabil & Guias (SPED / SINTEGRA)
+        </button>
+
+        <button
           onClick={() => setActiveTab('monofasicos')}
           className={`flex items-center gap-2 px-5 py-3 font-semibold text-sm border-b-2 transition whitespace-nowrap ${
             activeTab === 'monofasicos' ? 'border-amber-600 text-amber-600' : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -1352,6 +1363,27 @@ export default function RelatoriosPage() {
             </div>
           </div>
         )}
+
+        {/* ABA ESTIMATIVA CONTABIL & GUIAS (SPED / SINTEGRA) */}
+        {activeTab === 'estimativa_contabil' && (() => {
+          const currentCli = clientes.find(c => c.id === selectedCliente) || (userRole === 'cliente' ? clientes[0] : null)
+          return (
+            <EstimativaContabilTab
+              empresa={{
+                razao_social: currentCli?.razao_social || 'EMPRESA PARATECH',
+                nome_fantasia: currentCli?.nome_fantasia,
+                cnpj: currentCli?.cnpj || '',
+                ie: currentCli?.inscricao_estadual || currentCli?.ie,
+                cidade: currentCli?.cidade,
+                uf: currentCli?.uf || 'MG',
+                regime_tributario: currentCli?.regime_tributario,
+                contabilidade_nome: currentCli?.contabilidades?.razao_social
+              }}
+              competencia={selectedMonth}
+              auditData={auditData}
+            />
+          )
+        })()}
 
         {/* ABA 2: AUDITOR DE MONOFÁSICOS POR NCM */}
         {activeTab === 'monofasicos' && (
