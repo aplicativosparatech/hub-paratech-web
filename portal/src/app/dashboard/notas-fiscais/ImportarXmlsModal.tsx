@@ -93,32 +93,91 @@ export default function ImportarXmlsModal({
     }
 
     setEnviando(true)
-    const toastId = toast.loading(`Processando e triando ${arquivos.length} arquivo(s) XML...`)
+    const totalArquivos = arquivos.length
+    const CHUNK_SIZE = 50
+    const totalLotes = Math.ceil(totalArquivos / CHUNK_SIZE)
+    const toastId = toast.loading(`Iniciando importação de ${totalArquivos} arquivo(s) XML...`)
 
     try {
-      const formData = new FormData()
-      formData.append('cliente_id', targetClienteId)
-      for (const file of arquivos) {
-        formData.append('files', file)
+      const resumoAcumulado: ResumoImportacao = {
+        total: 0,
+        saidasNfe: 0,
+        saidasNfce: 0,
+        entradas: 0,
+        quarentena: 0,
+        duplicados: 0,
+        erros: 0
+      }
+      const detalhesAcumulados: DetalheItem[] = []
+
+      for (let i = 0; i < totalLotes; i++) {
+        const slice = arquivos.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
+        const progressoAtual = Math.min((i + 1) * CHUNK_SIZE, totalArquivos)
+
+        if (totalLotes > 1) {
+          toast.loading(`Processando lote ${i + 1} de ${totalLotes} (${progressoAtual}/${totalArquivos} XMLs)...`, { id: toastId })
+        } else {
+          toast.loading(`Processando e triando ${totalArquivos} arquivo(s) XML...`, { id: toastId })
+        }
+
+        const formData = new FormData()
+        formData.append('cliente_id', targetClienteId)
+        for (const file of slice) {
+          formData.append('files', file)
+        }
+
+        const res = await fetch('/api/notas-fiscais/importar-lote', {
+          method: 'POST',
+          body: formData
+        })
+
+        const contentType = res.headers.get('content-type') || ''
+        let data: any = null
+        if (contentType.includes('application/json')) {
+          data = await res.json()
+        } else {
+          const text = await res.text()
+          throw new Error(
+            res.status === 413
+              ? 'Lote muito grande para o servidor. Tente enviar menos arquivos por vez.'
+              : res.status === 504
+              ? 'O servidor demorou muito para responder (timeout).'
+              : `Erro no servidor (${res.status}): ${text.slice(0, 100)}`
+          )
+        }
+
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Falha ao processar arquivos no servidor.')
+        }
+
+        if (data.resumo) {
+          resumoAcumulado.total += data.resumo.total || 0
+          resumoAcumulado.saidasNfe += data.resumo.saidasNfe || 0
+          resumoAcumulado.saidasNfce += data.resumo.saidasNfce || 0
+          resumoAcumulado.entradas += data.resumo.entradas || 0
+          resumoAcumulado.quarentena += data.resumo.quarentena || 0
+          resumoAcumulado.duplicados += data.resumo.duplicados || 0
+          resumoAcumulado.erros += data.resumo.erros || 0
+        }
+
+        if (Array.isArray(data.detalhes)) {
+          detalhesAcumulados.push(...data.detalhes)
+        }
       }
 
-      const res = await fetch('/api/notas-fiscais/importar-lote', {
-        method: 'POST',
-        body: formData
-      })
-
-      const data = await res.json()
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Falha ao processar arquivos no servidor.')
-      }
-
-      setResumo(data.resumo)
-      setDetalhes(data.detalhes || [])
+      setResumo(resumoAcumulado)
+      setDetalhes(detalhesAcumulados)
       setArquivos([])
 
+      const totalImportados =
+        resumoAcumulado.saidasNfe +
+        resumoAcumulado.saidasNfce +
+        resumoAcumulado.entradas +
+        resumoAcumulado.quarentena
+
       toast.success(
-        `Importação concluída! ${data.resumo.saidasNfe + data.resumo.saidasNfce + data.resumo.entradas + data.resumo.quarentena} XMLs importados com sucesso.`,
-        { id: toastId, duration: 5000 }
+        `Importação concluída! ${totalImportados} XMLs importados com sucesso (${resumoAcumulado.duplicados} já existentes/ignorados).`,
+        { id: toastId, duration: 6000 }
       )
 
       // Dispara evento global para recarregar contadores e tabelas
