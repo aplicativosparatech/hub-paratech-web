@@ -100,9 +100,20 @@ export async function GET(request: Request) {
       }))
       .sort((a, b) => b.total - a.total)
 
+    // 4.5. Busca Inutilizações Homologadas da Empresa
+    const { data: inutilizacoesBanco } = await supabase
+      .from('inutilizacoes_saidas')
+      .select('*')
+      .eq('cliente_id', clienteId)
+      .in('status_sefaz', ['102', '204', '563'])
+      .order('numero_inicial', { ascending: true })
+
+    const inutsRegistradas = inutilizacoesBanco || []
+
     // 5. Relatório de Quebra de Sequência de Numeração
     function detectarQuebras(notas: any[], modelo: string) {
       const quebras: any[] = []
+      const modCod = modelo.includes('65') ? '65' : '55'
       // Agrupa por série
       const seriesMap = new Map<string, number[]>()
 
@@ -121,14 +132,30 @@ export async function GET(request: Request) {
           const atual = numeros[i]
           const proximo = numeros[i + 1]
           if (proximo > atual + 1) {
+            const de = atual + 1
+            const ate = proximo - 1
+
+            // Verifica se o intervalo faltante foi coberto por alguma inutilização homologada
+            const inutMatch = inutsRegistradas.find(inut => 
+              inut.modelo === modCod &&
+              String(inut.serie || '1') === String(serie) &&
+              inut.numero_inicial <= de &&
+              inut.numero_final >= ate
+            )
+
+            const isInutilizado = Boolean(inutMatch)
+
             quebras.push({
               modelo,
               serie,
-              esperado_de: atual + 1,
-              esperado_ate: proximo - 1,
-              quantidade_faltante: (proximo - 1) - (atual + 1) + 1,
+              esperado_de: de,
+              esperado_ate: ate,
+              quantidade_faltante: ate - de + 1,
               anterior_emitido: atual,
-              posterior_emitido: proximo
+              posterior_emitido: proximo,
+              is_inutilizado: isInutilizado,
+              protocolo_inutilizacao: inutMatch?.protocolo || null,
+              status: isInutilizado ? 'Inutilizada na SEFAZ' : 'Pendente / Inutilizar'
             })
           }
         }
@@ -146,11 +173,48 @@ export async function GET(request: Request) {
     const nfceNaoAssinadas = (nfceSaidas || []).filter(n => !n.tem_assinatura || (n.cstat && n.cstat !== '100' && !n.is_autorizada))
 
     // 7. Relatório de Inutilizados
-    const nfeInutilizadas = (nfeSaidas || []).filter(n => n.cstat === '102' || (n.motivo_sefaz && n.motivo_sefaz.toLowerCase().includes('inutilizad')))
-    const nfceInutilizadas = (nfceSaidas || []).filter(n => n.cstat === '102' || (n.motivo_sefaz && n.motivo_sefaz.toLowerCase().includes('inutilizad')))
+    // Inclui inutilizações cuja data de homologação corresponde ao mês selecionado
+    // OU que cobrem quebras de numeração detectadas no período
+    const inutsDoMes = inutsRegistradas.filter(inut => {
+      if (!mesAno) return true
+      const dataInutStr = inut.data_hora ? inut.data_hora.split('T')[0] : (inut.created_at ? inut.created_at.split('T')[0] : '')
+      const pertenceAoMesData = dataInutStr.startsWith(mesAno)
+
+      // Cobre quebra identificada nas notas deste mês
+      const modCod = inut.modelo === '55' ? '55' : '65'
+      const cobreQuebraDoMes = quebrasSequencia.some(q => 
+        (q.modelo.includes('65') ? '65' : '55') === modCod &&
+        String(q.serie) === String(inut.serie || '1') &&
+        inut.numero_inicial <= q.esperado_de &&
+        inut.numero_final >= q.esperado_ate
+      )
+
+      return pertenceAoMesData || cobreQuebraDoMes
+    })
+
+    const inutsFormatadas = inutsDoMes.map(i => ({
+      id: i.id,
+      modelo: i.modelo,
+      serie: i.serie || '1',
+      numero: i.numero_inicial === i.numero_final ? String(i.numero_inicial) : `${i.numero_inicial} até ${i.numero_final}`,
+      numero_inicial: i.numero_inicial,
+      numero_final: i.numero_final,
+      protocolo: i.protocolo,
+      chave: i.protocolo || i.id,
+      data_hora: i.data_hora || i.created_at,
+      data_emissao: i.data_hora || i.created_at,
+      justificativa: i.justificativa,
+      motivo_sefaz: i.motivo_sefaz || 'Inutilização Homologada'
+    }))
+
+    const nfeInutilizadas = inutsFormatadas.filter(i => i.modelo === '55')
+    const nfceInutilizadas = inutsFormatadas.filter(i => i.modelo === '65')
 
     return NextResponse.json({
       consolidado: {
+        total_faturado: Math.round(somaGeral * 100) / 100,
+        total_monofasico: Math.round(somaMonofasicos * 100) / 100,
+        total_geral: Math.round(somaGeral * 100) / 100,
         nfe: {
           quantidade: nfeValidas.length,
           total: Math.round(somaNfe * 100) / 100,

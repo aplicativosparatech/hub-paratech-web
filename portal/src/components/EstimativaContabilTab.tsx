@@ -62,8 +62,20 @@ export default function EstimativaContabilTab({
       }))
     ]
 
-    const faturado = Number(auditData.consolidado?.total_faturado || auditData.consolidado?.total_geral || 0)
-    const monofasico = Number(auditData.consolidado?.total_monofasico || 0)
+    const faturadoCalculado = formatadas.reduce((acc, n) => acc + (n.valor || 0), 0)
+    const monofasicoCalculado = formatadas.reduce((acc, n) => acc + (n.valor_monofasico || 0), 0)
+
+    const faturado = Number(
+      auditData.consolidado?.geral?.total_faturado ??
+      auditData.consolidado?.total_faturado ??
+      auditData.consolidado?.total_geral ??
+      faturadoCalculado
+    )
+    const monofasico = Number(
+      auditData.consolidado?.geral?.total_monofasico ??
+      auditData.consolidado?.total_monofasico ??
+      monofasicoCalculado
+    )
     // Se não houver segregação específica de ST no resumo, estimamos ST baseado nas notas de saída
     const icmsSt = monofasico * 0.95 // Bebidas/peças geralmente são simultaneamente ST + Monofásicos
 

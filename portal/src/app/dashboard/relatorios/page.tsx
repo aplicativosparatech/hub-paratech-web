@@ -715,6 +715,7 @@ export default function RelatoriosPage() {
 
   const consolidado = auditData?.consolidado
   const quebras = auditData?.quebras_sequencia || []
+  const quebrasPendentes = useMemo(() => quebras.filter((q: any) => !q.is_inutilizado), [quebras])
   const naoAssinadas = auditData?.nao_assinadas
   const inutilizadas = auditData?.inutilizadas
 
@@ -1094,10 +1095,12 @@ export default function RelatoriosPage() {
         <button
           onClick={() => setActiveTab('quebra')}
           className={`flex items-center gap-2 px-5 py-3 font-semibold text-sm border-b-2 transition whitespace-nowrap ${
-            activeTab === 'quebra' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+            activeTab === 'quebra'
+              ? (quebrasPendentes.length > 0 ? 'border-red-600 text-red-600' : 'border-emerald-600 text-emerald-600')
+              : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
-          <Hash size={18} /> Quebra de Sequência ({quebras.length})
+          <Hash size={18} /> Quebra de Sequência ({quebras.length}{quebras.length > 0 && quebrasPendentes.length === 0 ? ' ✓ Regularizadas' : ''})
         </button>
 
         <button
@@ -2162,19 +2165,28 @@ export default function RelatoriosPage() {
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm">
                     {quebrasPaginadas.map((q: any, idx: number) => (
-                      <tr key={idx} className="hover:bg-red-50/30 transition">
+                      <tr key={idx} className={`transition ${q.is_inutilizado ? 'bg-emerald-50/20 hover:bg-emerald-50/40' : 'hover:bg-red-50/30'}`}>
                         <td className="p-4 font-semibold text-slate-800">{q.modelo}</td>
                         <td className="p-4 text-slate-600">Série {q.serie}</td>
-                        <td className="p-4 font-mono font-bold text-red-600">
+                        <td className="p-4 font-mono font-bold text-slate-900">
                           {q.esperado_de === q.esperado_ate ? `Nº ${q.esperado_de}` : `Nº ${q.esperado_de} até ${q.esperado_ate}`}
                         </td>
                         <td className="p-4 font-semibold text-slate-800">{q.quantidade_faltante} nota(s)</td>
                         <td className="p-4 text-slate-500 font-mono">Nº {q.anterior_emitido}</td>
                         <td className="p-4 text-slate-500 font-mono">Nº {q.posterior_emitido}</td>
                         <td className="p-4">
-                          <span className="px-2.5 py-1 bg-red-100 text-red-700 text-xs font-bold rounded-full">
-                            Pendente / Inutilizar
-                          </span>
+                          {q.is_inutilizado ? (
+                            <span
+                              className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full inline-flex items-center gap-1.5"
+                              title={q.protocolo_inutilizacao ? `Protocolo SEFAZ: ${q.protocolo_inutilizacao}` : 'Homologada pelo Fisco'}
+                            >
+                              <CheckCircle2 size={13} className="text-emerald-600" /> Inutilizada na SEFAZ
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 bg-red-100 text-red-700 text-xs font-bold rounded-full">
+                              Pendente / Inutilizar
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -2309,19 +2321,37 @@ export default function RelatoriosPage() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      <th className="p-4">Número</th>
-                      <th className="p-4">Protocolo / Chave</th>
-                      <th className="p-4">Motivo SEFAZ</th>
+                      <th className="p-4">Modelo</th>
+                      <th className="p-4">Série</th>
+                      <th className="p-4">Faixa Inutilizada</th>
+                      <th className="p-4">Qtd. Notas</th>
+                      <th className="p-4">Protocolo SEFAZ</th>
+                      <th className="p-4">Data / Hora</th>
+                      <th className="p-4">Status / Motivo</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm">
-                    {[...(inutilizadas?.nfe || []), ...(inutilizadas?.nfce || [])].map((n: any) => (
-                      <tr key={n.id}>
-                        <td className="p-4 font-bold text-slate-800">Nº {n.numero}</td>
-                        <td className="p-4 font-mono text-xs text-slate-600">{n.chave}</td>
-                        <td className="p-4 text-slate-600">{n.motivo_sefaz || 'Inutilização Homologada'}</td>
-                      </tr>
-                    ))}
+                    {[...(inutilizadas?.nfe || []), ...(inutilizadas?.nfce || [])].map((n: any, idx: number) => {
+                      const modNome = (n.modelo === '55' || n.modelo?.includes?.('55')) ? 'NF-e (55)' : 'NFC-e (65)'
+                      const faixa = n.numero_inicial === n.numero_final ? `Nº ${n.numero_inicial}` : `Nº ${n.numero_inicial} até ${n.numero_final}`
+                      const qtd = (n.numero_final - n.numero_inicial + 1) || 1
+                      return (
+                        <tr key={n.id || idx} className="hover:bg-slate-50/50 transition">
+                          <td className="p-4 font-semibold text-slate-800">{modNome}</td>
+                          <td className="p-4 text-slate-600">Série {n.serie || '1'}</td>
+                          <td className="p-4 font-mono font-bold text-indigo-700">{faixa}</td>
+                          <td className="p-4 text-slate-700">{qtd} nota(s)</td>
+                          <td className="p-4 font-mono text-xs text-slate-600">{n.protocolo || '—'}</td>
+                          <td className="p-4 text-slate-500 text-xs">{n.data_hora ? new Date(n.data_hora).toLocaleString('pt-BR') : '—'}</td>
+                          <td className="p-4">
+                            <span className="px-2.5 py-1 text-xs font-bold bg-emerald-100 text-emerald-800 rounded-md inline-flex items-center gap-1">
+                              <CheckCircle2 size={12} className="text-emerald-600" />
+                              {n.motivo_sefaz || 'Homologada SEFAZ (102)'}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
