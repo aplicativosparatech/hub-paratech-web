@@ -76,11 +76,20 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
   const [loadingClientes, setLoadingClientes] = useState(true)
 
   // 4. Cliente Global Selecionado ('' = Nenhum / Todos)
-  const [selectedClienteId, _setSelectedClienteId] = useState<string>('')
+  const [selectedClienteId, _setSelectedClienteId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return localStorage.getItem(GLOBAL_CLIENT_STORAGE_KEY) || sessionStorage.getItem('hub_paratech_nf_filter_cliente') || ''
+      } catch {
+        return ''
+      }
+    }
+    return ''
+  })
 
   // 5. Preferências de interface e login
   const [priorizarNomeFantasia, setPriorizarNomeFantasia] = useState(false)
-  const [clientePadraoLogin, setClientePadraoLoginState] = useState<'vazio' | 'ultimo_usado'>('vazio')
+  const [clientePadraoLogin, setClientePadraoLoginState] = useState<'vazio' | 'ultimo_usado'>('ultimo_usado')
 
   // Inicialização no Client
   useEffect(() => {
@@ -100,18 +109,14 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
     const savedPriorizar = localStorage.getItem('hub_priorizar_nome_fantasia') === 'true'
     setPriorizarNomeFantasia(savedPriorizar)
 
-    // Carrega preferência de cliente padrão ao logar (vazio ou ultimo_usado) - Padrão: 'vazio'
-    const savedClientePadrao = (localStorage.getItem('hub_cliente_padrao_login') as 'vazio' | 'ultimo_usado') || 'vazio'
+    // Carrega preferência de cliente padrão ao logar - Padrão: 'ultimo_usado'
+    const savedClientePadrao = (localStorage.getItem('hub_cliente_padrao_login') as 'vazio' | 'ultimo_usado') || 'ultimo_usado'
     setClientePadraoLoginState(savedClientePadrao)
 
-    // Se configurado para manter o último usado, recupera do storage; caso contrário inicia vazio
-    if (savedClientePadrao === 'ultimo_usado') {
-      const savedClient = localStorage.getItem(GLOBAL_CLIENT_STORAGE_KEY) || sessionStorage.getItem('hub_paratech_nf_filter_cliente') || ''
-      if (savedClient) {
-        _setSelectedClienteId(savedClient)
-      }
-    } else {
-      _setSelectedClienteId('')
+    // Recupera e garante a persistência imediata do cliente selecionado
+    const savedClient = localStorage.getItem(GLOBAL_CLIENT_STORAGE_KEY) || sessionStorage.getItem('hub_paratech_nf_filter_cliente') || ''
+    if (savedClient) {
+      _setSelectedClienteId(savedClient)
     }
   }, [])
 
@@ -131,8 +136,13 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
       const pref = localStorage.getItem('hub_priorizar_nome_fantasia') === 'true'
       setPriorizarNomeFantasia(pref)
 
-      const padraoLogin = (localStorage.getItem('hub_cliente_padrao_login') as 'vazio' | 'ultimo_usado') || 'vazio'
+      const padraoLogin = (localStorage.getItem('hub_cliente_padrao_login') as 'vazio' | 'ultimo_usado') || 'ultimo_usado'
       setClientePadraoLoginState(padraoLogin)
+    }
+
+    const handleGlobalClienteChanged = (e: any) => {
+      const newId = e.detail?.clienteId ?? (typeof window !== 'undefined' ? localStorage.getItem(GLOBAL_CLIENT_STORAGE_KEY) || '' : '')
+      _setSelectedClienteId(newId)
     }
 
     const handleStorage = (e: StorageEvent) => {
@@ -152,14 +162,16 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
         setPriorizarNomeFantasia(e.newValue === 'true')
       }
       if (e.key === 'hub_cliente_padrao_login') {
-        setClientePadraoLoginState((e.newValue as 'vazio' | 'ultimo_usado') || 'vazio')
+        setClientePadraoLoginState((e.newValue as 'vazio' | 'ultimo_usado') || 'ultimo_usado')
       }
     }
 
     window.addEventListener('hub_settings_changed', handleSettingsChanged)
+    window.addEventListener('hub_global_cliente_changed', handleGlobalClienteChanged)
     window.addEventListener('storage', handleStorage)
     return () => {
       window.removeEventListener('hub_settings_changed', handleSettingsChanged)
+      window.removeEventListener('hub_global_cliente_changed', handleGlobalClienteChanged)
       window.removeEventListener('storage', handleStorage)
     }
   }, [])
@@ -280,11 +292,13 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
         clisData = []
       }
 
-      // Limpa qualquer ID salvo de sessões antigas que não pertença a este usuário/carteira
-      if (typeof window !== 'undefined') {
+      // Limpa qualquer ID salvo de sessões antigas apenas se a lista foi carregada com sucesso
+      // e o ID definitivamente não pertence mais à carteira deste usuário
+      if (typeof window !== 'undefined' && clisData.length > 0) {
         const saved = localStorage.getItem(GLOBAL_CLIENT_STORAGE_KEY)
         if (saved && !clisData.some(c => c.id === saved)) {
           localStorage.removeItem(GLOBAL_CLIENT_STORAGE_KEY)
+          sessionStorage.removeItem('hub_paratech_nf_filter_cliente')
         }
       }
 
@@ -332,25 +346,33 @@ export function GlobalClientProvider({ children }: { children: React.ReactNode }
         console.warn('Erro ao carregar configuracoes_portal_geral no GlobalClientContext:', errConfig)
       }
 
-      // Regra de Seleção de Cliente ao Iniciar:
+      // Regra de Persistência Absoluta de Seleção de Empresa Global:
       _setSelectedClienteId(prev => {
-        // 1. Se for perfil 'cliente', sempre seleciona a única empresa dele
+        // 1. Perfil 'cliente': empresa única associada
         if (role === 'cliente' && clisData.length > 0) {
-          return clisData[0].id
-        }
-        // 2. Se o usuário já selecionou ativamente uma empresa durante a navegação desta sessão, mantém
-        if (prev && clisData.some(c => c.id === prev)) {
-          return prev
-        }
-        // 3. Verifica a preferência configurada (Vazio como padrão vs Manter último usado)
-        const prefPadrao = (localStorage.getItem('hub_cliente_padrao_login') as 'vazio' | 'ultimo_usado') || 'vazio'
-        if (prefPadrao === 'ultimo_usado') {
-          const saved = typeof window !== 'undefined' ? localStorage.getItem(GLOBAL_CLIENT_STORAGE_KEY) : null
-          if (saved && clisData.some(c => c.id === saved)) {
-            return saved
+          const cliId = clisData[0].id
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(GLOBAL_CLIENT_STORAGE_KEY, cliId)
           }
+          return cliId
         }
-        // 4. Padrão do sistema para Admin e Contabilidade: Vazio (visão global / Todas as Empresas)
+
+        // 2. Prioridade máxima: recupera a empresa salva no localStorage ou sessionStorage
+        const saved = typeof window !== 'undefined' 
+          ? (localStorage.getItem(GLOBAL_CLIENT_STORAGE_KEY) || sessionStorage.getItem('hub_paratech_nf_filter_cliente') || '')
+          : ''
+
+        const candidate = saved || prev
+
+        if (candidate && clisData.some(c => c.id === candidate)) {
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(GLOBAL_CLIENT_STORAGE_KEY, candidate)
+            sessionStorage.setItem('hub_paratech_nf_filter_cliente', candidate)
+          }
+          return candidate
+        }
+
+        // 3. Se nenhuma empresa estiver salva ou selecionada (ou se foi explicitamente limpa pelo usuário com clearSelectedCliente):
         return ''
       })
     } catch (err: any) {

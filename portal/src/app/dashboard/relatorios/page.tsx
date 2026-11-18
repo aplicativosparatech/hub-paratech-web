@@ -41,9 +41,7 @@ export default function RelatoriosPage() {
 
   // Sincronização automática com a empresa selecionada globalmente
   useEffect(() => {
-    if (globalClienteId) {
-      setSelectedCliente(globalClienteId)
-    }
+    setSelectedCliente(globalClienteId || '')
   }, [globalClienteId])
   
   // Filtro de Mês/Ano (Padrão: Mês Atual)
